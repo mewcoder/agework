@@ -1,0 +1,20 @@
+{
+  "name": "@agework/shared",
+  "version": "0.0.1",
+  "private": true,
+  "exports": {
+    ".": "./src/common/index.ts",
+    "./protocol": "./src/protocol/index.ts",
+    "./api": "./src/api/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@ag-ui/core": "^0.0.54",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
+  }
+}

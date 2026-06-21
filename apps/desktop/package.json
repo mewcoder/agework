@@ -1,0 +1,29 @@
+{
+  "name": "@agework/desktop",
+  "private": true,
+  "version": "0.0.1",
+  "packageManager": "pnpm@10.33.4",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "electron .",
+    "dev": "pnpm -C ../.. desktop:build && pnpm start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "prepare:resources": "node scripts/prepare-resources.mjs",
+    "dist:mac": "cross-env TARGET_PLATFORM=darwin TARGET_ARCH=arm64 pnpm -C ../.. desktop:resources && electron-builder --config electron-builder.yml --mac --arm64",
+    "dist:win": "cross-env TARGET_PLATFORM=win32 TARGET_ARCH=x64 pnpm -C ../.. desktop:resources && electron-builder --config electron-builder.yml --win --x64"
+  },
+  "dependencies": {
+    "electron-log": "^5.4.4"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@types/node": "^24.0.0",
+    "cross-env": "^10.1.0",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.8"
+  }
+}

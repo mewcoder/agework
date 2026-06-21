@@ -1,0 +1,51 @@
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Roles } from "../../auth/roles.decorator";
+import { CreateModelProviderDto } from "../dto/create-model-provider.dto";
+import { ModelProviderIdDto } from "../dto/model-provider-id.dto";
+import { SetModelProviderEnabledDto } from "../dto/set-model-provider-enabled.dto";
+import { UpdateModelProviderDto } from "../dto/update-model-provider.dto";
+import { ModelProviderService } from "../model-provider.service";
+
+@Roles("admin")
+@Controller("admin/model-providers")
+export class AdminModelProviderController {
+  constructor(private modelProviderService: ModelProviderService) {}
+
+  @Get("list")
+  list(@Query("agentType") agentType: string) {
+    return this.modelProviderService.listForAdmin(agentType);
+  }
+
+  @Post("create")
+  create(@Body() body: CreateModelProviderDto) {
+    return this.modelProviderService.create(
+      body.agentType,
+      body.name,
+      body.providerConfig
+    );
+  }
+
+  @Post("update")
+  update(@Body() body: UpdateModelProviderDto) {
+    return this.modelProviderService.update(
+      body.id,
+      body.name,
+      body.providerConfig
+    );
+  }
+
+  @Post("set-enabled")
+  setEnabled(@Body() body: SetModelProviderEnabledDto) {
+    return this.modelProviderService.setEnabled(body.id, body.isEnabled);
+  }
+
+  @Post("remove")
+  remove(@Body() body: ModelProviderIdDto) {
+    return this.modelProviderService.delete(body.id);
+  }
+
+  @Post("ping")
+  ping(@Body() body: ModelProviderIdDto) {
+    return this.modelProviderService.test(body.id, true);
+  }
+}

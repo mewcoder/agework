@@ -1,0 +1,33 @@
+appId: com.agework.desktop
+productName: AgeWork
+directories:
+  output: out
+  buildResources: build
+files:
+  - dist/**/*
+  - package.json
+npmRebuild: false
+extraResources:
+  - from: resources/app
+    to: app
+  - from: resources/bin
+    to: bin
+  - from: resources/template.db
+    to: template.db
+mac:
+  icon: build/icon.icns
+  target:
+    - target: dmg
+      arch:
+        - arm64
+  category: public.app-category.developer-tools
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+afterPack: scripts/after-pack.cjs

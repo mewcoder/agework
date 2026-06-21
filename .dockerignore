@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+dist
+**/dist
+!apps/worker/dist
+!apps/worker/dist/main.js
+.turbo
+**/.turbo
+*.log
+.env
+.env.*
+.git
+**/*.spec.ts
+**/*.test.ts
+apps/web
+apps/api/generated
+apps/api/dev.db

@@ -1,0 +1,209 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                 String          @id
+  username           String          @unique
+  passwordHash       String
+  role               String          @default("user")
+  status             String          @default("active")
+  mustChangePassword Boolean         @default(false)
+  passwordKind       String          @default("user_set")
+  passwordExpiresAt  DateTime?
+  passwordUpdatedAt  DateTime?
+  passwordResetAt    DateTime?
+  passwordResetById  String?
+  approvedAt         DateTime?
+  approvedById       String?
+  lastLoginAt        DateTime?
+  sessionVersion     Int             @default(1)
+  failedLoginCount   Int             @default(0)
+  lockedUntil        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+  deletedAt          DateTime?
+  workspaces         Workspace[]
+  modelProviders     ModelProvider[]
+}
+
+model WorkspaceDirectory {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  rootPath    String
+  status      String    @default("ready")
+  source      String    @default("managed")
+  metadata    Json
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([rootPath])
+}
+
+model Workspace {
+  id             String              @id
+  name           String
+  gitUrl         String?
+  description    String?
+  runtimeType    String?
+  isolationScope String?
+  sandboxEngine  String?
+  userId         String
+  user           User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  deletedAt      DateTime?
+  directory      WorkspaceDirectory?
+  conversations  Conversation[]
+  runtime        WorkspaceRuntime?
+
+  @@index([userId])
+  @@index([userId, deletedAt, createdAt])
+}
+
+model Conversation {
+  id                String    @id @default(cuid())
+  title             String?
+  status            String    @default("regular")
+  activeRunStatus   String    @default("idle")
+  pendingUserAction String?
+  workspaceId       String
+  workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+  agentType         String    @default("claude")
+  agentSessionId    String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+  messages          Message[]
+  runs              Run[]
+
+  @@index([workspaceId, status, deletedAt, updatedAt])
+  @@index([workspaceId, status, deletedAt, createdAt])
+}
+
+model Message {
+  id             String
+  conversationId String
+  runId          String?
+  parentId       String?
+  format         String
+  content        Json
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  run            Run?         @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@id([id, conversationId])
+  @@index([conversationId, createdAt])
+  @@index([runId, createdAt])
+}
+
+model ModelProvider {
+  id          String   @id @default(cuid())
+  agentType   String
+  scope       String   @default("global")
+  userId      String?
+  name        String
+  isEnabled   Boolean  @default(false)
+  baseUrl     String
+  apiKey      String
+  models      Json
+  extraConfig Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([agentType, scope])
+  @@index([agentType, userId])
+  @@index([agentType, scope, userId, name])
+  @@index([userId])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model Run {
+  id                String       @id @default(cuid())
+  conversationId    String
+  agentType         String
+  runtimeType       String       @default("local")
+  runtimeResourceId String?
+  status            String       @default("queued")
+  phase             String?
+  lastSeq           Int          @default(0)
+  lastHeartbeatAt   DateTime?
+  error             String?
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  // Token 用量，由 RUN_FINISHED.result 归一化写入（见 RunRecordService.recordUsage），
+  // 整体对应 @agework/shared/protocol 的 RunUsage。
+  usage             Json?
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  messages          Message[]
+  events            RunEvent[]
+
+  @@index([conversationId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+model RunEvent {
+  id         String   @id @default(cuid())
+  runId      String
+  run        Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seq        Int?
+  source     String
+  eventType  String
+  level      String   @default("info")
+  summary    String?
+  payload    Json?
+  payloadRef String?
+  createdAt  DateTime @default(now())
+
+  @@index([runId, createdAt])
+  @@index([runId, eventType, createdAt])
+  @@index([level, createdAt])
+}
+
+model RuntimeResource {
+  id                String             @id @default(cuid())
+  runtimeType       String
+  isolationScope    String
+  ownerUserId       String
+  ownerWorkspaceId  String?
+  runtimeResourceId String
+  status            String             @default("running")
+  expiresAt         DateTime?
+  metadata          Json
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  workspaceRuntimes WorkspaceRuntime[]
+
+  @@unique([runtimeType, runtimeResourceId])
+  @@index([runtimeType, isolationScope, status])
+  @@index([ownerUserId])
+  @@index([ownerWorkspaceId])
+}
+
+model WorkspaceRuntime {
+  id          String          @id @default(cuid())
+  workspaceId String          @unique
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  resourceId  String
+  resource    RuntimeResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  @@index([resourceId])
+}

@@ -1,0 +1,144 @@
+# 配置管理
+
+AgeWork 配置按边界分为四类：
+
+| 类别            | 存放位置                  | 用途                                                         | 生效方式                       |
+| --------------- | ------------------------- | ------------------------------------------------------------ | ------------------------------ |
+| 部署/启动 ENV   | `apps/api/.env`、进程环境 | 进程启动前必须确定的部署、认证、网络、runtime 拓扑、诊断配置 | 修改后重启                     |
+| 前端构建 ENV    | `apps/web/.env`、进程环境 | Vite base path 与 API context                                | 重新启动 dev server 或重新构建 |
+| DB 系统设置     | `SystemSetting` 表        | 管理员可在线调整的运行时业务配置                             | API 写入后立即刷新内存缓存     |
+| 内部 worker ENV | API 启动 worker 时注入    | API 与 worker 通信协议、runtime 元数据                       | 不暴露给用户维护               |
+
+原则：
+
+- 启动必需、密钥、网络拓扑、runtime 能力限制、诊断开关放 ENV。
+- 运行期可改、适合后台管理的业务配置放 DB，并允许同名 ENV 作为 fallback。
+- Worker 内部协议变量不要写进用户 `.env.example`。
+- 模型 Provider 的系统环境变量单独归类，不属于 AgeWork 部署配置。
+
+代码级默认配置集中在 `apps/api/src/config/defaults.ts`。如果 fork/私有部署想改变 AgeWork 的默认 App 名、端口、默认 runtime、默认镜像、OpenSandbox 默认值或固定本机目录，直接改这个文件；不要再为这些默认值额外增加 ENV。
+
+---
+
+## API ENV
+
+这些变量由后端进程读取，主要配置文件是 `apps/api/.env`。
+
+### 基础
+
+| 变量                | 默认值                               | 建议     | 说明                                                                                               |
+| ------------------- | ------------------------------------ | -------- | -------------------------------------------------------------------------------------------------- |
+| `PORT`              | `3000`                               | 保留 ENV | 后端 HTTP 监听端口。                                                                               |
+| `AGEWORK_CONTEXT`       | 空字符串                             | 保留 ENV | 应用上下文路径，例如 `/agent` 会让 API 挂载到 `/agent/api/v1`。                                    |
+| `AGEWORK_SERVE_FRONTEND`    | `false`                              | 保留 ENV | 后端是否托管前端静态资源。按需开启。                                                               |
+| `AGEWORK_BODY_LIMIT`    | `50mb`                               | 保留 ENV | API 请求体大小上限。                                                                               |
+| `AGEWORK_LOG_LEVEL`         | dev: `debug`；prod: `error,warn,log` | 保留 ENV | 可选 `debug`、`verbose`、`warn`、`error`。                                                         |
+| `AGEWORK_DATA_DIR`          | `~/.agework`                         | 保留 ENV | AgeWork 本机数据根目录。                                                                           |
+| `AGEWORK_PRIVATE_DATABASE_URL`      | `file:./dev.db`                      | 保留 ENV | Prisma 数据库连接。开发默认 SQLite；生产可切 PostgreSQL。                                          |
+| `AGEWORK_PRIVATE_JWT_SECRET`        | init 写入                            | 保留 ENV | JWT 签名密钥，由初始化流程生成并写入 `.env`；正常不需要手动配置。生产环境缺失会启动失败。          |
+| `AGEWORK_DEV_AUTH_DISABLED` | `false`                              | 保留 ENV | 仅在 `NODE_ENV` 为空或 `development` 时有效。为 `true` 时使用真实 admin 超级管理员并跳过登录验证。 |
+
+`NODE_ENV` 不是 `.env.example` 配置项，由运行脚本设置（`pnpm dev`/`pnpm test` 等留空按开发处理，`pnpm start` 设为 `production`）。它决定 `AGEWORK_DEV_AUTH_DISABLED`/`AGEWORK_PRIVATE_JWT_SECRET` 校验是否生效，以及 `AGEWORK_LOG_LEVEL`、`AGEWORK_WORKER_LOG_LEVEL` 的默认级别。
+
+### Runtime / Sandbox
+
+| 变量                           | 默认值                     | 建议     | 说明                                                                                 |
+| ------------------------------ | -------------------------- | -------- | ------------------------------------------------------------------------------------ |
+| `AGEWORK_RUNTIME_ALLOWED_TYPES`        | `local`                    | 保留 ENV | 当前部署允许创建的 workspace runtime，可选 `local`、`sandbox` 或 `local,sandbox`。非法值启动失败。 |
+| `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES` | `user`                  | 保留 ENV | 当前部署允许创建的 sandbox 隔离级别，可选 `user`、`workspace` 或 `user,workspace`；第一项作为默认值。沙箱指定本地目录时必须使用 `workspace`。 |
+| `AGEWORK_SANDBOX_ENGINE`               | `docker`                   | 保留 ENV | 新建 sandbox 的默认引擎，可选 `docker`、`opensandbox`。                              |
+| `AGEWORK_SANDBOX_OPENSANDBOX_DOMAIN`           | `localhost:8080`           | 保留 ENV | OpenSandbox 服务地址，格式为 host:port。仅 `AGEWORK_SANDBOX_ENGINE=opensandbox` 时需要关注。 |
+| `AGEWORK_SANDBOX_OPENSANDBOX_PROTOCOL`         | `http`                     | 保留 ENV | 可选 `http`、`https`。                                                               |
+| `AGEWORK_PRIVATE_OPENSANDBOX_API_KEY`          | 空                         | 保留 ENV | OpenSandbox API key，属于部署密钥。                                                  |
+| `AGEWORK_SANDBOX_OPENSANDBOX_IMAGE`            | `agework/worker:latest`    | 保留 ENV | OpenSandbox 创建 sandbox 使用的镜像。                                                |
+| `AGEWORK_SANDBOX_OPENSANDBOX_TIMEOUT_SECONDS`  | `3600`                     | 保留 ENV | sandbox 生命周期超时秒数。                                                           |
+| `AGEWORK_SANDBOX_OPENSANDBOX_USE_SERVER_PROXY` | `false`                    | 保留 ENV | 是否通过 OpenSandbox 服务代理访问。                                                  |
+
+### 诊断与日志
+
+| 变量                             | 默认值                     | 建议     | 说明                                                                                      |
+| -------------------------------- | -------------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `AGEWORK_AGENT_EVENT_TRACE_ENABLED`      | `false`                    | 保留 ENV | 开启后写入 agent 事件 trace 文件（`*.raw.jsonl`、`*.agui.jsonl`）。当前代码直接读取 ENV。 |
+| `AGEWORK_AGENT_EVENT_TRACE_MAX_FILE_MB`  | `50`                       | 保留 ENV | 单个 agent 事件 trace 文件大小上限，超过后写入 truncated 标记并停止继续写入。             |
+| `AGEWORK_WORKER_LOG_LEVEL`       | dev: `debug`；prod: `info` | 保留 ENV | worker 诊断日志（`*.worker.log`）级别：`debug`、`info`、`warn`、`error`。                 |
+| `AGEWORK_WORKER_LOG_MAX_FILE_MB` | `50`                       | 保留 ENV | 单个 worker 诊断日志文件大小上限，超过后写入 truncated 标记并停止继续写入。               |
+
+---
+
+## Web ENV
+
+这些变量由 Vite 读取，主要配置文件是 `apps/web/.env`。
+
+| 变量                   | 默认值                                       | 建议           | 说明                                                           |
+| ---------------------- | --------------------------------------------- | -------------- | --------------------------------------------------------------- |
+| `VITE_APP_BASE_PATH`   | fallback 到 `apps/api/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端页面、路由、静态资源 base path。                          |
+| `VITE_APP_API_CONTEXT` | fallback 到 `apps/api/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端请求 API 的 context，最终 API 前缀为 `<context>/api/v1`。 |
+
+通常只设置 `AGEWORK_CONTEXT` 即可；只有前端部署路径和后端 API context 不一致时才单独设置这两个变量。
+
+---
+
+## DB 系统设置
+
+当前实现使用 `SystemSetting` 表：
+
+```prisma
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+```
+
+读取优先级：**DB 覆盖值 > 同名 ENV > 代码默认值**。
+
+| key                            | 默认值    | 类型   | 建议                     | 说明                                   |
+| ------------------------------ | --------- | ------ | ------------------------ | -------------------------------------- |
+| `AGEWORK_APP_NAME`             | `AgeWork` | string | 放 DB，允许 ENV fallback | 应用名称，展示在登录页、侧边栏等位置。 |
+| `AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS` | `1800`    | number | 放 DB，允许 ENV fallback | Runtime 空闲超时秒数。                 |
+
+Admin API 当前为 RPC 风格：
+
+```text
+GET  /api/v1/admin/config/list
+POST /api/v1/admin/config/set      body: { key, value }
+POST /api/v1/admin/config/reset    body: { key }
+```
+
+---
+
+## 内部 Worker ENV
+
+以下变量由 API 在启动 local/sandbox worker 时注入，不应让用户手动维护，也不应放进 `.env.example`。
+
+| 变量                              | 来源               | 说明                                                                |
+| --------------------------------- | ------------------- | --------------------------------------------------------------------- |
+| `AGEWORK_INTERNAL_TRANSPORT`               | API 注入           | `ipc` 或 `http`，决定 worker 通信方式。                            |
+| `AGEWORK_INTERNAL_API_BASE`                | API 注入           | worker 访问 API 的完整 base URL。                                   |
+| `AGEWORK_INTERNAL_RUN_ID`                  | API 注入           | 单 run worker 的 run id。                                          |
+| `AGEWORK_INTERNAL_RUN_START_TOKEN`         | API 注入           | local worker 启动握手 token。                                       |
+| `AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY`      | API 注入           | worker 调用 internal API 的访问密钥。                              |
+| `AGEWORK_INTERNAL_WORKSPACE_ID`            | API 注入           | 持久 worker 的 workspace/resource key。                            |
+| `AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID`     | API 注入           | runtime resource id。                                              |
+| `AGEWORK_INTERNAL_RUNTIME_TYPE`            | API 注入           | worker 诊断上下文，取值 `local` 或 `sandbox`。                     |
+| `AGEWORK_INTERNAL_SANDBOX_ENGINE`          | API 注入           | worker 诊断上下文，取值 `docker` 或 `opensandbox`。                |
+| `AGEWORK_INTERNAL_ISOLATION_SCOPE` | API 注入           | worker 诊断上下文。                                                |
+| `AGEWORK_INTERNAL_LOG_DIR`         | API 注入           | 容器内 runtime 诊断日志目录，不是宿主机可配置项。                  |
+| `AGEWORK_INTERNAL_WORKER_MODE`            | API 注入           | `persistent` 等 worker 模式。                                      |
+| `AGEWORK_INTERNAL_WORKER_LOG_FILE`         | API 注入           | worker 日志文件路径。                                              |
+
+---
+
+## 模型 Provider 系统环境
+
+这些变量不是 AgeWork 部署配置，而是"模型服务使用系统环境"的来源。它们由模型配置页面的"系统环境"信息展示和 agent 子进程安全透传逻辑使用。
+
+| Agent  | 变量                   | 说明                                          |
+| ------ | ----------------------- | ----------------------------------------------- |
+| Claude | `ANTHROPIC_AUTH_TOKEN` | Claude 认证 token。当前主用字段。            |
+| Claude | `ANTHROPIC_BASE_URL`   | Claude API base URL。                        |
+| Claude | `ANTHROPIC_MODEL`      | Claude 模型名。                              |
+| Claude | `CLAUDE_CONFIG_DIR`    | Claude CLI 配置目录，仅系统环境透传时使用。 |
+| Codex  | `OPENAI_API_KEY`       | OpenAI/Codex API key。                       |
+| Codex  | `CODEX_API_KEY`        | Codex API key fallback。                     |
