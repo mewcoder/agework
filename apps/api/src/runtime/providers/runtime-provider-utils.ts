@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import type { ControlPayload, Envelope } from "@agework/shared/protocol";
-import type { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import type { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 import { resolveApiBasePath } from "../../common/path.util";
 import { swallow } from "../../common/swallow";
 import { EnvKey } from "../../config/env-key";

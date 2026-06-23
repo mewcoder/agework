@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { RunEventRefs } from "@agework/shared/protocol";
-import { Prisma } from "../../../../generated/prisma/client.js";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { Prisma } from "../../../generated/prisma/client.js";
+import { PrismaService } from "../../prisma/prisma.service";
 
 function hasRefValue(
   refs: Prisma.JsonValue,

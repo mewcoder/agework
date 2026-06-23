@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { ConversationService } from "../../../conversations/conversation.service";
+import { ConversationService } from "../../conversations/conversation.service";
 import { RunActiveStore, type RunHandle } from "./run-active.store";
-import { runStatusEffect } from "../runs/status/run-lifecycle.policy";
-import { RunRepository } from "../runs/run.repository";
+import { runStatusEffect } from "./run-lifecycle.policy";
+import { RunRepository } from "../run.repository";
 import { RunExecutionStatusHandler } from "./run-execution-status.handler";
 
 function makeHandle(overrides: Partial<RunHandle> = {}): RunHandle {

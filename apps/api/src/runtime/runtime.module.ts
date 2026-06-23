@@ -1,17 +1,17 @@
 import { Module, OnModuleInit } from "@nestjs/common";
 
 // core
-import { RunRepository } from "./core/runs/run.repository";
+import { RunRepository } from "../runs/run.repository";
 import { WorkspaceRuntimeRepository } from "./core/runtime-resources/workspace-runtime.repository";
-import { RunActiveStore } from "./core/run-execution/run-active.store";
-import { RunEnvelopeProcessor } from "./core/run-execution/run-envelope.processor";
-import { RawEventLogWriter } from "./core/run-events/raw-event-log.writer";
-import { RunEventRecorder, RunEventStore } from "./core/run-events/run-event-recorder";
-import { RunEventQuery } from "./core/run-events/run-event-query";
-import { RunRecoveryUseCase } from "./core/runs/run-recovery.use-case";
+import { RunActiveStore } from "../runs/execution/run-active.store";
+import { RunEnvelopeProcessor } from "../runs/execution/run-envelope.processor";
+import { RawEventLogWriter } from "../runs/events/raw-event-log.writer";
+import { RunEventRecorder, RunEventStore } from "../runs/events/run-event-recorder";
+import { RunEventQuery } from "../runs/events/run-event-query";
+import { RunRecoveryUseCase } from "../runs/run-recovery.use-case";
 import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
 import { RuntimeResourceLifecycleUseCase } from "./core/runtime-resources/runtime-resource-lifecycle.use-case";
-import { RunExecutionStatusHandler } from "./core/run-execution/run-execution-status.handler";
+import { RunExecutionStatusHandler } from "../runs/execution/run-execution-status.handler";
 
 // providers
 import { RuntimeConfigStore } from "./internal/runtime-config-store";
@@ -36,7 +36,7 @@ import { RuntimeInternalAuthGuard } from "./internal/runtime-internal-auth.guard
 import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 
 // runner
-import { RunRunner } from "./core/run-execution/run.runner";
+import { RunRunner } from "../runs/run.runner";
 
 // admin
 import { AdminRunController } from "./admin/admin-run.controller";

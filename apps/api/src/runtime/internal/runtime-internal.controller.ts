@@ -14,8 +14,8 @@ import type { Envelope, RunConfig, RunStatusPayload } from "@agework/shared/prot
 import { Public } from "../../auth/public.decorator";
 import { RawResponse } from "../../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
-import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
-import { RunActiveStore } from "../core/run-execution/run-active.store";
+import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
+import { RunActiveStore } from "../../runs/execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
 import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
 import { RuntimeControlQueue } from "./runtime-control-queue";

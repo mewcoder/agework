@@ -1,14 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { RunStatusPayload } from "@agework/shared/protocol";
-import { ConversationService } from "../../../conversations/conversation.service";
-import { swallow } from "../../../common/swallow";
+import { ConversationService } from "../../conversations/conversation.service";
+import { swallow } from "../../common/swallow";
 import type { RunHandle } from "./run-active.store";
 import { RunActiveStore } from "./run-active.store";
 import type {
   RunStatusEffect,
   RunStatusPersistenceAction,
-} from "../runs/status/run-lifecycle.policy";
-import { RunRepository } from "../runs/run.repository";
+} from "./run-lifecycle.policy";
+import { RunRepository } from "../run.repository";
 
 @Injectable()
 export class RunExecutionStatusHandler {

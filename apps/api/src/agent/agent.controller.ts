@@ -5,7 +5,7 @@ import { ConversationService } from "../conversations/conversation.service";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { JwtUser } from "../auth/current-user.decorator";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
-import { RunRunner } from "../runtime/core/run-execution/run.runner";
+import { RunRunner } from "../runs/run.runner";
 import type { RunAgentInput } from "./run-agent-input";
 import { getAgentPermissionOptions } from "./agent-permission-options";
 

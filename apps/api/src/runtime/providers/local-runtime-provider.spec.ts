@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime-provider";
-import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 
 describe("LocalRuntimeProvider", () => {
   let provider: LocalRuntimeProvider;

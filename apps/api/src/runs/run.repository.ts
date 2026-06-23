@@ -4,12 +4,12 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import type { RunUsage } from "@agework/shared/protocol";
-import { Prisma } from "../../../../generated/prisma/client.js";
-import { PrismaService } from "../../../prisma/prisma.service";
+import { Prisma } from "../../generated/prisma/client.js";
+import { PrismaService } from "../prisma/prisma.service";
 import {
   ACTIVE_RUN_STATUSES,
   RUNNING_MUTABLE_STATUSES,
-} from "./status/run-lifecycle.policy";
+} from "./execution/run-lifecycle.policy";
 
 @Injectable()
 export class RunRepository {

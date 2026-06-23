@@ -2,15 +2,15 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { RunConfig, RuntimeHandle, RuntimePlacement } from "@agework/shared/protocol";
-import { RunRepository } from "../runs/run.repository";
-import { RunActiveStore } from "./run-active.store";
-import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
-import { ConversationService } from "../../../conversations/conversation.service";
-import type { IncompleteMessageReason, RunMessageAggregator } from "./run-message.aggregator";
-import { swallow } from "../../../common/swallow";
-import { errorLogFields, safeLogJson } from "../../../common/logging";
-import { RunEventRecorder } from "../run-events/run-event-recorder";
-import { RunEventFacts, compactData } from "../run-events/run-event-facts";
+import { RunRepository } from "./run.repository";
+import { RunActiveStore } from "./execution/run-active.store";
+import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
+import { ConversationService } from "../conversations/conversation.service";
+import type { IncompleteMessageReason, RunMessageAggregator } from "./execution/run-message.aggregator";
+import { swallow } from "../common/swallow";
+import { errorLogFields, safeLogJson } from "../common/logging";
+import { RunEventRecorder } from "./events/run-event-recorder";
+import { RunEventFacts, compactData } from "./events/run-event-facts";
 
 @Injectable()
 export class RunRunner {

@@ -5,7 +5,7 @@ import type {
   AgentEventTraceConfig,
   AgentEventTracePayload,
 } from "@agework/shared/protocol";
-import { errorLogFields, redactLogValue, safeLogJson } from "../../../common/logging";
+import { errorLogFields, redactLogValue, safeLogJson } from "../../common/logging";
 
 type AgentEventLogKind = "raw" | "agui";
 

@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryUseCase } from "./run-recovery.use-case";
 import { RunRepository } from "./run.repository";
-import { ConversationService } from "../../../conversations/conversation.service";
-import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
+import { ConversationService } from "../conversations/conversation.service";
+import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
 
 function makePrisma() {
   return {

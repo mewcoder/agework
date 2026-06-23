@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Envelope, ControlPayload } from "@agework/shared/protocol";
 import { errorLogFields, safeLogJson } from "../../common/logging";
-import { RunEventRecorder } from "../core/run-events/run-event-recorder";
-import { RunEventFacts } from "../core/run-events/run-event-facts";
+import { RunEventRecorder } from "../../runs/events/run-event-recorder";
+import { RunEventFacts } from "../../runs/events/run-event-facts";
 
 type WorkspaceWaiter = {
   afterSeq: number;

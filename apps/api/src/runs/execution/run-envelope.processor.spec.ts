@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunEnvelopeProcessor } from "./run-envelope.processor";
-import { RunRepository } from "../runs/run.repository";
+import { RunRepository } from "../run.repository";
 import { RunActiveStore } from "./run-active.store";
-import { ConversationService } from "../../../conversations/conversation.service";
+import { ConversationService } from "../../conversations/conversation.service";
 import { RunMessageAggregator } from "./run-message.aggregator";
-import { RawEventLogWriter } from "../run-events/raw-event-log.writer";
-import { RunEventRecorder } from "../run-events/run-event-recorder";
+import { RawEventLogWriter } from "../events/raw-event-log.writer";
+import { RunEventRecorder } from "../events/run-event-recorder";
 import { RunExecutionStatusHandler } from "./run-execution-status.handler";
 
 describe("RunEnvelopeProcessor", () => {

@@ -5,19 +5,19 @@ import type {
   ControlTracePayload,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import { RunRepository } from "../runs/run.repository";
-import { normalizeRunUsage } from "../runs/run-usage.mapper";
+import { RunRepository } from "../run.repository";
+import { normalizeRunUsage } from "./run-usage.mapper";
 import { RunActiveStore, type RunHandle } from "./run-active.store";
-import { ConversationService } from "../../../conversations/conversation.service";
-import { swallow } from "../../../common/swallow";
+import { ConversationService } from "../../conversations/conversation.service";
+import { swallow } from "../../common/swallow";
 import {
   errorLogFields,
   safeLogJson,
   summarizeEnvelopePayload,
-} from "../../../common/logging";
-import { RawEventLogWriter } from "../run-events/raw-event-log.writer";
-import { RunEventRecorder } from "../run-events/run-event-recorder";
-import { decideRunStatusUpdate } from "../runs/status/run-lifecycle.policy";
+} from "../../common/logging";
+import { RawEventLogWriter } from "../events/raw-event-log.writer";
+import { RunEventRecorder } from "../events/run-event-recorder";
+import { decideRunStatusUpdate } from "./run-lifecycle.policy";
 import {
   aguiEventFacts,
   controlTraceFact,
@@ -25,7 +25,7 @@ import {
   sdkRawErrorFact,
   shouldLogAgUiEvent,
   workerSeqGapFact,
-} from "../run-events/run-event-normalizer";
+} from "../events/run-event-normalizer";
 import { RunExecutionStatusHandler } from "./run-execution-status.handler";
 
 const CHUNK_SAVE_INTERVAL = 20;

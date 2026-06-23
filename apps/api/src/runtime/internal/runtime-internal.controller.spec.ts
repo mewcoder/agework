@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { IS_PUBLIC_KEY } from "../../auth/public.decorator";
 import { RuntimeInternalController } from "./runtime-internal.controller";
-import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
-import { RunActiveStore } from "../core/run-execution/run-active.store";
+import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
+import { RunActiveStore } from "../../runs/execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
 import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
 import { RuntimeControlQueue } from "./runtime-control-queue";

@@ -15,8 +15,8 @@ import type { JwtUser } from "../auth/current-user.decorator";
 import {
   RunMessageAggregator,
   type IncompleteMessageReason,
-} from "../runtime/core/run-execution/run-message.aggregator";
-import { RunRunner } from "../runtime/core/run-execution/run.runner";
+} from "../runs/execution/run-message.aggregator";
+import { RunRunner } from "../runs/run.runner";
 import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
 import {
   ConfigService,

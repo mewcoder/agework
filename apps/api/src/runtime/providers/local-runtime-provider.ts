@@ -9,9 +9,9 @@ import type {
   ControlPayload,
   Envelope,
 } from "@agework/shared/protocol";
-import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
-import { RunEventRecorder } from "../core/run-events/run-event-recorder";
-import { RunEventFacts } from "../core/run-events/run-event-facts";
+import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
+import { RunEventRecorder } from "../../runs/events/run-event-recorder";
+import { RunEventFacts } from "../../runs/events/run-event-facts";
 import {
   HeartbeatWatchdog,
   nextControlEnvelope,

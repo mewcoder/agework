@@ -8,7 +8,7 @@ import type {
   IsolationScope,
   ControlPayload,
 } from "@agework/shared/protocol";
-import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 import { RuntimeConfigStore } from "../internal/runtime-config-store";
 import { RuntimeInternalAccessService } from "../internal/runtime-internal-access.service";
 import { RuntimeControlQueue } from "../internal/runtime-control-queue";

@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunRunner } from "./run.runner";
-import { RunRepository } from "../runs/run.repository";
-import { RunActiveStore } from "./run-active.store";
-import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
-import { ConversationService } from "../../../conversations/conversation.service";
-import { RunEventRecorder } from "../run-events/run-event-recorder";
+import { RunRepository } from "./run.repository";
+import { RunActiveStore } from "./execution/run-active.store";
+import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
+import { ConversationService } from "../conversations/conversation.service";
+import { RunEventRecorder } from "./events/run-event-recorder";
 
 function makePlacement(runtimeType: string) {
   const runtimePath = runtimeType === "local" ? "/tmp/ws" : "/workspace";
