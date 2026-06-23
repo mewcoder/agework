@@ -39,6 +39,7 @@ import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 import { RunService } from "../runs/run.service";
 import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { RuntimeService } from "./runtime.service";
+import { TitleService } from "../runs/title.service";
 
 // admin
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -46,10 +47,11 @@ import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 
 // external deps
 import { ConversationModule } from "../conversations/conversation.module";
+import { ModelProviderModule } from "../model-providers/model-provider.module";
 import { ConfigService } from "../config/config.service";
 
 @Module({
-  imports: [ConversationModule],
+  imports: [ConversationModule, ModelProviderModule],
   controllers: [
     AdminRunController,
     AdminRuntimeController,
@@ -102,6 +104,7 @@ import { ConfigService } from "../config/config.service";
     RunService,
     RunConfigAssembler,
     RuntimeService,
+    TitleService,
   ],
   exports: [
     RunRepository,

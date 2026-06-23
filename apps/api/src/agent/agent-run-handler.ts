@@ -1,45 +1,28 @@
-import {
-  Injectable,
-  BadRequestException,
-  ConflictException,
-  Logger,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { Prisma } from "../../generated/prisma/client.js";
 import { AgentSpecBuilder } from "./agent-spec.builder";
-import { RunConfigAssembler } from "../runs/run-config.assembler";
-import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
 import type { JwtUser } from "../auth/current-user.decorator";
-import {
-  RunMessageAggregator,
-  type IncompleteMessageReason,
-} from "../runs/execution/run-message.aggregator";
 import { RunService } from "../runs/run.service";
-import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
-import {
-  ConfigService,
-  type IsolationScope,
-} from "../config/config.service";
-import { swallow } from "../common/swallow";
 import { safeLogJson } from "../common/logging";
 import type { RunAgentInput } from "./run-agent-input";
 import { getAgentPermissionOptions } from "./agent-permission-options";
 
+/**
+ * Agent 层入口：把 HTTP 请求翻成 RunService.start 的 StartRunInput。
+ * 只负责解析参数、读取 conversation/workspace、产出 AgentSpec；
+ * placement / RunConfig 组装 / 生命周期 / SSE / 持久化全部交给 RunService。
+ */
 @Injectable()
 export class AgentRunHandler {
   private readonly logger = new Logger(AgentRunHandler.name);
 
   constructor(
     private readonly agentSpecBuilder: AgentSpecBuilder,
-    private readonly runConfigAssembler: RunConfigAssembler,
     private readonly conversationService: ConversationService,
-    private readonly titleService: TitleService,
-    private readonly runtimeRunner: RunService,
-    private readonly runtimePlacementService: RuntimePlacementPolicy,
-    private readonly configService: ConfigService
+    private readonly runService: RunService
   ) {}
 
   async run(body: RunAgentInput, res: Response, user: JwtUser): Promise<void> {
@@ -129,35 +112,6 @@ export class AgentRunHandler {
     if (!modelProviderId) {
       throw new BadRequestException("缺少 modelProviderId");
     }
-    const runtimeType =
-      workspaceRuntimeType ?? this.configService.getDefaultRuntimeType();
-    if (!this.configService.isRuntimeTypeAllowed(runtimeType)) {
-      throw new BadRequestException("当前部署不支持该工作空间的运行环境");
-    }
-    let isolationScope: IsolationScope | undefined;
-    if (runtimeType === "sandbox") {
-      const resolvedIsolationScope =
-        workspaceIsolationScope ??
-        this.configService.getDefaultIsolationScope();
-      if (
-        !this.configService.isIsolationScopeAllowed(
-          resolvedIsolationScope
-        )
-      ) {
-        throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
-      }
-      isolationScope = resolvedIsolationScope;
-    }
-
-    const placement = this.runtimePlacementService.resolveForRun({
-      userId,
-      workspaceId,
-      workspaceRootPath,
-      userWorkspaceRootPath: this.configService.getUserWorkspace(userId),
-      runtimeType,
-      isolationScope,
-      sandboxEngine: workspaceSandboxEngine ?? undefined,
-    });
 
     const forwardedProps = {
       ...(body.forwardedProps ?? {}),
@@ -182,22 +136,13 @@ export class AgentRunHandler {
       ...(agentSessionId && { messages: body.messages?.slice(-1) }),
     };
 
-    // Build RunConfig for worker: agent 层产出 placement-free 的 AgentSpec，
-    // 再由 RunConfigAssembler 结合 placement 组装成 RunConfig。
-    let runConfig;
+    // Agent 层只产出 placement-free 的 AgentSpec
+    let agentSpec;
     try {
-      const agentSpec = await this.agentSpecBuilder.build({
+      agentSpec = await this.agentSpecBuilder.build({
         agentType,
         modelProviderId,
         model: requestedModel,
-      });
-      runConfig = this.runConfigAssembler.assemble({
-        agentSpec,
-        placement,
-        workspaceId,
-        runId,
-        conversationId,
-        input: runInput,
       });
     } catch (err) {
       throw new BadRequestException(
@@ -205,136 +150,30 @@ export class AgentRunHandler {
       );
     }
 
-    // Set up SSE response
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    if (conversationId) {
-      // 尝试更新状态，使用乐观锁防止并发
-      // setActiveRunStatus 内部会检查 activeRunStatus in ["idle", "error"] 才会更新为 running
-      const result = await this.conversationService.setActiveRunStatus(
-        conversationId,
-        "running"
-      );
-
-      if (result.count === 0) {
-        // 更新失败，查询当前状态以区分情况
-        try {
-          await this.conversationService.findOne(userId, conversationId);
-          if (interruptReason === "user_steered") {
-            await this.runtimeRunner.stop(conversationId, {
-              reason: "user_steered",
-              endResponse: true,
-            });
-            this.logger.log(
-              `active run interrupted by user steering ${safeLogJson({
-                conversationId,
-                runId,
-              })}`
-            );
-          } else {
-            // conversation 存在但更新失败，说明状态为 running
-            throw new ConflictException(
-              "A run is already active for this conversation"
-            );
-          }
-        } catch (err) {
-          if (err instanceof ConflictException) throw err;
-          // findOne 失败：conversation 不存在或数据库错误
-          if (
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2025"
-          ) {
-            throw new NotFoundException(
-              `Conversation ${conversationId} not found`
-            );
-          }
-          throw err;
-        }
-      }
-    }
-
-    if (conversationId && userMessage) {
-      await this.conversationService.saveUserMessage(
-        conversationId,
-        userMessage
-      );
-
-      // 标题只依赖用户首条消息，发送即可生成，与助手回复并行
-      this.titleService
-        .maybeGenerate(conversationId, agentType, modelProviderId)
-        .catch(
-          swallow(
-            this.logger,
-            `generate title for conversation ${conversationId}`
-          )
-        );
-    }
-
-    // Set up aggregator and saveRun
-    const aggregator = new RunMessageAggregator();
-    // 串行化 saveRun：chunk 节流 / 事件边界 / 终态会多次调用，原 fire-and-forget
-    // 并发 upsert 可能乱序完成——较早的不完整快照若晚于终态完整快照落库，会把
-    // status 覆盖回 incomplete。用 promise 链按调用顺序执行 build+upsert，
-    // 保证终态写入最后落库。build 也在链中执行，确保终态取到含全部内容的快照。
-    let saveChain: Promise<void> = Promise.resolve();
-    const saveRun = (
-      complete: boolean,
-      incompleteReason?: IncompleteMessageReason
-    ) => {
-      if (!conversationId) return;
-      saveChain = saveChain
-        .then(() => {
-          const snap = aggregator.build(complete, incompleteReason);
-          if (snap.content.length === 0) return;
-          const contentId = snap.messageId ?? runId;
-          return this.conversationService.upsertMessage(conversationId, {
-            id: runId,
-            runId,
-            parent_id: null,
-            format: "assistant-ui",
-            content: {
-              role: "assistant",
-              id: contentId,
-              content: snap.content,
-              status: snap.status,
-              ...(snap.metadata ? { metadata: snap.metadata } : {}),
-            },
-          });
-        })
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `persist assistant message for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
-    };
-
-    // Delegate all run lifecycle operations to RunRunner
-    await this.runtimeRunner.start({
+    await this.runService.start({
       runId,
       conversationId,
-      agentType,
-      placement,
-      runConfig,
-      res,
-      aggregator,
-      saveRun,
-      userMessageId,
       userId,
-      onAgentSessionId: (sessionId) => {
-        this.conversationService
-          .setAgentSessionId(conversationId, sessionId)
-          .catch(
-            swallow(this.logger, `persist agent session for ${conversationId}`)
-          );
+      agentSpec,
+      modelProviderId,
+      input: runInput,
+      workspace: {
+        workspaceId,
+        workspaceRootPath,
+        runtimeType: workspaceRuntimeType,
+        isolationScope: workspaceIsolationScope,
+        sandboxEngine: workspaceSandboxEngine,
       },
+      userMessage,
+      userMessageId,
+      res,
+      interruptReason,
     });
   }
 
   /**
    * 刷新网页后续接进行中的 run：校验 conversation 归属后，把 SSE response
-   * 交给 RunRunner.attachStream 接到活跃 run 上。
+   * 交给 RunService.resumeStream 接到活跃 run 上。
    */
   async resumeStream(
     conversationId: string,
@@ -346,7 +185,7 @@ export class AgentRunHandler {
     }
     // 校验归属：找不到会抛 NotFound，等价于官方 assertStreamOwner
     await this.conversationService.findOne(user.userId, conversationId);
-    await this.runtimeRunner.resumeStream(conversationId, res);
+    await this.runService.resumeStream(conversationId, res);
   }
 
   private normalizePermissionForwardedProps(
