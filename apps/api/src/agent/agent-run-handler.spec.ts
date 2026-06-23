@@ -5,7 +5,7 @@ import { AgentSpecBuilder } from "./agent-spec.builder";
 import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
-import { RunRunner } from "../runs/run.runner";
+import { RunService } from "../runs/run.service";
 import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
 import { RunMessageAggregator } from "../runs/execution/run-message.aggregator";
 import { ConfigService } from "../config/config.service";
@@ -18,7 +18,7 @@ describe("AgentRunHandler", () => {
   let mockRunConfigAssembler: Partial<RunConfigAssembler>;
   let mockConversationService: Partial<ConversationService>;
   let mockTitleService: Partial<TitleService>;
-  let mockRunRunner: Partial<RunRunner>;
+  let mockRunRunner: Partial<RunService>;
   let mockRuntimePlacementPolicy: Partial<RuntimePlacementPolicy>;
   let mockConfigService: Partial<ConfigService>;
   let res: Partial<Response>;
@@ -87,7 +87,7 @@ describe("AgentRunHandler", () => {
       mockRunConfigAssembler as RunConfigAssembler,
       mockConversationService as ConversationService,
       mockTitleService as TitleService,
-      mockRunRunner as RunRunner,
+      mockRunRunner as RunService,
       mockRuntimePlacementPolicy as RuntimePlacementPolicy,
       mockConfigService as ConfigService
     );
@@ -142,7 +142,7 @@ describe("AgentRunHandler", () => {
     );
   });
 
-  it("delegates to RunRunner.start with the built run config and lifecycle hooks", async () => {
+  it("delegates to RunService.start with the built run config and lifecycle hooks", async () => {
     const body = baseBody();
 
     await service.run(body, res as Response, user);

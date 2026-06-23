@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RunRunner } from "./run.runner";
+import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
-import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime/runtime.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { RunEventRecorder } from "./events/run-event-recorder";
 
@@ -19,11 +19,11 @@ function makePlacement(runtimeType: string) {
   };
 }
 
-describe("RunRunner", () => {
-  let service: RunRunner;
+describe("RunService", () => {
+  let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockRunActiveStore: Partial<RunActiveStore>;
-  let mockProviderRegistry: Partial<RuntimeProviderRegistry>;
+  let mockRuntimeService: Partial<RuntimeService>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunEventRecorder: Partial<RunEventRecorder>;
 
@@ -42,16 +42,16 @@ describe("RunRunner", () => {
       unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockProviderRegistry = {
-      resolve: vi.fn().mockReturnValue({
-        start: vi.fn().mockReturnValue({
-          runId: "run-1",
-          runtimeType: "local",
-          runtimeResourceId: "1:token",
-        }),
-        sendControl: vi.fn(),
-        cancel: vi.fn(),
+    mockRuntimeService = {
+      startWorker: vi.fn().mockReturnValue({
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeResourceId: "1:token",
       }),
+      sendControl: vi.fn(),
+      cancel: vi.fn(),
+      heartbeat: vi.fn(),
+      cleanup: vi.fn(),
     };
     mockConversationService = {
       attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
@@ -62,10 +62,10 @@ describe("RunRunner", () => {
       forgetRun: vi.fn(),
     };
 
-    service = new RunRunner(
+    service = new RunService(
       mockRunRepository as RunRepository,
       mockRunActiveStore as RunActiveStore,
-      mockProviderRegistry as RuntimeProviderRegistry,
+      mockRuntimeService as RuntimeService,
       mockConversationService as ConversationService,
       mockRunEventRecorder as RunEventRecorder
     );
@@ -113,7 +113,7 @@ describe("RunRunner", () => {
         agentType: "claude",
         runtimeType: "local",
       });
-      expect(mockProviderRegistry.resolve).toHaveBeenCalledWith("local");
+      expect(mockRuntimeService.startWorker).toHaveBeenCalled();
       expect(mockRunActiveStore.register).toHaveBeenCalledWith(
         "run-1",
         expect.objectContaining({
@@ -181,16 +181,12 @@ describe("RunRunner", () => {
     });
 
     it("continues starting the provider when audit event recording fails", async () => {
-      const provider = {
-        start: vi.fn().mockReturnValue({
-          runId: "run-1",
-          runtimeType: "local",
-          runtimeResourceId: "1:token",
-        }),
-        sendControl: vi.fn(),
-        cancel: vi.fn(),
-      };
-      mockProviderRegistry.resolve = vi.fn().mockReturnValue(provider);
+      const startWorker = vi.fn().mockReturnValue({
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeResourceId: "1:token",
+      });
+      mockRuntimeService.startWorker = startWorker;
       mockRunEventRecorder.append = vi
         .fn()
         .mockRejectedValue(new Error("SQLITE_BUSY"));
@@ -207,7 +203,7 @@ describe("RunRunner", () => {
         saveRun: vi.fn(),
       });
 
-      expect(provider.start).toHaveBeenCalled();
+      expect(startWorker).toHaveBeenCalled();
       expect(mockRunActiveStore.register).toHaveBeenCalledWith(
         "run-1",
         expect.objectContaining({ runId: "run-1" })
@@ -217,16 +213,13 @@ describe("RunRunner", () => {
     });
 
     it("persists the runtime handle once a docker provider resolves the container id asynchronously", async () => {
-      const provider = {
-        start: vi.fn().mockImplementation((_runConfig, _placement, onRuntimeResourceIdReady) => {
+      mockRuntimeService.startWorker = vi
+        .fn()
+        .mockImplementation((_runConfig, _placement, onRuntimeResourceIdReady) => {
           const handle = { runId: "run-1", runtimeType: "docker", runtimeResourceId: "", conversationId: "conversation-1" };
           queueMicrotask(() => onRuntimeResourceIdReady?.("container-abc"));
           return handle;
-        }),
-        sendControl: vi.fn(),
-        cancel: vi.fn(),
-      };
-      mockProviderRegistry.resolve = vi.fn().mockReturnValue(provider);
+        });
 
       const res = { on: vi.fn(), writableEnded: false } as any;
       const runConfig = { runId: "run-1", conversationId: "conversation-1" } as any;
@@ -252,12 +245,9 @@ describe("RunRunner", () => {
     });
 
     it("should rollback on provider.start() failure", async () => {
-      const provider = {
-        start: vi.fn().mockImplementation(() => {
-          throw new Error("spawn failed");
-        }),
-      };
-      mockProviderRegistry.resolve = vi.fn().mockReturnValue(provider);
+      mockRuntimeService.startWorker = vi.fn().mockImplementation(() => {
+        throw new Error("spawn failed");
+      });
 
       const res = { on: vi.fn(), writableEnded: false, write: vi.fn(), end: vi.fn() } as any;
 
@@ -292,11 +282,11 @@ describe("RunRunner", () => {
     });
   });
 
-  describe("sendApprovalResolved()", () => {
+  describe("resolveApproval()", () => {
     it("should throw NotFoundException when no active run found", async () => {
       mockRunRepository.findActiveByConversationId = vi.fn().mockResolvedValue(null);
       await expect(
-        service.sendApprovalResolved("conversation-1", {})
+        service.resolveApproval("conversation-1", {})
       ).rejects.toThrow();
     });
   });
@@ -333,8 +323,6 @@ describe("RunRunner", () => {
         stopRequested: false,
       };
       mockRunActiveStore.get = vi.fn().mockReturnValue(handle);
-      const provider = { cancel: vi.fn() };
-      mockProviderRegistry.resolve = vi.fn().mockReturnValue(provider);
 
       const hadHandle = await service.stop("conversation-1");
 
@@ -346,12 +334,12 @@ describe("RunRunner", () => {
           data: expect.objectContaining({ status: "cancelling" }),
         })
       );
-      expect(provider.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
+      expect(mockRuntimeService.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
       expect(hadHandle).toBe(true);
     });
   });
 
-  describe("attachStream()", () => {
+  describe("resumeStream()", () => {
     it("无活跃 run 时发终态 complete 快照并 end", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
@@ -364,7 +352,7 @@ describe("RunRunner", () => {
         on: vi.fn(),
       } as any;
 
-      await service.attachStream("conversation-1", res);
+      await service.resumeStream("conversation-1", res);
 
       // 最后一次 write 是终态快照，含 complete status
       const writes = (res.write as ReturnType<typeof vi.fn>).mock.calls.map(
@@ -400,7 +388,7 @@ describe("RunRunner", () => {
         on: vi.fn(),
       } as any;
 
-      await service.attachStream("conversation-1", res);
+      await service.resumeStream("conversation-1", res);
 
       // 补发了初始快照
       expect(aggregator.build).toHaveBeenCalled();
@@ -427,7 +415,7 @@ describe("RunRunner", () => {
         status: vi.fn().mockReturnThis(),
       } as any;
 
-      await service.attachStream("conversation-1", res);
+      await service.resumeStream("conversation-1", res);
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.write).not.toHaveBeenCalled();

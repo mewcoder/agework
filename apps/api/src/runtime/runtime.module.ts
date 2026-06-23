@@ -36,7 +36,7 @@ import { RuntimeInternalAuthGuard } from "./internal/runtime-internal-auth.guard
 import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 
 // runner
-import { RunRunner } from "../runs/run.runner";
+import { RunService } from "../runs/run.service";
 import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { RuntimeService } from "./runtime.service";
 
@@ -99,14 +99,14 @@ import { ConfigService } from "../config/config.service";
     RuntimeInternalAuthGuard,
     RuntimeControlQueue,
     // runner
-    RunRunner,
+    RunService,
     RunConfigAssembler,
     RuntimeService,
   ],
   exports: [
     RunRepository,
     WorkspaceRuntimeRepository,
-    RunRunner,
+    RunService,
     RunConfigAssembler,
     RuntimeService,
     RuntimeProviderRegistry,

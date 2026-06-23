@@ -17,7 +17,7 @@ import {
   RunMessageAggregator,
   type IncompleteMessageReason,
 } from "../runs/execution/run-message.aggregator";
-import { RunRunner } from "../runs/run.runner";
+import { RunService } from "../runs/run.service";
 import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
 import {
   ConfigService,
@@ -37,7 +37,7 @@ export class AgentRunHandler {
     private readonly runConfigAssembler: RunConfigAssembler,
     private readonly conversationService: ConversationService,
     private readonly titleService: TitleService,
-    private readonly runtimeRunner: RunRunner,
+    private readonly runtimeRunner: RunService,
     private readonly runtimePlacementService: RuntimePlacementPolicy,
     private readonly configService: ConfigService
   ) {}
@@ -346,7 +346,7 @@ export class AgentRunHandler {
     }
     // 校验归属：找不到会抛 NotFound，等价于官方 assertStreamOwner
     await this.conversationService.findOne(user.userId, conversationId);
-    await this.runtimeRunner.attachStream(conversationId, res);
+    await this.runtimeRunner.resumeStream(conversationId, res);
   }
 
   private normalizePermissionForwardedProps(

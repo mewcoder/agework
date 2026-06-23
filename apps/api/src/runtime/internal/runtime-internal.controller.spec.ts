@@ -4,8 +4,36 @@ import { RuntimeInternalController } from "./runtime-internal.controller";
 import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 import { RunActiveStore } from "../../runs/execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
 import { RuntimeControlQueue } from "./runtime-control-queue";
+
+const activeHandle = {
+  runtimeHandle: {
+    runId: "run-1",
+    runtimeType: "docker",
+    runtimeResourceId: "container-abc",
+    conversationId: "conversation-1",
+  },
+};
+
+function makeController(opts: {
+  handle: unknown;
+  runtimeService: Partial<RuntimeService>;
+}) {
+  const runEventProcessor: Partial<RunEnvelopeProcessor> = {
+    publish: vi.fn().mockResolvedValue(undefined),
+  };
+  const runRegistry: Partial<RunActiveStore> = {
+    get: vi.fn().mockReturnValue(opts.handle),
+  };
+  return new RuntimeInternalController(
+    runEventProcessor as RunEnvelopeProcessor,
+    {} as RuntimeConfigStore,
+    runRegistry as RunActiveStore,
+    opts.runtimeService as RuntimeService,
+    {} as RuntimeControlQueue
+  );
+}
 
 describe("RuntimeInternalController", () => {
   it("is marked @Public() so the global JwtAuthGuard does not block worker callbacks (auth is handled by RuntimeInternalAuthGuard)", () => {
@@ -13,27 +41,9 @@ describe("RuntimeInternalController", () => {
   });
 
   describe("postEvent()", () => {
-    it("cleans up via the provider matching the run's runtimeType on terminal status, without depending on a concrete provider", async () => {
-      const cleanup = vi.fn();
-      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
-        publish: vi.fn().mockResolvedValue(undefined),
-      };
-      const runRegistry: Partial<RunActiveStore> = {
-        get: vi.fn().mockReturnValue({
-          runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
-        }),
-      };
-      const runtimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ cleanup }),
-      };
-
-      const controller = new RuntimeInternalController(
-        runEventProcessor as RunEnvelopeProcessor,
-        {} as RuntimeConfigStore,
-        runRegistry as RunActiveStore,
-        runtimeProviderRegistry as RuntimeProviderRegistry,
-        {} as RuntimeControlQueue
-      );
+    it("cleans up via RuntimeService on terminal status", async () => {
+      const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
+      const controller = makeController({ handle: activeHandle, runtimeService });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -43,31 +53,12 @@ describe("RuntimeInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeProviderRegistry.resolve).toHaveBeenCalledWith("docker");
-      expect(cleanup).toHaveBeenCalledWith("run-1");
+      expect(runtimeService.cleanup).toHaveBeenCalledWith("run-1");
     });
 
     it("does not call cleanup for non-terminal run.status", async () => {
-      const cleanup = vi.fn();
-      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
-        publish: vi.fn().mockResolvedValue(undefined),
-      };
-      const runRegistry: Partial<RunActiveStore> = {
-        get: vi.fn().mockReturnValue({
-          runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
-        }),
-      };
-      const runtimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ cleanup }),
-      };
-
-      const controller = new RuntimeInternalController(
-        runEventProcessor as RunEnvelopeProcessor,
-        {} as RuntimeConfigStore,
-        runRegistry as RunActiveStore,
-        runtimeProviderRegistry as RuntimeProviderRegistry,
-        {} as RuntimeControlQueue
-      );
+      const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
+      const controller = makeController({ handle: activeHandle, runtimeService });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -77,30 +68,12 @@ describe("RuntimeInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(cleanup).not.toHaveBeenCalled();
+      expect(runtimeService.cleanup).not.toHaveBeenCalled();
     });
 
-    it("feeds the heartbeat watchdog of the run's provider on heartbeat events", async () => {
-      const heartbeat = vi.fn();
-      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
-        publish: vi.fn().mockResolvedValue(undefined),
-      };
-      const runRegistry: Partial<RunActiveStore> = {
-        get: vi.fn().mockReturnValue({
-          runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
-        }),
-      };
-      const runtimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ heartbeat }),
-      };
-
-      const controller = new RuntimeInternalController(
-        runEventProcessor as RunEnvelopeProcessor,
-        {} as RuntimeConfigStore,
-        runRegistry as RunActiveStore,
-        runtimeProviderRegistry as RuntimeProviderRegistry,
-        {} as RuntimeControlQueue
-      );
+    it("feeds the heartbeat watchdog via RuntimeService on heartbeat events", async () => {
+      const runtimeService: Partial<RuntimeService> = { heartbeat: vi.fn() };
+      const controller = makeController({ handle: activeHandle, runtimeService });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -110,28 +83,12 @@ describe("RuntimeInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeProviderRegistry.resolve).toHaveBeenCalledWith("docker");
-      expect(heartbeat).toHaveBeenCalledWith("run-1");
+      expect(runtimeService.heartbeat).toHaveBeenCalledWith("run-1");
     });
 
-    it("does not throw on heartbeat when no run handle is registered", async () => {
-      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
-        publish: vi.fn().mockResolvedValue(undefined),
-      };
-      const runRegistry: Partial<RunActiveStore> = {
-        get: vi.fn().mockReturnValue(undefined),
-      };
-      const runtimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn(),
-      };
-
-      const controller = new RuntimeInternalController(
-        runEventProcessor as RunEnvelopeProcessor,
-        {} as RuntimeConfigStore,
-        runRegistry as RunActiveStore,
-        runtimeProviderRegistry as RuntimeProviderRegistry,
-        {} as RuntimeControlQueue
-      );
+    it("does not feed heartbeat when no run handle is registered", async () => {
+      const runtimeService: Partial<RuntimeService> = { heartbeat: vi.fn() };
+      const controller = makeController({ handle: undefined, runtimeService });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -141,7 +98,7 @@ describe("RuntimeInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeProviderRegistry.resolve).not.toHaveBeenCalled();
+      expect(runtimeService.heartbeat).not.toHaveBeenCalled();
     });
   });
 });

@@ -4,7 +4,7 @@ import type { Response } from "express";
 import type { RunConfig, RuntimeHandle, RuntimePlacement } from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
-import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime/runtime.service";
 import { ConversationService } from "../conversations/conversation.service";
 import type { IncompleteMessageReason, RunMessageAggregator } from "./execution/run-message.aggregator";
 import { swallow } from "../common/swallow";
@@ -13,13 +13,13 @@ import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunEventFacts, compactData } from "./events/run-event-facts";
 
 @Injectable()
-export class RunRunner {
-  private readonly logger = new Logger(RunRunner.name);
+export class RunService {
+  private readonly logger = new Logger(RunService.name);
 
   constructor(
     private readonly runService: RunRepository,
     private readonly runRegistry: RunActiveStore,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
+    private readonly runtimeService: RuntimeService,
     private readonly conversationService: ConversationService,
     private readonly runEventRecorder: RunEventRecorder
   ) {}
@@ -119,8 +119,7 @@ export class RunRunner {
       return;
     }
 
-    // Start worker via provider
-    const provider = this.runtimeProviderRegistry.resolve(runtimeType);
+    // Start worker via RuntimeService facade
     let runtimeHandle: RuntimeHandle;
     try {
       this.runEventRecorder
@@ -134,7 +133,7 @@ export class RunRunner {
           })
         )
         .catch(swallow(this.logger, `record runtime starting for run ${runId}`));
-      runtimeHandle = provider.start(runConfig, placement, (runtimeResourceId) => {
+      runtimeHandle = this.runtimeService.startWorker(runConfig, placement, (runtimeResourceId) => {
         this.runService
           .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
           .catch(
@@ -249,7 +248,7 @@ export class RunRunner {
     );
   }
 
-  async sendApprovalResolved(
+  async resolveApproval(
     conversationId: string,
     answers: Record<string, string | string[]>
   ): Promise<void> {
@@ -258,10 +257,7 @@ export class RunRunner {
     if (!handle) {
       throw new NotFoundException(`No active run for conversation: ${conversationId}`);
     }
-    const provider = this.runtimeProviderRegistry.resolve(
-      handle.runtimeHandle.runtimeType
-    );
-    provider.sendControl(handle.runtimeHandle, {
+    this.runtimeService.sendControl(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: randomUUID(),
       conversationId,
@@ -280,7 +276,7 @@ export class RunRunner {
    *  - 无活跃 run / 无内存 handle（已结束）：发一个终态 complete 快照并 end，
    *    让前端 resume 流正常收尾，不卡在 running。
    */
-  async attachStream(conversationId: string, res: Response): Promise<void> {
+  async resumeStream(conversationId: string, res: Response): Promise<void> {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -397,10 +393,7 @@ export class RunRunner {
         )
         .catch(swallow(this.logger, `record cancel request for run ${activeRunRecord.id}`));
     }
-    const provider = this.runtimeProviderRegistry.resolve(
-      handle.runtimeHandle.runtimeType
-    );
-    provider.cancel(handle.runtimeHandle);
+    this.runtimeService.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       if (handle.res && !handle.res.writableEnded) {

@@ -17,7 +17,7 @@ import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
 import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 import { RunActiveStore } from "../../runs/execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
 import { RuntimeControlQueue } from "./runtime-control-queue";
 import {
   safeLogJson,
@@ -42,7 +42,7 @@ export class RuntimeInternalController {
     private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runRegistry: RunActiveStore,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
+    private readonly runtimeService: RuntimeService,
     private readonly controlQueue: RuntimeControlQueue
   ) {}
 
@@ -103,9 +103,7 @@ export class RuntimeInternalController {
     // worker 心跳上报：喂给对应 provider 的心跳 watchdog（HTTP transport 场景下
     // 这是唯一的喂狗入口，IPC transport 由 child.on("message") 直接喂狗）。
     if (envelope.type === "heartbeat" && handle) {
-      this.runtimeProviderRegistry
-        .resolve(handle.runtimeHandle.runtimeType)
-        .heartbeat(runId);
+      this.runtimeService.heartbeat(runId);
     }
 
     // worker 上报终态后清理 provider 内部状态（心跳定时器等），
@@ -113,9 +111,7 @@ export class RuntimeInternalController {
     if (envelope.type === "run.status") {
       const { status } = envelope.payload as RunStatusPayload;
       if (TERMINAL_RUN_STATUSES.includes(status) && handle) {
-        this.runtimeProviderRegistry
-          .resolve(handle.runtimeHandle.runtimeType)
-          .cleanup(runId);
+        this.runtimeService.cleanup(runId);
       }
     }
 
