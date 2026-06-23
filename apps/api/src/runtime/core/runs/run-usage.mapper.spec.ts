@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeRunUsage } from "./run-usage";
+import { normalizeRunUsage } from "./run-usage.mapper";
 
 describe("normalizeRunUsage", () => {
   it("normalizes codex result shape", () => {

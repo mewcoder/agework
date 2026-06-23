@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { PrismaService } from "../../prisma/prisma.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
 
 /**
  * Runtime 资源生命周期清理：
@@ -8,8 +8,8 @@ import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry"
  * - user 删除：关闭该用户名下的所有 user/workspace 隔离资源。
  */
 @Injectable()
-export class RuntimeLifecycleService {
-  private readonly logger = new Logger(RuntimeLifecycleService.name);
+export class RuntimeResourceLifecycleUseCase {
+  private readonly logger = new Logger(RuntimeResourceLifecycleUseCase.name);
 
   constructor(
     private readonly prisma: PrismaService,

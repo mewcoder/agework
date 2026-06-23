@@ -13,7 +13,7 @@ import {
   normalizeUsername,
 } from "../auth/user-credentials";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeLifecycleService } from "../runtime/core/runtime-lifecycle.service";
+import { RuntimeResourceLifecycleUseCase } from "../runtime/core/runtime-resources/runtime-resource-lifecycle.use-case";
 import { generateUserId } from "../common/id-generator";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
@@ -38,7 +38,7 @@ export class UserService {
   constructor(
     private prisma: PrismaService,
     private authService: AuthService,
-    private runtimeLifecycleService: RuntimeLifecycleService
+    private runtimeLifecycleService: RuntimeResourceLifecycleUseCase
   ) {}
 
   async list(operator: JwtUser, pagination?: { take: number; skip: number }) {

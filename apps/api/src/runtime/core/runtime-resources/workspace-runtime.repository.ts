@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { RuntimePlacement } from "@agework/shared/protocol";
-import { PrismaService } from "../../prisma/prisma.service";
+import { PrismaService } from "../../../prisma/prisma.service";
 
 function ownerWhere(placement: RuntimePlacement) {
   return {
@@ -40,7 +40,7 @@ function ownerWhereByResourceKey(
  * WorkspaceRuntime 表达业务绑定，RuntimeResource 表达容器/沙箱资源生命周期。
  */
 @Injectable()
-export class WorkspaceRuntimeService {
+export class WorkspaceRuntimeRepository {
   constructor(private prisma: PrismaService) {}
 
   async findActiveByWorkspace(workspaceId: string) {

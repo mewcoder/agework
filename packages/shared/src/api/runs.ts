@@ -1,6 +1,13 @@
 import type { RunStatus } from "../common";
 import type { PaginatedListResponse } from "../common";
-import type { RunUsage } from "../protocol";
+import type {
+  RunEventData,
+  RunEventOrigin,
+  RunEventRefs,
+  RunEventTargetType,
+  RunEventType,
+  RunUsage,
+} from "../protocol";
 
 /** /api/v1/admin/runs/list 的条目。 */
 export type AdminRunResponse = {
@@ -71,13 +78,16 @@ export type AdminRunDetailResponse = AdminRunResponse & {
 export type AdminRunEventResponse = {
   id: string;
   runId: string;
-  seq: number | null;
-  source: string;
-  eventType: string;
-  level: "debug" | "info" | "warn" | "error" | string;
+  runSeq: number;
+  eventKey: string | null;
+  type: RunEventType;
+  origin: RunEventOrigin;
+  targetType: RunEventTargetType | null;
+  targetId: string | null;
+  chainId: string | null;
+  refs: RunEventRefs | null;
   summary: string | null;
-  payload: unknown;
-  payloadRef: string | null;
+  data: RunEventData | null;
   /** ISO 8601 */
   createdAt: string;
 };
@@ -90,9 +100,16 @@ export type AdminRunListQuery = {
 
 export type AdminRunEventListQuery = {
   runId: string;
-  source?: string[];
-  eventType?: string;
-  level?: string[];
+  type?: RunEventType[];
+  typePrefix?: string;
+  origin?: RunEventOrigin[];
+  targetType?: RunEventTargetType;
+  targetId?: string;
+  chainId?: string;
+  refKey?: keyof RunEventRefs | string;
+  refValue?: string;
+  fromRunSeq?: number;
+  toRunSeq?: number;
   pageNo?: number;
   pageSize?: number;
 };

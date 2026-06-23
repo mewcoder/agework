@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { RuntimeLifecycleService } from "./runtime-lifecycle.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeResourceLifecycleUseCase } from "./runtime-resource-lifecycle.use-case";
+import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
 
 function makeResource(overrides: Record<string, unknown> = {}) {
   return {
@@ -14,7 +14,7 @@ function makeResource(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("RuntimeLifecycleService", () => {
+describe("RuntimeResourceLifecycleUseCase", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned runtime resource and deletes the workspace binding", async () => {
       const shutdownRuntimeResource = vi.fn();
@@ -27,7 +27,7 @@ describe("RuntimeLifecycleService", () => {
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
-      const service = new RuntimeLifecycleService(
+      const service = new RuntimeResourceLifecycleUseCase(
         { workspaceRuntime: { findUnique, deleteMany } } as never,
         registry as RuntimeProviderRegistry
       );
@@ -57,7 +57,7 @@ describe("RuntimeLifecycleService", () => {
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
-      const service = new RuntimeLifecycleService(
+      const service = new RuntimeResourceLifecycleUseCase(
         { workspaceRuntime: { findUnique, deleteMany } } as never,
         registry as RuntimeProviderRegistry
       );
@@ -84,7 +84,7 @@ describe("RuntimeLifecycleService", () => {
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
-      const service = new RuntimeLifecycleService(
+      const service = new RuntimeResourceLifecycleUseCase(
         { runtimeResource: { findMany } } as never,
         registry as RuntimeProviderRegistry
       );
@@ -114,7 +114,7 @@ describe("RuntimeLifecycleService", () => {
     const registry: Partial<RuntimeProviderRegistry> = {
       resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
     };
-    const service = new RuntimeLifecycleService(
+    const service = new RuntimeResourceLifecycleUseCase(
       { runtimeResource: { findMany } } as never,
       registry as RuntimeProviderRegistry
     );

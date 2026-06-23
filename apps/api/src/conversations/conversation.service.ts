@@ -404,6 +404,17 @@ export class ConversationService {
     );
   }
 
+  async attachMessageToRun(
+    conversationId: string,
+    messageId: string,
+    runId: string
+  ) {
+    return this.prisma.message.updateMany({
+      where: { id: messageId, conversationId },
+      data: { runId },
+    });
+  }
+
   private async ensureTitleFromMessage(
     conversationId: string,
     content: unknown

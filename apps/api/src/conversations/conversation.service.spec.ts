@@ -79,6 +79,22 @@ describe("ConversationService", () => {
     });
   });
 
+  it("attaches an existing message to a run", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new ConversationService({
+      message: { updateMany },
+    } as never);
+
+    await expect(
+      service.attachMessageToRun("conversation-1", "msg-1", "run-1")
+    ).resolves.toEqual({ count: 1 });
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "msg-1", conversationId: "conversation-1" },
+      data: { runId: "run-1" },
+    });
+  });
+
   it("uses the previous message as parent when parent_id is missing", async () => {
     const upsert = vi.fn().mockResolvedValue(undefined);
     const service = new ConversationService({

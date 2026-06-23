@@ -5,7 +5,7 @@ import type {
   AgentEventTraceConfig,
   AgentEventTracePayload,
 } from "@agework/shared/protocol";
-import { errorLogFields, redactLogValue, safeLogJson } from "../../common/logging";
+import { errorLogFields, redactLogValue, safeLogJson } from "../../../common/logging";
 
 type AgentEventLogKind = "raw" | "agui";
 
@@ -21,8 +21,8 @@ type AgentEventLogEntry = {
 };
 
 @Injectable()
-export class AgentEventLogService {
-  private readonly logger = new Logger(AgentEventLogService.name);
+export class RawEventLogWriter {
+  private readonly logger = new Logger(RawEventLogWriter.name);
   private readonly truncated = new Set<string>();
 
   writeRaw(config: AgentEventTraceConfig | undefined, payload: unknown): void {

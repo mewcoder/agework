@@ -1,8 +1,8 @@
-import { RuntimeActiveStore, type RunHandle } from "./runtime-active-store";
+import { RunActiveStore, type RunHandle } from "./run-active.store";
 
-describe("RuntimeActiveStore", () => {
+describe("RunActiveStore", () => {
   it("registers, retrieves and unregisters a run handle", () => {
-    const registry = new RuntimeActiveStore();
+    const registry = new RunActiveStore();
     const handle: RunHandle = {
       runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
       res: null,
@@ -23,7 +23,7 @@ describe("RuntimeActiveStore", () => {
   });
 
   it("returns undefined for an unknown run id", () => {
-    const registry = new RuntimeActiveStore();
+    const registry = new RunActiveStore();
     expect(registry.get("missing")).toBeUndefined();
   });
 });

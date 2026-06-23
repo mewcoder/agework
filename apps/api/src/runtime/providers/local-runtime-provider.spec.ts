@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime-provider";
-import { RuntimeEventProcessor } from "../core/runtime-event-processor";
+import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
 
 describe("LocalRuntimeProvider", () => {
   let provider: LocalRuntimeProvider;
-  let mockEventProcessor: Partial<RuntimeEventProcessor>;
+  let mockEventProcessor: Partial<RunEnvelopeProcessor>;
 
   beforeEach(() => {
     mockEventProcessor = {
       publish: vi.fn().mockResolvedValue(undefined),
     };
     provider = new LocalRuntimeProvider(
-      mockEventProcessor as RuntimeEventProcessor,
-      { record: vi.fn() } as never
+      mockEventProcessor as RunEnvelopeProcessor,
+      { append: vi.fn().mockResolvedValue({}) } as never
     );
   });
 

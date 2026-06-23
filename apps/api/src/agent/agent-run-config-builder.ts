@@ -115,7 +115,7 @@ function resolveAdapterKind(agentType: string): "claude" | "codex" {
 }
 
 // AGEWORK_AGENT_EVENT_TRACE_ENABLED 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，
-// 不是事件索引）。DB 诊断索引（RunEventRecordService 写入的 RunEvent）与本开关无关，始终记录，
+// 不是事件索引）。DB 关键事件索引（RunEventRecorder 写入的 RunEvent）与本开关无关，始终记录，
 // 关闭本开关后 run 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。
 function buildAgentEventTraceConfig(input: {
   runId: string;

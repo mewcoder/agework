@@ -3,21 +3,16 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import type { RunStatus } from "@agework/shared";
 import type { RunUsage } from "@agework/shared/protocol";
-import { Prisma } from "../../../generated/prisma/client.js";
-import { PrismaService } from "../../prisma/prisma.service";
-
-const ACTIVE_RUN_STATUSES: RunStatus[] = [
-  "queued",
-  "preparing",
-  "running",
-  "cancelling",
-  "requires_action",
-];
+import { Prisma } from "../../../../generated/prisma/client.js";
+import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  ACTIVE_RUN_STATUSES,
+  RUNNING_MUTABLE_STATUSES,
+} from "./status/run-lifecycle.policy";
 
 @Injectable()
-export class RunRecordService {
+export class RunRepository {
   constructor(private prisma: PrismaService) {}
 
   async create(data: {
@@ -53,8 +48,8 @@ export class RunRecordService {
   }
 
   async markRunning(runId: string) {
-    await this.prisma.run.update({
-      where: { id: runId },
+    await this.prisma.run.updateMany({
+      where: { id: runId, status: { in: RUNNING_MUTABLE_STATUSES } },
       data: { status: "running", startedAt: new Date() },
     });
   }
@@ -108,7 +103,7 @@ export class RunRecordService {
 
   async markRequiresAction(runId: string) {
     await this.prisma.run.updateMany({
-      where: { id: runId, status: { in: ACTIVE_RUN_STATUSES } },
+      where: { id: runId, status: { in: RUNNING_MUTABLE_STATUSES } },
       data: { status: "requires_action" },
     });
   }
@@ -171,42 +166,6 @@ export class RunRecordService {
         conversationTitle: conversation.title,
         workspaceName: conversation.workspace.name,
       })),
-      total,
-      pageNo: skip / take + 1,
-      pageSize: take,
-    };
-  }
-
-  async listAdminEvents(params: {
-    runId: string;
-    source?: string[];
-    eventType?: string;
-    level?: string[];
-    take: number;
-    skip: number;
-  }) {
-    const { runId, source, eventType, level, take, skip } = params;
-    const where = {
-      runId,
-      ...(source?.length ? { source: { in: source } } : {}),
-      ...(level?.length ? { level: { in: level } } : {}),
-      // SQLite Prisma 的 contains 区分大小写，前端 UI 已提示。
-      ...(eventType ? { eventType: { contains: eventType } } : {}),
-    };
-
-    const [list, total] = await Promise.all([
-      this.prisma.runEvent.findMany({
-        where,
-        // seq 可为 null、createdAt 可能相同，加 id 兜底保证翻页稳定。
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        take,
-        skip,
-      }),
-      this.prisma.runEvent.count({ where }),
-    ]);
-
-    return {
-      list,
       total,
       pageNo: skip / take + 1,
       pageSize: take,

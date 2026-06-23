@@ -5,11 +5,11 @@ import {
   ConfigService,
   type IsolationScope,
   type RuntimeType,
-} from "../../config/config.service";
-import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
+} from "../../../config/config.service";
+import { CONTAINER_WORKSPACES_ROOT } from "../../../config/defaults";
 
 @Injectable()
-export class RuntimePlacementService {
+export class RuntimePlacementPolicy {
   constructor(private readonly configService: ConfigService) {}
 
   resolveForRun(input: {

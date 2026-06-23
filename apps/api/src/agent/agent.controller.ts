@@ -5,7 +5,7 @@ import { ConversationService } from "../conversations/conversation.service";
 import { CurrentUser } from "../auth/current-user.decorator";
 import type { JwtUser } from "../auth/current-user.decorator";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
-import { RuntimeRunner } from "../runtime/core/runtime-runner";
+import { RunRunner } from "../runtime/core/run-execution/run.runner";
 import type { RunAgentInput } from "./run-agent-input";
 import { getAgentPermissionOptions } from "./agent-permission-options";
 
@@ -14,7 +14,7 @@ export class AgentController {
   constructor(
     private readonly agentRunHandler: AgentRunHandler,
     private readonly conversationService: ConversationService,
-    private readonly runtimeRunner: RuntimeRunner
+    private readonly runtimeRunner: RunRunner
   ) {}
 
   @Get("permission-options")

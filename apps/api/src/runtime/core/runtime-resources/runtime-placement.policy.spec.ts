@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RuntimePlacementService } from "./runtime-placement.service";
-import { ConfigService } from "../../config/config.service";
-import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
+import { RuntimePlacementPolicy } from "./runtime-placement.policy";
+import { ConfigService } from "../../../config/config.service";
+import { CONTAINER_WORKSPACES_ROOT } from "../../../config/defaults";
 
-describe("RuntimePlacementService", () => {
+describe("RuntimePlacementPolicy", () => {
   let mockConfigService: Partial<ConfigService>;
-  let service: RuntimePlacementService;
+  let service: RuntimePlacementPolicy;
 
   beforeEach(() => {
     mockConfigService = {
@@ -16,7 +16,7 @@ describe("RuntimePlacementService", () => {
         workspaceMountPath: "/workspace",
       }),
     };
-    service = new RuntimePlacementService(mockConfigService as ConfigService);
+    service = new RuntimePlacementPolicy(mockConfigService as ConfigService);
   });
 
   describe("non-local runtime, user isolation scope", () => {

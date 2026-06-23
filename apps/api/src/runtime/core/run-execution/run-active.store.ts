@@ -1,12 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { Response } from "express";
 import type { AgentEventTraceConfig, RuntimeHandle } from "@agework/shared/protocol";
-import type { IncompleteMessageReason, RuntimeMessageAggregator } from "./runtime-message-aggregator";
+import type { IncompleteMessageReason, RunMessageAggregator } from "./run-message.aggregator";
 
 export type RunHandle = {
   runtimeHandle: RuntimeHandle;
   res: Response | null;
-  aggregator: RuntimeMessageAggregator;
+  aggregator: RunMessageAggregator;
   conversationId: string;
   runId: string;
   workspaceId: string;
@@ -26,7 +26,7 @@ export type RunHandle = {
 };
 
 @Injectable()
-export class RuntimeActiveStore {
+export class RunActiveStore {
   private readonly handles = new Map<string, RunHandle>();
 
   register(runId: string, handle: RunHandle): void {

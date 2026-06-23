@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
-import { RunRecoveryService } from "./run-recovery.service";
-import { RunRecordService } from "./run-record.service";
-import { ConversationService } from "../../conversations/conversation.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RunRecoveryUseCase } from "./run-recovery.use-case";
+import { RunRepository } from "./run.repository";
+import { ConversationService } from "../../../conversations/conversation.service";
+import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
 
 function makePrisma() {
   return {
@@ -15,10 +15,10 @@ function makePrisma() {
   };
 }
 
-describe("RunRecoveryService.recoverOrphanRuns", () => {
+describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
   it("recovers orphan runs via the matching provider's recoverOrphan, based on runtimeType", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
-    const mockRunRecordService: Partial<RunRecordService> = {
+    const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
           id: "run-1",
@@ -36,8 +36,8 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
     };
 
-    const service = new RunRecoveryService(
-      mockRunRecordService as RunRecordService,
+    const service = new RunRecoveryUseCase(
+      mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
       makePrisma() as never
@@ -47,7 +47,7 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
 
     expect(mockProviderRegistry.resolve).toHaveBeenCalledWith("docker");
     expect(recoverOrphan).toHaveBeenCalledWith("container-abc");
-    expect(mockRunRecordService.markError).toHaveBeenCalledWith(
+    expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
     );
@@ -58,7 +58,7 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
   });
 
   it("skips provider recovery when a run has no persisted runtimeResourceId", async () => {
-    const mockRunRecordService: Partial<RunRecordService> = {
+    const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
           id: "run-1",
@@ -76,8 +76,8 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
       resolve: vi.fn(),
     };
 
-    const service = new RunRecoveryService(
-      mockRunRecordService as RunRecordService,
+    const service = new RunRecoveryUseCase(
+      mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
       makePrisma() as never
@@ -86,17 +86,17 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
     await service.recoverOrphanRuns();
 
     expect(mockProviderRegistry.resolve).not.toHaveBeenCalled();
-    expect(mockRunRecordService.markError).toHaveBeenCalledWith(
+    expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
     );
   });
 });
 
-describe("RunRecoveryService.recoverOrphanContainers", () => {
+describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
   it("stops running workspace-scope runtime resources and marks them stopped", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
-    const mockRunRecordService: Partial<RunRecordService> = {
+    const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([]),
     };
     const mockConversationService: Partial<ConversationService> = {};
@@ -119,8 +119,8 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
       },
     ]);
 
-    const service = new RunRecoveryService(
-      mockRunRecordService as RunRecordService,
+    const service = new RunRecoveryUseCase(
+      mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
       prisma as never
@@ -139,7 +139,7 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
 
   it("skips user-scope runtime resources without stopping or marking them", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
-    const mockRunRecordService: Partial<RunRecordService> = {
+    const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([]),
     };
     const mockConversationService: Partial<ConversationService> = {};
@@ -156,8 +156,8 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
       },
     ]);
 
-    const service = new RunRecoveryService(
-      mockRunRecordService as RunRecordService,
+    const service = new RunRecoveryUseCase(
+      mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
       prisma as never

@@ -6,6 +6,18 @@ export type {
   AgentTraceSink,
 } from "./trace";
 export type {
+  CoreRunEventType,
+  RecordRunEventInput,
+  RunEventData,
+  RunEventDataValue,
+  RunEventOrigin,
+  RunEventRecord,
+  RunEventRefs,
+  RunEventTargetType,
+  RunEventType,
+  RunFact,
+} from "./run-events";
+export type {
   AGUIEvent,
   AgentType,
   RunStatus,

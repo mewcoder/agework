@@ -5,7 +5,7 @@ import { RawResponse } from "../../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
 import { RuntimeControlQueue } from "./runtime-control-queue";
 import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
-import { WorkspaceRuntimeService } from "../core/workspace-runtime.service";
+import { WorkspaceRuntimeRepository } from "../core/runtime-resources/workspace-runtime.repository";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
@@ -25,7 +25,7 @@ export class RuntimeWorkspaceController {
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeService
+    private readonly workspaceRuntimeService: WorkspaceRuntimeRepository
   ) {}
 
   /**

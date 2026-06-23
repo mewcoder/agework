@@ -13,11 +13,11 @@ import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
 import type { JwtUser } from "../auth/current-user.decorator";
 import {
-  RuntimeMessageAggregator,
+  RunMessageAggregator,
   type IncompleteMessageReason,
-} from "../runtime/core/runtime-message-aggregator";
-import { RuntimeRunner } from "../runtime/core/runtime-runner";
-import { RuntimePlacementService } from "../runtime/core/runtime-placement.service";
+} from "../runtime/core/run-execution/run-message.aggregator";
+import { RunRunner } from "../runtime/core/run-execution/run.runner";
+import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
 import {
   ConfigService,
   type IsolationScope,
@@ -35,8 +35,8 @@ export class AgentRunHandler {
     private readonly runConfigBuilder: AgentRunConfigBuilder,
     private readonly conversationService: ConversationService,
     private readonly titleService: TitleService,
-    private readonly runtimeRunner: RuntimeRunner,
-    private readonly runtimePlacementService: RuntimePlacementService,
+    private readonly runtimeRunner: RunRunner,
+    private readonly runtimePlacementService: RuntimePlacementPolicy,
     private readonly configService: ConfigService
   ) {}
 
@@ -47,6 +47,12 @@ export class AgentRunHandler {
       typeof body.runId === "string" && body.runId ? body.runId : randomUUID();
     const userId = user.userId;
     const userMessage = body.messages?.[body.messages.length - 1];
+    const userMessageId =
+      typeof userMessage?.id === "string" && userMessage.id
+        ? userMessage.id
+        : userMessage?.id !== undefined && userMessage.id !== null
+          ? String(userMessage.id)
+          : undefined;
     const requestedAgentType = body.forwardedProps?.agentType ?? "claude";
     const requestedModelProviderId =
       typeof body.forwardedProps?.modelProviderId === "string"
@@ -63,7 +69,7 @@ export class AgentRunHandler {
         conversationId,
         runId,
         userId,
-        userMessageId: userMessage?.id,
+        userMessageId,
         requestedAgentType,
         requestedModelProviderId,
         requestedModel,
@@ -261,7 +267,7 @@ export class AgentRunHandler {
     }
 
     // Set up aggregator and saveRun
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     // 串行化 saveRun：chunk 节流 / 事件边界 / 终态会多次调用，原 fire-and-forget
     // 并发 upsert 可能乱序完成——较早的不完整快照若晚于终态完整快照落库，会把
     // status 覆盖回 incomplete。用 promise 链按调用顺序执行 build+upsert，
@@ -298,7 +304,7 @@ export class AgentRunHandler {
         });
     };
 
-    // Delegate all run lifecycle operations to RuntimeRunner
+    // Delegate all run lifecycle operations to RunRunner
     await this.runtimeRunner.start({
       runId,
       conversationId,
@@ -308,6 +314,8 @@ export class AgentRunHandler {
       res,
       aggregator,
       saveRun,
+      userMessageId,
+      userId,
       onAgentSessionId: (sessionId) => {
         this.conversationService
           .setAgentSessionId(conversationId, sessionId)
@@ -320,7 +328,7 @@ export class AgentRunHandler {
 
   /**
    * 刷新网页后续接进行中的 run：校验 conversation 归属后，把 SSE response
-   * 交给 RuntimeRunner.attachStream 接到活跃 run 上。
+   * 交给 RunRunner.attachStream 接到活跃 run 上。
    */
   async resumeStream(
     conversationId: string,

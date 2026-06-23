@@ -2,25 +2,26 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import type { RunConfig, RuntimeHandle, RuntimePlacement } from "@agework/shared/protocol";
-import { RunRecordService } from "./run-record.service";
-import { RuntimeActiveStore } from "./runtime-active-store";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
-import { ConversationService } from "../../conversations/conversation.service";
-import type { IncompleteMessageReason, RuntimeMessageAggregator } from "./runtime-message-aggregator";
-import { swallow } from "../../common/swallow";
-import { errorLogFields, safeLogJson } from "../../common/logging";
-import { RunEventRecordService } from "./run-event-record.service";
+import { RunRepository } from "../runs/run.repository";
+import { RunActiveStore } from "./run-active.store";
+import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
+import { ConversationService } from "../../../conversations/conversation.service";
+import type { IncompleteMessageReason, RunMessageAggregator } from "./run-message.aggregator";
+import { swallow } from "../../../common/swallow";
+import { errorLogFields, safeLogJson } from "../../../common/logging";
+import { RunEventRecorder } from "../run-events/run-event-recorder";
+import { RunEventFacts, compactData } from "../run-events/run-event-facts";
 
 @Injectable()
-export class RuntimeRunner {
-  private readonly logger = new Logger(RuntimeRunner.name);
+export class RunRunner {
+  private readonly logger = new Logger(RunRunner.name);
 
   constructor(
-    private readonly runService: RunRecordService,
-    private readonly runRegistry: RuntimeActiveStore,
+    private readonly runService: RunRepository,
+    private readonly runRegistry: RunActiveStore,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly conversationService: ConversationService,
-    private readonly runEventRecordService: RunEventRecordService
+    private readonly runEventRecorder: RunEventRecorder
   ) {}
 
   async start(params: {
@@ -30,8 +31,10 @@ export class RuntimeRunner {
     placement: RuntimePlacement;
     runConfig: RunConfig;
     res: Response;
-    aggregator: RuntimeMessageAggregator;
+    aggregator: RunMessageAggregator;
     saveRun: (complete: boolean, incompleteReason?: IncompleteMessageReason) => void;
+    userMessageId?: string;
+    userId?: string;
     onAgentSessionId?: (sessionId: string) => void;
   }): Promise<void> {
     const {
@@ -42,6 +45,8 @@ export class RuntimeRunner {
       res,
       aggregator,
       saveRun,
+      userMessageId,
+      userId,
       onAgentSessionId,
     } = params;
     const runtimeType = placement.runtimeType;
@@ -64,18 +69,38 @@ export class RuntimeRunner {
         agentType: params.agentType,
         runtimeType,
       });
-      this.runEventRecordService.record({
-        runId,
-        source: "system",
-        eventType: "run.created",
-        payload: {
-          conversationId,
-          workspaceId: placement.workspaceId,
-          agentType: params.agentType,
-          runtimeType,
-          isolationScope: placement.isolationScope,
-        },
-      });
+      this.runEventRecorder
+        .append(
+          RunEventFacts.runCreated({
+            runId,
+            conversationId,
+            workspaceId: placement.workspaceId,
+            agentType: params.agentType,
+            runtimeType,
+            isolationScope: placement.isolationScope,
+          })
+        )
+        .catch(swallow(this.logger, `record run created for run ${runId}`));
+      if (userMessageId) {
+        await this.conversationService
+          .attachMessageToRun(conversationId, userMessageId, runId)
+          .catch(
+            swallow(
+              this.logger,
+              `attach user message ${userMessageId} to run ${runId}`
+            )
+          );
+        this.runEventRecorder
+          .append(
+            RunEventFacts.messageAccepted({
+              runId,
+              conversationId,
+              messageId: userMessageId,
+              userId,
+            })
+          )
+          .catch(swallow(this.logger, `record message accepted for run ${runId}`));
+      }
     } catch (err) {
       this.logger.warn(
         `create run record failed ${safeLogJson({
@@ -98,31 +123,35 @@ export class RuntimeRunner {
     const provider = this.runtimeProviderRegistry.resolve(runtimeType);
     let runtimeHandle: RuntimeHandle;
     try {
-      this.runEventRecordService.record({
-        runId,
-        source: "runtime",
-        eventType: "runtime.starting",
-        payload: {
-          runtimeType,
-          isolationScope: placement.isolationScope,
-          sandboxEngineType: placement.sandboxEngineType,
-        },
-      });
+      this.runEventRecorder
+        .append(
+          RunEventFacts.runtimeStatusChanged({
+            runId,
+            status: "starting",
+            runtimeType,
+            isolationScope: placement.isolationScope,
+            sandboxEngineType: placement.sandboxEngineType,
+          })
+        )
+        .catch(swallow(this.logger, `record runtime starting for run ${runId}`));
       runtimeHandle = provider.start(runConfig, placement, (runtimeResourceId) => {
         this.runService
-          .updateRuntimeHandle(runId, runtimeHandle.runtimeType, runtimeResourceId)
+          .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
           .catch(
             swallow(this.logger, `persist runtime handle for run ${runId}`)
           );
-        this.runEventRecordService.record({
-          runId,
-          source: "runtime",
-          eventType: "runtime.ready",
-          payload: {
-            runtimeType: runtimeHandle.runtimeType,
-            runtimeResourceId,
-          },
-        });
+        this.runEventRecorder
+          .append(
+            RunEventFacts.runtimeStatusChanged({
+              runId,
+              eventKey: `runtime:${runtimeResourceId}:ready`,
+              status: "ready",
+              targetId: runtimeResourceId,
+              runtimeType,
+              runtimeResourceId,
+            })
+          )
+          .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
       });
     } catch (err) {
       this.logger.error(
@@ -133,15 +162,20 @@ export class RuntimeRunner {
           ...errorLogFields(err),
         })}`
       );
-      await this.runService.markError(runId, "Failed to start worker");
-      this.runEventRecordService.record({
-        runId,
-        source: "runtime",
-        eventType: "runtime.start_failed",
-        level: "error",
-        summary: err instanceof Error ? err.message : String(err),
-        payload: errorLogFields(err),
-      });
+      await this.runService
+        .markError(runId, "Failed to start worker")
+        .catch(swallow(this.logger, `mark run ${runId} start failure`));
+      this.runEventRecorder
+        .append(
+          RunEventFacts.runtimeStatusChanged({
+            runId,
+            status: "start_failed",
+            error: err instanceof Error ? err.message : String(err),
+            data: compactData(errorLogFields(err)),
+          })
+        )
+        .catch(swallow(this.logger, `record runtime start failure for run ${runId}`))
+        .finally(() => this.runEventRecorder.forgetRun(runId));
       await this.conversationService
         .setActiveRunStatus(conversationId, "error")
         .catch(
@@ -169,18 +203,21 @@ export class RuntimeRunner {
           runtimeHandle.runtimeResourceId
         )
         .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
-      this.runEventRecordService.record({
-        runId,
-        source: "runtime",
-        eventType: "runtime.ready",
-        payload: {
-          runtimeType: runtimeHandle.runtimeType,
-          runtimeResourceId: runtimeHandle.runtimeResourceId,
-        },
-      });
+      this.runEventRecorder
+        .append(
+          RunEventFacts.runtimeStatusChanged({
+            runId,
+            eventKey: `runtime:${runtimeHandle.runtimeResourceId}:ready`,
+            status: "ready",
+            targetId: runtimeHandle.runtimeResourceId,
+            runtimeType: runtimeHandle.runtimeType,
+            runtimeResourceId: runtimeHandle.runtimeResourceId,
+          })
+        )
+        .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
     }
 
-    // Register with RuntimeActiveStore
+    // Register with RunActiveStore
     this.runRegistry.register(runId, {
       runtimeHandle,
       res,
@@ -332,13 +369,16 @@ export class RuntimeRunner {
       // No in-memory handle — clean up stale state
       if (activeRunRecord) {
         await this.runService.markCancelled(activeRunRecord.id);
-        this.runEventRecordService.record({
-          runId: activeRunRecord.id,
-          source: "control",
-          eventType: "run.cancelled_without_handle",
-          level: "warn",
-          payload: { conversationId },
-        });
+        this.runEventRecorder
+          .append(
+            RunEventFacts.runStatusChanged({
+              runId: activeRunRecord.id,
+              origin: "platform",
+              status: "cancelled",
+              reason: "cancelled_without_handle",
+            })
+          )
+          .catch(swallow(this.logger, `record cancel without handle for run ${activeRunRecord.id}`));
       }
       return false;
     }
@@ -346,12 +386,16 @@ export class RuntimeRunner {
     handle.stopReason = options?.reason;
     if (activeRunRecord) {
       await this.runService.markCancelling(activeRunRecord.id);
-      this.runEventRecordService.record({
-        runId: activeRunRecord.id,
-        source: "control",
-        eventType: "run.cancel_requested",
-        payload: { conversationId, reason: options?.reason },
-      });
+      this.runEventRecorder
+        .append(
+          RunEventFacts.runStatusChanged({
+            runId: activeRunRecord.id,
+            origin: "platform",
+            status: "cancelling",
+            reason: options?.reason,
+          })
+        )
+        .catch(swallow(this.logger, `record cancel request for run ${activeRunRecord.id}`));
     }
     const provider = this.runtimeProviderRegistry.resolve(
       handle.runtimeHandle.runtimeType

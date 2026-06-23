@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { IS_PUBLIC_KEY } from "../../auth/public.decorator";
 import { RuntimeInternalController } from "./runtime-internal.controller";
-import { RuntimeEventProcessor } from "../core/runtime-event-processor";
-import { RuntimeActiveStore } from "../core/runtime-active-store";
+import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import { RunActiveStore } from "../core/run-execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
 import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
 import { RuntimeControlQueue } from "./runtime-control-queue";
@@ -15,10 +15,10 @@ describe("RuntimeInternalController", () => {
   describe("postEvent()", () => {
     it("cleans up via the provider matching the run's runtimeType on terminal status, without depending on a concrete provider", async () => {
       const cleanup = vi.fn();
-      const runEventProcessor: Partial<RuntimeEventProcessor> = {
+      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
         publish: vi.fn().mockResolvedValue(undefined),
       };
-      const runRegistry: Partial<RuntimeActiveStore> = {
+      const runRegistry: Partial<RunActiveStore> = {
         get: vi.fn().mockReturnValue({
           runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
         }),
@@ -28,9 +28,9 @@ describe("RuntimeInternalController", () => {
       };
 
       const controller = new RuntimeInternalController(
-        runEventProcessor as RuntimeEventProcessor,
+        runEventProcessor as RunEnvelopeProcessor,
         {} as RuntimeConfigStore,
-        runRegistry as RuntimeActiveStore,
+        runRegistry as RunActiveStore,
         runtimeProviderRegistry as RuntimeProviderRegistry,
         {} as RuntimeControlQueue
       );
@@ -49,10 +49,10 @@ describe("RuntimeInternalController", () => {
 
     it("does not call cleanup for non-terminal run.status", async () => {
       const cleanup = vi.fn();
-      const runEventProcessor: Partial<RuntimeEventProcessor> = {
+      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
         publish: vi.fn().mockResolvedValue(undefined),
       };
-      const runRegistry: Partial<RuntimeActiveStore> = {
+      const runRegistry: Partial<RunActiveStore> = {
         get: vi.fn().mockReturnValue({
           runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
         }),
@@ -62,9 +62,9 @@ describe("RuntimeInternalController", () => {
       };
 
       const controller = new RuntimeInternalController(
-        runEventProcessor as RuntimeEventProcessor,
+        runEventProcessor as RunEnvelopeProcessor,
         {} as RuntimeConfigStore,
-        runRegistry as RuntimeActiveStore,
+        runRegistry as RunActiveStore,
         runtimeProviderRegistry as RuntimeProviderRegistry,
         {} as RuntimeControlQueue
       );
@@ -82,10 +82,10 @@ describe("RuntimeInternalController", () => {
 
     it("feeds the heartbeat watchdog of the run's provider on heartbeat events", async () => {
       const heartbeat = vi.fn();
-      const runEventProcessor: Partial<RuntimeEventProcessor> = {
+      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
         publish: vi.fn().mockResolvedValue(undefined),
       };
-      const runRegistry: Partial<RuntimeActiveStore> = {
+      const runRegistry: Partial<RunActiveStore> = {
         get: vi.fn().mockReturnValue({
           runtimeHandle: { runId: "run-1", runtimeType: "docker", runtimeResourceId: "container-abc", conversationId: "conversation-1" },
         }),
@@ -95,9 +95,9 @@ describe("RuntimeInternalController", () => {
       };
 
       const controller = new RuntimeInternalController(
-        runEventProcessor as RuntimeEventProcessor,
+        runEventProcessor as RunEnvelopeProcessor,
         {} as RuntimeConfigStore,
-        runRegistry as RuntimeActiveStore,
+        runRegistry as RunActiveStore,
         runtimeProviderRegistry as RuntimeProviderRegistry,
         {} as RuntimeControlQueue
       );
@@ -115,10 +115,10 @@ describe("RuntimeInternalController", () => {
     });
 
     it("does not throw on heartbeat when no run handle is registered", async () => {
-      const runEventProcessor: Partial<RuntimeEventProcessor> = {
+      const runEventProcessor: Partial<RunEnvelopeProcessor> = {
         publish: vi.fn().mockResolvedValue(undefined),
       };
-      const runRegistry: Partial<RuntimeActiveStore> = {
+      const runRegistry: Partial<RunActiveStore> = {
         get: vi.fn().mockReturnValue(undefined),
       };
       const runtimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
@@ -126,9 +126,9 @@ describe("RuntimeInternalController", () => {
       };
 
       const controller = new RuntimeInternalController(
-        runEventProcessor as RuntimeEventProcessor,
+        runEventProcessor as RunEnvelopeProcessor,
         {} as RuntimeConfigStore,
-        runRegistry as RuntimeActiveStore,
+        runRegistry as RunActiveStore,
         runtimeProviderRegistry as RuntimeProviderRegistry,
         {} as RuntimeControlQueue
       );

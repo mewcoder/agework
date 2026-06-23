@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Envelope, ControlPayload } from "@agework/shared/protocol";
-import { safeLogJson } from "../../common/logging";
-import { RunEventRecordService } from "../core/run-event-record.service";
+import { errorLogFields, safeLogJson } from "../../common/logging";
+import { RunEventRecorder } from "../core/run-events/run-event-recorder";
+import { RunEventFacts } from "../core/run-events/run-event-facts";
 
 type WorkspaceWaiter = {
   afterSeq: number;
@@ -26,7 +27,7 @@ export class RuntimeControlQueue {
   private readonly workspaceWaiters = new Map<string, WorkspaceWaiter[]>();
 
   constructor(
-    private readonly runEventRecordService: RunEventRecordService
+    private readonly runEventRecorder: RunEventRecorder
   ) {}
 
   push(runId: string, envelope: Envelope<ControlPayload>): void {
@@ -151,18 +152,23 @@ export class RuntimeControlQueue {
   ): void {
     if (!runId) return;
     const control = envelope.payload;
-    this.runEventRecordService.record({
-      runId,
-      source: "control",
-      eventType: "control.sent",
-      level: "info",
-      summary: `${control.type} sent`,
-      payload: {
-        commandId: control.commandId,
-        controlType: control.type,
-        seq: envelope.seq,
-      },
-    });
+    this.runEventRecorder
+      .append(
+        RunEventFacts.controlSent({
+          runId,
+          commandId: control.commandId,
+          controlType: control.type,
+        })
+      )
+      .catch((err) =>
+        this.logger.warn(
+          `record control sent failed ${safeLogJson({
+            runId,
+            controlType: control.type,
+            ...errorLogFields(err),
+          })}`
+        )
+      );
   }
 
   cleanupWorkspace(workspaceId: string): void {

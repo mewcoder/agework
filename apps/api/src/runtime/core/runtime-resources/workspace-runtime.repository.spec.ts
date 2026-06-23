@@ -3,7 +3,7 @@ vi.mock("../../prisma/prisma.service", () => ({
 }));
 
 import type { RuntimePlacement } from "@agework/shared/protocol";
-import { WorkspaceRuntimeService } from "./workspace-runtime.service";
+import { WorkspaceRuntimeRepository } from "./workspace-runtime.repository";
 
 function placement(overrides: Partial<RuntimePlacement> = {}): RuntimePlacement {
   return {
@@ -18,13 +18,13 @@ function placement(overrides: Partial<RuntimePlacement> = {}): RuntimePlacement 
   };
 }
 
-describe("WorkspaceRuntimeService", () => {
+describe("WorkspaceRuntimeRepository", () => {
   it("finds a running workspace runtime by workspaceId", async () => {
     const findUnique = vi.fn().mockResolvedValue({
       id: "wr-1",
       resource: { id: "rr-1", status: "running" },
     });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       workspaceRuntime: { findUnique },
     } as never);
 
@@ -42,7 +42,7 @@ describe("WorkspaceRuntimeService", () => {
       id: "wr-1",
       resource: { id: "rr-1", status: "stopped" },
     });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       workspaceRuntime: { findUnique },
     } as never);
 
@@ -60,7 +60,7 @@ describe("WorkspaceRuntimeService", () => {
         workspaceRuntime: { upsert },
       })
     );
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       $transaction: transaction,
     } as never);
 
@@ -110,7 +110,7 @@ describe("WorkspaceRuntimeService", () => {
         workspaceRuntime: { upsert },
       })
     );
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       $transaction: transaction,
     } as never);
 
@@ -144,7 +144,7 @@ describe("WorkspaceRuntimeService", () => {
 
   it("marks a resource stopped from a placement", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       runtimeResource: { updateMany },
     } as never);
 
@@ -163,7 +163,7 @@ describe("WorkspaceRuntimeService", () => {
 
   it("marks a user runtime resource stopped by resource key", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       runtimeResource: { updateMany },
     } as never);
 
@@ -182,7 +182,7 @@ describe("WorkspaceRuntimeService", () => {
 
   it("finds active resources by provider runtime id", async () => {
     const findUnique = vi.fn().mockResolvedValue({ id: "rr-1", status: "running" });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       runtimeResource: { findUnique },
     } as never);
 
@@ -210,7 +210,7 @@ describe("WorkspaceRuntimeService", () => {
         runtimeResourceId: "container-abc",
       },
     });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       workspaceRuntime: { findUnique },
     } as never);
 
@@ -238,7 +238,7 @@ describe("WorkspaceRuntimeService", () => {
   it("deletes workspace bindings and stale resources", async () => {
     const deleteManyWorkspaceRuntime = vi.fn().mockResolvedValue({ count: 1 });
     const deleteManyRuntimeResource = vi.fn().mockResolvedValue({ count: 2 });
-    const service = new WorkspaceRuntimeService({
+    const service = new WorkspaceRuntimeRepository({
       workspaceRuntime: { deleteMany: deleteManyWorkspaceRuntime },
       runtimeResource: { deleteMany: deleteManyRuntimeResource },
     } as never);

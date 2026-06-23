@@ -1,11 +1,15 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { Roles } from "../../auth/roles.decorator";
-import { RunRecordService } from "../core/run-record.service";
+import { RunRepository } from "../core/runs/run.repository";
+import { RunEventQuery } from "../core/run-events/run-event-query";
 
 @Controller("admin/runs")
 @Roles("admin")
 export class AdminRunController {
-  constructor(private readonly runService: RunRecordService) {}
+  constructor(
+    private readonly runService: RunRepository,
+    private readonly runEventQueryService: RunEventQuery
+  ) {}
 
   @Get("list")
   listAdmin(
@@ -30,21 +34,35 @@ export class AdminRunController {
   @Get("events")
   listEvents(
     @Query("runId") runId: string,
-    @Query("source") source?: string,
-    @Query("eventType") eventType?: string,
-    @Query("level") level?: string,
+    @Query("type") type?: string,
+    @Query("typePrefix") typePrefix?: string,
+    @Query("origin") origin?: string,
+    @Query("targetType") targetType?: string,
+    @Query("targetId") targetId?: string,
+    @Query("chainId") chainId?: string,
+    @Query("refKey") refKey?: string,
+    @Query("refValue") refValue?: string,
+    @Query("fromRunSeq") fromRunSeq?: string,
+    @Query("toRunSeq") toRunSeq?: string,
     @Query("pageNo") pageNo?: string,
     @Query("pageSize") pageSize?: string
   ) {
     // 事件列表按单次 run 取全量在前端筛选/虚拟滚动，不再分页，上限仅用于兜底。
     const take = Math.min(Math.max(Number(pageSize) || 20, 1), 5000);
     const pageNum = Math.max(Number(pageNo) || 1, 1);
-    // source / level 支持逗号分隔多选；解析成数组去空，空数组视为不过滤。
-    return this.runService.listAdminEvents({
+    // type / origin 支持逗号分隔多选；解析成数组去空，空数组视为不过滤。
+    return this.runEventQueryService.listAdminEvents({
       runId,
-      source: parseMulti(source),
-      eventType: eventType || undefined,
-      level: parseMulti(level),
+      type: parseMulti(type),
+      typePrefix: typePrefix || undefined,
+      origin: parseMulti(origin),
+      targetType: targetType || undefined,
+      targetId: targetId || undefined,
+      chainId: chainId || undefined,
+      refKey: refKey || undefined,
+      refValue: refValue || undefined,
+      fromRunSeq: fromRunSeq ? Number(fromRunSeq) : undefined,
+      toRunSeq: toRunSeq ? Number(toRunSeq) : undefined,
       take,
       skip: (pageNum - 1) * take,
     });
@@ -52,8 +70,8 @@ export class AdminRunController {
 }
 
 /**
- * 解析多选 query 参数，兼容逗号分隔（`"agui,runtime"`）和标准重复 key 数组格式
- * （NestJS 对 `?source=a&source=b` 会解析成 `string[]`）。
+ * 解析多选 query 参数，兼容逗号分隔（`"platform,worker"`）和标准重复 key 数组格式
+ * （NestJS 对 `?origin=a&origin=b` 会解析成 `string[]`）。
  */
 function parseMulti(value?: string | string[]): string[] | undefined {
   if (!value) return undefined;

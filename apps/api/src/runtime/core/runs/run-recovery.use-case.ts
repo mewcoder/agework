@@ -1,20 +1,20 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { RunRecordService } from "./run-record.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
-import { ConversationService } from "../../conversations/conversation.service";
-import { PrismaService } from "../../prisma/prisma.service";
-import { swallow } from "../../common/swallow";
+import { RunRepository } from "./run.repository";
+import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
+import { ConversationService } from "../../../conversations/conversation.service";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { swallow } from "../../../common/swallow";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
  * 让对应 provider 清理底层进程/容器，并将 run/thread 状态标记为 error。
  */
 @Injectable()
-export class RunRecoveryService {
-  private readonly logger = new Logger(RunRecoveryService.name);
+export class RunRecoveryUseCase {
+  private readonly logger = new Logger(RunRecoveryUseCase.name);
 
   constructor(
-    private readonly runService: RunRecordService,
+    private readonly runService: RunRepository,
     private readonly conversationService: ConversationService,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly prisma: PrismaService

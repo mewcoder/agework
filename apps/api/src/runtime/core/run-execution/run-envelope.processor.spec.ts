@@ -1,49 +1,58 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RuntimeEventProcessor } from "./runtime-event-processor";
-import { RunRecordService } from "./run-record.service";
-import { RuntimeActiveStore } from "./runtime-active-store";
-import { ConversationService } from "../../conversations/conversation.service";
-import { RuntimeMessageAggregator } from "./runtime-message-aggregator";
-import { AgentEventLogService } from "./agent-event-log.service";
-import { RunEventRecordService } from "./run-event-record.service";
+import { RunEnvelopeProcessor } from "./run-envelope.processor";
+import { RunRepository } from "../runs/run.repository";
+import { RunActiveStore } from "./run-active.store";
+import { ConversationService } from "../../../conversations/conversation.service";
+import { RunMessageAggregator } from "./run-message.aggregator";
+import { RawEventLogWriter } from "../run-events/raw-event-log.writer";
+import { RunEventRecorder } from "../run-events/run-event-recorder";
+import { RunExecutionStatusHandler } from "./run-execution-status.handler";
 
-describe("RuntimeEventProcessor", () => {
-  let runEventProcessor: RuntimeEventProcessor;
-  let runRegistry: RuntimeActiveStore;
-  let mockRunRecordService: Partial<RunRecordService>;
+describe("RunEnvelopeProcessor", () => {
+  let runEventProcessor: RunEnvelopeProcessor;
+  let runRegistry: RunActiveStore;
+  let mockRunRepository: Partial<RunRepository>;
   let mockConversationService: Partial<ConversationService>;
-  let mockAgentEventLogService: Partial<AgentEventLogService>;
-  let mockRunEventRecordService: Partial<RunEventRecordService>;
+  let mockRawEventLogWriter: Partial<RawEventLogWriter>;
+  let mockRunEventRecorder: Partial<RunEventRecorder>;
 
   beforeEach(() => {
-    mockRunRecordService = {
+    mockRunRepository = {
       markRunning: vi.fn().mockResolvedValue(undefined),
       markFinished: vi.fn().mockResolvedValue(undefined),
       markError: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
       markRequiresAction: vi.fn().mockResolvedValue(undefined),
       updateHeartbeat: vi.fn().mockResolvedValue(undefined),
+      findActiveByConversationId: vi.fn().mockResolvedValue(null),
     };
 
     mockConversationService = {
       setPendingUserAction: vi.fn().mockResolvedValue(undefined),
       setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    mockAgentEventLogService = {
+    mockRawEventLogWriter = {
       writeRaw: vi.fn(),
       writeAgui: vi.fn(),
     };
-    mockRunEventRecordService = {
-      record: vi.fn(),
+    mockRunEventRecorder = {
+      append: vi.fn().mockResolvedValue({} as never),
+      forgetRun: vi.fn(),
     };
 
-    runRegistry = new RuntimeActiveStore();
-    runEventProcessor = new RuntimeEventProcessor(
-      mockRunRecordService as RunRecordService,
+    runRegistry = new RunActiveStore();
+    const runExecutionStatusHandler = new RunExecutionStatusHandler(
+      mockRunRepository as RunRepository,
+      mockConversationService as ConversationService,
+      runRegistry
+    );
+    runEventProcessor = new RunEnvelopeProcessor(
+      mockRunRepository as RunRepository,
       runRegistry,
       mockConversationService as ConversationService,
-      mockAgentEventLogService as AgentEventLogService,
-      mockRunEventRecordService as RunEventRecordService
+      mockRawEventLogWriter as RawEventLogWriter,
+      mockRunEventRecorder as RunEventRecorder,
+      runExecutionStatusHandler
     );
   });
 
@@ -66,8 +75,11 @@ describe("RuntimeEventProcessor", () => {
     await runEventProcessor.publish(envelope);
 
     // markRunning should only be called once
-    expect(mockRunRecordService.markRunning).toHaveBeenCalledTimes(1);
-    expect(mockRunEventRecordService.record).toHaveBeenCalledTimes(1);
+    expect(mockRunRepository.markRunning).toHaveBeenCalledTimes(1);
+    expect(mockRunEventRecorder.append).toHaveBeenCalledTimes(1);
+    expect(mockRunEventRecorder.append).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "run.status_changed" })
+    );
   });
 
   it("should handle heartbeat envelope", async () => {
@@ -80,8 +92,8 @@ describe("RuntimeEventProcessor", () => {
     };
 
     await runEventProcessor.publish(envelope);
-    expect(mockRunRecordService.updateHeartbeat).toHaveBeenCalledWith("run-1");
-    expect(mockRunEventRecordService.record).not.toHaveBeenCalled();
+    expect(mockRunRepository.updateHeartbeat).toHaveBeenCalledWith("run-1");
+    expect(mockRunEventRecorder.append).not.toHaveBeenCalled();
   });
 
   it("forceErrorStatus marks the run as error and bypasses seq dedup", async () => {
@@ -95,9 +107,103 @@ describe("RuntimeEventProcessor", () => {
 
     await runEventProcessor.forceErrorStatus("run-1", "worker heartbeat timeout");
 
-    expect(mockRunRecordService.markError).toHaveBeenCalledWith(
+    expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "worker heartbeat timeout"
+    );
+  });
+
+  it("still applies terminal status when run event recording fails", async () => {
+    mockRunEventRecorder.append = vi
+      .fn()
+      .mockRejectedValue(new Error("SQLITE_BUSY"));
+
+    await expect(
+      runEventProcessor.publish({
+        runId: "run-1",
+        seq: 1,
+        type: "run.status" as const,
+        payload: { status: "finished" as const },
+        ts: new Date().toISOString(),
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockRunRepository.markFinished).toHaveBeenCalledWith("run-1");
+  });
+
+  it("ignores late run statuses after a terminal status", async () => {
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "run.status" as const,
+      payload: { status: "finished" as const },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunRepository.markFinished).toHaveBeenCalledWith("run-1");
+
+    (mockRunRepository.markRunning as ReturnType<typeof vi.fn>).mockClear();
+    (mockRunEventRecorder.append as ReturnType<typeof vi.fn>).mockClear();
+
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 2,
+      type: "run.status" as const,
+      payload: { status: "running" as const },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunRepository.markRunning).not.toHaveBeenCalled();
+    expect(mockRunEventRecorder.append).not.toHaveBeenCalled();
+  });
+
+  it("continues AG-UI processing when run event recording fails", async () => {
+    mockRunEventRecorder.append = vi
+      .fn()
+      .mockRejectedValue(new Error("SQLITE_BUSY"));
+    const aggregator = { handle: vi.fn() };
+    const traceConfig = {
+      enabled: true,
+      rawFilePath: "/tmp/conversation-1.raw.jsonl",
+      aguiFilePath: "/tmp/conversation-1.agui.jsonl",
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+    };
+    runRegistry.register("run-1", {
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      agentEventTrace: traceConfig,
+      res: null,
+      aggregator: aggregator as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await expect(
+      runEventProcessor.publish({
+        runId: "run-1",
+        seq: 1,
+        type: "agui.event" as const,
+        payload: {
+          type: "TOOL_CALL_START",
+          toolCallId: "tool-1",
+          toolCallName: "bash",
+        },
+        ts: new Date().toISOString(),
+      })
+    ).resolves.toBeUndefined();
+
+    expect(mockRawEventLogWriter.writeAgui).toHaveBeenCalledWith(
+      traceConfig,
+      expect.objectContaining({ type: "TOOL_CALL_START" })
+    );
+    expect(aggregator.handle).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "TOOL_CALL_START" })
     );
   });
 
@@ -110,7 +216,7 @@ describe("RuntimeEventProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       res,
-      aggregator: new RuntimeMessageAggregator(),
+      aggregator: new RunMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
     });
@@ -124,7 +230,7 @@ describe("RuntimeEventProcessor", () => {
     });
 
     expect(res.write).not.toHaveBeenCalled();
-    expect(mockAgentEventLogService.writeAgui).toHaveBeenCalledWith(
+    expect(mockRawEventLogWriter.writeAgui).toHaveBeenCalledWith(
       undefined,
       { type: "MESSAGES_SNAPSHOT", messages: [] }
     );
@@ -139,7 +245,7 @@ describe("RuntimeEventProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       res,
-      aggregator: new RuntimeMessageAggregator(),
+      aggregator: new RunMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
       streamingSnapshot: true,
@@ -170,7 +276,7 @@ describe("RuntimeEventProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       res,
-      aggregator: new RuntimeMessageAggregator(),
+      aggregator: new RunMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
       // streamingSnapshot 默认 false
@@ -184,6 +290,51 @@ describe("RuntimeEventProcessor", () => {
     // 原始事件直接 JSON 转发，不是快照形态
     const written = (res.write as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
     expect(written).toContain('"type":"RUN_STARTED"');
+  });
+
+  it("records failed tool results as tool.failed facts", async () => {
+    runRegistry.register("run-1", {
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      res: null,
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {
+        type: "TOOL_CALL_RESULT",
+        toolCallId: "tool-1",
+        messageId: "msg-1",
+        isError: true,
+        content: JSON.stringify({ error: "permission denied" }),
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunEventRecorder.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventKey: "tool:tool-1:failed",
+        type: "tool.failed",
+        targetId: "tool-1",
+        refs: expect.objectContaining({
+          toolCallId: "tool-1",
+          messageId: "msg-1",
+        }),
+        data: expect.objectContaining({ error: "permission denied" }),
+      })
+    );
+    const recordedTypes = (
+      mockRunEventRecorder.append as ReturnType<typeof vi.fn>
+    ).mock.calls.map(([fact]) => fact.type);
+    expect(recordedTypes).not.toContain("tool.completed");
   });
 
   it("writes raw SDK events without forwarding them to the aggregator", async () => {
@@ -219,7 +370,7 @@ describe("RuntimeEventProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockAgentEventLogService.writeRaw).toHaveBeenCalledWith(
+    expect(mockRawEventLogWriter.writeRaw).toHaveBeenCalledWith(
       traceConfig,
       payload
     );

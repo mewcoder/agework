@@ -1,15 +1,17 @@
 import { Module, OnModuleInit } from "@nestjs/common";
 
 // core
-import { RunRecordService } from "./core/run-record.service";
-import { WorkspaceRuntimeService } from "./core/workspace-runtime.service";
-import { RuntimeActiveStore } from "./core/runtime-active-store";
-import { RuntimeEventProcessor } from "./core/runtime-event-processor";
-import { AgentEventLogService } from "./core/agent-event-log.service";
-import { RunEventRecordService } from "./core/run-event-record.service";
-import { RunRecoveryService } from "./core/run-recovery.service";
-import { RuntimePlacementService } from "./core/runtime-placement.service";
-import { RuntimeLifecycleService } from "./core/runtime-lifecycle.service";
+import { RunRepository } from "./core/runs/run.repository";
+import { WorkspaceRuntimeRepository } from "./core/runtime-resources/workspace-runtime.repository";
+import { RunActiveStore } from "./core/run-execution/run-active.store";
+import { RunEnvelopeProcessor } from "./core/run-execution/run-envelope.processor";
+import { RawEventLogWriter } from "./core/run-events/raw-event-log.writer";
+import { RunEventRecorder, RunEventStore } from "./core/run-events/run-event-recorder";
+import { RunEventQuery } from "./core/run-events/run-event-query";
+import { RunRecoveryUseCase } from "./core/runs/run-recovery.use-case";
+import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
+import { RuntimeResourceLifecycleUseCase } from "./core/runtime-resources/runtime-resource-lifecycle.use-case";
+import { RunExecutionStatusHandler } from "./core/run-execution/run-execution-status.handler";
 
 // providers
 import { RuntimeConfigStore } from "./internal/runtime-config-store";
@@ -34,7 +36,7 @@ import { RuntimeInternalAuthGuard } from "./internal/runtime-internal-auth.guard
 import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 
 // runner
-import { RuntimeRunner } from "./core/runtime-runner";
+import { RunRunner } from "./core/run-execution/run.runner";
 
 // admin
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -55,15 +57,18 @@ import { ConfigService } from "../config/config.service";
   ],
   providers: [
     // core
-    RunRecordService,
-    WorkspaceRuntimeService,
-    RuntimeActiveStore,
-    RuntimeEventProcessor,
-    AgentEventLogService,
-    RunEventRecordService,
-    RunRecoveryService,
-    RuntimePlacementService,
-    RuntimeLifecycleService,
+    RunRepository,
+    WorkspaceRuntimeRepository,
+    RunActiveStore,
+    RunEnvelopeProcessor,
+    RawEventLogWriter,
+    RunEventStore,
+    RunEventRecorder,
+    RunEventQuery,
+    RunRecoveryUseCase,
+    RuntimePlacementPolicy,
+    RuntimeResourceLifecycleUseCase,
+    RunExecutionStatusHandler,
     // providers
     RuntimeConfigStore,
     LocalRuntimeProvider,
@@ -92,19 +97,19 @@ import { ConfigService } from "../config/config.service";
     RuntimeInternalAuthGuard,
     RuntimeControlQueue,
     // runner
-    RuntimeRunner,
+    RunRunner,
   ],
   exports: [
-    RunRecordService,
-    WorkspaceRuntimeService,
-    RuntimeRunner,
+    RunRepository,
+    WorkspaceRuntimeRepository,
+    RunRunner,
     RuntimeProviderRegistry,
-    RuntimePlacementService,
-    RuntimeLifecycleService,
+    RuntimePlacementPolicy,
+    RuntimeResourceLifecycleUseCase,
   ],
 })
 export class RuntimeModule implements OnModuleInit {
-  constructor(private readonly runRecovery: RunRecoveryService) {}
+  constructor(private readonly runRecovery: RunRecoveryUseCase) {}
 
   async onModuleInit() {
     await this.runRecovery.recoverOrphanRuns();

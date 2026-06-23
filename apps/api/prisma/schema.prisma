@@ -162,18 +162,26 @@ model RunEvent {
   id         String   @id @default(cuid())
   runId      String
   run        Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
-  seq        Int?
-  source     String
-  eventType  String
-  level      String   @default("info")
+  runSeq     Int
+  eventKey   String?
+  type       String
+  origin     String
+  targetType String?
+  targetId   String?
+  chainId    String?
+  refs       Json?
   summary    String?
-  payload    Json?
-  payloadRef String?
+  data       Json?
   createdAt  DateTime @default(now())
 
-  @@index([runId, createdAt])
-  @@index([runId, eventType, createdAt])
-  @@index([level, createdAt])
+  @@unique([runId, runSeq])
+  @@unique([runId, eventKey])
+  @@index([runId, runSeq])
+  @@index([runId, type, runSeq])
+  @@index([runId, origin, runSeq])
+  @@index([runId, targetType, targetId, runSeq])
+  @@index([runId, chainId, runSeq])
+  @@index([type, createdAt])
 }
 
 model RuntimeResource {

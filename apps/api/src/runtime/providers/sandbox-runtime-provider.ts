@@ -8,13 +8,13 @@ import type {
   IsolationScope,
   ControlPayload,
 } from "@agework/shared/protocol";
-import { RuntimeEventProcessor } from "../core/runtime-event-processor";
+import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
 import { RuntimeConfigStore } from "../internal/runtime-config-store";
 import { RuntimeInternalAccessService } from "../internal/runtime-internal-access.service";
 import { RuntimeControlQueue } from "../internal/runtime-control-queue";
 import { ConfigService } from "../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../config/defaults";
-import { WorkspaceRuntimeService } from "../core/workspace-runtime.service";
+import { WorkspaceRuntimeRepository } from "../core/runtime-resources/workspace-runtime.repository";
 import { swallow } from "../../common/swallow";
 import {
   HeartbeatWatchdog,
@@ -53,12 +53,12 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
 
   constructor(
-    private readonly runEventProcessor: RuntimeEventProcessor,
+    private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runtimeAccess: RuntimeInternalAccessService,
     private readonly controlQueue: RuntimeControlQueue,
     private readonly configService: ConfigService,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeService,
+    private readonly workspaceRuntimeService: WorkspaceRuntimeRepository,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));

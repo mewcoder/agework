@@ -508,7 +508,7 @@ describe("WorkspaceService", () => {
       return { ...mocks, service, prismaMock };
     }
 
-    it("shuts down the workspace-scoped runtime resource via RuntimeLifecycleService", async () => {
+    it("shuts down the workspace-scoped runtime resource via RuntimeResourceLifecycleUseCase", async () => {
       const { service, shutdownForWorkspace } = makeDeleteMocks();
 
       await service.delete(userId, workspaceId);

@@ -11,6 +11,7 @@ import {
   type AdminRun,
   type AdminRunDetail,
   type AdminRunEvent,
+  type AdminRunEventListQuery,
   type RunStatus,
 } from "@/api/runs";
 import {
@@ -558,22 +559,13 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
   );
 }
 
-const EVENT_SOURCE_OPTIONS = [
-  { value: "agui", label: "agui" },
-  { value: "runtime", label: "runtime" },
-  { value: "control", label: "control" },
-  { value: "system", label: "system" },
+const EVENT_ORIGIN_OPTIONS = [
+  { value: "platform", label: "platform" },
+  { value: "agent", label: "agent" },
+  { value: "worker", label: "worker" },
 ];
 
-const EVENT_LEVEL_OPTIONS = [
-  { value: "info", label: "info" },
-  { value: "debug", label: "debug" },
-  { value: "warn", label: "warn" },
-  { value: "error", label: "error" },
-];
-
-const EVENT_SOURCE_VALUES = EVENT_SOURCE_OPTIONS.map((o) => o.value);
-const EVENT_LEVEL_VALUES = EVENT_LEVEL_OPTIONS.map((o) => o.value);
+const EVENT_ORIGIN_VALUES = EVENT_ORIGIN_OPTIONS.map((o) => o.value);
 
 // 单次 run 的事件数量天然有上限，一次性取全量后在前端筛选 + 虚拟滚动，不再分页。
 const EVENTS_FETCH_LIMIT = 5000;
@@ -581,8 +573,7 @@ const ESTIMATED_EVENT_ROW_HEIGHT = 72;
 
 function RunEventTimeline({ runId }: { runId: string }) {
   // 默认全选 = 不过滤；选中子集才作为过滤条件。
-  const [source, setSource] = useState<string[]>(EVENT_SOURCE_VALUES);
-  const [level, setLevel] = useState<string[]>(EVENT_LEVEL_VALUES);
+  const [origin, setOrigin] = useState<string[]>(EVENT_ORIGIN_VALUES);
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [eventTypeMenuOpen, setEventTypeMenuOpen] = useState(false);
   const [draftEventTypes, setDraftEventTypes] = useState<string[]>([]);
@@ -593,28 +584,27 @@ function RunEventTimeline({ runId }: { runId: string }) {
     queryFn: () =>
       runsApi.adminEvents({
         runId,
-        source: EVENT_SOURCE_VALUES,
+        origin: EVENT_ORIGIN_VALUES as AdminRunEventListQuery["origin"],
         pageSize: EVENTS_FETCH_LIMIT,
       }),
   });
 
   const allEvents = data?.list ?? [];
-  const hasSelection = source.length > 0 && level.length > 0;
+  const hasSelection = origin.length > 0;
 
   // 事件类型下拉的选项直接从当前运行已加载的事件聚合得到，不维护单独的枚举。
   const eventTypeOptions = useMemo(
-    () => Array.from(new Set(allEvents.map((event) => event.eventType))).sort(),
+    () => Array.from(new Set(allEvents.map((event) => event.type))).sort(),
     [allEvents]
   );
 
   const filteredEvents = useMemo(() => {
     return allEvents.filter((event) => {
-      if (!source.includes(event.source)) return false;
-      if (!level.includes(event.level)) return false;
-      if (eventTypes.length > 0 && !eventTypes.includes(event.eventType)) return false;
+      if (!origin.includes(event.origin)) return false;
+      if (eventTypes.length > 0 && !eventTypes.includes(event.type)) return false;
       return true;
     });
-  }, [allEvents, source, level, eventTypes]);
+  }, [allEvents, origin, eventTypes]);
 
   const virtualizer = useVirtualizer({
     count: filteredEvents.length,
@@ -633,7 +623,7 @@ function RunEventTimeline({ runId }: { runId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      {/* 筛选区：事件类型多选下拉靠左，来源 + 等级靠右。 */}
+      {/* 筛选区：事件类型多选下拉靠左，origin 靠右。 */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5">
         <DropdownMenu
           open={eventTypeMenuOpen}
@@ -727,41 +717,20 @@ function RunEventTimeline({ runId }: { runId: string }) {
 
         <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
-            <span className="mr-1 text-xs text-muted-foreground">来源</span>
+            <span className="mr-1 text-xs text-muted-foreground">origin</span>
             <ToggleGroup
               multiple
               variant="outline"
               size="sm"
               className="flex-wrap"
-              value={source}
-              onValueChange={setSource}
+              value={origin}
+              onValueChange={setOrigin}
             >
-              {EVENT_SOURCE_OPTIONS.map((option) => (
+              {EVENT_ORIGIN_OPTIONS.map((option) => (
                 <ToggleGroupItem
                   key={option.value}
                   value={option.value}
                   className="data-pressed:border-primary/40 data-pressed:bg-primary/10 data-pressed:text-primary"
-                >
-                  {option.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
-            <span className="mr-1 text-xs text-muted-foreground">等级</span>
-            <ToggleGroup
-              multiple
-              variant="outline"
-              size="sm"
-              className="flex-wrap"
-              value={level}
-              onValueChange={setLevel}
-            >
-              {EVENT_LEVEL_OPTIONS.map((option) => (
-                <ToggleGroupItem
-                  key={option.value}
-                  value={option.value}
-                  className={eventFilterLevelClassName(option.value)}
                 >
                   {option.label}
                 </ToggleGroupItem>
@@ -775,7 +744,7 @@ function RunEventTimeline({ runId }: { runId: string }) {
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto pr-2">
         {!hasSelection ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            请至少选择一个来源和等级。
+            请至少选择一个 origin。
           </p>
         ) : isLoading ? (
           <div className="space-y-2">
@@ -817,10 +786,12 @@ function RunEventTimeline({ runId }: { runId: string }) {
 
 function RunEventRow({ event }: { event: AdminRunEvent }) {
   const [showDetails, setShowDetails] = useState(false);
-  const hasPayload = event.payload !== null && event.payload !== undefined;
-  const hasDetails = Boolean(event.summary || hasPayload);
-  const isError = event.level === "error";
-  const isWarn = event.level === "warn";
+  const hasData = event.data !== null && event.data !== undefined;
+  const hasRefs = event.refs !== null && event.refs !== undefined;
+  const hasDetails = Boolean(event.summary || hasData || hasRefs);
+  const severity = eventSeverity(event);
+  const isError = severity === "error";
+  const isWarn = severity === "warn";
 
   return (
     <div
@@ -844,23 +815,28 @@ function RunEventRow({ event }: { event: AdminRunEvent }) {
           )}
         />
         <div className="min-w-0 flex-1 p-3">
-          {/* 第一行：事件类型 + 级别 + 来源 + 展开按钮。 */}
+          {/* 第一行：事件类型 + origin + 展开按钮。 */}
           <div className="flex h-6 items-center gap-2">
             <span className="min-w-0 truncate font-mono text-sm font-medium text-foreground">
-              {event.eventType}
+              #{event.runSeq} {event.type}
             </span>
             <Badge
-              variant={eventLevelVariant(event.level)}
-              className={eventLevelClassName(event.level)}
+              variant={eventSeverityVariant(severity)}
+              className={eventSeverityClassName(severity)}
             >
-              {eventLevelLabel(event.level)}
+              {severity}
             </Badge>
             <Badge
               variant="outline"
               className="border-primary/25 bg-primary/5 text-primary"
             >
-              {event.source}
+              {event.origin}
             </Badge>
+            {event.targetType && event.targetId && (
+              <Badge variant="outline" className="font-mono">
+                {event.targetType}:{event.targetId}
+              </Badge>
+            )}
             {hasDetails && (
               <Button
                 type="button"
@@ -896,13 +872,23 @@ function RunEventRow({ event }: { event: AdminRunEvent }) {
                   </p>
                 </div>
               )}
-              {hasPayload && (
+              {hasData && (
                 <div className="flex flex-col gap-1">
                   <div className="text-xs font-medium text-muted-foreground">
-                    payload
+                    data
                   </div>
                   <pre className="max-h-72 overflow-auto rounded-md bg-muted p-2 text-xs">
-                    {JSON.stringify(event.payload, null, 2)}
+                    {JSON.stringify(event.data, null, 2)}
+                  </pre>
+                </div>
+              )}
+              {hasRefs && (
+                <div className="flex flex-col gap-1">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    refs
+                  </div>
+                  <pre className="max-h-72 overflow-auto rounded-md bg-muted p-2 text-xs">
+                    {JSON.stringify(event.refs, null, 2)}
                   </pre>
                 </div>
               )}
@@ -926,20 +912,19 @@ function aggregateToolCalls(events: AdminRunEvent[]): ToolCallEntry[] {
   const order: string[] = [];
 
   for (const event of events) {
-    if (event.eventType === "TOOL_CALL_START") {
-      const payload = event.payload as Record<string, unknown> | null;
-      const toolCallId = String(payload?.toolCallId ?? "");
+    if (event.type === "tool.started") {
+      const data = eventData(event);
+      const toolCallId = event.refs?.toolCallId ?? event.targetId ?? "";
       if (!toolCallId || byId.has(toolCallId)) continue;
       const entry: ToolCallEntry = {
         toolCallId,
-        toolName: String(payload?.toolCallName ?? event.summary ?? "tool"),
+        toolName: String(data?.toolName ?? event.summary ?? "tool"),
         startEvent: event,
       };
       byId.set(toolCallId, entry);
       order.push(toolCallId);
-    } else if (event.eventType === "TOOL_CALL_RESULT") {
-      const payload = event.payload as Record<string, unknown> | null;
-      const toolCallId = String(payload?.toolCallId ?? "");
+    } else if (event.type === "tool.completed") {
+      const toolCallId = event.refs?.toolCallId ?? event.targetId ?? "";
       if (!toolCallId) continue;
       const entry = byId.get(toolCallId);
       if (entry) entry.resultEvent = event;
@@ -955,8 +940,7 @@ function ToolCallProcessView({ runId }: { runId: string }) {
     queryFn: () =>
       runsApi.adminEvents({
         runId,
-        eventType: "TOOL_CALL",
-        source: ["agui"],
+        typePrefix: "tool.",
         pageSize: EVENTS_FETCH_LIMIT,
       }),
   });
@@ -1000,17 +984,18 @@ function ToolCallProcessView({ runId }: { runId: string }) {
 
 function ToolCallCard({ entry }: { entry: ToolCallEntry }) {
   const done = !!entry.resultEvent;
-  const startPayload = entry.startEvent.payload as Record<string, unknown> | null;
-  const resultPayload = entry.resultEvent?.payload as Record<string, unknown> | null;
+  const startData = eventData(entry.startEvent);
+  const resultData = entry.resultEvent ? eventData(entry.resultEvent) : null;
   const contentPreview =
-    typeof resultPayload?.contentPreview === "string"
-      ? resultPayload.contentPreview
+    typeof resultData?.contentPreview === "string"
+      ? resultData.contentPreview
       : undefined;
   const duration = done
-    ? Date.parse(entry.resultEvent!.createdAt) - Date.parse(entry.startEvent.createdAt)
+    ? Date.parse(entry.resultEvent!.createdAt) -
+      Date.parse(entry.startEvent.createdAt)
     : null;
   const state: ToolState = done ? "output-available" : "input-available";
-  const output = contentPreview ?? entry.resultEvent?.summary ?? resultPayload;
+  const output = contentPreview ?? entry.resultEvent?.summary ?? resultData;
 
   return (
     <Tool defaultOpen={false} className={!done ? "border-amber-500/40" : undefined}>
@@ -1052,49 +1037,44 @@ function ToolCallCard({ entry }: { entry: ToolCallEntry }) {
         {entry.resultEvent?.summary && entry.resultEvent.summary !== contentPreview && (
           <ToolOutput title="摘要" output={entry.resultEvent.summary} />
         )}
-        <ToolInput title="Start payload" input={startPayload} />
-        <ToolOutput title="Result payload" output={resultPayload} />
+        <ToolInput title="Start data" input={startData} />
+        <ToolOutput title="Result data" output={resultData} />
       </ToolContent>
     </Tool>
   );
 }
 
-function eventLevelVariant(level: string) {
-  if (level === "error") return "destructive" as const;
-  if (level === "warn") return "secondary" as const;
+type EventSeverity = "info" | "warn" | "error";
+
+function eventData(event: AdminRunEvent): Record<string, unknown> | null {
+  return event.data && typeof event.data === "object" && !Array.isArray(event.data)
+    ? (event.data as Record<string, unknown>)
+    : null;
+}
+
+function eventSeverity(event: AdminRunEvent): EventSeverity {
+  const data = eventData(event);
+  if (event.type.endsWith(".failed")) return "error";
+  if (event.type === "system.issue" && data?.severity === "error") return "error";
+  if (event.type === "system.issue") return "warn";
+  if (event.type === "run.status_changed" && data?.status === "error") {
+    return "error";
+  }
+  return "info";
+}
+
+function eventSeverityVariant(severity: EventSeverity) {
+  if (severity === "error") return "destructive" as const;
+  if (severity === "warn") return "secondary" as const;
   return "outline" as const;
 }
 
-function eventLevelClassName(level: string) {
-  if (level === "error") return undefined;
-  if (level === "warn") {
+function eventSeverityClassName(severity: EventSeverity) {
+  if (severity === "error") return undefined;
+  if (severity === "warn") {
     return "border-amber-500/30 bg-amber-500/10 text-amber-700";
   }
-  if (level === "info") {
-    return "border-sky-500/30 bg-sky-500/10 text-sky-700";
-  }
-  if (level === "debug") {
-    return "border-muted-foreground/30 bg-muted text-muted-foreground";
-  }
-  return "border-muted-foreground/30 bg-muted text-muted-foreground";
-}
-
-function eventFilterLevelClassName(level: string) {
-  if (level === "error") {
-    return "data-pressed:border-destructive/40 data-pressed:bg-destructive/10 data-pressed:text-destructive";
-  }
-  if (level === "warn") {
-    return "data-pressed:border-amber-500/40 data-pressed:bg-amber-500/10 data-pressed:text-amber-700";
-  }
-  if (level === "info") {
-    return "data-pressed:border-sky-500/40 data-pressed:bg-sky-500/10 data-pressed:text-sky-700";
-  }
-  return "data-pressed:border-muted-foreground/40 data-pressed:bg-muted data-pressed:text-muted-foreground";
-}
-
-function eventLevelLabel(level: string) {
-  // 级别用英文原值，不翻译。
-  return level;
+  return "border-sky-500/30 bg-sky-500/10 text-sky-700";
 }
 
 function formatInteger(value?: number | null) {

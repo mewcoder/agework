@@ -1,5 +1,5 @@
 import type { AssistantUserMessage } from "../conversations/conversation.service";
-import type { IncompleteMessageReason } from "../runtime/core/runtime-message-aggregator";
+import type { IncompleteMessageReason } from "../runtime/core/run-execution/run-message.aggregator";
 
 /**
  * POST /agent/run 请求体。除已知字段外，原样透传给 RunConfig.input

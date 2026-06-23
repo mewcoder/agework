@@ -9,8 +9,9 @@ import type {
   ControlPayload,
   Envelope,
 } from "@agework/shared/protocol";
-import { RuntimeEventProcessor } from "../core/runtime-event-processor";
-import { RunEventRecordService } from "../core/run-event-record.service";
+import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import { RunEventRecorder } from "../core/run-events/run-event-recorder";
+import { RunEventFacts } from "../core/run-events/run-event-facts";
 import {
   HeartbeatWatchdog,
   nextControlEnvelope,
@@ -43,8 +44,8 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   private readonly controlSeqs = new Map<string, number>();
 
   constructor(
-    private readonly runEventProcessor: RuntimeEventProcessor,
-    private readonly runEventRecordService: RunEventRecordService
+    private readonly runEventProcessor: RunEnvelopeProcessor,
+    private readonly runEventRecorder: RunEventRecorder
   ) {}
 
   start(runConfig: RunConfig, _placement: RuntimePlacement): RuntimeHandle {
@@ -92,7 +93,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     };
     child.send(configEnvelope);
 
-    // Forward upstream messages to RuntimeEventProcessor
+    // Forward upstream messages to RunEnvelopeProcessor
     child.on("message", (msg: unknown) => {
       const envelope = msg as Envelope<unknown>;
       if (envelope.type === "heartbeat") {
@@ -164,18 +165,23 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       handle.runId,
       control
     );
-    this.runEventRecordService.record({
-      runId: handle.runId,
-      source: "control",
-      eventType: "control.sent",
-      level: "info",
-      summary: `${control.type} sent`,
-      payload: {
-        commandId: control.commandId,
-        controlType: control.type,
-        seq: envelope.seq,
-      },
-    });
+    this.runEventRecorder
+      .append(
+        RunEventFacts.controlSent({
+          runId: handle.runId,
+          commandId: control.commandId,
+          controlType: control.type,
+        })
+      )
+      .catch((err) => {
+        this.logger.warn(
+          `record control sent failed ${safeLogJson({
+            runId: handle.runId,
+            controlType: control.type,
+            ...errorLogFields(err),
+          })}`
+        );
+      });
     state.child.send(envelope);
   }
 

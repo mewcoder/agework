@@ -18,7 +18,7 @@ import {
 } from "../config/config.service";
 import { generateWorkspaceId } from "../common/id-generator";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeLifecycleService } from "../runtime/core/runtime-lifecycle.service";
+import { RuntimeResourceLifecycleUseCase } from "../runtime/core/runtime-resources/runtime-resource-lifecycle.use-case";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -89,7 +89,7 @@ export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-    private runtimeLifecycleService: RuntimeLifecycleService
+    private runtimeLifecycleService: RuntimeResourceLifecycleUseCase
   ) {}
 
   async listAll(pagination?: { take: number; skip: number }) {

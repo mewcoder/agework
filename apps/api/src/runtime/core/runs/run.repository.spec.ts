@@ -2,13 +2,13 @@ vi.mock("../prisma/prisma.service", () => ({
   PrismaService: class PrismaService {},
 }));
 
-import { RunRecordService } from "./run-record.service";
+import { RunRepository } from "./run.repository";
 
-describe("RunRecordService", () => {
+describe("RunRepository", () => {
   it("creates a run with the given identifiers", async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: "conversation-1" });
     const create = vi.fn().mockResolvedValue({ id: "run-1", status: "queued" });
-    const service = new RunRecordService({
+    const service = new RunRepository({
       conversation: { findFirst },
       run: { create },
     } as never);
@@ -41,7 +41,7 @@ describe("RunRecordService", () => {
   it("rejects run creation when conversation does not exist", async () => {
     const findFirst = vi.fn().mockResolvedValue(null);
     const create = vi.fn();
-    const service = new RunRecordService({
+    const service = new RunRepository({
       conversation: { findFirst },
       run: { create },
     } as never);
@@ -59,20 +59,20 @@ describe("RunRecordService", () => {
   });
 
   it("marks a run as running with a startedAt timestamp", async () => {
-    const update = vi.fn().mockResolvedValue({});
-    const service = new RunRecordService({ run: { update } } as never);
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new RunRepository({ run: { updateMany } } as never);
 
     await service.markRunning("run-1");
 
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "run-1" },
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "requires_action"] } },
       data: expect.objectContaining({ status: "running" }),
     });
   });
 
   it("marks a run as finished", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new RunRecordService({ run: { updateMany } } as never);
+    const service = new RunRepository({ run: { updateMany } } as never);
 
     await service.markFinished("run-1");
 
@@ -84,7 +84,7 @@ describe("RunRecordService", () => {
 
   it("marks a run as errored with the error message", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new RunRecordService({ run: { updateMany } } as never);
+    const service = new RunRepository({ run: { updateMany } } as never);
 
     await service.markError("run-1", "boom");
 
@@ -96,7 +96,7 @@ describe("RunRecordService", () => {
 
   it("marks a run as cancelling", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new RunRecordService({ run: { updateMany } } as never);
+    const service = new RunRepository({ run: { updateMany } } as never);
 
     await service.markCancelling("run-1");
 
@@ -106,9 +106,21 @@ describe("RunRecordService", () => {
     });
   });
 
+  it("marks a run as requiring action without overwriting cancelling runs", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new RunRepository({ run: { updateMany } } as never);
+
+    await service.markRequiresAction("run-1");
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "requires_action"] } },
+      data: { status: "requires_action" },
+    });
+  });
+
   it("persists the runtime handle (runtimeType + runtimeResourceId) for a run", async () => {
     const update = vi.fn().mockResolvedValue({});
-    const service = new RunRecordService({ run: { update } } as never);
+    const service = new RunRepository({ run: { update } } as never);
 
     await service.updateRuntimeHandle("run-1", "docker", "container-abc");
 
@@ -120,7 +132,7 @@ describe("RunRecordService", () => {
 
   it("records token usage for a run", async () => {
     const update = vi.fn().mockResolvedValue({});
-    const service = new RunRecordService({ run: { update } } as never);
+    const service = new RunRepository({ run: { update } } as never);
 
     const usage = {
       inputTokens: 100,
@@ -192,7 +204,7 @@ describe("RunRecordService", () => {
         },
       ],
     });
-    const service = new RunRecordService({
+    const service = new RunRepository({
       run: { findUnique: findRun },
       runtimeResource: { findUnique: findRuntimeResource },
     } as never);
@@ -236,58 +248,9 @@ describe("RunRecordService", () => {
     expect(detail).not.toHaveProperty("events");
   });
 
-  it("lists run events with pagination and filters", async () => {
-    const now = new Date().toISOString();
-    const findMany = vi.fn().mockResolvedValue([
-      {
-        id: "event-1",
-        runId: "run-1",
-        seq: 1,
-        source: "runtime",
-        eventType: "run.status.running",
-        level: "info",
-        summary: null,
-        payload: null,
-        payloadRef: null,
-        createdAt: now,
-      },
-    ]);
-    const count = vi.fn().mockResolvedValue(1);
-    const service = new RunRecordService({
-      runEvent: { findMany, count },
-    } as never);
-
-    const result = await service.listAdminEvents({
-      runId: "run-1",
-      source: ["runtime"],
-      eventType: "run.status",
-      take: 20,
-      skip: 0,
-    });
-
-    const expectedWhere = {
-      runId: "run-1",
-      source: { in: ["runtime"] },
-      eventType: { contains: "run.status" },
-    };
-    expect(findMany).toHaveBeenCalledWith({
-      where: expectedWhere,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-      take: 20,
-      skip: 0,
-    });
-    expect(count).toHaveBeenCalledWith({ where: expectedWhere });
-    expect(result).toMatchObject({
-      total: 1,
-      pageNo: 1,
-      pageSize: 20,
-      list: [{ id: "event-1", eventType: "run.status.running" }],
-    });
-  });
-
   it("finds the most recent active run for a conversation", async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: "run-1", status: "running" });
-    const service = new RunRecordService({ run: { findFirst } } as never);
+    const service = new RunRepository({ run: { findFirst } } as never);
 
     const run = await service.findActiveByConversationId("conversation-1");
 

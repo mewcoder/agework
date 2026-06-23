@@ -14,6 +14,7 @@ export type { RunStatus };
 export type { AdminRunResponse as AdminRun };
 export type { AdminRunDetailResponse as AdminRunDetail };
 export type { AdminRunEventResponse as AdminRunEvent };
+export type { AdminRunEventListQuery };
 export type { AdminRunListResponse };
 
 export const runsApi = {
@@ -34,9 +35,16 @@ export const runsApi = {
   adminEvents: (params: AdminRunEventListQuery) => {
     const query = new URLSearchParams();
     query.set("runId", params.runId);
-    if (params.source?.length) query.set("source", params.source.join(","));
-    if (params.eventType) query.set("eventType", params.eventType);
-    if (params.level?.length) query.set("level", params.level.join(","));
+    if (params.type?.length) query.set("type", params.type.join(","));
+    if (params.typePrefix) query.set("typePrefix", params.typePrefix);
+    if (params.origin?.length) query.set("origin", params.origin.join(","));
+    if (params.targetType) query.set("targetType", params.targetType);
+    if (params.targetId) query.set("targetId", params.targetId);
+    if (params.chainId) query.set("chainId", params.chainId);
+    if (params.refKey) query.set("refKey", String(params.refKey));
+    if (params.refValue) query.set("refValue", params.refValue);
+    if (params.fromRunSeq) query.set("fromRunSeq", String(params.fromRunSeq));
+    if (params.toRunSeq) query.set("toRunSeq", String(params.toRunSeq));
     if (params.pageNo) query.set("pageNo", String(params.pageNo));
     if (params.pageSize) query.set("pageSize", String(params.pageSize));
     return apiGet<AdminRunEventListResponse>(

@@ -4,9 +4,9 @@ import { AgentRunHandler } from "./agent-run-handler";
 import { AgentRunConfigBuilder } from "./agent-run-config-builder";
 import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
-import { RuntimeRunner } from "../runtime/core/runtime-runner";
-import { RuntimePlacementService } from "../runtime/core/runtime-placement.service";
-import { RuntimeMessageAggregator } from "../runtime/core/runtime-message-aggregator";
+import { RunRunner } from "../runtime/core/run-execution/run.runner";
+import { RuntimePlacementPolicy } from "../runtime/core/runtime-resources/runtime-placement.policy";
+import { RunMessageAggregator } from "../runtime/core/run-execution/run-message.aggregator";
 import { ConfigService } from "../config/config.service";
 import type { Response } from "express";
 import type { JwtUser } from "../auth/current-user.decorator";
@@ -16,8 +16,8 @@ describe("AgentRunHandler", () => {
   let mockAgentRunConfigBuilder: Partial<AgentRunConfigBuilder>;
   let mockConversationService: Partial<ConversationService>;
   let mockTitleService: Partial<TitleService>;
-  let mockRuntimeRunner: Partial<RuntimeRunner>;
-  let mockRuntimePlacementService: Partial<RuntimePlacementService>;
+  let mockRunRunner: Partial<RunRunner>;
+  let mockRuntimePlacementPolicy: Partial<RuntimePlacementPolicy>;
   let mockConfigService: Partial<ConfigService>;
   let res: Partial<Response>;
   let user: JwtUser;
@@ -40,10 +40,10 @@ describe("AgentRunHandler", () => {
     mockTitleService = {
       maybeGenerate: vi.fn().mockResolvedValue(undefined),
     };
-    mockRuntimeRunner = {
+    mockRunRunner = {
       start: vi.fn().mockResolvedValue(undefined),
     };
-    mockRuntimePlacementService = {
+    mockRuntimePlacementPolicy = {
       resolveForRun: vi.fn().mockImplementation(({ userId, workspaceId, workspaceRootPath }) => ({
         runtimeType: "local",
         isolationScope: "user",
@@ -78,8 +78,8 @@ describe("AgentRunHandler", () => {
       mockAgentRunConfigBuilder as AgentRunConfigBuilder,
       mockConversationService as ConversationService,
       mockTitleService as TitleService,
-      mockRuntimeRunner as RuntimeRunner,
-      mockRuntimePlacementService as RuntimePlacementService,
+      mockRunRunner as RunRunner,
+      mockRuntimePlacementPolicy as RuntimePlacementPolicy,
       mockConfigService as ConfigService
     );
   });
@@ -133,7 +133,7 @@ describe("AgentRunHandler", () => {
     );
   });
 
-  it("delegates to RuntimeRunner.start with the built run config and lifecycle hooks", async () => {
+  it("delegates to RunRunner.start with the built run config and lifecycle hooks", async () => {
     const body = baseBody();
 
     await service.run(body, res as Response, user);
@@ -147,24 +147,26 @@ describe("AgentRunHandler", () => {
       })
     );
 
-    expect(mockRuntimeRunner.start).toHaveBeenCalledTimes(1);
-    const startArgs = (mockRuntimeRunner.start as ReturnType<typeof vi.fn>).mock
+    expect(mockRunRunner.start).toHaveBeenCalledTimes(1);
+    const startArgs = (mockRunRunner.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(startArgs.conversationId).toBe("conversation-1");
     expect(startArgs.agentType).toBe("claude");
+    expect(startArgs.userMessageId).toBe("msg-1");
+    expect(startArgs.userId).toBe("user-1");
     expect(startArgs.runConfig).toEqual({ runId: "run-1" });
     expect(startArgs.res).toBe(res);
-    expect(startArgs.aggregator).toBeInstanceOf(RuntimeMessageAggregator);
+    expect(startArgs.aggregator).toBeInstanceOf(RunMessageAggregator);
     expect(typeof startArgs.saveRun).toBe("function");
     expect(typeof startArgs.onAgentSessionId).toBe("function");
   });
 
-  it("resolves placement via RuntimePlacementService and passes it to buildRunConfig and runtimeRunner.start", async () => {
+  it("resolves placement via RuntimePlacementPolicy and passes it to buildRunConfig and runtimeRunner.start", async () => {
     const body = baseBody();
 
     await service.run(body, res as Response, user);
 
-    expect(mockRuntimePlacementService.resolveForRun).toHaveBeenCalledWith({
+    expect(mockRuntimePlacementPolicy.resolveForRun).toHaveBeenCalledWith({
       userId: "user-1",
       workspaceId: "proj-1",
       workspaceRootPath: "/rootPath",
@@ -177,7 +179,7 @@ describe("AgentRunHandler", () => {
     const buildArgs = (
       mockAgentRunConfigBuilder.buildRunConfig as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
-    const startArgs = (mockRuntimeRunner.start as ReturnType<typeof vi.fn>).mock
+    const startArgs = (mockRunRunner.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(buildArgs.placement).toBe(startArgs.placement);
     expect(buildArgs.placement.runtimePath).toBe("/rootPath");
@@ -209,7 +211,7 @@ describe("AgentRunHandler", () => {
       workspaceId: "proj-1",
       activeRunStatus: "idle",
     });
-    mockRuntimePlacementService.resolveForRun = vi
+    mockRuntimePlacementPolicy.resolveForRun = vi
       .fn()
       .mockImplementation(({ userId, workspaceId, workspaceRootPath, runtimeType }) => ({
         runtimeType,
@@ -234,9 +236,9 @@ describe("AgentRunHandler", () => {
     ).mock.calls[0][0];
     expect(buildArgs.input.forwardedProps.agentSessionId).toBe("session-1");
     expect(buildArgs.input.forwardedProps.resume).toBe("session-1");
-    const startArgs = (mockRuntimeRunner.start as ReturnType<typeof vi.fn>).mock
+    const startArgs = (mockRunRunner.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
-    expect(mockRuntimePlacementService.resolveForRun).toHaveBeenCalledWith(
+    expect(mockRuntimePlacementPolicy.resolveForRun).toHaveBeenCalledWith(
       expect.objectContaining({
         runtimeType: "sandbox",
         isolationScope: "workspace",
@@ -259,7 +261,7 @@ describe("AgentRunHandler", () => {
       service.run(baseBody(), res as Response, user)
     ).rejects.toThrow("当前部署不支持该工作空间的运行环境");
 
-    expect(mockRuntimePlacementService.resolveForRun).not.toHaveBeenCalled();
+    expect(mockRuntimePlacementPolicy.resolveForRun).not.toHaveBeenCalled();
   });
 
   it("rejects runs when the workspace isolation scope is not allowed by deployment config", async () => {
@@ -276,6 +278,6 @@ describe("AgentRunHandler", () => {
       service.run(baseBody(), res as Response, user)
     ).rejects.toThrow("当前部署不支持该工作空间的隔离级别");
 
-    expect(mockRuntimePlacementService.resolveForRun).not.toHaveBeenCalled();
+    expect(mockRuntimePlacementPolicy.resolveForRun).not.toHaveBeenCalled();
   });
 });

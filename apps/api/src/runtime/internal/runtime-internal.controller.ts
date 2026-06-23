@@ -14,8 +14,8 @@ import type { Envelope, RunConfig, RunStatusPayload } from "@agework/shared/prot
 import { Public } from "../../auth/public.decorator";
 import { RawResponse } from "../../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
-import { RuntimeEventProcessor } from "../core/runtime-event-processor";
-import { RuntimeActiveStore } from "../core/runtime-active-store";
+import { RunEnvelopeProcessor } from "../core/run-execution/run-envelope.processor";
+import { RunActiveStore } from "../core/run-execution/run-active.store";
 import { RuntimeConfigStore } from "./runtime-config-store";
 import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
 import { RuntimeControlQueue } from "./runtime-control-queue";
@@ -39,9 +39,9 @@ export class RuntimeInternalController {
   private readonly logger = new Logger(RuntimeInternalController.name);
 
   constructor(
-    private readonly runEventProcessor: RuntimeEventProcessor,
+    private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
-    private readonly runRegistry: RuntimeActiveStore,
+    private readonly runRegistry: RunActiveStore,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly controlQueue: RuntimeControlQueue
   ) {}
@@ -90,13 +90,13 @@ export class RuntimeInternalController {
         payload: summarizeEnvelopePayload(envelope.payload),
       })}`
     );
-    // 发布前先取出 handle：RuntimeEventProcessor 在终态时会 unregister，之后就拿不到 runtimeType 了
+    // 发布前先取出 handle：RunEnvelopeProcessor 在终态时会 unregister，之后就拿不到 runtimeType 了
     const handle = this.runRegistry.get(runId);
 
-    // RuntimeEventProcessor 内部做 seq 去重
+    // RunEnvelopeProcessor 内部做 seq 去重
     await this.runEventProcessor.publish(envelope).catch((err) => {
       this.logger.warn(
-        `RuntimeEventProcessor.publish failed for runId=${runId}: ${String(err)}`
+        `RunEnvelopeProcessor.publish failed for runId=${runId}: ${String(err)}`
       );
     });
 

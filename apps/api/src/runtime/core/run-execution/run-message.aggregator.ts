@@ -21,7 +21,7 @@ export type IncompleteMessageReason =
   | "error"
   | "user_steered";
 
-export class RuntimeMessageAggregator {
+export class RunMessageAggregator {
   private readonly aggregator: RunAggregator;
   private serverMessageId: string | undefined;
 

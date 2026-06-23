@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { RuntimeMessageAggregator } from "./runtime-message-aggregator";
+import { RunMessageAggregator } from "./run-message.aggregator";
 
-describe("RuntimeMessageAggregator", () => {
+describe("RunMessageAggregator", () => {
   it("uses streaming for incomplete snapshots by default", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
@@ -15,7 +15,7 @@ describe("RuntimeMessageAggregator", () => {
   });
 
   it("preserves cancelled for explicit run cancellation", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
@@ -28,7 +28,7 @@ describe("RuntimeMessageAggregator", () => {
   });
 
   it("can mark a cancelled stream as user-steered", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
@@ -41,7 +41,7 @@ describe("RuntimeMessageAggregator", () => {
   });
 
   it("reports the server messageId from TEXT_MESSAGE_START", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
@@ -51,7 +51,7 @@ describe("RuntimeMessageAggregator", () => {
   });
 
   it("reports complete/unknown for a normal RUN_FINISHED (shared with the frontend aggregator)", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", delta: "hello" });
     aggregator.handle({ type: "RUN_FINISHED" });
@@ -63,7 +63,7 @@ describe("RuntimeMessageAggregator", () => {
   });
 
   it("stamps mcp-apps activity snapshots onto resolved tool calls (newly shared with the frontend aggregator)", () => {
-    const aggregator = new RuntimeMessageAggregator();
+    const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TOOL_CALL_START", toolCallId: "tool1", toolCallName: "show_map" });
     aggregator.handle({
