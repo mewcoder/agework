@@ -495,7 +495,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
                 className="aui-composer-input w-full resize-none bg-transparent px-1.5 py-0.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70"
                 minRows={2}
                 maxRows={10}
-                onResize={onTextareaResize}
+                onHeightChange={onTextareaResize}
                 onKeyDownCapture={handleQueueKeyDownCapture}
                 autoFocus
                 aria-label="消息输入"
