@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import { AgentRunHandler } from "./agent-run-handler";
-import { AgentRunConfigBuilder } from "./agent-run-config-builder";
+import { AgentSpecBuilder } from "./agent-spec.builder";
+import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { RunRunner } from "../runs/run.runner";
@@ -13,7 +14,8 @@ import type { JwtUser } from "../auth/current-user.decorator";
 
 describe("AgentRunHandler", () => {
   let service: AgentRunHandler;
-  let mockAgentRunConfigBuilder: Partial<AgentRunConfigBuilder>;
+  let mockAgentSpecBuilder: Partial<AgentSpecBuilder>;
+  let mockRunConfigAssembler: Partial<RunConfigAssembler>;
   let mockConversationService: Partial<ConversationService>;
   let mockTitleService: Partial<TitleService>;
   let mockRunRunner: Partial<RunRunner>;
@@ -23,8 +25,14 @@ describe("AgentRunHandler", () => {
   let user: JwtUser;
 
   beforeEach(() => {
-    mockAgentRunConfigBuilder = {
-      buildRunConfig: vi.fn().mockResolvedValue({ runId: "run-1" }),
+    mockAgentSpecBuilder = {
+      build: vi.fn().mockResolvedValue({
+        agentType: "claude",
+        adapter: { kind: "claude", isEnvironmentConfig: true },
+      }),
+    };
+    mockRunConfigAssembler = {
+      assemble: vi.fn().mockReturnValue({ runId: "run-1" }),
     };
     mockConversationService = {
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
@@ -75,7 +83,8 @@ describe("AgentRunHandler", () => {
     user = { userId: "user-1" } as JwtUser;
 
     service = new AgentRunHandler(
-      mockAgentRunConfigBuilder as AgentRunConfigBuilder,
+      mockAgentSpecBuilder as AgentSpecBuilder,
+      mockRunConfigAssembler as RunConfigAssembler,
       mockConversationService as ConversationService,
       mockTitleService as TitleService,
       mockRunRunner as RunRunner,
@@ -108,8 +117,8 @@ describe("AgentRunHandler", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("wraps buildRunConfig errors as BadRequestException", async () => {
-    mockAgentRunConfigBuilder.buildRunConfig = vi
+  it("wraps run config build errors as BadRequestException", async () => {
+    mockAgentSpecBuilder.build = vi
       .fn()
       .mockRejectedValue(new Error("模型服务不可用"));
 
@@ -138,10 +147,14 @@ describe("AgentRunHandler", () => {
 
     await service.run(body, res as Response, user);
 
-    expect(mockAgentRunConfigBuilder.buildRunConfig).toHaveBeenCalledWith(
+    expect(mockAgentSpecBuilder.build).toHaveBeenCalledWith(
       expect.objectContaining({
         agentType: "claude",
         modelProviderId: "mc-1",
+      })
+    );
+    expect(mockRunConfigAssembler.assemble).toHaveBeenCalledWith(
+      expect.objectContaining({
         placement: expect.objectContaining({ runtimePath: "/rootPath" }),
         conversationId: "conversation-1",
       })
@@ -161,7 +174,7 @@ describe("AgentRunHandler", () => {
     expect(typeof startArgs.onAgentSessionId).toBe("function");
   });
 
-  it("resolves placement via RuntimePlacementPolicy and passes it to buildRunConfig and runtimeRunner.start", async () => {
+  it("resolves placement via RuntimePlacementPolicy and passes it to the assembler and runtimeRunner.start", async () => {
     const body = baseBody();
 
     await service.run(body, res as Response, user);
@@ -176,13 +189,13 @@ describe("AgentRunHandler", () => {
       sandboxEngine: undefined,
     });
 
-    const buildArgs = (
-      mockAgentRunConfigBuilder.buildRunConfig as ReturnType<typeof vi.fn>
+    const assembleArgs = (
+      mockRunConfigAssembler.assemble as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
     const startArgs = (mockRunRunner.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
-    expect(buildArgs.placement).toBe(startArgs.placement);
-    expect(buildArgs.placement.runtimePath).toBe("/rootPath");
+    expect(assembleArgs.placement).toBe(startArgs.placement);
+    expect(assembleArgs.placement.runtimePath).toBe("/rootPath");
   });
 
   it("passes resume props when the conversation has an agentSessionId", async () => {
@@ -196,12 +209,12 @@ describe("AgentRunHandler", () => {
 
     await service.run(body, res as Response, user);
 
-    const buildArgs = (
-      mockAgentRunConfigBuilder.buildRunConfig as ReturnType<typeof vi.fn>
+    const assembleArgs = (
+      mockRunConfigAssembler.assemble as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
-    expect(buildArgs.input.forwardedProps.agentSessionId).toBe("session-1");
-    expect(buildArgs.input.forwardedProps.resume).toBe("session-1");
-    expect(buildArgs.input.messages).toEqual([body.messages[0]]);
+    expect(assembleArgs.input.forwardedProps.agentSessionId).toBe("session-1");
+    expect(assembleArgs.input.forwardedProps.resume).toBe("session-1");
+    expect(assembleArgs.input.messages).toEqual([body.messages[0]]);
   });
 
   it("uses the workspace runtime type when resolving placement", async () => {
@@ -231,11 +244,11 @@ describe("AgentRunHandler", () => {
 
     await service.run(body, res as Response, user);
 
-    const buildArgs = (
-      mockAgentRunConfigBuilder.buildRunConfig as ReturnType<typeof vi.fn>
+    const assembleArgs = (
+      mockRunConfigAssembler.assemble as ReturnType<typeof vi.fn>
     ).mock.calls[0][0];
-    expect(buildArgs.input.forwardedProps.agentSessionId).toBe("session-1");
-    expect(buildArgs.input.forwardedProps.resume).toBe("session-1");
+    expect(assembleArgs.input.forwardedProps.agentSessionId).toBe("session-1");
+    expect(assembleArgs.input.forwardedProps.resume).toBe("session-1");
     const startArgs = (mockRunRunner.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(mockRuntimePlacementPolicy.resolveForRun).toHaveBeenCalledWith(

@@ -8,7 +8,8 @@ import {
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { Prisma } from "../../generated/prisma/client.js";
-import { AgentRunConfigBuilder } from "./agent-run-config-builder";
+import { AgentSpecBuilder } from "./agent-spec.builder";
+import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { TitleService } from "./title.service";
 import { ConversationService } from "../conversations/conversation.service";
 import type { JwtUser } from "../auth/current-user.decorator";
@@ -32,7 +33,8 @@ export class AgentRunHandler {
   private readonly logger = new Logger(AgentRunHandler.name);
 
   constructor(
-    private readonly runConfigBuilder: AgentRunConfigBuilder,
+    private readonly agentSpecBuilder: AgentSpecBuilder,
+    private readonly runConfigAssembler: RunConfigAssembler,
     private readonly conversationService: ConversationService,
     private readonly titleService: TitleService,
     private readonly runtimeRunner: RunRunner,
@@ -180,18 +182,22 @@ export class AgentRunHandler {
       ...(agentSessionId && { messages: body.messages?.slice(-1) }),
     };
 
-    // Build RunConfig for worker
+    // Build RunConfig for worker: agent 层产出 placement-free 的 AgentSpec，
+    // 再由 RunConfigAssembler 结合 placement 组装成 RunConfig。
     let runConfig;
     try {
-      runConfig = await this.runConfigBuilder.buildRunConfig({
+      const agentSpec = await this.agentSpecBuilder.build({
         agentType,
         modelProviderId,
-        workspaceId,
+        model: requestedModel,
+      });
+      runConfig = this.runConfigAssembler.assemble({
+        agentSpec,
         placement,
+        workspaceId,
         runId,
         conversationId,
         input: runInput,
-        model: requestedModel,
       });
     } catch (err) {
       throw new BadRequestException(

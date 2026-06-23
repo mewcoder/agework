@@ -37,6 +37,7 @@ import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 
 // runner
 import { RunRunner } from "../runs/run.runner";
+import { RunConfigAssembler } from "../runs/run-config.assembler";
 
 // admin
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -98,11 +99,13 @@ import { ConfigService } from "../config/config.service";
     RuntimeControlQueue,
     // runner
     RunRunner,
+    RunConfigAssembler,
   ],
   exports: [
     RunRepository,
     WorkspaceRuntimeRepository,
     RunRunner,
+    RunConfigAssembler,
     RuntimeProviderRegistry,
     RuntimePlacementPolicy,
     RuntimeResourceLifecycleUseCase,
