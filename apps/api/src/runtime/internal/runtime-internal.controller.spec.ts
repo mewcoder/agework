@@ -37,13 +37,18 @@ function makeController(opts: {
 
 describe("RuntimeInternalController", () => {
   it("is marked @Public() so the global JwtAuthGuard does not block worker callbacks (auth is handled by RuntimeInternalAuthGuard)", () => {
-    expect(Reflect.getMetadata(IS_PUBLIC_KEY, RuntimeInternalController)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, RuntimeInternalController)).toBe(
+      true
+    );
   });
 
   describe("postEvent()", () => {
     it("cleans up via RuntimeService on terminal status", async () => {
       const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
-      const controller = makeController({ handle: activeHandle, runtimeService });
+      const controller = makeController({
+        handle: activeHandle,
+        runtimeService,
+      });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -58,7 +63,10 @@ describe("RuntimeInternalController", () => {
 
     it("does not call cleanup for non-terminal run.status", async () => {
       const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
-      const controller = makeController({ handle: activeHandle, runtimeService });
+      const controller = makeController({
+        handle: activeHandle,
+        runtimeService,
+      });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -73,7 +81,10 @@ describe("RuntimeInternalController", () => {
 
     it("feeds the heartbeat watchdog via RuntimeService on heartbeat events", async () => {
       const runtimeService: Partial<RuntimeService> = { heartbeat: vi.fn() };
-      const controller = makeController({ handle: activeHandle, runtimeService });
+      const controller = makeController({
+        handle: activeHandle,
+        runtimeService,
+      });
 
       await controller.postEvent("run-1", {
         runId: "run-1",

@@ -48,7 +48,9 @@ export class AgentService {
         ? body.forwardedProps.model
         : undefined;
     const interruptReason =
-      body.interruptReason === "user_steered" ? body.interruptReason : undefined;
+      body.interruptReason === "user_steered"
+        ? body.interruptReason
+        : undefined;
     this.logger.log(
       `agent run requested ${safeLogJson({
         conversationId,

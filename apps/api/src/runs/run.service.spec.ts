@@ -46,18 +46,33 @@ describe("RunService", () => {
   let mockConfigService: Partial<ConfigService>;
 
   function makeRes() {
-    return { on: vi.fn(), setHeader: vi.fn(), write: vi.fn(), end: vi.fn(), writableEnded: false } as any;
+    return {
+      on: vi.fn(),
+      setHeader: vi.fn(),
+      write: vi.fn(),
+      end: vi.fn(),
+      writableEnded: false,
+    } as any;
   }
 
-  function makeStartInput(overrides: Partial<StartRunInput> = {}): StartRunInput {
+  function makeStartInput(
+    overrides: Partial<StartRunInput> = {}
+  ): StartRunInput {
     return {
       runId: "run-1",
       conversationId: "conversation-1",
       userId: "user-1",
-      agentSpec: { agentType: "claude", adapter: { kind: "claude", isEnvironmentConfig: true } },
+      agentSpec: {
+        agentType: "claude",
+        adapter: { kind: "claude", isEnvironmentConfig: true },
+      },
       modelProviderId: "mp-1",
       input: { messages: [{ id: "msg-1" }] },
-      workspace: { workspaceId: "ws-1", workspaceRootPath: "/tmp/ws", runtimeType: "local" },
+      workspace: {
+        workspaceId: "ws-1",
+        workspaceRootPath: "/tmp/ws",
+        runtimeType: "local",
+      },
       res: makeRes(),
       ...overrides,
     };
@@ -114,10 +129,10 @@ describe("RunService", () => {
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
-      isRuntimeTypeAllowed: ((t: string): t is "local" | "sandbox" =>
-        t === "local" || t === "sandbox"),
-      isIsolationScopeAllowed: ((s: string): s is "user" | "workspace" =>
-        s === "user" || s === "workspace"),
+      isRuntimeTypeAllowed: (t: string): t is "local" | "sandbox" =>
+        t === "local" || t === "sandbox",
+      isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
+        s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
     };
 
@@ -165,7 +180,9 @@ describe("RunService", () => {
         "local",
         "1:token"
       );
-      const registered = (mockRunActiveStore.register as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      const registered = (
+        mockRunActiveStore.register as ReturnType<typeof vi.fn>
+      ).mock.calls[0][1];
       expect(typeof registered.saveRun).toBe("function");
       expect(typeof registered.onAgentSessionId).toBe("function");
     });
@@ -180,7 +197,9 @@ describe("RunService", () => {
 
     it("saves the user message and triggers title generation", async () => {
       const userMessage = { id: "msg-1", role: "user", content: "hi" } as any;
-      await service.start(makeStartInput({ userMessage, userMessageId: "msg-1" }));
+      await service.start(
+        makeStartInput({ userMessage, userMessageId: "msg-1" })
+      );
 
       expect(mockConversationService.saveUserMessage).toHaveBeenCalledWith(
         "conversation-1",
@@ -194,8 +213,12 @@ describe("RunService", () => {
     });
 
     it("throws BadRequestException when the runtime type is not allowed", async () => {
-      mockConfigService.isRuntimeTypeAllowed = ((_t: string): _t is "local" | "sandbox" => false);
-      await expect(service.start(makeStartInput())).rejects.toThrow(BadRequestException);
+      mockConfigService.isRuntimeTypeAllowed = (
+        _t: string
+      ): _t is "local" | "sandbox" => false;
+      await expect(service.start(makeStartInput())).rejects.toThrow(
+        BadRequestException
+      );
       expect(mockRuntimeService.resolvePlacement).not.toHaveBeenCalled();
     });
 
@@ -203,7 +226,9 @@ describe("RunService", () => {
       mockRunConfigAssembler.assemble = vi.fn().mockImplementation(() => {
         throw new Error("模型服务不可用");
       });
-      await expect(service.start(makeStartInput())).rejects.toThrow(BadRequestException);
+      await expect(service.start(makeStartInput())).rejects.toThrow(
+        BadRequestException
+      );
     });
 
     it("attaches the accepted user message to the created run", async () => {
@@ -223,7 +248,9 @@ describe("RunService", () => {
     });
 
     it("continues starting the worker when audit event recording fails", async () => {
-      mockRunEventRecorder.append = vi.fn().mockRejectedValue(new Error("SQLITE_BUSY"));
+      mockRunEventRecorder.append = vi
+        .fn()
+        .mockRejectedValue(new Error("SQLITE_BUSY"));
       const res = makeRes();
 
       await service.start(makeStartInput({ res }));
@@ -236,17 +263,30 @@ describe("RunService", () => {
 
     it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
       // placement.runtimeType=docker（sandbox engine 解析结果），用于 body 内的 runtimeType
-      mockRuntimeService.resolvePlacement = vi.fn().mockReturnValue(makePlacement("docker"));
+      mockRuntimeService.resolvePlacement = vi
+        .fn()
+        .mockReturnValue(makePlacement("docker"));
       mockRuntimeService.startWorker = vi
         .fn()
         .mockImplementation((_runConfig, _placement, onReady) => {
-          const handle = { runId: "run-1", runtimeType: "docker", runtimeResourceId: "", conversationId: "conversation-1" };
+          const handle = {
+            runId: "run-1",
+            runtimeType: "docker",
+            runtimeResourceId: "",
+            conversationId: "conversation-1",
+          };
           queueMicrotask(() => onReady?.("container-abc"));
           return handle;
         });
 
       await service.start(
-        makeStartInput({ workspace: { workspaceId: "ws-1", workspaceRootPath: "/tmp/ws", runtimeType: "sandbox" } })
+        makeStartInput({
+          workspace: {
+            workspaceId: "ws-1",
+            workspaceRootPath: "/tmp/ws",
+            runtimeType: "sandbox",
+          },
+        })
       );
       await new Promise<void>((resolve) => queueMicrotask(resolve));
 
@@ -266,7 +306,10 @@ describe("RunService", () => {
       await service.start(makeStartInput({ res }));
 
       expect(mockRunActiveStore.register).not.toHaveBeenCalled();
-      expect(mockRunRepository.markError).toHaveBeenCalledWith("run-1", "Failed to start worker");
+      expect(mockRunRepository.markError).toHaveBeenCalledWith(
+        "run-1",
+        "Failed to start worker"
+      );
       expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith(
         "conversation-1",
         "error"
@@ -278,8 +321,12 @@ describe("RunService", () => {
 
   describe("resolveApproval()", () => {
     it("should throw NotFoundException when no active run found", async () => {
-      mockRunRepository.findActiveByConversationId = vi.fn().mockResolvedValue(null);
-      await expect(service.resolveApproval("conversation-1", {})).rejects.toThrow();
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue(null);
+      await expect(
+        service.resolveApproval("conversation-1", {})
+      ).rejects.toThrow();
     });
   });
 
@@ -301,7 +348,12 @@ describe("RunService", () => {
         .fn()
         .mockResolvedValue({ id: "run-1" });
       const handle = {
-        runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+        runtimeHandle: {
+          runId: "run-1",
+          runtimeType: "local",
+          runtimeResourceId: "1:token",
+          conversationId: "conversation-1",
+        },
         stopRequested: false,
       };
       mockRunActiveStore.get = vi.fn().mockReturnValue(handle);
@@ -309,19 +361,31 @@ describe("RunService", () => {
       const hadHandle = await service.stop("conversation-1");
 
       expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
-      expect(mockRuntimeService.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
+      expect(mockRuntimeService.cancel).toHaveBeenCalledWith(
+        handle.runtimeHandle
+      );
       expect(hadHandle).toBe(true);
     });
   });
 
   describe("resumeStream()", () => {
     it("无活跃 run 时发终态 complete 快照并 end", async () => {
-      mockRunRepository.findActiveByConversationId = vi.fn().mockResolvedValue(null);
-      const res = { setHeader: vi.fn(), write: vi.fn(), end: vi.fn(), writableEnded: false, on: vi.fn() } as any;
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue(null);
+      const res = {
+        setHeader: vi.fn(),
+        write: vi.fn(),
+        end: vi.fn(),
+        writableEnded: false,
+        on: vi.fn(),
+      } as any;
 
       await service.resumeStream("conversation-1", res);
 
-      const writes = (res.write as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[0] as string);
+      const writes = (res.write as ReturnType<typeof vi.fn>).mock.calls.map(
+        (c) => c[0] as string
+      );
       expect(writes.length).toBeGreaterThan(0);
       const last = JSON.parse(writes.at(-1)!.slice(6).trim());
       expect(last.status).toEqual({ type: "complete", reason: "unknown" });
@@ -333,7 +397,14 @@ describe("RunService", () => {
         .fn()
         .mockResolvedValue({ id: "run-1", status: "requires_action" });
       mockRunActiveStore.get = vi.fn().mockReturnValue({ runId: "run-1" });
-      const res = { setHeader: vi.fn(), write: vi.fn(), end: vi.fn(), writableEnded: false, on: vi.fn(), status: vi.fn().mockReturnThis() } as any;
+      const res = {
+        setHeader: vi.fn(),
+        write: vi.fn(),
+        end: vi.fn(),
+        writableEnded: false,
+        on: vi.fn(),
+        status: vi.fn().mockReturnThis(),
+      } as any;
 
       await service.resumeStream("conversation-1", res);
 

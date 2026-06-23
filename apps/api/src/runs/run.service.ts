@@ -19,10 +19,7 @@ import {
 } from "./execution/run-message.aggregator";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { TitleService } from "./title.service";
-import {
-  ConfigService,
-  type IsolationScope,
-} from "../config/config.service";
+import { ConfigService, type IsolationScope } from "../config/config.service";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRecorder } from "./events/run-event-recorder";
@@ -69,7 +66,8 @@ export class RunService {
     let isolationScope: IsolationScope | undefined;
     if (requestedRuntimeType === "sandbox") {
       const resolvedIsolationScope =
-        workspace.isolationScope ?? this.configService.getDefaultIsolationScope();
+        workspace.isolationScope ??
+        this.configService.getDefaultIsolationScope();
       if (!this.configService.isIsolationScopeAllowed(resolvedIsolationScope)) {
         throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
       }
@@ -155,12 +153,18 @@ export class RunService {
 
     // 5. 保存用户消息 + 触发标题（标题只依赖首条用户消息，与助手回复并行）
     if (conversationId && userMessage) {
-      await this.conversationService.saveUserMessage(conversationId, userMessage);
+      await this.conversationService.saveUserMessage(
+        conversationId,
+        userMessage
+      );
 
       this.titleService
         .maybeGenerate(conversationId, agentType, modelProviderId)
         .catch(
-          swallow(this.logger, `generate title for conversation ${conversationId}`)
+          swallow(
+            this.logger,
+            `generate title for conversation ${conversationId}`
+          )
         );
     }
 
@@ -260,7 +264,9 @@ export class RunService {
               userId,
             })
           )
-          .catch(swallow(this.logger, `record message accepted for run ${runId}`));
+          .catch(
+            swallow(this.logger, `record message accepted for run ${runId}`)
+          );
       }
     } catch (err) {
       this.logger.warn(
@@ -293,26 +299,34 @@ export class RunService {
             sandboxEngineType: placement.sandboxEngineType,
           })
         )
-        .catch(swallow(this.logger, `record runtime starting for run ${runId}`));
-      runtimeHandle = this.runtimeService.startWorker(runConfig, placement, (runtimeResourceId) => {
-        this.runRepository
-          .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
-          .catch(
-            swallow(this.logger, `persist runtime handle for run ${runId}`)
-          );
-        this.runEventRecorder
-          .append(
-            RunEventFacts.runtimeStatusChanged({
-              runId,
-              eventKey: `runtime:${runtimeResourceId}:ready`,
-              status: "ready",
-              targetId: runtimeResourceId,
-              runtimeType,
-              runtimeResourceId,
-            })
-          )
-          .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
-      });
+        .catch(
+          swallow(this.logger, `record runtime starting for run ${runId}`)
+        );
+      runtimeHandle = this.runtimeService.startWorker(
+        runConfig,
+        placement,
+        (runtimeResourceId) => {
+          this.runRepository
+            .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
+            .catch(
+              swallow(this.logger, `persist runtime handle for run ${runId}`)
+            );
+          this.runEventRecorder
+            .append(
+              RunEventFacts.runtimeStatusChanged({
+                runId,
+                eventKey: `runtime:${runtimeResourceId}:ready`,
+                status: "ready",
+                targetId: runtimeResourceId,
+                runtimeType,
+                runtimeResourceId,
+              })
+            )
+            .catch(
+              swallow(this.logger, `record runtime ready for run ${runId}`)
+            );
+        }
+      );
     } catch (err) {
       this.logger.error(
         `start worker failed ${safeLogJson({
@@ -334,7 +348,9 @@ export class RunService {
             data: compactData(errorLogFields(err)),
           })
         )
-        .catch(swallow(this.logger, `record runtime start failure for run ${runId}`))
+        .catch(
+          swallow(this.logger, `record runtime start failure for run ${runId}`)
+        )
         .finally(() => this.runEventRecorder.forgetRun(runId));
       await this.conversationService
         .setActiveRunStatus(conversationId, "error")
@@ -413,10 +429,13 @@ export class RunService {
     conversationId: string,
     answers: Record<string, string | string[]>
   ): Promise<void> {
-    const activeRun = await this.runRepository.findActiveByConversationId(conversationId);
+    const activeRun =
+      await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRun ? this.runRegistry.get(activeRun.id) : undefined;
     if (!handle) {
-      throw new NotFoundException(`No active run for conversation: ${conversationId}`);
+      throw new NotFoundException(
+        `No active run for conversation: ${conversationId}`
+      );
     }
     this.runtimeService.sendControl(handle.runtimeHandle, {
       type: "approval_resolved",
@@ -535,7 +554,12 @@ export class RunService {
               reason: "cancelled_without_handle",
             })
           )
-          .catch(swallow(this.logger, `record cancel without handle for run ${activeRunRecord.id}`));
+          .catch(
+            swallow(
+              this.logger,
+              `record cancel without handle for run ${activeRunRecord.id}`
+            )
+          );
       }
       return false;
     }
@@ -552,7 +576,12 @@ export class RunService {
             reason: options?.reason,
           })
         )
-        .catch(swallow(this.logger, `record cancel request for run ${activeRunRecord.id}`));
+        .catch(
+          swallow(
+            this.logger,
+            `record cancel request for run ${activeRunRecord.id}`
+          )
+        );
     }
     this.runtimeService.cancel(handle.runtimeHandle);
     if (options?.endResponse) {

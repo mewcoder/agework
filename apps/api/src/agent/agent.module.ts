@@ -9,9 +9,6 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
 @Module({
   imports: [ConversationModule, RuntimeModule, ModelProviderModule],
   controllers: [AgentController],
-  providers: [
-    AgentService,
-    AgentSpecBuilder,
-  ],
+  providers: [AgentService, AgentSpecBuilder],
 })
 export class AgentModule {}

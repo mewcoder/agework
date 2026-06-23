@@ -1,5 +1,4 @@
 import type { AssistantUserMessage } from "../conversations/conversation.service";
-import type { IncompleteMessageReason } from "../runs/execution/run-message.aggregator";
 
 /**
  * POST /agent/run 请求体。除已知字段外，原样透传给 RunConfig.input
@@ -9,7 +8,7 @@ import type { IncompleteMessageReason } from "../runs/execution/run-message.aggr
 export interface RunAgentInput {
   threadId: string;
   runId?: string;
-  interruptReason?: Extract<IncompleteMessageReason, "user_steered">;
+  interruptReason?: "user_steered";
   messages?: AssistantUserMessage[];
   forwardedProps?: {
     agentType?: string;

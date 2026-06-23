@@ -31,8 +31,11 @@ export class AgentSpecBuilder {
 
 function buildAdapter(
   agentType: string,
-  resolved: { providerConfig: ProviderConfig; providerSource: "environment" | "database" },
-  requestedModel?: string,
+  resolved: {
+    providerConfig: ProviderConfig;
+    providerSource: "environment" | "database";
+  },
+  requestedModel?: string
 ): AdapterRuntimeConfig {
   const kind = resolveAdapterKind(agentType);
   if (resolved.providerSource === "environment") {
@@ -42,7 +45,9 @@ function buildAdapter(
   const { baseUrl, apiKey, models, extraConfig } = resolved.providerConfig;
   if (!baseUrl || !apiKey || models.length === 0) {
     const label = kind === "claude" ? "Claude" : "Codex";
-    throw new BadRequestException(`${label} 自定义配置缺少 baseUrl/apiKey/models`);
+    throw new BadRequestException(
+      `${label} 自定义配置缺少 baseUrl/apiKey/models`
+    );
   }
   // model 由前端选定并传入，后端不兜底取 models[0]；缺失或不在可用列表中即报错。
   if (!requestedModel || !models.includes(requestedModel)) {

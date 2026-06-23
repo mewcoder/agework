@@ -40,7 +40,13 @@ describe("AgentService", () => {
       resolveApproval: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(false),
     };
-    res = { setHeader: vi.fn(), on: vi.fn(), writableEnded: false, end: vi.fn(), write: vi.fn() };
+    res = {
+      setHeader: vi.fn(),
+      on: vi.fn(),
+      writableEnded: false,
+      end: vi.fn(),
+      write: vi.fn(),
+    };
     user = { userId: "user-1" } as JwtUser;
 
     service = new AgentService(
@@ -76,7 +82,9 @@ describe("AgentService", () => {
   });
 
   it("wraps AgentSpec build errors as BadRequestException", async () => {
-    mockAgentSpecBuilder.build = vi.fn().mockRejectedValue(new Error("模型服务不可用"));
+    mockAgentSpecBuilder.build = vi
+      .fn()
+      .mockRejectedValue(new Error("模型服务不可用"));
 
     await expect(
       service.run(baseBody(), res as Response, user)
@@ -93,7 +101,8 @@ describe("AgentService", () => {
     );
 
     expect(mockRunService.start).toHaveBeenCalledTimes(1);
-    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(startArgs.conversationId).toBe("conversation-1");
     expect(startArgs.userId).toBe("user-1");
     expect(startArgs.modelProviderId).toBe("mc-1");
@@ -103,7 +112,11 @@ describe("AgentService", () => {
       expect.objectContaining({ agentType: "claude" })
     );
     expect(startArgs.workspace).toEqual(
-      expect.objectContaining({ workspaceId: "proj-1", workspaceRootPath: "/rootPath", runtimeType: "local" })
+      expect.objectContaining({
+        workspaceId: "proj-1",
+        workspaceRootPath: "/rootPath",
+        runtimeType: "local",
+      })
     );
     expect(startArgs.input.forwardedProps.agentType).toBe("claude");
   });
@@ -119,23 +132,35 @@ describe("AgentService", () => {
 
     await service.run(body, res as Response, user);
 
-    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(startArgs.input.forwardedProps.agentSessionId).toBe("session-1");
     expect(startArgs.input.forwardedProps.resume).toBe("session-1");
     expect(startArgs.input.messages).toEqual([body.messages[0]]);
   });
 
   it("forwards interruptReason through to RunService.start", async () => {
-    await service.run(baseBody({ interruptReason: "user_steered" }), res as Response, user);
-    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    await service.run(
+      baseBody({ interruptReason: "user_steered" }),
+      res as Response,
+      user
+    );
+    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
     expect(startArgs.interruptReason).toBe("user_steered");
   });
 
   describe("resumeStream()", () => {
     it("verifies ownership then delegates to RunService.resumeStream", async () => {
       await service.resumeStream("conversation-1", res as Response, user);
-      expect(mockConversationService.findOne).toHaveBeenCalledWith("user-1", "conversation-1");
-      expect(mockRunService.resumeStream).toHaveBeenCalledWith("conversation-1", res);
+      expect(mockConversationService.findOne).toHaveBeenCalledWith(
+        "user-1",
+        "conversation-1"
+      );
+      expect(mockRunService.resumeStream).toHaveBeenCalledWith(
+        "conversation-1",
+        res
+      );
     });
 
     it("throws when conversationId is missing", async () => {
@@ -148,25 +173,39 @@ describe("AgentService", () => {
   describe("reply()", () => {
     it("delegates to RunService.resolveApproval", async () => {
       await service.reply("conversation-1", { q1: "yes" });
-      expect(mockRunService.resolveApproval).toHaveBeenCalledWith("conversation-1", { q1: "yes" });
+      expect(mockRunService.resolveApproval).toHaveBeenCalledWith(
+        "conversation-1",
+        { q1: "yes" }
+      );
     });
   });
 
   describe("stop()", () => {
     it("resets a stale running conversation to idle when no in-memory handle existed", async () => {
-      mockConversationService.findOne = vi.fn().mockResolvedValue({ activeRunStatus: "running" });
-      mockConversationService.setActiveRunStatus = vi.fn().mockResolvedValue({ count: 1 });
+      mockConversationService.findOne = vi
+        .fn()
+        .mockResolvedValue({ activeRunStatus: "running" });
+      mockConversationService.setActiveRunStatus = vi
+        .fn()
+        .mockResolvedValue({ count: 1 });
       mockRunService.stop = vi.fn().mockResolvedValue(false);
 
       await service.stop("conversation-1", user);
 
       expect(mockRunService.stop).toHaveBeenCalledWith("conversation-1");
-      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith("conversation-1", "idle");
+      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith(
+        "conversation-1",
+        "idle"
+      );
     });
 
     it("does not reset status when an active handle was stopped", async () => {
-      mockConversationService.findOne = vi.fn().mockResolvedValue({ activeRunStatus: "running" });
-      mockConversationService.setActiveRunStatus = vi.fn().mockResolvedValue({ count: 1 });
+      mockConversationService.findOne = vi
+        .fn()
+        .mockResolvedValue({ activeRunStatus: "running" });
+      mockConversationService.setActiveRunStatus = vi
+        .fn()
+        .mockResolvedValue({ count: 1 });
       mockRunService.stop = vi.fn().mockResolvedValue(true);
 
       await service.stop("conversation-1", user);

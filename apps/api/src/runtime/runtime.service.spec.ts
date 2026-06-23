@@ -20,8 +20,12 @@ function makeProvider() {
 const placement = (runtimeType: string): RuntimePlacement =>
   ({ runtimeType, runtimePath: "/ws" }) as RuntimePlacement;
 
-const handle = (runId: string, runtimeType: string): RuntimeHandle =>
-  ({ runId, runtimeType, runtimeResourceId: "rr-1", conversationId: "c-1" });
+const handle = (runId: string, runtimeType: string): RuntimeHandle => ({
+  runId,
+  runtimeType,
+  runtimeResourceId: "rr-1",
+  conversationId: "c-1",
+});
 
 describe("RuntimeService", () => {
   let placementPolicy: Partial<RuntimePlacementPolicy>;
@@ -31,7 +35,9 @@ describe("RuntimeService", () => {
 
   beforeEach(() => {
     provider = makeProvider();
-    placementPolicy = { resolveForRun: vi.fn().mockReturnValue(placement("local")) };
+    placementPolicy = {
+      resolveForRun: vi.fn().mockReturnValue(placement("local")),
+    };
     providerRegistry = { resolve: vi.fn().mockReturnValue(provider) };
     service = new RuntimeService(
       placementPolicy as RuntimePlacementPolicy,
@@ -40,7 +46,12 @@ describe("RuntimeService", () => {
   });
 
   it("resolvePlacement delegates to RuntimePlacementPolicy", () => {
-    const input = { userId: "u", workspaceId: "w", workspaceRootPath: "/a", userWorkspaceRootPath: "/a" };
+    const input = {
+      userId: "u",
+      workspaceId: "w",
+      workspaceRootPath: "/a",
+      userWorkspaceRootPath: "/a",
+    };
     service.resolvePlacement(input);
     expect(placementPolicy.resolveForRun).toHaveBeenCalledWith(input);
   });
