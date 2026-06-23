@@ -16,8 +16,8 @@ import { getAgentPermissionOptions } from "./agent-permission-options";
  * placement / RunConfig 组装 / 生命周期 / SSE / 持久化全部交给 RunService。
  */
 @Injectable()
-export class AgentRunHandler {
-  private readonly logger = new Logger(AgentRunHandler.name);
+export class AgentService {
+  private readonly logger = new Logger(AgentService.name);
 
   constructor(
     private readonly agentSpecBuilder: AgentSpecBuilder,
@@ -186,6 +186,26 @@ export class AgentRunHandler {
     // 校验归属：找不到会抛 NotFound，等价于官方 assertStreamOwner
     await this.conversationService.findOne(user.userId, conversationId);
     await this.runService.resumeStream(conversationId, res);
+  }
+
+  /** 回应一次审批（approval_resolved 控制指令）。 */
+  async reply(
+    conversationId: string,
+    answers: Record<string, string | string[]>
+  ): Promise<void> {
+    await this.runService.resolveApproval(conversationId, answers);
+  }
+
+  /** 停止 conversation 的活跃 run；若无内存 handle 但状态仍为 running 则重置为 idle。 */
+  async stop(conversationId: string, user: JwtUser): Promise<void> {
+    const conversation = await this.conversationService.findOne(
+      user.userId,
+      conversationId
+    );
+    const hadHandle = await this.runService.stop(conversationId);
+    if (!hadHandle && conversation.activeRunStatus === "running") {
+      await this.conversationService.setActiveRunStatus(conversationId, "idle");
+    }
   }
 
   private normalizePermissionForwardedProps(

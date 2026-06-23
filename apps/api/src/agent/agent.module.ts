@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AgentController } from "./agent.controller";
-import { AgentRunHandler } from "./agent-run-handler";
+import { AgentService } from "./agent.service";
 import { AgentSpecBuilder } from "./agent-spec.builder";
 import { ConversationModule } from "../conversations/conversation.module";
 import { RuntimeModule } from "../runtime/runtime.module";
@@ -10,7 +10,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
   imports: [ConversationModule, RuntimeModule, ModelProviderModule],
   controllers: [AgentController],
   providers: [
-    AgentRunHandler,
+    AgentService,
     AgentSpecBuilder,
   ],
 })

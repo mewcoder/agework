@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
-import { AgentRunHandler } from "./agent-run-handler";
+import { AgentService } from "./agent.service";
 import { AgentSpecBuilder } from "./agent-spec.builder";
 import { ConversationService } from "../conversations/conversation.service";
 import { RunService } from "../runs/run.service";
 import type { Response } from "express";
 import type { JwtUser } from "../auth/current-user.decorator";
 
-describe("AgentRunHandler", () => {
-  let service: AgentRunHandler;
+describe("AgentService", () => {
+  let service: AgentService;
   let mockAgentSpecBuilder: Partial<AgentSpecBuilder>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunService: Partial<RunService>;
@@ -37,11 +37,13 @@ describe("AgentRunHandler", () => {
     mockRunService = {
       start: vi.fn().mockResolvedValue(undefined),
       resumeStream: vi.fn().mockResolvedValue(undefined),
+      resolveApproval: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(false),
     };
     res = { setHeader: vi.fn(), on: vi.fn(), writableEnded: false, end: vi.fn(), write: vi.fn() };
     user = { userId: "user-1" } as JwtUser;
 
-    service = new AgentRunHandler(
+    service = new AgentService(
       mockAgentSpecBuilder as AgentSpecBuilder,
       mockConversationService as ConversationService,
       mockRunService as RunService
@@ -140,6 +142,36 @@ describe("AgentRunHandler", () => {
       await expect(
         service.resumeStream("", res as Response, user)
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe("reply()", () => {
+    it("delegates to RunService.resolveApproval", async () => {
+      await service.reply("conversation-1", { q1: "yes" });
+      expect(mockRunService.resolveApproval).toHaveBeenCalledWith("conversation-1", { q1: "yes" });
+    });
+  });
+
+  describe("stop()", () => {
+    it("resets a stale running conversation to idle when no in-memory handle existed", async () => {
+      mockConversationService.findOne = vi.fn().mockResolvedValue({ activeRunStatus: "running" });
+      mockConversationService.setActiveRunStatus = vi.fn().mockResolvedValue({ count: 1 });
+      mockRunService.stop = vi.fn().mockResolvedValue(false);
+
+      await service.stop("conversation-1", user);
+
+      expect(mockRunService.stop).toHaveBeenCalledWith("conversation-1");
+      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith("conversation-1", "idle");
+    });
+
+    it("does not reset status when an active handle was stopped", async () => {
+      mockConversationService.findOne = vi.fn().mockResolvedValue({ activeRunStatus: "running" });
+      mockConversationService.setActiveRunStatus = vi.fn().mockResolvedValue({ count: 1 });
+      mockRunService.stop = vi.fn().mockResolvedValue(true);
+
+      await service.stop("conversation-1", user);
+
+      expect(mockConversationService.setActiveRunStatus).not.toHaveBeenCalled();
     });
   });
 });
