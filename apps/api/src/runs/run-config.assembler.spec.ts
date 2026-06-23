@@ -1,14 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { ConfigService } from "../config/config.service";
-import type { AgentSpec } from "./run-service.types";
+import type { AgentProviderConfig } from "@agework/shared/protocol";
 
-const ENV_ADAPTER: AgentSpec["adapter"] = {
-  kind: "claude",
-  isEnvironmentConfig: true,
+const AGENT_PROVIDER_CONFIG: AgentProviderConfig = {
+  agentType: "claude",
+  source: "system",
 };
-
-const SPEC: AgentSpec = { agentType: "claude", adapter: ENV_ADAPTER };
 
 describe("RunConfigAssembler", () => {
   let configService: Partial<ConfigService>;
@@ -27,7 +25,7 @@ describe("RunConfigAssembler", () => {
 
   it("includes workspaceId in the RunConfig", () => {
     const config = assembler.assemble({
-      agentSpec: SPEC,
+      agentProviderConfig: AGENT_PROVIDER_CONFIG,
       placement: {
         runtimeType: "local",
         isolationScope: "workspace",
@@ -43,12 +41,12 @@ describe("RunConfigAssembler", () => {
       input: {},
     });
     expect(config.workspaceId).toBe("ws-1");
-    expect(config.adapter).toBe(ENV_ADAPTER);
+    expect(config.agentProviderConfig).toBe(AGENT_PROVIDER_CONFIG);
   });
 
   it("uses placement.runtimePath for RunConfig.runtimePath", () => {
     const config = assembler.assemble({
-      agentSpec: SPEC,
+      agentProviderConfig: AGENT_PROVIDER_CONFIG,
       placement: {
         runtimeType: "docker",
         isolationScope: "workspace",
@@ -71,7 +69,7 @@ describe("RunConfigAssembler", () => {
     vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_MAX_FILE_MB", "5");
 
     const config = assembler.assemble({
-      agentSpec: SPEC,
+      agentProviderConfig: AGENT_PROVIDER_CONFIG,
       placement: {
         runtimeType: "local",
         isolationScope: "workspace",

@@ -12,8 +12,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ag-ui/client": "0.0.53",
-    "@ag-ui/core": "^0.0.54",
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
     "@agework/shared": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.3.158",
     "@anthropic-ai/sdk": "^0.102.0",

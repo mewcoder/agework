@@ -62,9 +62,9 @@ describe("RunService", () => {
       runId: "run-1",
       conversationId: "conversation-1",
       userId: "user-1",
-      agentSpec: {
+      agentProviderConfig: {
         agentType: "claude",
-        adapter: { kind: "claude", isEnvironmentConfig: true },
+        source: "system",
       },
       modelProviderId: "mp-1",
       input: { messages: [{ id: "msg-1" }] },

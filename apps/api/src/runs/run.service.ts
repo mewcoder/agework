@@ -46,7 +46,7 @@ export class RunService {
       runId,
       conversationId,
       userId,
-      agentSpec,
+      agentProviderConfig,
       modelProviderId,
       input: runInput,
       workspace,
@@ -55,7 +55,7 @@ export class RunService {
       res,
       interruptReason,
     } = input;
-    const agentType = agentSpec.agentType;
+    const agentType = agentProviderConfig.agentType;
 
     // 1. 校验 runtime/isolation 是否被部署允许，并解析 placement
     const requestedRuntimeType =
@@ -84,11 +84,11 @@ export class RunService {
     });
     const runtimeType = placement.runtimeType;
 
-    // 2. 组装 RunConfig（adapter 由 AgentSpec 提供，路径/trace 由 placement 决定）
+    // 2. 组装 RunConfig（agent provider 由 agent 层提供，路径/trace 由 placement 决定）
     let runConfig: RunConfig;
     try {
       runConfig = this.runConfigAssembler.assemble({
-        agentSpec,
+        agentProviderConfig,
         placement,
         workspaceId: workspace.workspaceId,
         runId,

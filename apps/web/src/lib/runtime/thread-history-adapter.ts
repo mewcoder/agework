@@ -158,7 +158,7 @@ export function createThreadHistoryAdapter(
 
       const token = useAuthStore.getState().token;
       const res = await fetch(
-        apiUrl(`/api/v1/agent/run/resume?id=${remoteId}`),
+        apiUrl(`/api/v1/conversations/agent/resume?id=${remoteId}`),
         {
           headers: {
             Accept: "text/event-stream",

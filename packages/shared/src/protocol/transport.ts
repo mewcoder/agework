@@ -55,41 +55,40 @@ export type RunConfig = {
   runId: string;
   conversationId: string;
   workspaceId: string;
-  agentType: AgentType;
   runtimePath: string;
   env: Record<string, string>;
   /** 传给 Agent Adapter 的原始 run input（如 AG-UI RunAgentInput）。 */
   input: unknown;
-  adapter: AdapterRuntimeConfig;
+  agentProviderConfig: AgentProviderConfig;
   agentEventTrace?: AgentEventTraceConfig;
   workerLogFilePath?: string;
 };
 
 /**
- * Adapter 运行时配置（API → worker 下发）。
+ * Agent provider 运行时配置（API → worker 下发）。
  * 用判别式联合区分两种来源：
- * - 环境模式：配置由本地 CLI 文件提供（~/.claude.json 等），无需任何参数。
- * - 自定义模式：由 DB 的 ModelProvider 提供四个统一字段。
+ * - 系统配置：配置由本地 CLI 文件提供（~/.claude.json 等），无需任何参数。
+ * - 自定义配置：由用户保存的 ModelProvider 提供四个统一字段。
  */
-export type EnvironmentAdapterRuntimeConfig = {
-  kind: "claude" | "codex";
-  isEnvironmentConfig: true;
+export type SystemAgentProviderConfig = {
+  agentType: AgentType;
+  source: "system";
 };
 
-export type CustomAdapterRuntimeConfig = {
-  kind: "claude" | "codex";
-  isEnvironmentConfig: false;
+export type CustomAgentProviderConfig = {
+  agentType: AgentType;
+  source: "custom";
   baseUrl: string;
   apiKey: string;
-  /** API 在 buildAdapter 阶段已解析好的单模型。 */
+  /** API 在 build provider config 阶段已解析好的单模型。 */
   model: string;
   /** 补充项：Claude 注入为子进程环境变量、Codex 合并进 --config。 */
   extraConfig?: Record<string, string>;
 };
 
-export type AdapterRuntimeConfig =
-  | EnvironmentAdapterRuntimeConfig
-  | CustomAdapterRuntimeConfig;
+export type AgentProviderConfig =
+  | SystemAgentProviderConfig
+  | CustomAgentProviderConfig;
 
 /** 控制面 → worker 的下行控制消息。 */
 export type ControlPayload =

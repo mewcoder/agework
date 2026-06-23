@@ -84,10 +84,9 @@ const baseRun = {
   conversationId: "conversation-1",
   workspaceId: "ws-1",
   runtimePath: "/workspace",
-  agentType: "claude",
   env: {},
   input: {},
-  adapter: { kind: "claude" as const, isEnvironmentConfig: false },
+  agentProviderConfig: { agentType: "claude" as const, source: "custom" as const },
 };
 
 function makePlacement(overrides?: Partial<RuntimePlacement & { sandboxEngineType?: string }>): RuntimePlacement & { sandboxEngineType?: string } {

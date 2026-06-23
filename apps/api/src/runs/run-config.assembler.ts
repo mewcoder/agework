@@ -1,12 +1,14 @@
 import { Injectable } from "@nestjs/common";
 import { join, posix } from "node:path";
-import type { AgentType } from "@agework/shared";
-import type { RunConfig, RuntimePlacement } from "@agework/shared/protocol";
+import type {
+  AgentProviderConfig,
+  RunConfig,
+  RuntimePlacement,
+} from "@agework/shared/protocol";
 import { ConfigService } from "../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
 import { EnvKey } from "../config/env-key";
 import { safePathPart } from "../common/safe-path";
-import type { AgentSpec } from "./run-service.types";
 
 const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
@@ -15,14 +17,14 @@ export class RunConfigAssembler {
   constructor(private readonly configService: ConfigService) {}
 
   assemble(params: {
-    agentSpec: AgentSpec;
+    agentProviderConfig: AgentProviderConfig;
     placement: RuntimePlacement;
     workspaceId: string;
     runId: string;
     conversationId: string;
     input: unknown;
   }): RunConfig {
-    const { agentSpec, placement, workspaceId, runId, conversationId, input } =
+    const { agentProviderConfig, placement, workspaceId, runId, conversationId, input } =
       params;
 
     const logPaths = buildRuntimeLogPaths({
@@ -35,16 +37,15 @@ export class RunConfigAssembler {
       runId,
       conversationId,
       workspaceId,
-      agentType: agentSpec.agentType as AgentType,
       runtimePath: placement.runtimePath,
       env: {},
       input,
-      adapter: agentSpec.adapter,
+      agentProviderConfig,
       agentEventTrace: buildAgentEventTraceConfig({
         runId,
         conversationId,
         workspaceId,
-        agentType: agentSpec.agentType,
+        agentType: agentProviderConfig.agentType,
         ...logPaths,
       }),
       workerLogFilePath: logPaths.workerRuntimeFilePath,

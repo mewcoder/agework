@@ -22,8 +22,8 @@
     "test:cov": "vitest run --coverage"
   },
   "dependencies": {
-    "@ag-ui/client": "0.0.53",
-    "@ag-ui/core": "^0.0.54",
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
     "@agework/adapters": "workspace:*",
     "@agework/shared": "workspace:*",
     "@agework/worker": "workspace:*",

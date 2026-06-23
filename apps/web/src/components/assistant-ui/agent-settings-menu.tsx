@@ -86,11 +86,11 @@ function getModelProviderModels(providerConfig: string) {
   }
 }
 
-function isEnvironmentModelProvider(
+function isSystemModelProvider(
   modelProvider: { modelProviderId: string; scope?: string } | undefined,
 ) {
   return (
-    modelProvider?.scope === "environment" ||
+    modelProvider?.scope === "system" ||
     modelProvider?.modelProviderId.startsWith("system:")
   );
 }
@@ -207,19 +207,19 @@ function ModelSettingsSelector({
     selectedModel && modelOptions.includes(selectedModel)
       ? selectedModel
       : modelOptions[0];
-  const isEnvironmentProvider = isEnvironmentModelProvider(activeModelProvider);
+  const isSystemProvider = isSystemModelProvider(activeModelProvider);
   const reasoningLabel = EFFORT_LABELS[effort];
   const providerSummaryLabel =
     activeModelProvider?.name ?? (isLoading ? "加载中" : "未选择");
   const modelSummaryLabel = activeModel ?? "未选择";
-  const showModelInSummary = !isEnvironmentProvider && !!activeModel;
-  const showModelSection = activeModelProvider !== undefined && !isEnvironmentProvider;
+  const showModelInSummary = !isSystemProvider && !!activeModel;
+  const showModelSection = activeModelProvider !== undefined && !isSystemProvider;
   const showReasoningSection = true;
   const summaryModelLabel =
     showModelSection && !activeModel ? "未选择" : undefined;
   const showReasoningInSummary =
     selectedAgentType === "codex" &&
-    (isEnvironmentProvider || !!activeModel);
+    (isSystemProvider || !!activeModel);
   const triggerSummaryParts = [
     providerSummaryLabel,
     ...(summaryModelLabel ? [summaryModelLabel] : []),
@@ -260,14 +260,14 @@ function ModelSettingsSelector({
   ]);
 
   useEffect(() => {
-    if (!activeModelProvider || isEnvironmentProvider) return;
+    if (!activeModelProvider || isSystemProvider) return;
     const defaultModel = modelOptions[0];
     if (!defaultModel) return;
     if (selectedModel && modelOptions.includes(selectedModel)) return;
     selectModelForProvider(activeModelProvider.modelProviderId, defaultModel);
   }, [
     activeModelProvider,
-    isEnvironmentProvider,
+    isSystemProvider,
     modelOptions,
     selectModelForProvider,
     selectedModel,

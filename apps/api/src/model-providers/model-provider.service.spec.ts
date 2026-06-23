@@ -95,7 +95,7 @@ describe("ModelProviderService", () => {
     });
   });
 
-  it("creates environment model providers disabled by default", async () => {
+  it("creates system model providers disabled by default", async () => {
     const { prisma, service } = createService();
 
     await service.onModuleInit();
@@ -104,7 +104,7 @@ describe("ModelProviderService", () => {
       data: expect.objectContaining({
         id: "system:claude",
         agentType: "claude",
-        scope: "environment",
+        scope: "system",
         name: "系统环境",
         isEnabled: false,
         baseUrl: "",
@@ -117,7 +117,7 @@ describe("ModelProviderService", () => {
       data: expect.objectContaining({
         id: "system:codex",
         agentType: "codex",
-        scope: "environment",
+        scope: "system",
         name: "系统环境",
         isEnabled: false,
         baseUrl: "",
@@ -128,7 +128,7 @@ describe("ModelProviderService", () => {
     });
   });
 
-  it("includes local environment status for system providers", async () => {
+  it("includes system status for system providers", async () => {
     const originalAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
     process.env.ANTHROPIC_AUTH_TOKEN = "sk-test";
     mockSpawnSync.mockReturnValue({ status: 0 } as never);
@@ -140,7 +140,7 @@ describe("ModelProviderService", () => {
           {
             id: "system:claude",
             agentType: "claude",
-            scope: "environment",
+            scope: "system",
             userId: null,
             name: "系统环境",
             isEnabled: false,
@@ -156,7 +156,7 @@ describe("ModelProviderService", () => {
 
       const result = await service.listForAdmin("claude");
 
-      expect(result.list[0]?.environmentStatus).toEqual({
+      expect(result.list[0]?.systemStatus).toEqual({
         command: "claude",
         commandAvailable: true,
         configAvailable: true,
@@ -174,7 +174,7 @@ describe("ModelProviderService", () => {
     }
   });
 
-  it("treats Claude Code credentials under CLAUDE_CONFIG_DIR as environment config", async () => {
+  it("treats Claude Code credentials under CLAUDE_CONFIG_DIR as system config", async () => {
     const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
     const originalAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
     const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
@@ -194,7 +194,7 @@ describe("ModelProviderService", () => {
           {
             id: "system:claude",
             agentType: "claude",
-            scope: "environment",
+            scope: "system",
             userId: null,
             name: "系统环境",
             isEnabled: false,
@@ -210,7 +210,7 @@ describe("ModelProviderService", () => {
 
       const result = await service.listForAdmin("claude");
 
-      expect(result.list[0]?.environmentStatus?.configAvailable).toBe(true);
+      expect(result.list[0]?.systemStatus?.configAvailable).toBe(true);
       expect(mockExistsSync).toHaveBeenCalledWith(
         "/custom/claude/.credentials.json"
       );
@@ -264,5 +264,64 @@ describe("ModelProviderService", () => {
         process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
       }
     }
+  });
+
+  it("resolves an enabled system provider from database state", async () => {
+    const { service } = createService({
+      findFirst: vi.fn().mockResolvedValue({
+        id: "system:claude",
+        agentType: "claude",
+        scope: "system",
+        isEnabled: true,
+        baseUrl: "",
+        apiKey: "",
+        models: [],
+        extraConfig: {},
+      }),
+    });
+
+    await expect(
+      service.resolveEnabledProvider("claude", "system:claude")
+    ).resolves.toEqual({ source: "system" });
+  });
+
+  it("returns null when a system provider is not enabled in database state", async () => {
+    const { prisma, service } = createService({
+      findFirst: vi.fn().mockResolvedValue(null),
+    });
+
+    await expect(
+      service.resolveEnabledProvider("claude", "system:claude")
+    ).resolves.toBeNull();
+    expect(prisma.modelProvider.findFirst).toHaveBeenCalledWith({
+      where: { id: "system:claude", agentType: "claude", isEnabled: true },
+    });
+  });
+
+  it("resolves an enabled custom provider with its saved config", async () => {
+    const { service } = createService({
+      findFirst: vi.fn().mockResolvedValue({
+        id: "mp-1",
+        agentType: "claude",
+        scope: "global",
+        isEnabled: true,
+        baseUrl: "https://example.com",
+        apiKey: "sk-test",
+        models: ["claude-test"],
+        extraConfig: { FOO: "bar" },
+      }),
+    });
+
+    await expect(
+      service.resolveEnabledProvider("claude", "mp-1")
+    ).resolves.toEqual({
+      source: "custom",
+      providerConfig: {
+        baseUrl: "https://example.com",
+        apiKey: "sk-test",
+        models: ["claude-test"],
+        extraConfig: { FOO: "bar" },
+      },
+    });
   });
 });

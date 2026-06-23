@@ -1,18 +1,22 @@
 import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
-import { Prisma } from "../../generated/prisma/client.js";
-import { AgentSpecBuilder } from "./agent-spec.builder";
-import { ConversationService } from "../conversations/conversation.service";
-import type { JwtUser } from "../auth/current-user.decorator";
-import { RunService } from "../runs/run.service";
-import { safeLogJson } from "../common/logging";
-import type { RunAgentInput } from "./run-agent-input";
+import type {
+  AgentProviderConfig,
+  CustomAgentProviderConfig,
+} from "@agework/shared/protocol";
+import { Prisma } from "../../../generated/prisma/client.js";
+import { ConversationService } from "../conversation.service";
+import type { JwtUser } from "../../auth/current-user.decorator";
+import { RunService } from "../../runs/run.service";
+import { safeLogJson } from "../../common/logging";
+import type { AgentRunRequestBody } from "./agent.types";
 import { getAgentPermissionOptions } from "./agent-permission-options";
+import { ModelProviderService } from "../../model-providers/model-provider.service";
 
 /**
  * Agent 层入口：把 HTTP 请求翻成 RunService.start 的 StartRunInput。
- * 只负责解析参数、读取 conversation/workspace、产出 AgentSpec；
+ * 只负责解析参数、读取 conversation/workspace、产出 agent provider config；
  * placement / RunConfig 组装 / 生命周期 / SSE / 持久化全部交给 RunService。
  */
 @Injectable()
@@ -20,12 +24,16 @@ export class AgentService {
   private readonly logger = new Logger(AgentService.name);
 
   constructor(
-    private readonly agentSpecBuilder: AgentSpecBuilder,
     private readonly conversationService: ConversationService,
-    private readonly runService: RunService
+    private readonly runService: RunService,
+    private readonly modelProviderService: ModelProviderService
   ) {}
 
-  async run(body: RunAgentInput, res: Response, user: JwtUser): Promise<void> {
+  async run(
+    body: AgentRunRequestBody,
+    res: Response,
+    user: JwtUser
+  ): Promise<void> {
     // body.threadId 是 AG-UI 协议字段，值等于 AgeWork conversationId
     const conversationId = body.threadId;
     const runId =
@@ -138,10 +146,10 @@ export class AgentService {
       ...(agentSessionId && { messages: body.messages?.slice(-1) }),
     };
 
-    // Agent 层只产出 placement-free 的 AgentSpec
-    let agentSpec;
+    // Agent 层只产出 placement-free 的 provider config
+    let agentProviderConfig;
     try {
-      agentSpec = await this.agentSpecBuilder.build({
+      agentProviderConfig = await this.getAgentProviderConfig({
         agentType,
         modelProviderId,
         model: requestedModel,
@@ -156,7 +164,7 @@ export class AgentService {
       runId,
       conversationId,
       userId,
-      agentSpec,
+      agentProviderConfig,
       modelProviderId,
       input: runInput,
       workspace: {
@@ -193,8 +201,10 @@ export class AgentService {
   /** 回应一次审批（approval_resolved 控制指令）。 */
   async reply(
     conversationId: string,
-    answers: Record<string, string | string[]>
+    answers: Record<string, string | string[]>,
+    user: JwtUser
   ): Promise<void> {
+    await this.conversationService.findOne(user.userId, conversationId);
     await this.runService.resolveApproval(conversationId, answers);
   }
 
@@ -225,5 +235,58 @@ export class AgentService {
     ) {
       forwardedProps.permissionMode = permissionOptions.defaultValue;
     }
+  }
+
+  private async getAgentProviderConfig(params: {
+    agentType: string;
+    modelProviderId: string;
+    model?: string;
+  }): Promise<AgentProviderConfig> {
+    const { agentType, modelProviderId, model } = params;
+    // todo: 目前只支持 claude/codex，后续可扩展更多 agent 类型
+    if (agentType !== "claude" && agentType !== "codex") {
+      throw new BadRequestException(`不支持的 agent 类型: ${agentType}`);
+    }
+
+    const resolved = await this.modelProviderService.resolveEnabledProvider(
+      agentType,
+      modelProviderId
+    );
+
+    if (!resolved) {
+      throw new BadRequestException(`模型服务不可用: ${modelProviderId}`);
+    }
+
+    if (resolved.source === "system") {
+      return { agentType, source: "system" };
+    }
+
+    if (!model) {
+      throw new BadRequestException("未选择模型或模型不在可用列表中");
+    }
+
+    const {
+      baseUrl,
+      apiKey,
+      models = [],
+      extraConfig = {},
+    } = resolved.providerConfig;
+
+    if (!models.includes(model)) {
+      throw new BadRequestException(
+        `模型 ${model} 不在可用列表中: ${models.join(", ")}`
+      );
+    }
+
+    const config: CustomAgentProviderConfig = {
+      agentType,
+      source: "custom",
+      baseUrl,
+      apiKey,
+      model,
+      extraConfig,
+    };
+
+    return config;
   }
 }

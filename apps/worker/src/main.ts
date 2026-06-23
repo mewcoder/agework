@@ -70,16 +70,16 @@ async function runSingle() {
     runId,
     conversationId,
     workspaceId: config.workspaceId,
-    agentType: config.agentType,
+    agentType: config.agentProviderConfig.agentType,
     runtimePath: config.runtimePath,
-    adapterKind: config.adapter.kind,
+    agentProviderSource: config.agentProviderConfig.source,
   });
   workerLog("single run config loaded");
   const trace = new AgentEventTraceWriter(config.agentEventTrace, (msg) => {
     void transport.emit(msg);
   });
 
-  // Construct adapter based on config.adapter.kind
+  // Construct adapter based on config.agentProviderConfig.agentType
   const adapter = createAdapter(config, trace.sink(), (_threadId, payload) => {
     void emitStatus(transport, runId, payload);
   });
@@ -369,17 +369,17 @@ async function runPersistent() {
           runId: config.runId,
           conversationId: config.conversationId,
           workspaceId: config.workspaceId,
-          agentType: config.agentType,
+          agentType: config.agentProviderConfig.agentType,
           runtimePath: config.runtimePath,
-          adapterKind: config.adapter.kind,
+          agentProviderSource: config.agentProviderConfig.source,
         });
         traces.create(config.agentEventTrace);
-        const agentType = config.agentType as AgentType;
+        const agentType = config.agentProviderConfig.agentType as AgentType;
         if (!adapters.has(agentType)) {
           workerLog("creating adapter", {
             runId: control.runId,
-            agentType: config.agentType,
-            adapterKind: config.adapter.kind,
+            agentType: config.agentProviderConfig.agentType,
+            agentProviderSource: config.agentProviderConfig.source,
             runtimePath: config.runtimePath,
           });
           const adapter = createAdapter(config, createRegistryTraceSink(traces), (aguiThreadId, payload) => {
@@ -512,7 +512,7 @@ function createAdapter(
   trace: AgentTraceSink | undefined,
   emitRunStatusForAguiThread: (aguiThreadId: string, payload: RunStatusPayload) => void
 ) {
-  const { adapter: adapterConfig, runtimePath } = config;
+  const { agentProviderConfig, runtimePath } = config;
   const { claudeExecutablePath, codexExecutablePath } = resolveAgentCliPaths(process.env);
 
   const pendingActionSink = (event: {
@@ -526,21 +526,21 @@ function createAdapter(
     emitRunStatusForAguiThread(event.threadId, payload);
   };
 
-  // 环境模式不带任何配置字段；自定义模式透传 baseUrl/apiKey/model/extraConfig 给两个 adapter。
-  const credentials = adapterConfig.isEnvironmentConfig
+  // 系统配置不带任何配置字段；自定义配置透传 baseUrl/apiKey/model/extraConfig 给两个 adapter。
+  const credentials = agentProviderConfig.source === "system"
     ? {}
     : {
-        apiKey: adapterConfig.apiKey,
-        model: adapterConfig.model,
-        baseUrl: adapterConfig.baseUrl,
-        extraConfig: adapterConfig.extraConfig,
+        apiKey: agentProviderConfig.apiKey,
+        model: agentProviderConfig.model,
+        baseUrl: agentProviderConfig.baseUrl,
+        extraConfig: agentProviderConfig.extraConfig,
       };
 
-  if (adapterConfig.kind === "claude") {
+  if (agentProviderConfig.agentType === "claude") {
     return new ClaudeAgentAdapter({
       ...credentials,
       cwd: runtimePath,
-      isEnvironmentConfig: adapterConfig.isEnvironmentConfig,
+      isEnvironmentConfig: agentProviderConfig.source === "system",
       pendingActionSink,
       trace,
       ...(claudeExecutablePath ? { pathToClaudeCodeExecutable: claudeExecutablePath } : {}),

@@ -12,7 +12,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
-    "@ag-ui/core": "^0.0.54",
+    "@ag-ui/core": "catalog:",
     "@types/node": "^24.0.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8"

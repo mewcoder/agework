@@ -1,13 +1,13 @@
 import { Controller, Get, Post, Body, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { AgentService } from "./agent.service";
-import { CurrentUser } from "../auth/current-user.decorator";
-import type { JwtUser } from "../auth/current-user.decorator";
+import { CurrentUser } from "../../auth/current-user.decorator";
+import type { JwtUser } from "../../auth/current-user.decorator";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
-import type { RunAgentInput } from "./run-agent-input";
+import type { AgentRunRequestBody } from "./agent.types";
 import { getAgentPermissionOptions } from "./agent-permission-options";
 
-@Controller("agent")
+@Controller("conversations/agent")
 export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
@@ -18,14 +18,14 @@ export class AgentController {
 
   @Post("run")
   async run(
-    @Body() body: RunAgentInput,
+    @Body() body: AgentRunRequestBody,
     @Res() res: Response,
     @CurrentUser() user: JwtUser
   ) {
     await this.agentService.run(body, res, user);
   }
 
-  @Get("run/resume")
+  @Get("resume")
   async resumeStream(
     @Query("id") conversationId: string,
     @Res() res: Response,
@@ -37,9 +37,9 @@ export class AgentController {
   @Post("reply")
   async answerQuestion(
     @Body() body: AgentReplyDto,
-    @CurrentUser() _user: JwtUser
+    @CurrentUser() user: JwtUser
   ) {
-    await this.agentService.reply(body.id, body.answers);
+    await this.agentService.reply(body.id, body.answers, user);
   }
 
   @Post("stop")

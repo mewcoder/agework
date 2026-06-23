@@ -27,7 +27,7 @@ import {
   type ManagedAgent,
   compareModelProviders,
   getBaseUrl,
-  isEnvironmentModelProvider,
+  isSystemModelProvider,
   getModel,
 } from "@/utils/model-provider";
 import {
@@ -35,10 +35,10 @@ import {
   ModelProviderValue,
 } from "./admin-model-provider-row";
 
-function EnvironmentStatusBadge({ modelProvider }: { modelProvider: ModelProvider }) {
-  if (!isEnvironmentModelProvider(modelProvider)) return null;
+function SystemStatusBadge({ modelProvider }: { modelProvider: ModelProvider }) {
+  if (!isSystemModelProvider(modelProvider)) return null;
 
-  const status = modelProvider.environmentStatus;
+  const status = modelProvider.systemStatus;
   if (!status) return null;
 
   const isReady = status.commandAvailable && status.configAvailable;
@@ -160,7 +160,7 @@ export function AdminModelProvidersPanel({
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2">
           <DataTableText className="font-medium">{row.original.name}</DataTableText>
-          <EnvironmentStatusBadge modelProvider={row.original} />
+          <SystemStatusBadge modelProvider={row.original} />
         </div>
       ),
     },

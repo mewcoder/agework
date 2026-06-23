@@ -27,9 +27,9 @@ export function agentLabel(agentType: string) {
   return isManagedAgent(agentType) ? AGENT_LABELS[agentType] : agentType;
 }
 
-export function isEnvironmentModelProvider(modelProvider: ModelProvider) {
+export function isSystemModelProvider(modelProvider: ModelProvider) {
   return (
-    modelProvider.scope === "environment" ||
+    modelProvider.scope === "system" ||
     modelProvider.modelProviderId.startsWith("system:")
   );
 }
@@ -40,9 +40,9 @@ function agentSortOrder(agentType: string) {
 }
 
 export function compareModelProviders(a: ModelProvider, b: ModelProvider) {
-  const aEnvironment = isEnvironmentModelProvider(a);
-  const bEnvironment = isEnvironmentModelProvider(b);
-  if (aEnvironment !== bEnvironment) return aEnvironment ? -1 : 1;
+  const aSystem = isSystemModelProvider(a);
+  const bSystem = isSystemModelProvider(b);
+  if (aSystem !== bSystem) return aSystem ? -1 : 1;
 
   const agentOrder = agentSortOrder(a.agentType) - agentSortOrder(b.agentType);
   if (agentOrder !== 0) return agentOrder;

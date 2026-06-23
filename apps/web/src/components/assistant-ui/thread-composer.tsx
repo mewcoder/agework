@@ -31,7 +31,7 @@ import { StopConversationRunButton } from "@/components/assistant-ui/stop-conver
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { labels } from "@/utils/labels";
-import { isEnvironmentModelProvider } from "@/utils/model-provider";
+import { isSystemModelProvider } from "@/utils/model-provider";
 
 const EMPTY_QUEUED_INPUTS: QueuedUserInput[] = [];
 const COMPOSER_SEND_BUTTON_CLASS =
@@ -276,11 +276,11 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     : undefined;
   const needsWorkspace = !selectedConversationId && !selectedWorkspaceId;
   const needsModelProvider = !selectedModelProviderId;
-  const needsNonEnvironmentModelProvider =
+  const needsNonSystemModelProvider =
     targetWorkspace?.runtimeType === "sandbox" &&
     !!selectedModelProvider &&
-    isEnvironmentModelProvider(selectedModelProvider);
-  const modelProviderAttentionMessage = needsNonEnvironmentModelProvider
+    isSystemModelProvider(selectedModelProvider);
+  const modelProviderAttentionMessage = needsNonSystemModelProvider
     ? "沙箱工作空间不能使用系统环境模型配置"
     : "请选择模型配置";
   const queueConversationId = selectedConversationId;
@@ -339,13 +339,13 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
         requestModelProviderForSend();
         return;
       }
-      if (needsNonEnvironmentModelProvider) {
+      if (needsNonSystemModelProvider) {
         event.preventDefault();
         requestModelProviderForSend();
         return;
       }
     },
-    [aui, composerText, editingQueueItemId, needsModelProvider, needsNonEnvironmentModelProvider, needsWorkspace, queueConversationId, queueCurrentInput, requestModelProviderForSend, requestWorkspaceForSend, showStop],
+    [aui, composerText, editingQueueItemId, needsModelProvider, needsNonSystemModelProvider, needsWorkspace, queueConversationId, queueCurrentInput, requestModelProviderForSend, requestWorkspaceForSend, showStop],
   );
 
   const handleQueueKeyDownCapture = useCallback(

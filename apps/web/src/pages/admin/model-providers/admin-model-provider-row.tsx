@@ -12,7 +12,7 @@ import {
   type ModelProvider,
 } from "@/hooks/model-provider-hooks";
 import { errorMessage } from "@/utils/error";
-import { isEnvironmentModelProvider, showModelProviderTestToast } from "@/utils/model-provider";
+import { isSystemModelProvider, showModelProviderTestToast } from "@/utils/model-provider";
 
 export function ModelProviderValue({
   value,
@@ -60,7 +60,7 @@ export function AdminModelProviderActions({
   isTogglingEnabled: boolean;
 }) {
   const testModelProvider = useAdminTestModelProvider();
-  const isEnvironment = isEnvironmentModelProvider(modelProvider);
+  const isSystem = isSystemModelProvider(modelProvider);
 
   async function handleTest() {
     try {
@@ -86,7 +86,7 @@ export function AdminModelProviderActions({
       >
         {modelProvider.isEnabled ? "停用" : "启用"}
       </DataTableButton>
-      {!isEnvironment && (
+      {!isSystem && (
         <>
           <DataTableActionButton
             onClick={handleTest}

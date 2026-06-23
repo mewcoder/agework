@@ -58,10 +58,16 @@ export const conversationsApi = {
     apiPost('/api/v1/conversations/clear-archived'),
 
   stopRun: (conversationId: string) =>
-    apiPost('/api/v1/agent/stop', { id: conversationId }),
+    apiPost('/api/v1/conversations/agent/stop', { id: conversationId }),
 
-  submitQuestionAnswer: (conversationId: string, answers: SubmitQuestionAnswerRequest['answers']) =>
-    apiPost('/api/v1/agent/reply', { id: conversationId, answers }),
+  submitQuestionAnswer: (
+    conversationId: string,
+    answers: SubmitQuestionAnswerRequest['answers'],
+  ) =>
+    apiPost('/api/v1/conversations/agent/reply', {
+      id: conversationId,
+      answers,
+    }),
 
   listMessages: (conversationId: string) =>
     apiGet<StoredMessage[]>(`/api/v1/conversations/messages/list?id=${conversationId}`),

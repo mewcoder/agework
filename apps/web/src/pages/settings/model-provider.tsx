@@ -19,7 +19,7 @@ import { errorMessage } from '@/utils/error';
 import { getBaseUrl, getModel } from '@/utils/model-provider';
 import { showModelProviderTestToast } from '@/utils/model-provider';
 
-function EnvironmentModelProviderDescription(agent: string): string {
+function SystemModelProviderDescription(agent: string): string {
   if (agent === 'claude') return '使用服务运行环境中的 Claude Code 配置';
   if (agent === 'codex') return '使用服务运行环境中的 Codex 配置';
   return '使用服务运行环境中的默认模型服务';
@@ -64,7 +64,7 @@ function ModelProviderRow({
   onDelete: () => void;
 }) {
   const testModelProvider = useTestModelProvider();
-  const isEnvironment = modelProvider.modelProviderId.startsWith('system:');
+  const isSystem = modelProvider.modelProviderId.startsWith('system:');
   const baseUrl = getBaseUrl(modelProvider);
   const model = getModel(modelProvider);
 
@@ -86,13 +86,13 @@ function ModelProviderRow({
 
   const title = modelProvider.name;
 
-  const description = isEnvironment
-    ? EnvironmentModelProviderDescription(agent)
+  const description = isSystem
+    ? SystemModelProviderDescription(agent)
     : <ModelProviderDescription model={model} baseUrl={baseUrl} />;
 
   const actions = (
     <div className="flex items-center gap-1">
-      {!isEnvironment && (
+      {!isSystem && (
         <Button
           variant="ghost"
           size="icon"
@@ -108,7 +108,7 @@ function ModelProviderRow({
           )}
         </Button>
       )}
-      {!isEnvironment && canManage && (
+      {!isSystem && canManage && (
         <>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onEdit}>
             <Pencil className="h-3.5 w-3.5" />

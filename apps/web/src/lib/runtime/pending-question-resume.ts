@@ -22,7 +22,7 @@ export function dropStalePendingQuestionMessage<
 
 /**
  * 回答 pending question 后是否需要手动发起 resume 重连。
- * 只有刷新过页面（assistant-ui core 是全新实例，原始 /agent/run 的 SSE 连接已经
+ * 只有刷新过页面（assistant-ui core 是全新实例，原始 /conversations/agent/run 的 SSE 连接已经
  * 丢失，isRunning=false）才需要；没刷新页面时原始连接仍存活，worker resolve 后
  * 续事件会通过它正常到达，再手动 resumeRun 会和原始 run 同时产生第二条助手消息。
  */

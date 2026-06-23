@@ -36,7 +36,7 @@ export function useAgentChatRuntime(): AssistantRuntime {
 
   const agent = useMemo(() => {
     const instance = new ChatHttpAgent({
-      url: apiUrl("/api/v1/agent/run"),
+      url: apiUrl("/api/v1/conversations/agent/run"),
       headers: {
         Accept: "text/event-stream",
       },

@@ -3,3 +3,16 @@ packages:
   - "!apps/desktop"
   - "packages/*"
   - "e2e"
+
+catalog:
+  "@ag-ui/client": "0.0.57"
+  "@ag-ui/core": "0.0.57"
+
+onlyBuiltDependencies:
+  - "@nestjs/core"
+  - "@prisma/engines"
+  - "@swc/core"
+  - better-sqlite3
+  - esbuild
+  - msw
+  - prisma

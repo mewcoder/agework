@@ -71,12 +71,12 @@ export class TitleService {
     userText: string,
     modelProviderId?: string | null
   ): Promise<string | null> {
-    if (!modelProviderId) return null; // 系统环境无可直连的 key，回退规则标题
-    const resolved = await this.modelProviderService.resolveEnabledConfig(
+    if (!modelProviderId) return null; // 系统配置无可直连的 key，回退规则标题
+    const resolved = await this.modelProviderService.resolveEnabledProvider(
       agentType,
       modelProviderId
     );
-    if (!resolved || resolved.providerSource === "environment") return null;
+    if (!resolved || resolved.source === "system") return null;
     const providerConfig = resolved.providerConfig;
 
     if (agentType === "claude")

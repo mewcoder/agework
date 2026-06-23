@@ -135,7 +135,10 @@ describe('conversationsApi', () => {
     it('发送 stop 请求', async () => {
       await conversationsApi.stopRun('conv-1');
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/agent/stop', { id: 'conv-1' });
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/api/v1/conversations/agent/stop',
+        { id: 'conv-1' },
+      );
     });
   });
 
@@ -144,7 +147,10 @@ describe('conversationsApi', () => {
       const answers = { q1: 'yes', q2: ['a', 'b'] };
       await conversationsApi.submitQuestionAnswer('conv-1', answers);
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/agent/reply', { id: 'conv-1', answers });
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/api/v1/conversations/agent/reply',
+        { id: 'conv-1', answers },
+      );
     });
   });
 

@@ -153,9 +153,9 @@ export class PersistentHttpClient {
       runId,
       workspaceId: this.workspaceId,
       conversationId: data.config.conversationId,
-      agentType: data.config.agentType,
+      agentType: data.config.agentProviderConfig.agentType,
       runtimePath: data.config.runtimePath,
-      adapterKind: data.config.adapter?.kind,
+      agentProviderSource: data.config.agentProviderConfig.source,
     }, "debug");
     return data.config;
   }

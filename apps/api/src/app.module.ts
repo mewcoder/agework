@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Module } from "@nestjs/common";
 import { ServeStaticModule } from "@nestjs/serve-static";
-import { AgentModule } from "./agent/agent.module";
+import { AgentModule } from "./conversations/agent/agent.module";
 import { AuthModule } from "./auth/auth.module";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";

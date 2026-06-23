@@ -66,8 +66,8 @@ export class RuntimeInternalController {
         runId,
         conversationId: config.conversationId,
         workspaceId: config.workspaceId,
-        agentType: config.agentType,
-        adapterKind: config.adapter.kind,
+        agentType: config.agentProviderConfig.agentType,
+        agentProviderSource: config.agentProviderConfig.source,
       })}`
     );
     return { config };

@@ -22,13 +22,16 @@ import {
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
 const SYSTEM_PREFIX = "system:";
-const ENVIRONMENT_MODEL_PROVIDER_NAME = "系统环境";
-const MODEL_PROVIDER_SCOPE_ENVIRONMENT = "environment";
+const SYSTEM_MODEL_PROVIDER_NAME = "系统环境";
+const MODEL_PROVIDER_SCOPE_SYSTEM = "system";
 const MODEL_PROVIDER_SCOPE_GLOBAL = "global";
-const ENVIRONMENT_AGENT_TYPES = ["claude", "codex"] as const;
+const SYSTEM_AGENT_TYPES = ["claude", "codex"] as const;
 
-type ModelProviderScope = "environment" | "global" | "user";
-type EnvironmentStatus = {
+type ModelProviderScope = "system" | "global" | "user";
+type ResolvedModelProvider =
+  | { source: "system" }
+  | { source: "custom"; providerConfig: ProviderConfig };
+type SystemStatus = {
   command: string;
   commandAvailable: boolean;
   configAvailable: boolean;
@@ -40,15 +43,15 @@ type ProviderConfigColumns = {
   extraConfig: unknown;
 };
 
-function isEnvironmentModelProviderId(id: string) {
+function isSystemModelProviderId(id: string) {
   return id.startsWith(SYSTEM_PREFIX);
 }
 
-function environmentModelProviderId(agentType: string) {
+function systemModelProviderId(agentType: string) {
   return `${SYSTEM_PREFIX}${agentType}`;
 }
 
-function agentTypeFromEnvironmentModelProviderId(id: string): AgentType {
+function agentTypeFromSystemModelProviderId(id: string): AgentType {
   const agentType = id.slice(SYSTEM_PREFIX.length);
   if (agentType !== "claude" && agentType !== "codex") {
     throw new BadRequestException(`模型服务不可用: ${id}`);
@@ -122,19 +125,19 @@ export class ModelProviderService implements OnModuleInit {
 
   async onModuleInit() {
     await Promise.all(
-      ENVIRONMENT_AGENT_TYPES.map((agentType) =>
-        this.ensureEnvironmentModelProvider(agentType)
+      SYSTEM_AGENT_TYPES.map((agentType) =>
+        this.ensureSystemModelProvider(agentType)
       )
     );
   }
 
-  private async ensureEnvironmentModelProvider(agentType: string) {
-    const id = environmentModelProviderId(agentType);
+  private async ensureSystemModelProvider(agentType: string) {
+    const id = systemModelProviderId(agentType);
     const placeholder = {
       agentType,
-      scope: MODEL_PROVIDER_SCOPE_ENVIRONMENT,
+      scope: MODEL_PROVIDER_SCOPE_SYSTEM,
       userId: null,
-      name: ENVIRONMENT_MODEL_PROVIDER_NAME,
+      name: SYSTEM_MODEL_PROVIDER_NAME,
       baseUrl: "",
       apiKey: "",
       models: [] as string[],
@@ -146,14 +149,16 @@ export class ModelProviderService implements OnModuleInit {
     if (existing) {
       const isPlaceholder =
         existing.agentType === agentType &&
-        existing.scope === MODEL_PROVIDER_SCOPE_ENVIRONMENT &&
+        existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM &&
         existing.userId === null &&
-        existing.name === ENVIRONMENT_MODEL_PROVIDER_NAME &&
+        existing.name === SYSTEM_MODEL_PROVIDER_NAME &&
         existing.baseUrl === "" &&
         existing.apiKey === "" &&
         normalizeModels(existing.models).length === 0 &&
         Object.keys(normalizeExtraConfig(existing.extraConfig)).length === 0;
-      if (isPlaceholder) return existing;
+      if (isPlaceholder && existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
+        return existing;
+      }
       return this.prisma.modelProvider.update({
         where: { id },
         data: placeholder,
@@ -185,9 +190,9 @@ export class ModelProviderService implements OnModuleInit {
       orderBy: { createdAt: "asc" },
     });
     const sorted = [...modelProviders].sort((a, b) => {
-      const aEnvironment = isEnvironmentModelProviderId(a.id);
-      const bEnvironment = isEnvironmentModelProviderId(b.id);
-      if (aEnvironment !== bEnvironment) return aEnvironment ? -1 : 1;
+      const aSystem = isSystemModelProviderId(a.id);
+      const bSystem = isSystemModelProviderId(b.id);
+      if (aSystem !== bSystem) return aSystem ? -1 : 1;
       return a.createdAt.getTime() - b.createdAt.getTime();
     });
     // desensitize: includeDisabled=true 代表走 admin 接口（listForAdmin），不脱敏；
@@ -197,8 +202,8 @@ export class ModelProviderService implements OnModuleInit {
       toModelProviderDto(
         {
           ...p,
-          environmentStatus: isEnvironmentModelProviderId(p.id)
-            ? this.getEnvironmentStatus(p.agentType)
+          systemStatus: isSystemModelProviderId(p.id)
+            ? this.getSystemStatus(p.agentType)
             : undefined,
         },
         desensitize
@@ -206,7 +211,7 @@ export class ModelProviderService implements OnModuleInit {
     );
   }
 
-  private getEnvironmentStatus(agentType: string): EnvironmentStatus {
+  private getSystemStatus(agentType: string): SystemStatus {
     const home = homedir();
 
     if (agentType === "claude") {
@@ -265,7 +270,7 @@ export class ModelProviderService implements OnModuleInit {
   }
 
   async update(modelProviderId: string, name: string, providerConfig: ProviderConfig) {
-    if (isEnvironmentModelProviderId(modelProviderId))
+    if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可修改");
     const modelProvider = await this.prisma.modelProvider.findUnique({
       where: { id: modelProviderId },
@@ -295,9 +300,9 @@ export class ModelProviderService implements OnModuleInit {
   }
 
   async setEnabled(modelProviderId: string, isEnabled: boolean) {
-    if (isEnvironmentModelProviderId(modelProviderId)) {
-      const agentType = agentTypeFromEnvironmentModelProviderId(modelProviderId);
-      await this.ensureEnvironmentModelProvider(agentType);
+    if (isSystemModelProviderId(modelProviderId)) {
+      const agentType = agentTypeFromSystemModelProviderId(modelProviderId);
+      await this.ensureSystemModelProvider(agentType);
       const updated = await this.prisma.modelProvider.update({
         where: { id: modelProviderId },
         data: { isEnabled },
@@ -317,35 +322,27 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(updated, false);
   }
 
-  // 供 agent 模块解析运行所需的模型服务：环境配置返回占位 ProviderConfig，
-  // 其余按 agentType 校验启用状态。未找到/不可用返回 null，由调用方决定如何报错。
-  async resolveEnabledConfig(
+  // 供 agent 模块解析运行所需的模型服务：系统/自定义都以数据库启用状态为准。
+  // 系统配置不携带 ProviderConfig；未找到/不可用返回 null，由调用方决定如何报错。
+  async resolveEnabledProvider(
     agentType: string,
     modelProviderId: string
-  ): Promise<{
-    providerConfig: ProviderConfig;
-    providerSource: "environment" | "database";
-  } | null> {
-    if (isEnvironmentModelProviderId(modelProviderId)) {
-      if (modelProviderId !== environmentModelProviderId(agentType)) return null;
-      return {
-        providerConfig: { baseUrl: "", apiKey: "", models: [], extraConfig: {} },
-        providerSource: "environment",
-      };
-    }
-
+  ): Promise<ResolvedModelProvider | null> {
     const modelProvider = await this.prisma.modelProvider.findFirst({
       where: { id: modelProviderId, agentType, isEnabled: true },
     });
     if (!modelProvider) return null;
+    if (modelProvider.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
+      return { source: "system" };
+    }
     return {
+      source: "custom",
       providerConfig: toProviderConfig(modelProvider),
-      providerSource: "database",
     };
   }
 
   async delete(modelProviderId: string) {
-    if (isEnvironmentModelProviderId(modelProviderId))
+    if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可删除");
     const modelProvider = await this.prisma.modelProvider.findUnique({
       where: { id: modelProviderId },
@@ -428,7 +425,7 @@ export class ModelProviderService implements OnModuleInit {
     modelProviderId: string,
     includeDisabled = false
   ): Promise<{ success: boolean; latency: number; error?: string }> {
-    if (isEnvironmentModelProviderId(modelProviderId))
+    if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不支持连通性测试");
 
     const modelProvider = await this.prisma.modelProvider.findUnique({
@@ -534,7 +531,7 @@ function toModelProviderDto(
     userId: string | null;
     name: string;
     isEnabled: boolean;
-    environmentStatus?: EnvironmentStatus;
+    systemStatus?: SystemStatus;
     createdAt: Date | string;
     updatedAt: Date | string;
   },
@@ -548,8 +545,8 @@ function toModelProviderDto(
     name: modelProvider.name,
     isEnabled: modelProvider.isEnabled,
     providerConfig: serializeProviderConfig(modelProvider, desensitize),
-    ...(modelProvider.environmentStatus
-      ? { environmentStatus: modelProvider.environmentStatus }
+    ...(modelProvider.systemStatus
+      ? { systemStatus: modelProvider.systemStatus }
       : {}),
     createdAt:
       modelProvider.createdAt instanceof Date

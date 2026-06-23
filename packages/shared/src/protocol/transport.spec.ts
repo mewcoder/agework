@@ -12,16 +12,21 @@ describe("RuntimeTransport contract", () => {
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
-      agentType: "claude",
       runtimePath: "/tmp/workspace",
       env: { FOO: "bar" },
       input: { foo: "bar" },
-      adapter: { kind: "claude", isEnvironmentConfig: false, apiKey: "sk-test" },
+      agentProviderConfig: {
+        agentType: "claude",
+        source: "custom",
+        apiKey: "sk-test",
+        baseUrl: "https://example.com",
+        model: "claude-test",
+      },
     };
 
     expect(config.runtimePath).toBe("/tmp/workspace");
     expect(config.env.FOO).toBe("bar");
-    expect(config.adapter.kind).toBe("claude");
+    expect(config.agentProviderConfig.agentType).toBe("claude");
   });
 
   it("a RuntimeTransport implementation can fetch config, emit upstream messages and subscribe controls", async () => {
@@ -34,11 +39,10 @@ describe("RuntimeTransport contract", () => {
           runId: "run-1",
           conversationId: "conversation-1",
           workspaceId: "ws-1",
-          agentType: "claude" as const,
           runtimePath: "/tmp/workspace",
           env: {},
           input: {},
-          adapter: { kind: "claude" as const, isEnvironmentConfig: false },
+          agentProviderConfig: { agentType: "claude" as const, source: "system" },
         }),
       emit: (msg) => {
         sent.push(msg);

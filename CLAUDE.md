@@ -68,6 +68,13 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 - 前后端共享结构优先放 `packages/shared`。
 - Prisma 相关代码在 `apps/api/src/prisma` 和 `apps/api/prisma`。
 
+### 模块组织与封装
+
+- 后端模块按业务领域组织，不按数据库表；模块外只能调用该领域公开 Service 和公开类型，不穿透 Repository、helper、internal、provider、execution、events 等内部文件；Service 是该领域对外唯一入口。
+- 模块依赖必须按架构定义保持单向；上层调用下层，下层不得反向注入或直接调用上层 Service；需要反向通知时用 domain event、回调端口或注册表解耦，避免 God Service 和循环依赖。
+- 辅助逻辑跟着它修改/拥有的数据走：默认合并进 owner Service 的 private method；数据库读写细节进 Repository，跨边界类型进公开 `*.types.ts` 或 shared contract；禁止为了“分层好看”制造无意义层级。
+- 是否抽成独立文件/目录看独立变化原因，不看行数；能起出清晰领域概念名才抽成同目录带领域名前缀的内部文件，起不出名就留在 private method；默认子目录最多一层，大领域确有稳定子能力时才加深。
+
 ## 测试约定
 
 - 前后端单测统一用 Vitest。

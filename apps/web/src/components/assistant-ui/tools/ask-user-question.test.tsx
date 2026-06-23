@@ -112,10 +112,13 @@ describe("AskUserQuestionUI 权限提交", () => {
     fireEvent.click(screen.getByRole("button", { name: /允许/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith("/api/v1/agent/reply", {
-        id: "conv-1",
-        answers: { "允许 Claude 使用 Read？": PERMISSION_ALLOW_LABEL },
-      });
+      expect(mockApiPost).toHaveBeenCalledWith(
+        "/api/v1/conversations/agent/reply",
+        {
+          id: "conv-1",
+          answers: { "允许 Claude 使用 Read？": PERMISSION_ALLOW_LABEL },
+        }
+      );
     });
   });
 
@@ -125,10 +128,13 @@ describe("AskUserQuestionUI 权限提交", () => {
     fireEvent.click(screen.getByRole("button", { name: /拒绝/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith("/api/v1/agent/reply", {
-        id: "conv-1",
-        answers: { "允许 Claude 使用 Read？": PERMISSION_DENY_LABEL },
-      });
+      expect(mockApiPost).toHaveBeenCalledWith(
+        "/api/v1/conversations/agent/reply",
+        {
+          id: "conv-1",
+          answers: { "允许 Claude 使用 Read？": PERMISSION_DENY_LABEL },
+        }
+      );
     });
   });
 
@@ -240,11 +246,13 @@ describe("AskUserQuestionUI 始终允许按钮", () => {
     fireEvent.click(screen.getByRole("button", { name: /始终允许/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith("/api/v1/agent/reply", {
-        id: "conv-1",
-        answers: { "允许 Claude 使用 Write？": PERMISSION_ALWAYS_ALLOW_LABEL },
-      });
+      expect(mockApiPost).toHaveBeenCalledWith(
+        "/api/v1/conversations/agent/reply",
+        {
+          id: "conv-1",
+          answers: { "允许 Claude 使用 Write？": PERMISSION_ALWAYS_ALLOW_LABEL },
+        }
+      );
     });
   });
 });
-

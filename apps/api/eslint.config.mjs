@@ -35,7 +35,7 @@ export default tseslint.config(
   // 层次边界（§6）：agent 层只能经 runs/run.service 门面与 run-service.types 触达下层，
   // 不得 deep import runtime 内部实现或 runs 的入站/事件管线。
   {
-    files: ['src/agent/**/*.ts'],
+    files: ['src/conversations/agent/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',

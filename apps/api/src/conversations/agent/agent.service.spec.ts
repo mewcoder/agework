@@ -1,25 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import { AgentService } from "./agent.service";
-import { AgentSpecBuilder } from "./agent-spec.builder";
-import { ConversationService } from "../conversations/conversation.service";
-import { RunService } from "../runs/run.service";
+import { ConversationService } from "../conversation.service";
+import { RunService } from "../../runs/run.service";
+import { ModelProviderService } from "../../model-providers/model-provider.service";
 import type { Response } from "express";
-import type { JwtUser } from "../auth/current-user.decorator";
+import type { JwtUser } from "../../auth/current-user.decorator";
 
 describe("AgentService", () => {
   let service: AgentService;
-  let mockAgentSpecBuilder: Partial<AgentSpecBuilder>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunService: Partial<RunService>;
+  let mockModelProviderService: Partial<ModelProviderService>;
   let res: Partial<Response>;
   let user: JwtUser;
 
   beforeEach(() => {
-    mockAgentSpecBuilder = {
-      build: vi.fn().mockResolvedValue({
-        agentType: "claude",
-        adapter: { kind: "claude", isEnvironmentConfig: true },
+    mockModelProviderService = {
+      resolveEnabledProvider: vi.fn().mockResolvedValue({
+        source: "system",
       }),
     };
     mockConversationService = {
@@ -50,9 +49,9 @@ describe("AgentService", () => {
     user = { userId: "user-1" } as JwtUser;
 
     service = new AgentService(
-      mockAgentSpecBuilder as AgentSpecBuilder,
       mockConversationService as ConversationService,
-      mockRunService as RunService
+      mockRunService as RunService,
+      mockModelProviderService as ModelProviderService
     );
   });
 
@@ -81,8 +80,8 @@ describe("AgentService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("wraps AgentSpec build errors as BadRequestException", async () => {
-    mockAgentSpecBuilder.build = vi
+  it("wraps agent provider config lookup errors as BadRequestException", async () => {
+    mockModelProviderService.resolveEnabledProvider = vi
       .fn()
       .mockRejectedValue(new Error("模型服务不可用"));
 
@@ -91,13 +90,14 @@ describe("AgentService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("builds the AgentSpec and delegates to RunService.start with a StartRunInput", async () => {
+  it("gets the agent provider config and delegates to RunService.start with a StartRunInput", async () => {
     const body = baseBody();
 
     await service.run(body, res as Response, user);
 
-    expect(mockAgentSpecBuilder.build).toHaveBeenCalledWith(
-      expect.objectContaining({ agentType: "claude", modelProviderId: "mc-1" })
+    expect(mockModelProviderService.resolveEnabledProvider).toHaveBeenCalledWith(
+      "claude",
+      "mc-1"
     );
 
     expect(mockRunService.start).toHaveBeenCalledTimes(1);
@@ -108,8 +108,8 @@ describe("AgentService", () => {
     expect(startArgs.modelProviderId).toBe("mc-1");
     expect(startArgs.userMessageId).toBe("msg-1");
     expect(startArgs.res).toBe(res);
-    expect(startArgs.agentSpec).toEqual(
-      expect.objectContaining({ agentType: "claude" })
+    expect(startArgs.agentProviderConfig).toEqual(
+      expect.objectContaining({ agentType: "claude", source: "system" })
     );
     expect(startArgs.workspace).toEqual(
       expect.objectContaining({
@@ -119,6 +119,59 @@ describe("AgentService", () => {
       })
     );
     expect(startArgs.input.forwardedProps.agentType).toBe("claude");
+  });
+
+  it("passes a custom agent provider config to RunService.start", async () => {
+    mockModelProviderService.resolveEnabledProvider = vi.fn().mockResolvedValue({
+      source: "custom",
+      providerConfig: {
+        baseUrl: "https://example.com",
+        apiKey: "sk-test",
+        models: ["claude-test"],
+        extraConfig: { FOO: "bar" },
+      },
+    });
+
+    await service.run(
+      baseBody({
+        forwardedProps: { modelProviderId: "mc-1", model: "claude-test" },
+      }),
+      res as Response,
+      user
+    );
+
+    const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
+      .calls[0][0];
+    expect(startArgs.agentProviderConfig).toEqual({
+      agentType: "claude",
+      source: "custom",
+      baseUrl: "https://example.com",
+      apiKey: "sk-test",
+      model: "claude-test",
+      extraConfig: { FOO: "bar" },
+    });
+  });
+
+  it("throws when the requested model is not available for a custom provider", async () => {
+    mockModelProviderService.resolveEnabledProvider = vi.fn().mockResolvedValue({
+      source: "custom",
+      providerConfig: {
+        baseUrl: "https://example.com",
+        apiKey: "sk-test",
+        models: ["claude-test"],
+        extraConfig: {},
+      },
+    });
+
+    await expect(
+      service.run(
+        baseBody({
+          forwardedProps: { modelProviderId: "mc-1", model: "claude-unknown" },
+        }),
+        res as Response,
+        user
+      )
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("passes resume props when the conversation has an agentSessionId", async () => {
@@ -171,8 +224,12 @@ describe("AgentService", () => {
   });
 
   describe("reply()", () => {
-    it("delegates to RunService.resolveApproval", async () => {
-      await service.reply("conversation-1", { q1: "yes" });
+    it("verifies ownership then delegates to RunService.resolveApproval", async () => {
+      await service.reply("conversation-1", { q1: "yes" }, user);
+      expect(mockConversationService.findOne).toHaveBeenCalledWith(
+        "user-1",
+        "conversation-1"
+      );
       expect(mockRunService.resolveApproval).toHaveBeenCalledWith(
         "conversation-1",
         { q1: "yes" }

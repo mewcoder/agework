@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { RequestMethod } from "@nestjs/common";
 import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
 import { describe, expect, it } from "vitest";
-import { AgentController } from "../agent/agent.controller";
+import { AgentController } from "../conversations/agent/agent.controller";
 import { AuthController } from "../auth/auth.controller";
 import { AdminConfigController } from "../config/admin/admin-config.controller";
 import { ConversationController } from "../conversations/conversation.controller";
@@ -108,9 +108,10 @@ describe("external API route convention", () => {
   });
 
   it("uses body ids instead of path ids for agent controls", () => {
-    expect(controllerPath(AgentController)).toBe("agent");
+    expect(controllerPath(AgentController)).toBe("conversations/agent");
     expectRoute(AgentController, "permissionOptions", "get", "permission-options");
     expectRoute(AgentController, "run", "post", "run");
+    expectRoute(AgentController, "resumeStream", "get", "resume");
     expectRoute(AgentController, "answerQuestion", "post", "reply");
     expectRoute(AgentController, "stop", "post", "stop");
   });
