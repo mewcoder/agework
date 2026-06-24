@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { generateId } from "@agework/shared";
 import type { Request, Response } from "express";
 import { errorLogFields, safeLogJson } from "../logging";
 
@@ -95,5 +95,5 @@ function resolveRequestId(request: Request): string {
     const first = header.find((value) => value.trim());
     if (first) return first;
   }
-  return randomUUID();
+  return generateId();
 }
