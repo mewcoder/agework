@@ -199,7 +199,7 @@ function makeServices() {
   const users = new UserService(
     prisma as unknown as PrismaService,
     auth,
-    { shutdownForUser: vi.fn().mockResolvedValue(undefined) } as never
+    { emit: vi.fn() } as never
   );
   const guard = new JwtAuthGuard(
     jwt,

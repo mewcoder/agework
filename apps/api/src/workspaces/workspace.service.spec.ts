@@ -16,6 +16,10 @@ vi.mock("../common/id-generator", () => ({
 
 import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
+import {
+  WORKSPACE_DELETED_EVENT,
+  WorkspaceDeletedEvent,
+} from "./workspace.events";
 import { mkdirSync, rmSync } from "fs";
 
 beforeEach(() => {
@@ -23,8 +27,8 @@ beforeEach(() => {
 });
 
 function makeMocks() {
-  const shutdownForWorkspace = vi.fn().mockResolvedValue(undefined);
-  const runtimeLifecycleService = { shutdownForWorkspace } as never;
+  const emit = vi.fn();
+  const events = { emit } as never;
 
   const config = {
     getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
@@ -37,7 +41,7 @@ function makeMocks() {
     getSandboxEngine: () => "docker",
   } as never;
 
-  return { shutdownForWorkspace, runtimeLifecycleService, config };
+  return { emit, events, config };
 }
 
 describe("WorkspaceService", () => {
@@ -80,7 +84,7 @@ describe("WorkspaceService", () => {
         isIsolationScopeAllowed: (scope: string) => scope === "user",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     const workspace = await service.create({
@@ -150,7 +154,7 @@ describe("WorkspaceService", () => {
         getDefaultIsolationScope: () => "user",
         isIsolationScopeAllowed: (scope: string) => scope === "user",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     const workspace = await service.create({
@@ -216,7 +220,7 @@ describe("WorkspaceService", () => {
           scope === "user" || scope === "workspace",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await service.create({
@@ -274,7 +278,7 @@ describe("WorkspaceService", () => {
           scope === "user" || scope === "workspace",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     const workspace = await service.create({
@@ -322,7 +326,7 @@ describe("WorkspaceService", () => {
           scope === "user" || scope === "workspace",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await expect(
@@ -354,7 +358,7 @@ describe("WorkspaceService", () => {
           scope === "user" || scope === "workspace",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await expect(
@@ -385,7 +389,7 @@ describe("WorkspaceService", () => {
         isIsolationScopeAllowed: (scope: string) => scope === "user",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await expect(
@@ -412,7 +416,7 @@ describe("WorkspaceService", () => {
         isIsolationScopeAllowed: (scope: string) => scope === "user",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await expect(
@@ -438,7 +442,7 @@ describe("WorkspaceService", () => {
         isIsolationScopeAllowed: (scope: string) => scope === "user",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     await expect(
@@ -484,7 +488,7 @@ describe("WorkspaceService", () => {
         isIsolationScopeAllowed: (scope: string) => scope === "user",
         getSandboxEngine: () => "docker",
       } as never,
-      { shutdownForWorkspace: vi.fn().mockResolvedValue(undefined) } as never
+      { emit: vi.fn() } as never
     );
 
     const result = await service.list("admin-1");
@@ -517,18 +521,21 @@ describe("WorkspaceService", () => {
       const service = new WorkspaceService(
         prismaMock,
         mocks.config,
-        mocks.runtimeLifecycleService,
+        mocks.events,
       );
 
       return { ...mocks, service, prismaMock };
     }
 
-    it("shuts down the workspace-scoped runtime resource via RuntimeResourceLifecycleUseCase", async () => {
-      const { service, shutdownForWorkspace } = makeDeleteMocks();
+    it("emits WorkspaceDeletedEvent so downstream can clean up runtime resources", async () => {
+      const { service, emit } = makeDeleteMocks();
 
       await service.delete(userId, workspaceId);
 
-      expect(shutdownForWorkspace).toHaveBeenCalledWith(workspaceId);
+      expect(emit).toHaveBeenCalledWith(
+        WORKSPACE_DELETED_EVENT,
+        new WorkspaceDeletedEvent(workspaceId),
+      );
     });
   });
 });

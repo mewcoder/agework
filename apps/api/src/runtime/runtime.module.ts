@@ -14,6 +14,7 @@ import { RunEventQuery } from "../runs/events/run-event-query";
 import { RunRecoveryUseCase } from "../runs/run-recovery.use-case";
 import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
 import { RuntimeResourceLifecycleUseCase } from "./core/runtime-resources/runtime-resource-lifecycle.use-case";
+import { RuntimeResourceLifecycleListener } from "./core/runtime-resources/runtime-resource-lifecycle.listener";
 import { RunExecutionStatusHandler } from "../runs/execution/run-execution-status.handler";
 
 // providers
@@ -74,6 +75,7 @@ import { ConfigService } from "../config/config.service";
     RunRecoveryUseCase,
     RuntimePlacementPolicy,
     RuntimeResourceLifecycleUseCase,
+    RuntimeResourceLifecycleListener,
     RunExecutionStatusHandler,
     // providers
     RuntimeConfigStore,

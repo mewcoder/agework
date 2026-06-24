@@ -3,10 +3,9 @@ import { AdminUserController } from "./admin/admin-user.controller";
 import { UserService } from "./user.service";
 import { AuthModule } from "../auth/auth.module";
 import { PrismaModule } from "../prisma/prisma.module";
-import { RuntimeModule } from "../runtime/runtime.module";
 
 @Module({
-  imports: [PrismaModule, AuthModule, RuntimeModule],
+  imports: [PrismaModule, AuthModule],
   controllers: [AdminUserController],
   providers: [UserService],
 })

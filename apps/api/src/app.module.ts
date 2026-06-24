@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Module } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ServeStaticModule } from "@nestjs/serve-static";
 import { AgentModule } from "./conversations/agent/agent.module";
 import { AuthModule } from "./auth/auth.module";
@@ -31,6 +32,7 @@ const shouldServeFrontend =
           }),
         ]
       : []),
+    EventEmitterModule.forRoot(),
     ConfigModule,
     PrismaModule,
     AuthModule,

@@ -12,8 +12,14 @@ import {
   normalizeStatus,
   normalizeUsername,
 } from "../auth/user-credentials";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeResourceLifecycleUseCase } from "../runtime/core/runtime-resources/runtime-resource-lifecycle.use-case";
+import {
+  USER_DELETED_EVENT,
+  USER_DISABLED_EVENT,
+  UserDeletedEvent,
+  UserDisabledEvent,
+} from "./user.events";
 import { generateUserId } from "../common/id-generator";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
@@ -39,7 +45,7 @@ export class UserService {
   constructor(
     private prisma: PrismaService,
     private authService: AuthService,
-    private runtimeLifecycleService: RuntimeResourceLifecycleUseCase
+    private events: EventEmitter2
   ) {}
 
   async list(operator: JwtUser, pagination?: { take: number; skip: number }) {
@@ -174,9 +180,9 @@ export class UserService {
       select: this.userSelect(),
     });
 
-    // 用户被禁用时关闭其 runtime 资源
+    // 用户被禁用时，下游据此关闭其 runtime 资源
     if (data.status !== undefined && normalizeStatus(data.status) === "disabled") {
-      await this.shutdownUserRuntimes(id);
+      this.events.emit(USER_DISABLED_EVENT, new UserDisabledEvent(id));
     }
 
     return this.toUserDto(updated);
@@ -230,8 +236,8 @@ export class UserService {
       },
     });
 
-    // 关闭该用户的 runtime 资源
-    await this.shutdownUserRuntimes(id);
+    // 下游据此关闭该用户的 runtime 资源
+    this.events.emit(USER_DELETED_EVENT, new UserDeletedEvent(id));
   }
 
   private async getUserOrThrow(id: string) {
@@ -271,11 +277,6 @@ export class UserService {
 
   private operatorId(operator: JwtUser) {
     return operator.userId;
-  }
-
-  /** 关闭该用户相关的全部 runtime 资源（用户共享资源 + 该用户所有 workspace 的资源）。 */
-  private async shutdownUserRuntimes(userId: string): Promise<void> {
-    await this.runtimeLifecycleService.shutdownForUser(userId);
   }
 
   private userSelect() {

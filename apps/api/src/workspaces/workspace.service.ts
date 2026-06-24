@@ -18,8 +18,12 @@ import {
   type SandboxEngineType,
 } from "../config/config.service";
 import { generateWorkspaceId } from "../common/id-generator";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeResourceLifecycleUseCase } from "../runtime/core/runtime-resources/runtime-resource-lifecycle.use-case";
+import {
+  WORKSPACE_DELETED_EVENT,
+  WorkspaceDeletedEvent,
+} from "./workspace.events";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -90,7 +94,7 @@ export class WorkspaceService {
   constructor(
     private prisma: PrismaService,
     private config: ConfigService,
-    private runtimeLifecycleService: RuntimeResourceLifecycleUseCase
+    private events: EventEmitter2
   ) {}
 
   async listAll(pagination?: { take: number; skip: number }) {
@@ -332,9 +336,6 @@ export class WorkspaceService {
       throw new BadRequestException("工作空间有正在运行的任务，不能删除");
     }
 
-    // 关闭专属于该 workspace 的 runtime 资源（user 隔离下的共享资源不受影响）。
-    await this.runtimeLifecycleService.shutdownForWorkspace(id);
-
     const deletedAt = new Date();
     await this.prisma.$transaction([
       this.prisma.workspace.update({
@@ -346,6 +347,9 @@ export class WorkspaceService {
         data: { deletedAt },
       }),
     ]);
+
+    // 下游（runtime）据此清理与该 workspace 绑定的资源；workspace 不感知下游。
+    this.events.emit(WORKSPACE_DELETED_EVENT, new WorkspaceDeletedEvent(id));
   }
 
   private toWorkspaceDto<
