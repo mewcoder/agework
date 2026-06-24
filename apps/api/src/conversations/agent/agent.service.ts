@@ -1,5 +1,4 @@
 import { Injectable, BadRequestException, Logger } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
 import type { Response } from "express";
 import { isAgentType, type AgentType } from "@agework/shared";
 import type {
@@ -38,7 +37,7 @@ export class AgentService {
   ): Promise<void> {
     // body.threadId 是 AG-UI 协议字段，值等于 AgeWork conversationId
     const conversationId = body.threadId;
-    const runId = body.runId?.trim() || randomUUID();
+    const runId = body.runId;
     const userId = user.userId;
     const userMessage = this.getLastUserMessage(body);
     const userMessageId = this.normalizeMessageId(userMessage?.id);

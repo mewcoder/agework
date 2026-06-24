@@ -11,8 +11,8 @@ import {
   ValidatorConstraint,
   type ValidatorConstraintInterface,
 } from "class-validator";
-import { Transform } from "class-transformer";
 import { AGENT_TYPES, isAgentType, type AgentType } from "@agework/shared";
+import { Trim } from "../../../common/decorators/trim.decorator";
 import type { AssistantUserMessage } from "../../conversation.service";
 
 export type AgentRunForwardedProps = Record<string, unknown> & {
@@ -61,14 +61,13 @@ class AgentRunForwardedPropsConstraint
 export class AgentRunRequestDto {
   @IsString()
   @IsNotEmpty()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @Trim()
   threadId!: string;
 
-  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
-  runId?: string;
+  @Trim()
+  runId!: string;
 
   @IsOptional()
   @IsIn(["user_steered"])

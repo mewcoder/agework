@@ -58,6 +58,7 @@ describe("AgentService", () => {
   ): AgentRunRequestBody {
     return {
       threadId: "conversation-1",
+      runId: "run-1",
       messages: [{ id: "msg-1", content: "hi" }],
       forwardedProps: { agentType: "claude", modelProviderId: "mc-1" },
       ...overrides,

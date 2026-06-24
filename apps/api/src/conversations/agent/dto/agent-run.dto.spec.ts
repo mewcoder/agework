@@ -7,6 +7,7 @@ const pipe = new ValidationPipe({ whitelist: true, transform: true });
 function baseBody(overrides: Record<string, unknown> = {}) {
   return {
     threadId: "conversation-1",
+    runId: "run-1",
     messages: [{ id: "msg-1", role: "user", content: "hi" }],
     forwardedProps: {
       agentType: "claude",
@@ -49,6 +50,18 @@ describe("AgentRunRequestDto", () => {
 
   it("requires threadId", async () => {
     await expect(validate(baseBody({ threadId: " " }))).rejects.toThrow(
+      BadRequestException
+    );
+  });
+
+  it("requires runId", async () => {
+    await expect(validate(baseBody({ runId: undefined }))).rejects.toThrow(
+      BadRequestException
+    );
+  });
+
+  it("rejects blank runId", async () => {
+    await expect(validate(baseBody({ runId: " " }))).rejects.toThrow(
       BadRequestException
     );
   });
