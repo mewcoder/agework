@@ -4,6 +4,6 @@
     "playwright@claude-plugins-official": false,
     "typescript-lsp@claude-plugins-official": true,
     "context7-plugin@context7-marketplace": true,
-    "superpowers@claude-plugins-official": true
+    "superpowers@claude-plugins-official": false
   }
 }
