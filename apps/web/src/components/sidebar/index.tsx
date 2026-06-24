@@ -88,7 +88,7 @@ function UserFooter() {
         <SidebarMenuButton className="h-10 rounded-lg px-2 hover:bg-sidebar-accent hover:shadow-sm">
           <CircleUserRoundIcon className="size-4 shrink-0 text-muted-foreground" />
           <span className="flex-1 truncate text-sm font-medium">
-            {user?.username ?? "用户"}
+            {user?.nickname ?? user?.username ?? "用户"}
           </span>
           <SettingsIcon className="size-4 shrink-0 text-muted-foreground" />
         </SidebarMenuButton>
@@ -102,7 +102,7 @@ function UserFooter() {
       >
         {user && (
           <>
-            <div className="px-2 py-1.5 text-sm font-medium">{user.username}</div>
+            <div className="px-2 py-1.5 text-sm font-medium">{user.nickname ?? user.username}</div>
             <DropdownMenuSeparator />
           </>
         )}

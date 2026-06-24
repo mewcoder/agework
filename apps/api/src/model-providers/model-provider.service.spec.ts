@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
+import { join } from "path";
 import { ModelProviderService } from "./model-provider.service";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -184,8 +185,9 @@ describe("ModelProviderService", () => {
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
     process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
     mockSpawnSync.mockReturnValue({ status: 0 } as never);
+    const credentialsPath = join("/custom/claude", ".credentials.json");
     mockExistsSync.mockImplementation((path) =>
-      String(path) === "/custom/claude/.credentials.json"
+      String(path) === credentialsPath
     );
 
     try {
@@ -212,7 +214,7 @@ describe("ModelProviderService", () => {
 
       expect(result.list[0]?.systemStatus?.configAvailable).toBe(true);
       expect(mockExistsSync).toHaveBeenCalledWith(
-        "/custom/claude/.credentials.json"
+        credentialsPath
       );
     } finally {
       if (originalClaudeConfigDir === undefined) {
@@ -241,8 +243,9 @@ describe("ModelProviderService", () => {
   it("reports Claude Code account credential files in system info", () => {
     const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
+    const credentialsPath = join("/custom/claude", ".credentials.json");
     mockExistsSync.mockImplementation((path) =>
-      String(path) === "/custom/claude/.credentials.json"
+      String(path) === credentialsPath
     );
 
     try {
@@ -251,7 +254,7 @@ describe("ModelProviderService", () => {
       expect(service.getSystemInfo("claude").configFiles).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            path: "/custom/claude/.credentials.json",
+            path: credentialsPath,
             exists: true,
             description: "账号登录认证文件",
           }),

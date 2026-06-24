@@ -14,6 +14,7 @@ vi.mock("../common/id-generator", () => ({
   generateWorkspaceId: () => Promise.resolve("ws260614113047"),
 }));
 
+import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
 import { mkdirSync, rmSync } from "fs";
 
@@ -41,7 +42,7 @@ function makeMocks() {
 
 describe("WorkspaceService", () => {
   it("creates a directory for the workspace and maps directory.rootPath back to rootPath", async () => {
-    const expectedRootPath = "/tmp/workspace/admin-1/ws260614113047";
+    const expectedRootPath = join("/tmp/workspace", "admin-1", "ws260614113047");
 
     const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
       Promise.resolve({
@@ -162,14 +163,15 @@ describe("WorkspaceService", () => {
     expect(rmSync).not.toHaveBeenCalled();
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         workspaceId: "ws260614113047",
-        rootPath: selectedRootPath,
+        rootPath: resolve(selectedRootPath),
         status: "ready",
         source: "external",
         metadata: {},
       },
     });
-    expect(workspace.rootPath).toBe(selectedRootPath);
+    expect(workspace.rootPath).toBe(resolve(selectedRootPath));
     expect(workspace.directorySource).toBe("external");
   });
 
@@ -232,7 +234,7 @@ describe("WorkspaceService", () => {
   });
 
   it("places sandbox workspace-isolated directories outside the user root", async () => {
-    const expectedRootPath = "/tmp/agework/workspaces/admin-1_ws260614113047";
+    const expectedRootPath = join("/tmp/agework/workspaces", "admin-1_ws260614113047");
     const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
       Promise.resolve({
         ...args.data,

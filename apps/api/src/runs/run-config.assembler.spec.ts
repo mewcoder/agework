@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { join } from "path";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { ConfigService } from "../config/config.service";
 import type { AgentProviderConfig } from "@agework/shared/protocol";
@@ -93,18 +94,19 @@ describe("RunConfigAssembler", () => {
       workspaceId: "ws-1",
       agentType: "claude",
     });
-    expect(config.agentEventTrace?.rawFilePath).toMatch(
-      /\/tmp\/agework-logs\/runtime\/conversation-1\.raw\.jsonl$/
+    const logDir = join("/tmp/agework-logs", "runtime");
+    expect(config.agentEventTrace?.rawFilePath).toBe(
+      join(logDir, "conversation-1.raw.jsonl")
     );
-    expect(config.agentEventTrace?.rawRuntimeFilePath).toMatch(
-      /\/tmp\/agework-logs\/runtime\/conversation-1\.raw\.jsonl$/
+    expect(config.agentEventTrace?.rawRuntimeFilePath).toBe(
+      join(logDir, "conversation-1.raw.jsonl")
     );
-    expect(config.agentEventTrace?.aguiFilePath).toMatch(
-      /\/tmp\/agework-logs\/runtime\/conversation-1\.agui\.jsonl$/
+    expect(config.agentEventTrace?.aguiFilePath).toBe(
+      join(logDir, "conversation-1.agui.jsonl")
     );
-    expect(config.agentEventTrace?.rawFilePath).not.toContain("/tmp/ws");
+    expect(config.agentEventTrace?.rawFilePath).not.toContain(join("/tmp/ws"));
     expect(config.workerLogFilePath).toBe(
-      "/tmp/agework-logs/runtime/conversation-1.worker.log"
+      join(logDir, "conversation-1.worker.log")
     );
   });
 });

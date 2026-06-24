@@ -26,6 +26,8 @@ const LETTERS = `${UPPERCASE}${LOWERCASE}`;
 const TEMP_PASSWORD_CHARS = `${LETTERS}${DIGITS}`;
 
 export function normalizeUsername(raw: unknown): string {
+  // username 不可修改：用作工作空间目录名（WorkspaceService.resolveCreateRootPath），
+  // 改名会使已有目录与 username 脱钩。此处仅校验创建时的格式，无改名接口。
   if (typeof raw !== "string") {
     throw new BadRequestException("用户名不能为空");
   }

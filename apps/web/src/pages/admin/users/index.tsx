@@ -134,6 +134,13 @@ export function UsersPanel({
       },
     },
     {
+      id: "nickname",
+      header: "昵称",
+      cell: ({ row }) => (
+        <DataTableText>{row.original.nickname ?? "—"}</DataTableText>
+      ),
+    },
+    {
       id: "role",
       header: "角色",
       cell: ({ row }) => (

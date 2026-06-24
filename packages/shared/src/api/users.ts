@@ -8,6 +8,8 @@ export type PasswordKind = "user_set" | "initial" | "temporary";
 export type UserResponse = {
   id: string;
   username: string;
+  /** 展示名（昵称），可空，UI 回退到 username。 */
+  nickname: string | null;
   role: UserRole;
   status: UserStatus;
   mustChangePassword: boolean;

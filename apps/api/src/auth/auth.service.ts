@@ -24,6 +24,7 @@ const SUPER_ADMIN_LOGIN_LOCK_MS = 30 * 60 * 1000;
 type AuthUserRecord = {
   id: string;
   username: string;
+  nickname: string | null;
   role: string;
   status: string;
   mustChangePassword: boolean;
@@ -314,6 +315,7 @@ export class AuthService {
     return {
       id: true,
       username: true,
+      nickname: true,
       role: true,
       status: true,
       mustChangePassword: true,
@@ -328,6 +330,7 @@ export class AuthService {
     return {
       id: user.id,
       username: user.username,
+      nickname: user.nickname,
       role: user.role,
       status: user.status,
       mustChangePassword: user.mustChangePassword,

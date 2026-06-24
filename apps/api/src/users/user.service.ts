@@ -22,6 +22,7 @@ const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
 type UserRecord = {
   id: string;
   username: string;
+  nickname: string | null;
   role: string;
   status: string;
   mustChangePassword: boolean;
@@ -281,6 +282,7 @@ export class UserService {
     return {
       id: true,
       username: true,
+      nickname: true,
       role: true,
       status: true,
       mustChangePassword: true,
@@ -297,6 +299,7 @@ export class UserService {
     return {
       id: user.id,
       username: user.username,
+      nickname: user.nickname,
       role: user.role,
       status: user.status,
       mustChangePassword: user.mustChangePassword,
