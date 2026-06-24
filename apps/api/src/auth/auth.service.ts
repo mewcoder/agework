@@ -14,6 +14,7 @@ import {
   SUPER_ADMIN_USERNAME,
 } from "./user-credentials";
 import { generateUserId } from "../common/id-generator";
+import { generateId } from "@agework/shared";
 
 const MAX_FAILED_LOGIN_COUNT = 5;
 const LOGIN_LOCK_MS = 15 * 60 * 1000;
@@ -82,7 +83,7 @@ export class AuthService {
     const now = new Date();
     const user = await this.prisma.user.create({
       data: {
-        id: "admin",
+        id: generateId(),
         username: SUPER_ADMIN_USERNAME,
         passwordHash: await this.hashPassword(password),
         role: "super_admin",
@@ -154,7 +155,7 @@ export class AuthService {
       throw new BadRequestException("注册失败，请稍后重试");
 
     const now = new Date();
-    const id = await generateUserId(this.prisma);
+    const id = await generateUserId();
     const user = await this.prisma.user.create({
       data: {
         id,

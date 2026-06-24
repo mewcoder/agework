@@ -42,6 +42,7 @@ function makeWorkspace(overrides: Record<string, unknown> = {}) {
     isolationScope: null,
     sandboxEngine: null,
     directory: { rootPath: "/tmp/ws" },
+    user: { username: "admin-1" },
     ...overrides,
   };
 }

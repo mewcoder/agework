@@ -6,6 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { generateId } from "@agework/shared";
 import { spawn } from "child_process";
 import { mkdirSync, realpathSync, rmSync, statSync } from "fs";
 import { homedir } from "os";
@@ -189,7 +190,7 @@ export class WorkspaceService {
       requestedIsolationScope,
       Boolean(requestedRootPath?.trim())
     );
-    const id = await generateWorkspaceId(this.prisma);
+    const id = await generateWorkspaceId();
     const { rootPath, ownsDirectory } = await this.resolveCreateRootPath(
       userId,
       id,
@@ -236,6 +237,7 @@ export class WorkspaceService {
         });
         const directory = await tx.workspaceDirectory.create({
           data: {
+            id: generateId(),
             workspaceId: created.id,
             rootPath,
             status: "ready",
@@ -410,12 +412,13 @@ export class WorkspaceService {
     runtimeType: RuntimeType,
     isolationScope: IsolationScope | null
   ) {
+    const username = await this.resolveUsername(userId);
     const trimmedRootPath = requestedRootPath?.trim();
     if (!trimmedRootPath) {
       const rootPath =
         isolationScope === "workspace"
-          ? join(this.config.getWorkspace(), `${userId}_${workspaceId}`)
-          : join(this.config.getUserWorkspace(userId), workspaceId);
+          ? join(this.config.getWorkspace(), `${username}_${workspaceId}`)
+          : join(this.config.getUserWorkspace(username), workspaceId);
       return { rootPath, ownsDirectory: true };
     }
     if (gitUrl) {
@@ -425,7 +428,7 @@ export class WorkspaceService {
     const rootPath = this.normalizeExistingDirectory(trimmedRootPath);
     this.assertCustomRootPathSupported(runtimeType, isolationScope);
     if (isolationScope === "workspace") {
-      this.assertPathOutsideUserRoot(userId, rootPath);
+      this.assertPathOutsideUserRoot(username, rootPath);
     }
 
     const existing = await this.prisma.workspaceDirectory.findFirst({
@@ -473,14 +476,25 @@ export class WorkspaceService {
     );
   }
 
-  private assertPathOutsideUserRoot(userId: string, rootPath: string) {
-    const userRoot = this.config.getUserWorkspace(userId);
+  private assertPathOutsideUserRoot(username: string, rootPath: string) {
+    const userRoot = this.config.getUserWorkspace(username);
     const rel = relative(userRoot, rootPath);
     if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
       throw new BadRequestException(
         "工作空间隔离的自定义目录不能在用户工作空间目录内"
       );
     }
+  }
+
+  private async resolveUsername(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
+    });
+    if (!user) {
+      throw new BadRequestException(`用户不存在: ${userId}`);
+    }
+    return user.username;
   }
 
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {

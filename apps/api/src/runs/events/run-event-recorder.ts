@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { generateId } from "@agework/shared";
 import type {
   RecordRunEventInput,
   RunEventData,
@@ -149,6 +150,7 @@ function toPrismaCreateInput(
   input: RunEventCreateInput
 ): Prisma.RunEventUncheckedCreateInput {
   const data: Prisma.RunEventUncheckedCreateInput = {
+    id: generateId(),
     runId: input.runId,
     runSeq: input.runSeq,
     type: input.type,

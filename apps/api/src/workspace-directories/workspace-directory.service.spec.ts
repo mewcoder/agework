@@ -24,6 +24,7 @@ describe("WorkspaceDirectoryService", () => {
 
     expect(create).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         workspaceId: "workspace-1",
         rootPath: "/tmp/workspace/admin-1/abc12345",
         status: "ready",

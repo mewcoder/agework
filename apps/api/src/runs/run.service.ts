@@ -33,6 +33,7 @@ type RunWorkspace = {
   runtimeType?: string;
   isolationScope?: string | null;
   sandboxEngine?: string | null;
+  username: string;
 };
 
 @Injectable()
@@ -88,7 +89,9 @@ export class RunService {
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
-      userWorkspaceRootPath: this.configService.getUserWorkspace(userId),
+      userWorkspaceRootPath: this.configService.getUserWorkspace(
+        workspace.username,
+      ),
       runtimeType: requestedRuntimeType,
       isolationScope,
       sandboxEngine: workspace.sandboxEngine ?? undefined,
@@ -520,7 +523,7 @@ export class RunService {
   private async resolveRunWorkspace(workspaceId: string): Promise<RunWorkspace> {
     const workspace = await this.prisma.workspace.findFirst({
       where: { id: workspaceId, deletedAt: null },
-      include: { directory: true },
+      include: { directory: true, user: { select: { username: true } } },
     });
     if (!workspace) {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
@@ -534,6 +537,7 @@ export class RunService {
       runtimeType: workspace.runtimeType ?? undefined,
       isolationScope: workspace.isolationScope,
       sandboxEngine: workspace.sandboxEngine,
+      username: workspace.user.username,
     };
   }
 

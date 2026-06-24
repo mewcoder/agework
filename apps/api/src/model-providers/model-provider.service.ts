@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { AGENT_TYPES, isAgentType, type AgentType } from "@agework/shared";
+import { AGENT_TYPES, generateId, isAgentType, type AgentType } from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -254,6 +254,7 @@ export class ModelProviderService implements OnModuleInit {
     );
     const modelProvider = await this.prisma.modelProvider.create({
       data: {
+        id: generateId(),
         agentType: resolvedAgentType,
         scope: MODEL_PROVIDER_SCOPE_GLOBAL,
         userId: null,

@@ -26,7 +26,7 @@ function makeMocks() {
   const runtimeLifecycleService = { shutdownForWorkspace } as never;
 
   const config = {
-    getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+    getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
     getAllowedRuntimeTypes: () => ["local"],
     getDefaultRuntimeType: () => "local",
     isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",
@@ -65,9 +65,12 @@ describe("WorkspaceService", () => {
       })
     );
     const service = new WorkspaceService(
-      { $transaction: transaction } as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        $transaction: transaction,
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+      } as never,
+      {
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",
@@ -93,6 +96,7 @@ describe("WorkspaceService", () => {
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         workspaceId: "ws260614113047",
         rootPath: expectedRootPath,
         status: "ready",
@@ -132,10 +136,11 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
         workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
       } as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getSandboxEngine: () => "docker",
         getAllowedRuntimeTypes: () => ["local"],
         getDefaultRuntimeType: () => "local",
@@ -194,10 +199,11 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
         workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
       } as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -249,10 +255,13 @@ describe("WorkspaceService", () => {
       })
     );
     const service = new WorkspaceService(
-      { $transaction: transaction } as never,
+      {
+        $transaction: transaction,
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+      } as never,
       {
         getWorkspace: () => "/tmp/agework/workspaces",
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -280,6 +289,7 @@ describe("WorkspaceService", () => {
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         workspaceId: "ws260614113047",
         rootPath: expectedRootPath,
         status: "ready",
@@ -294,11 +304,12 @@ describe("WorkspaceService", () => {
   it("rejects workspace-isolated custom directories inside the user root", async () => {
     const service = new WorkspaceService(
       {
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
         getWorkspace: () => "/tmp/agework/workspaces",
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -326,10 +337,11 @@ describe("WorkspaceService", () => {
   it("rejects sandbox custom directories when user isolation is explicitly selected", async () => {
     const service = new WorkspaceService(
       {
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -357,10 +369,11 @@ describe("WorkspaceService", () => {
   it("rejects sandbox custom directories when workspace isolation is not allowed", async () => {
     const service = new WorkspaceService(
       {
+        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -387,7 +400,7 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {} as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local", "sandbox"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) =>
@@ -414,7 +427,7 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {} as never,
       {
-        getUserWorkspace: (userId: string) => `/tmp/workspace/${userId}`,
+        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
         getAllowedRuntimeTypes: () => ["local"],
         getDefaultRuntimeType: () => "local",
         isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",

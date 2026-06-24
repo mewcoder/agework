@@ -3,8 +3,9 @@
  */
 
 import { Observable, Subscriber } from "rxjs";
-import { AbstractAgent, EventType, randomUUID } from "@ag-ui/client";
+import { AbstractAgent, EventType } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput, Message } from "@ag-ui/core";
+import { generateId } from "@agework/shared";
 
 import { createSdkMcpServer, query } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -255,8 +256,8 @@ export class ClaudeAgentAdapter extends AbstractAgent {
     messageStream: AsyncIterable<unknown>,
     subscriber: Subscriber<ProcessedEvent>,
   ): Promise<void> {
-    const threadId = input.threadId ?? randomUUID();
-    const runId = input.runId ?? randomUUID();
+    const threadId = input.threadId ?? generateId();
+    const runId = input.runId ?? generateId();
 
     const runCtx = {
       currentState: hasState(input.state) ? input.state : null,
@@ -553,7 +554,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
 
           if (eventType === "message_start") {
             // Defer TEXT_MESSAGE_START until we get actual text (avoids empty messages from thinking-only blocks)
-            currentMessageId = randomUUID();
+            currentMessageId = generateId();
             hasStreamedText = false;
             pendingMsg = { id: currentMessageId, content: "", toolCalls: [] };
           } else if (eventType === "content_block_delta") {
@@ -619,7 +620,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
 
             if (block.type === "thinking") {
               inReasoningBlock = true;
-              reasoningMessageId = randomUUID();
+              reasoningMessageId = generateId();
               subscriber.next({
                 type: EventType.REASONING_START,
                 messageId: reasoningMessageId,
@@ -829,7 +830,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
           const content = assistantMsg.message?.content ?? [];
 
           {
-            const msgId = currentMessageId ?? randomUUID();
+            const msgId = currentMessageId ?? generateId();
             const aguiMsg = buildAguiAssistantMessage(assistantMsg, msgId);
             if (aguiMsg) {
               upsertMessage(aguiMsg);
@@ -954,7 +955,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
 
           const resultText = (resultMsg as { result?: string }).result;
           if (!hasStreamedText && resultText) {
-            const resultMsgId = randomUUID();
+            const resultMsgId = generateId();
             subscriber.next({
               type: EventType.TEXT_MESSAGE_START,
               threadId,

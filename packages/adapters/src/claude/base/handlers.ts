@@ -5,8 +5,9 @@
  */
 
 import { Subscriber } from "rxjs";
-import { EventType, randomUUID } from "@ag-ui/client";
+import { EventType } from "@ag-ui/client";
 import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import { generateId } from "@agework/shared";
 import { stripMcpPrefix, isStateManagementTool } from "./utils";
 import type { ProcessedEvent } from "./types";
 
@@ -34,7 +35,7 @@ export function handleToolUseBlock(
 ): HandleToolUseResult {
   const toolName = block.name ?? "unknown";
   const toolInput = (block.input as Record<string, unknown>) ?? {};
-  const toolId = block.id ?? randomUUID();
+  const toolId = block.id ?? generateId();
 
   // Strip MCP prefix for client matching (same as streaming path)
   const toolDisplayName = stripMcpPrefix(toolName);

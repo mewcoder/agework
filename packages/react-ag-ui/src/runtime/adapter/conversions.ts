@@ -4,6 +4,7 @@ import type { InputContent } from "@ag-ui/client";
 import type { ThreadMessageLike as CoreThreadMessageLike } from "@assistant-ui/core";
 import { type Tool, toToolsJSONSchema } from "assistant-stream";
 import type { ReadonlyJSONObject } from "assistant-stream/utils";
+import { v7 } from "uuid";
 
 export type { InputContent };
 
@@ -77,10 +78,7 @@ function parseJSONText(value: string): unknown {
 }
 
 function generateId(): string {
-  return (
-    (globalThis.crypto as { randomUUID?: () => string })?.randomUUID?.() ??
-    Math.random().toString(36).slice(2)
-  );
+  return v7();
 }
 
 function normalizeToolCall(part: ToolCallPart): {

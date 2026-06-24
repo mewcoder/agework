@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { isAgentType, type AgentType } from "@agework/shared";
+import { generateId, isAgentType, type AgentType } from "@agework/shared";
 import type {
   ConversationPendingUserAction,
   ConversationResponse,
@@ -208,6 +208,7 @@ export class ConversationService {
       title ?? (firstMessage?.slice(0, 10) || undefined);
     const conversation = await this.prisma.conversation.create({
       data: {
+        id: generateId(),
         workspaceId,
         title: resolvedTitle,
         agentType: resolvedAgentType,

@@ -1,6 +1,7 @@
 "use client";
 
-import { generateId, fromThreadMessageLike } from "@assistant-ui/core";
+import { fromThreadMessageLike } from "@assistant-ui/core";
+import { v7 } from "uuid";
 import type {
   AddToolResultOptions,
   AppendMessage,
@@ -32,6 +33,10 @@ import {
 import { createAgUiSubscriber } from "./adapter/subscriber";
 
 const optimisticPrefix = "__optimistic__";
+// 本地 id 生成入口(UUID v7,时序有序)。react-ag-ui 作为 fork 包不引入 @agework/shared,
+// 与 shared 的 generateId() 同为 uuid v7,格式一致;此处 id 为会话内临时 id,
+// 最终落库 id 由后端 adapter 统一生成。
+const generateId = () => v7();
 const generateOptimisticId = () => `${optimisticPrefix}${generateId()}`;
 const isOptimisticId = (id: string) => id.startsWith(optimisticPrefix);
 

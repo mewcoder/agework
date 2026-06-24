@@ -1,49 +1,21 @@
-import { randomInt } from "crypto";
+import { generateId } from "@agework/shared";
 
-const MAX_RETRIES = 10;
-
-interface UserFindUnique {
-  findUnique(args: { where: { id: string }; select: { id: true } }): Promise<{ id: string } | null>;
+/**
+ * 生成 User 主键。统一使用 UUID v7(与全系统 id 一致)。
+ *
+ * 历史上用 `userNNNNNN` 短可读前缀 + 查库重试防碰撞;UUID v7 碰撞概率可忽略,
+ * 不再需要查库。User.id 用作目录/文件名,UUID 较长但功能无影响。
+ */
+export async function generateUserId(): Promise<string> {
+  return generateId();
 }
 
-interface WorkspaceFindUnique {
-  findUnique(args: { where: { id: string }; select: { id: true } }): Promise<{ id: string } | null>;
-}
-
-export async function generateUserId(
-  prisma: { user: UserFindUnique },
-): Promise<string> {
-  for (let i = 0; i < MAX_RETRIES; i++) {
-    const num = randomInt(100000, 1000000);
-    const id = `user${num}`;
-    const existing = await prisma.user.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!existing) return id;
-  }
-  throw new Error("Failed to generate unique user ID after retries");
-}
-
-export async function generateWorkspaceId(
-  prisma: { workspace: WorkspaceFindUnique },
-): Promise<string> {
-  const now = new Date();
-  const yy = String(now.getFullYear() % 100).padStart(2, "0");
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const dd = String(now.getDate()).padStart(2, "0");
-  const hh = String(now.getHours()).padStart(2, "0");
-  const mi = String(now.getMinutes()).padStart(2, "0");
-  const prefix = `ws${yy}${mm}${dd}${hh}${mi}`;
-
-  for (let i = 0; i < MAX_RETRIES; i++) {
-    const suffix = String(randomInt(0, 100)).padStart(2, "0");
-    const id = `${prefix}${suffix}`;
-    const existing = await prisma.workspace.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-    if (!existing) return id;
-  }
-  throw new Error("Failed to generate unique workspace ID after retries");
+/**
+ * 生成 Workspace 主键。统一使用 UUID v7(与全系统 id 一致)。
+ *
+ * 历史上用 `wsYYMMDDHHmmNN` 短可读前缀 + 查库重试防碰撞;UUID v7 碰撞概率可忽略,
+ * 不再需要查库。Workspace.id 用作目录/文件名,UUID 较长但功能无影响。
+ */
+export async function generateWorkspaceId(): Promise<string> {
+  return generateId();
 }

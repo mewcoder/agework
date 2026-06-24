@@ -34,7 +34,7 @@ model User {
 }
 
 model WorkspaceDirectory {
-  id          String    @id @default(cuid())
+  id          String    @id
   workspaceId String    @unique
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   rootPath    String
@@ -69,7 +69,7 @@ model Workspace {
 }
 
 model Conversation {
-  id                String    @id @default(cuid())
+  id                String    @id
   title             String?
   status            String    @default("regular")
   activeRunStatus   String    @default("idle")
@@ -105,7 +105,7 @@ model Message {
 }
 
 model ModelProvider {
-  id          String   @id @default(cuid())
+  id          String   @id
   agentType   String
   scope       String   @default("global")
   userId      String?
@@ -133,7 +133,7 @@ model SystemSetting {
 }
 
 model Run {
-  id                String       @id @default(cuid())
+  id                String       @id
   conversationId    String
   agentType         String
   runtimeType       String       @default("local")
@@ -159,7 +159,7 @@ model Run {
 }
 
 model RunEvent {
-  id         String   @id @default(cuid())
+  id         String   @id
   runId      String
   run        Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
   runSeq     Int
@@ -185,7 +185,7 @@ model RunEvent {
 }
 
 model RuntimeResource {
-  id                String             @id @default(cuid())
+  id                String             @id
   runtimeType       String
   isolationScope    String
   ownerUserId       String
@@ -205,7 +205,7 @@ model RuntimeResource {
 }
 
 model WorkspaceRuntime {
-  id          String          @id @default(cuid())
+  id          String          @id
   workspaceId String          @unique
   workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   resourceId  String

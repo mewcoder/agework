@@ -80,6 +80,7 @@ describe("WorkspaceRuntimeRepository", () => {
     });
     expect(create).toHaveBeenCalledWith({
       data: {
+        id: expect.any(String),
         runtimeType: "sandbox",
         isolationScope: "user",
         ownerUserId: "u1",
@@ -92,7 +93,7 @@ describe("WorkspaceRuntimeRepository", () => {
     });
     expect(upsert).toHaveBeenCalledWith({
       where: { workspaceId: "w1" },
-      create: { workspaceId: "w1", resourceId: "rr-1" },
+      create: { id: expect.any(String), workspaceId: "w1", resourceId: "rr-1" },
       update: { resourceId: "rr-1" },
     });
     expect(result.resource).toBe(resource);

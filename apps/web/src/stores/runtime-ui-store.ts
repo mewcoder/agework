@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { generateId } from '@agework/shared';
 import type { ConversationId } from './selection-store';
 
 export type { ConversationId };
@@ -16,7 +17,7 @@ export type IncompleteMessageReason =
   | "user_steered";
 
 function createQueuedInputId() {
-  return globalThis.crypto?.randomUUID?.() ?? `queued-input-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return generateId();
 }
 
 interface RuntimeUiStore {

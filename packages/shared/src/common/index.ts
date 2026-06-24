@@ -1,3 +1,18 @@
+import { v7 } from "uuid";
+
+/**
+ * 生成 UUID v7(时序有序)。前后端统一 id 入口。
+ *
+ * 选 v7 而非 v4:PG 原生 uuid 类型(16字节)+ 时序有序(id 排序=创建序)+ B-tree 写入局部性。
+ *
+ * 注意:本函数为运行时值导出,必须内联在本入口文件中,不可跨文件 re-export ——
+ * shared 包以源码形式被消费(exports 指向 src 源文件,无 dist),NodeNext 运行时
+ * 解析跨文件 re-export 需要显式扩展名,而磁盘上是 .ts,会导致 ERR_MODULE_NOT_FOUND。
+ */
+export function generateId(): string {
+  return v7();
+}
+
 /** 支持的 agent 类型。 */
 export const AGENT_TYPES = ["claude", "codex"] as const;
 export type AgentType = (typeof AGENT_TYPES)[number];

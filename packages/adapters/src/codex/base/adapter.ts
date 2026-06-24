@@ -1,6 +1,7 @@
 import { Observable, Subscriber } from "rxjs";
-import { AbstractAgent, EventType, randomUUID } from "@ag-ui/client";
+import { AbstractAgent, EventType } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput, Message } from "@ag-ui/core";
+import { generateId } from "@agework/shared";
 import type {
   ThreadEvent,
   ThreadItem,
@@ -79,7 +80,7 @@ export class CodexAgentAdapter extends AbstractAgent {
   run(input: RunAgentInput): Observable<BaseEvent> {
     return new Observable<ProcessedEvent>((subscriber) => {
       const threadId = input.threadId ?? "default";
-      const runId = input.runId ?? randomUUID();
+      const runId = input.runId ?? generateId();
 
       this.executeRun(input, threadId, runId, subscriber).catch((error) => {
         subscriber.error(error);

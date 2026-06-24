@@ -154,8 +154,8 @@ export class ConfigService implements OnModuleInit {
     return this.getSetting(SettingKey.APP_NAME) || DEFAULT_APP_NAME;
   }
 
-  getUserWorkspace(userId: string): string {
-    const dir = join(this.workspace, userId);
+  getUserWorkspace(username: string): string {
+    const dir = join(this.workspace, username);
     mkdirSync(dir, { recursive: true });
     return dir;
   }

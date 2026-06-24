@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { generateId } from "@agework/shared";
 import type { RuntimePlacement } from "@agework/shared/protocol";
 import { PrismaService } from "../../../prisma/prisma.service";
 
@@ -72,6 +73,7 @@ export class WorkspaceRuntimeRepository {
           })
         : await tx.runtimeResource.create({
             data: {
+              id: generateId(),
               ...where,
               ...data,
             },
@@ -79,6 +81,7 @@ export class WorkspaceRuntimeRepository {
       const workspaceRuntime = await tx.workspaceRuntime.upsert({
         where: { workspaceId: placement.workspaceId },
         create: {
+          id: generateId(),
           workspaceId: placement.workspaceId,
           resourceId: resource.id,
         },

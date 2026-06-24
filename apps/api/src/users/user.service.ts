@@ -91,7 +91,7 @@ export class UserService {
     const temporaryPassword = generateTemporaryPassword();
     const now = new Date();
     const passwordExpiresAt = new Date(now.getTime() + INITIAL_PASSWORD_TTL_MS);
-    const id = await generateUserId(this.prisma);
+    const id = await generateUserId();
     const user = await this.prisma.user.create({
       data: {
         id,

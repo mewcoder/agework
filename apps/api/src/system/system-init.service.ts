@@ -5,6 +5,7 @@ import {
   OnApplicationBootstrap,
 } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
+import { generateId } from "@agework/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { isDevAuthDisabled } from "../auth/dev-auth";
 import { SUPER_ADMIN_USERNAME } from "../auth/user-credentials";
@@ -84,7 +85,7 @@ export class SystemInitService implements OnApplicationBootstrap {
 
     await this.prisma.user.create({
       data: {
-        id: "admin",
+        id: generateId(),
         username: SUPER_ADMIN_USERNAME,
         ...data,
       },

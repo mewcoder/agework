@@ -1,7 +1,8 @@
 import { Logger } from "@nestjs/common";
 import { tmpdir } from "os";
 import { join } from "path";
-import { EventType, randomUUID } from "@ag-ui/client";
+import { EventType } from "@ag-ui/client";
+import { generateId } from "@agework/shared";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   ThinkingConfig,
@@ -423,7 +424,7 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
     // "A tool call with ID '...' is already in progress. Complete it with
     // 'TOOL_CALL_END' first." 前端按 toolName 渲染、后端按 threadId 的
     // pendingQuestions Map 关联答案，均不依赖此 ID 与原 tool-call 的关联。
-    const toolCallId = randomUUID();
+    const toolCallId = generateId();
     const eventSink = subscriber as {
       next(event: unknown): void;
     };
