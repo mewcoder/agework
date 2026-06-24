@@ -15,11 +15,13 @@ import {
   type ModelProvider,
   type ProviderConfigValues,
 } from '@/hooks/model-provider-hooks';
+import { useAgentOptions } from '@/hooks/use-agent-options';
 import { errorMessage } from '@/utils/error';
 import { getBaseUrl, getModel } from '@/utils/model-provider';
 import { showModelProviderTestToast } from '@/utils/model-provider';
+import type { AgentType } from '@agework/shared';
 
-function SystemModelProviderDescription(agent: string): string {
+function SystemModelProviderDescription(agent: AgentType): string {
   if (agent === 'claude') return '使用服务运行环境中的 Claude Code 配置';
   if (agent === 'codex') return '使用服务运行环境中的 Codex 配置';
   return '使用服务运行环境中的默认模型服务';
@@ -58,7 +60,7 @@ function ModelProviderRow({
   onDelete,
 }: {
   modelProvider: ModelProvider;
-  agent: string;
+  agent: AgentType;
   canManage: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -135,7 +137,7 @@ function ModelProviderRow({
   );
 }
 
-function ModelProviderList({ agent, canManage }: { agent: string; canManage: boolean }) {
+function ModelProviderList({ agent, canManage }: { agent: AgentType; canManage: boolean }) {
   const { data: modelProviders = [], isLoading } = useModelProviders(agent);
   const createModelProvider = useCreateModelProvider(agent);
   const updateModelProvider = useUpdateModelProvider(agent);
@@ -228,6 +230,9 @@ export function ModelProvider({
   canManage?: boolean;
   showHeader?: boolean;
 }) {
+  const { data: agentOptions, isLoading: isLoadingAgents } = useAgentOptions();
+  const agents = agentOptions?.agents ?? [];
+
   return (
     <div className={showHeader ? 'space-y-6' : 'space-y-0'}>
       {showHeader && (
@@ -240,21 +245,20 @@ export function ModelProvider({
       )}
 
       <div className="space-y-6">
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <AgentIcon agent="claude" />
-            <h3 className="text-sm font-medium">Claude</h3>
+        {isLoadingAgents && (
+          <div className="text-center text-sm text-muted-foreground">
+            加载中...
           </div>
-          <ModelProviderList agent="claude" canManage={canManage} />
-        </section>
-
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <AgentIcon agent="codex" />
-            <h3 className="text-sm font-medium">Codex</h3>
-          </div>
-          <ModelProviderList agent="codex" canManage={canManage} />
-        </section>
+        )}
+        {agents.map((agent) => (
+          <section key={agent.id} className="space-y-3">
+            <div className="flex items-center gap-2">
+              <AgentIcon agent={agent.id} />
+              <h3 className="text-sm font-medium">{agent.label}</h3>
+            </div>
+            <ModelProviderList agent={agent.id} canManage={canManage} />
+          </section>
+        ))}
       </div>
     </div>
   );

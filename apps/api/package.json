@@ -27,6 +27,7 @@
     "@agework/adapters": "workspace:*",
     "@agework/shared": "workspace:*",
     "@agework/worker": "workspace:*",
+    "@ai-sdk/anthropic": "^3.0.86",
     "@ai-sdk/openai": "^3.0.67",
     "@alibaba-group/opensandbox": "^0.1.8",
     "@anthropic-ai/claude-agent-sdk": "^0.3.158",

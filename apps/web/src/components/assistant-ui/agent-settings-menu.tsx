@@ -8,6 +8,7 @@ import {
   type ModelReasoningEffort,
 } from "@/stores/selection-store";
 import { useModelProviders } from "@/hooks/model-provider-hooks";
+import { useAgentOptions } from "@/hooks/use-agent-options";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { AGENT_LABELS } from "@agework/shared";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -37,13 +39,6 @@ const CLAUDE_THINKING_LABELS: Record<ClaudeThinkingMode, string> = {
   adaptive: "开启",
   disabled: "关闭",
 };
-
-const AGENT_LABELS: Record<AgentType, string> = {
-  claude: "Claude",
-  codex: "Codex",
-};
-
-const AGENT_OPTIONS: AgentType[] = ["claude", "codex"];
 
 const selectedMenuRadioClassName =
   "group/menu-radio justify-between rounded-md pl-2 pr-8 text-xs data-checked:bg-muted data-checked:font-medium [&>span:first-child]:hidden";
@@ -101,7 +96,12 @@ function AgentSelector() {
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
   const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
   const selectAgentType = useSelectionStore((s) => s.selectAgentType);
+  const { data: agentOptions } = useAgentOptions();
   const canSwitchAgent = selectedConversationId === undefined;
+  const agents = agentOptions?.agents ?? [];
+  const selectedAgentLabel =
+    agents.find((agent) => agent.id === selectedAgentType)?.label ??
+    AGENT_LABELS[selectedAgentType];
 
   if (!canSwitchAgent) {
     return (
@@ -111,16 +111,16 @@ function AgentSelector() {
             <button
               type="button"
               className={cn(agentTriggerClassName, "cursor-default hover:bg-transparent")}
-              aria-label={`当前 Agent：${AGENT_LABELS[selectedAgentType]}`}
+              aria-label={`当前 Agent：${selectedAgentLabel}`}
               aria-disabled
-              title={`当前 Agent：${AGENT_LABELS[selectedAgentType]}`}
+              title={`当前 Agent：${selectedAgentLabel}`}
             >
               <AgentIcon agent={selectedAgentType} size={15} />
             </button>
           }
         />
         <TooltipContent side="top" align="end" sideOffset={6}>
-          {AGENT_LABELS[selectedAgentType]}
+          {selectedAgentLabel}
         </TooltipContent>
       </Tooltip>
     );
@@ -134,7 +134,7 @@ function AgentSelector() {
             type="button"
             className={agentTriggerClassName}
             aria-label="选择 Agent"
-            title={`选择 Agent：${AGENT_LABELS[selectedAgentType]}`}
+            title={`选择 Agent：${selectedAgentLabel}`}
             >
               <AgentIcon agent={selectedAgentType} size={15} />
               <ChevronDownIcon className={menuChevronClassName} />
@@ -154,15 +154,15 @@ function AgentSelector() {
           <DropdownMenuLabel className={menuSectionLabelClassName}>
             Agent
           </DropdownMenuLabel>
-          {AGENT_OPTIONS.map((agent) => (
+          {agents.map((agent) => (
             <DropdownMenuRadioItem
-              key={agent}
-              value={agent}
+              key={agent.id}
+              value={agent.id}
               className={selectedMenuRadioClassName}
             >
               <span className="flex items-center gap-1.5">
-                <AgentIcon agent={agent} size={14} />
-                {AGENT_LABELS[agent]}
+                <AgentIcon agent={agent.id} size={14} />
+                {agent.label}
               </span>
               <SelectedMenuCheck />
             </DropdownMenuRadioItem>

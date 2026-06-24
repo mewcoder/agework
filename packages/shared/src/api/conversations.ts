@@ -43,7 +43,7 @@ export type StoredMessage = {
 export type CreateConversationRequest = {
   workspaceId: string;
   firstMessage?: string;
-  agentType?: string;
+  agentType?: AgentType;
   title?: string;
 };
 

@@ -1,15 +1,21 @@
 import { toast } from "sonner";
 import type { ModelProvider } from "@/hooks/model-provider-hooks";
+import {
+  AGENT_LABELS,
+  AGENT_TYPES,
+  isAgentType,
+  type AgentType,
+} from "@agework/shared";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-export const MANAGED_AGENTS = ["claude", "codex"] as const;
-export type ManagedAgent = (typeof MANAGED_AGENTS)[number];
+export const MANAGED_AGENTS = AGENT_TYPES;
+export type ManagedAgent = AgentType;
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 export function isManagedAgent(agent: string): agent is ManagedAgent {
-  return MANAGED_AGENTS.includes(agent as ManagedAgent);
+  return isAgentType(agent);
 }
 
 export function agentOrDefault(agent: string): ManagedAgent {
@@ -17,11 +23,6 @@ export function agentOrDefault(agent: string): ManagedAgent {
 }
 
 // ── Admin helpers ──────────────────────────────────────────────────────────
-
-const AGENT_LABELS: Record<ManagedAgent, string> = {
-  claude: "Claude",
-  codex: "Codex",
-};
 
 export function agentLabel(agentType: string) {
   return isManagedAgent(agentType) ? AGENT_LABELS[agentType] : agentType;

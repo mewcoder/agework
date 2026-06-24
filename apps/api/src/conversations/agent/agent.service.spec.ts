@@ -6,6 +6,7 @@ import { RunService } from "../../runs/run.service";
 import { ModelProviderService } from "../../model-providers/model-provider.service";
 import type { Response } from "express";
 import type { JwtUser } from "../../auth/current-user.decorator";
+import type { AgentRunRequestBody } from "./agent.types";
 
 describe("AgentService", () => {
   let service: AgentService;
@@ -27,10 +28,6 @@ describe("AgentService", () => {
         agentSessionId: undefined,
         workspaceId: "proj-1",
         activeRunStatus: "idle",
-      }),
-      getWorkspaceInfo: vi.fn().mockResolvedValue({
-        rootPath: "/rootPath",
-        runtimeType: "local",
       }),
     };
     mockRunService = {
@@ -56,17 +53,24 @@ describe("AgentService", () => {
   });
 
   // body.threadId 是 AG-UI 协议字段，值等于 AgeWork conversationId
-  function baseBody(overrides: Record<string, unknown> = {}) {
+  function baseBody(
+    overrides: Record<string, unknown> = {}
+  ): AgentRunRequestBody {
     return {
       threadId: "conversation-1",
-      messages: [{ id: "msg-1", role: "user", content: "hi" }],
-      forwardedProps: { modelProviderId: "mc-1" },
+      messages: [{ id: "msg-1", content: "hi" }],
+      forwardedProps: { agentType: "claude", modelProviderId: "mc-1" },
       ...overrides,
     };
   }
 
   it("throws BadRequestException when conversation has no associated workspace", async () => {
-    mockConversationService.getWorkspaceInfo = vi.fn().mockResolvedValue({});
+    mockConversationService.findOne = vi.fn().mockResolvedValue({
+      agentType: "claude",
+      agentSessionId: undefined,
+      workspaceId: undefined,
+      activeRunStatus: "idle",
+    });
 
     await expect(
       service.run(baseBody(), res as Response, user)
@@ -74,10 +78,20 @@ describe("AgentService", () => {
     expect(mockRunService.start).not.toHaveBeenCalled();
   });
 
-  it("throws BadRequestException when modelProviderId is missing", async () => {
+  it("throws BadRequestException when requested agentType does not match the conversation", async () => {
     await expect(
-      service.run(baseBody({ forwardedProps: {} }), res as Response, user)
+      service.run(
+        baseBody({
+          forwardedProps: { agentType: "codex", modelProviderId: "mc-1" },
+        }),
+        res as Response,
+        user
+      )
     ).rejects.toThrow(BadRequestException);
+    expect(
+      mockModelProviderService.resolveEnabledProvider
+    ).not.toHaveBeenCalled();
+    expect(mockRunService.start).not.toHaveBeenCalled();
   });
 
   it("wraps agent provider config lookup errors as BadRequestException", async () => {
@@ -106,17 +120,11 @@ describe("AgentService", () => {
     expect(startArgs.conversationId).toBe("conversation-1");
     expect(startArgs.userId).toBe("user-1");
     expect(startArgs.modelProviderId).toBe("mc-1");
+    expect(startArgs.workspaceId).toBe("proj-1");
     expect(startArgs.userMessageId).toBe("msg-1");
     expect(startArgs.res).toBe(res);
     expect(startArgs.agentProviderConfig).toEqual(
       expect.objectContaining({ agentType: "claude", source: "system" })
-    );
-    expect(startArgs.workspace).toEqual(
-      expect.objectContaining({
-        workspaceId: "proj-1",
-        workspaceRootPath: "/rootPath",
-        runtimeType: "local",
-      })
     );
     expect(startArgs.input.forwardedProps.agentType).toBe("claude");
   });
@@ -134,7 +142,11 @@ describe("AgentService", () => {
 
     await service.run(
       baseBody({
-        forwardedProps: { modelProviderId: "mc-1", model: "claude-test" },
+        forwardedProps: {
+          agentType: "claude",
+          modelProviderId: "mc-1",
+          model: "claude-test",
+        },
       }),
       res as Response,
       user
@@ -166,7 +178,11 @@ describe("AgentService", () => {
     await expect(
       service.run(
         baseBody({
-          forwardedProps: { modelProviderId: "mc-1", model: "claude-unknown" },
+          forwardedProps: {
+            agentType: "claude",
+            modelProviderId: "mc-1",
+            model: "claude-unknown",
+          },
         }),
         res as Response,
         user
@@ -189,7 +205,7 @@ describe("AgentService", () => {
       .calls[0][0];
     expect(startArgs.input.forwardedProps.agentSessionId).toBe("session-1");
     expect(startArgs.input.forwardedProps.resume).toBe("session-1");
-    expect(startArgs.input.messages).toEqual([body.messages[0]]);
+    expect(startArgs.input.messages).toEqual(body.messages?.slice(-1));
   });
 
   it("forwards interruptReason through to RunService.start", async () => {
@@ -203,9 +219,9 @@ describe("AgentService", () => {
     expect(startArgs.interruptReason).toBe("user_steered");
   });
 
-  describe("resumeStream()", () => {
+  describe("resume()", () => {
     it("verifies ownership then delegates to RunService.resumeStream", async () => {
-      await service.resumeStream("conversation-1", res as Response, user);
+      await service.resume("conversation-1", res as Response, user);
       expect(mockConversationService.findOne).toHaveBeenCalledWith(
         "user-1",
         "conversation-1"
@@ -218,7 +234,7 @@ describe("AgentService", () => {
 
     it("throws when conversationId is missing", async () => {
       await expect(
-        service.resumeStream("", res as Response, user)
+        service.resume("", res as Response, user)
       ).rejects.toThrow(BadRequestException);
     });
   });

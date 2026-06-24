@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from '@/lib/http';
+import type { AgentType } from '@agework/shared';
 import type {
   ModelProviderResponse,
   ModelProviderListResponse,
@@ -15,10 +16,10 @@ export type ProviderConfigValues = ProviderConfig;
 export type { ModelProviderTestResponse };
 
 export const modelProvidersApi = {
-  list: (agentType: string) =>
+  list: (agentType: AgentType) =>
     apiGet<ModelProviderListResponse>(`/api/v1/model-providers/list?agentType=${encodeURIComponent(agentType)}`),
 
-  adminList: (agentType: string) =>
+  adminList: (agentType: AgentType) =>
     apiGet<ModelProviderListResponse>(`/api/v1/admin/model-providers/list?agentType=${encodeURIComponent(agentType)}`),
 
   create: (body: CreateModelProviderRequest) =>

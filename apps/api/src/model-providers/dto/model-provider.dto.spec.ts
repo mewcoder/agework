@@ -36,6 +36,21 @@ describe("CreateModelProviderDto", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
+  it("rejects an unsupported agentType", async () => {
+    await expect(
+      transformBody(CreateModelProviderDto, {
+        agentType: "unknown",
+        name: "My Config",
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-xxx",
+          models: ["model"],
+          extraConfig: {},
+        },
+      })
+    ).rejects.toThrow(BadRequestException);
+  });
+
   it("rejects a providerConfig with non-string values", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {

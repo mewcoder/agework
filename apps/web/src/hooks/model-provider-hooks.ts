@@ -1,17 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { modelProvidersApi } from '@/api/model-providers';
 import type { ProviderConfigValues } from '@/api/model-providers';
+import type { AgentType } from '@agework/shared';
 export type { ModelProvider, ProviderConfigValues, ModelProviderTestResponse } from '@/api/model-providers';
 
-function queryKey(agentType: string) {
+function queryKey(agentType: AgentType) {
   return ['model-providers', agentType];
 }
 
-function adminQueryKey(agentType: string) {
+function adminQueryKey(agentType: AgentType) {
   return ['admin-model-providers', agentType];
 }
 
-export function useModelProviders(agentType: string) {
+export function useModelProviders(agentType: AgentType) {
   return useQuery({
     queryKey: queryKey(agentType),
     queryFn: () => modelProvidersApi.list(agentType),
@@ -19,7 +20,7 @@ export function useModelProviders(agentType: string) {
   });
 }
 
-export function useAdminModelProviders(agentType: string) {
+export function useAdminModelProviders(agentType: AgentType) {
   return useQuery({
     queryKey: adminQueryKey(agentType),
     queryFn: () => modelProvidersApi.adminList(agentType),
@@ -27,7 +28,7 @@ export function useAdminModelProviders(agentType: string) {
   });
 }
 
-export function useCreateModelProvider(agentType: string) {
+export function useCreateModelProvider(agentType: AgentType) {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
@@ -40,7 +41,7 @@ export function useCreateModelProvider(agentType: string) {
   });
 }
 
-export function useUpdateModelProvider(agentType: string) {
+export function useUpdateModelProvider(agentType: AgentType) {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
@@ -53,7 +54,7 @@ export function useUpdateModelProvider(agentType: string) {
   });
 }
 
-export function useSetModelProviderEnabled(agentType: string) {
+export function useSetModelProviderEnabled(agentType: AgentType) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ modelProviderId, isEnabled }: { modelProviderId: string; isEnabled: boolean }) =>
@@ -65,7 +66,7 @@ export function useSetModelProviderEnabled(agentType: string) {
   });
 }
 
-export function useDeleteModelProvider(agentType: string) {
+export function useDeleteModelProvider(agentType: AgentType) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (modelProviderId: string) => modelProvidersApi.delete({ id: modelProviderId }),

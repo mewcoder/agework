@@ -5,7 +5,7 @@ export { modelProvidersApi } from './model-providers';
 export { usersApi } from './users';
 export { runsApi } from './runs';
 export { systemApi } from './system';
-export { agentPermissionsApi } from './agent-permissions';
+export { agentsApi } from './agents';
 export type { Conversation, StoredMessage } from './conversations';
 export type { Workspace, WorkspaceWithUser, UpdateWorkspaceInput } from './workspaces';
 export type {

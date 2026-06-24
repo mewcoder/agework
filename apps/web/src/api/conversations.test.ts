@@ -63,7 +63,7 @@ describe('conversationsApi', () => {
   describe('create', () => {
     it('调用正确的 URL 和 body', async () => {
       mockApiPost.mockResolvedValue({ conversationId: 'new-conv' });
-      const body = { workspaceId: 'ws-1', agentType: 'claude' };
+      const body = { workspaceId: 'ws-1', agentType: 'claude' as const };
 
       await conversationsApi.create(body);
 

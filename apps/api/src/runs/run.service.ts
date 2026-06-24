@@ -25,6 +25,15 @@ import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunEventFacts, compactData } from "./events/run-event-facts";
 import type { StartRunInput } from "./run-service.types";
+import { PrismaService } from "../prisma/prisma.service";
+
+type RunWorkspace = {
+  workspaceId: string;
+  workspaceRootPath: string;
+  runtimeType?: string;
+  isolationScope?: string | null;
+  sandboxEngine?: string | null;
+};
 
 @Injectable()
 export class RunService {
@@ -38,7 +47,8 @@ export class RunService {
     private readonly runEventRecorder: RunEventRecorder,
     private readonly runConfigAssembler: RunConfigAssembler,
     private readonly titleService: TitleService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly prisma: PrismaService
   ) {}
 
   async start(input: StartRunInput): Promise<void> {
@@ -48,14 +58,15 @@ export class RunService {
       userId,
       agentProviderConfig,
       modelProviderId,
+      workspaceId,
       input: runInput,
-      workspace,
       userMessage,
       userMessageId,
       res,
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
+    const workspace = await this.resolveRunWorkspace(workspaceId);
 
     // 1. 校验 runtime/isolation 是否被部署允许，并解析 placement
     const requestedRuntimeType =
@@ -504,6 +515,26 @@ export class RunService {
         current.streamingSnapshot = false;
       }
     });
+  }
+
+  private async resolveRunWorkspace(workspaceId: string): Promise<RunWorkspace> {
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, deletedAt: null },
+      include: { directory: true },
+    });
+    if (!workspace) {
+      throw new NotFoundException(`Workspace ${workspaceId} not found`);
+    }
+    if (!workspace.directory?.rootPath) {
+      throw new BadRequestException("工作空间必须关联目录才能运行 agent");
+    }
+    return {
+      workspaceId: workspace.id,
+      workspaceRootPath: workspace.directory.rootPath,
+      runtimeType: workspace.runtimeType ?? undefined,
+      isolationScope: workspace.isolationScope,
+      sandboxEngine: workspace.sandboxEngine,
+    };
   }
 
   /** 把 aggregator.build() 的快照转成 ChatModelRunResult 形态并写成 SSE。 */

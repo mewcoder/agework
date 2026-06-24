@@ -5,5 +5,4 @@ export type * from "./auth";
 export type * from "./model-providers";
 export type * from "./runs";
 export type * from "./system";
-export type * from "./agent-permissions";
-export * from "./agent-permission-locale";
+export type * from "./agents";

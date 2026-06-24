@@ -10,6 +10,7 @@ import { RunConfigAssembler } from "./run-config.assembler";
 import { TitleService } from "./title.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
+import { PrismaService } from "../prisma/prisma.service";
 
 function makePlacement(runtimeType: string) {
   const runtimePath = runtimeType === "local" ? "/tmp/ws" : "/workspace";
@@ -34,6 +35,17 @@ const AGENT_EVENT_TRACE = {
   agentType: "claude",
 };
 
+function makeWorkspace(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "ws-1",
+    runtimeType: "local",
+    isolationScope: null,
+    sandboxEngine: null,
+    directory: { rootPath: "/tmp/ws" },
+    ...overrides,
+  };
+}
+
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
@@ -44,6 +56,8 @@ describe("RunService", () => {
   let mockRunConfigAssembler: Partial<RunConfigAssembler>;
   let mockTitleService: Partial<TitleService>;
   let mockConfigService: Partial<ConfigService>;
+  let mockPrismaService: Partial<PrismaService>;
+  let mockWorkspaceFindFirst: ReturnType<typeof vi.fn>;
 
   function makeRes() {
     return {
@@ -67,12 +81,8 @@ describe("RunService", () => {
         source: "system",
       },
       modelProviderId: "mp-1",
+      workspaceId: "ws-1",
       input: { messages: [{ id: "msg-1" }] },
-      workspace: {
-        workspaceId: "ws-1",
-        workspaceRootPath: "/tmp/ws",
-        runtimeType: "local",
-      },
       res: makeRes(),
       ...overrides,
     };
@@ -135,6 +145,12 @@ describe("RunService", () => {
         s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
     };
+    mockWorkspaceFindFirst = vi.fn().mockResolvedValue(makeWorkspace());
+    mockPrismaService = {
+      workspace: {
+        findFirst: mockWorkspaceFindFirst,
+      } as never,
+    };
 
     service = new RunService(
       mockRunRepository as RunRepository,
@@ -144,7 +160,8 @@ describe("RunService", () => {
       mockRunEventRecorder as RunEventRecorder,
       mockRunConfigAssembler as RunConfigAssembler,
       mockTitleService as TitleService,
-      mockConfigService as ConfigService
+      mockConfigService as ConfigService,
+      mockPrismaService as PrismaService
     );
   });
 
@@ -278,16 +295,11 @@ describe("RunService", () => {
           queueMicrotask(() => onReady?.("container-abc"));
           return handle;
         });
-
-      await service.start(
-        makeStartInput({
-          workspace: {
-            workspaceId: "ws-1",
-            workspaceRootPath: "/tmp/ws",
-            runtimeType: "sandbox",
-          },
-        })
+      mockWorkspaceFindFirst.mockResolvedValue(
+        makeWorkspace({ runtimeType: "sandbox" })
       );
+
+      await service.start(makeStartInput());
       await new Promise<void>((resolve) => queueMicrotask(resolve));
 
       expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(

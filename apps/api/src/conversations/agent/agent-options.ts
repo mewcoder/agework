@@ -1,4 +1,9 @@
-import type { AgentPermissionOptionsResponse } from "@agework/shared/api";
+import { AGENT_LABELS, AGENT_TYPES } from "@agework/shared";
+import type {
+  AgentOption,
+  AgentOptionsByType,
+  AgentOptionsResponse,
+} from "@agework/shared/api";
 
 const CLAUDE_PERMISSION_OPTIONS = [
   {
@@ -32,7 +37,7 @@ export function isRootRuntime() {
   return process.getuid?.() === 0;
 }
 
-export function getAgentPermissionOptions(): AgentPermissionOptionsResponse {
+export function getAgentOptionsByType(): AgentOptionsByType {
   const isRoot = isRootRuntime();
   return {
     claude: {
@@ -77,5 +82,19 @@ export function getAgentPermissionOptions(): AgentPermissionOptionsResponse {
         ],
       },
     },
+  };
+}
+
+export function getAgentOptions(): AgentOptionsResponse {
+  const optionsByType = getAgentOptionsByType();
+  return {
+    agents: AGENT_TYPES.map(
+      (id) =>
+        ({
+          id,
+          label: AGENT_LABELS[id],
+          options: optionsByType[id],
+        }) as AgentOption
+    ),
   };
 }

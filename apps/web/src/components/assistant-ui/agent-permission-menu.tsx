@@ -23,7 +23,7 @@ import {
   type ClaudePermissionMode,
   type CodexPermissionMode,
 } from "@/stores/selection-store";
-import { useAgentPermissionOptions } from "@/hooks/use-agent-permissions";
+import { useAgentOptions } from "@/hooks/use-agent-options";
 import { cn } from "@/lib/utils";
 import type { AgentPermissionOption } from "@agework/shared/api";
 
@@ -77,7 +77,7 @@ function PermissionRadioItem<T extends string>({
 }
 
 export function AgentPermissionMenu() {
-  const { data: options } = useAgentPermissionOptions();
+  const { data: agentOptions } = useAgentOptions();
   const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
   const claudePermissionMode = useSelectionStore((s) => s.claudePermissionMode);
   const codexPermissionMode = useSelectionStore((s) => s.codexPermissionMode);
@@ -88,28 +88,35 @@ export function AgentPermissionMenu() {
     (s) => s.setCodexPermissionMode,
   );
 
-  const claudeOptions = options?.claude.permissionMode.options ?? [];
-  const codexOptions = options?.codex.permissionMode.options ?? [];
+  const claudePermission = agentOptions?.agents.find(
+    (agent) => agent.id === "claude",
+  )?.options.permissionMode;
+  const codexPermission = agentOptions?.agents.find(
+    (agent) => agent.id === "codex",
+  )?.options.permissionMode;
+  const claudeOptions = claudePermission?.options ?? [];
+  const codexOptions = codexPermission?.options ?? [];
   useEffect(() => {
-    if (!options) return;
+    if (!claudePermission || !codexPermission) return;
     if (
-      !options.claude.permissionMode.options.some(
+      !claudePermission.options.some(
         (option) => option.value === claudePermissionMode,
       )
     ) {
-      setClaudePermissionMode(options.claude.permissionMode.defaultValue);
+      setClaudePermissionMode(claudePermission.defaultValue);
     }
     if (
-      !options.codex.permissionMode.options.some(
+      !codexPermission.options.some(
         (option) => option.value === codexPermissionMode,
       )
     ) {
-      setCodexPermissionMode(options.codex.permissionMode.defaultValue);
+      setCodexPermissionMode(codexPermission.defaultValue);
     }
   }, [
     claudePermissionMode,
+    claudePermission,
     codexPermissionMode,
-    options,
+    codexPermission,
     setClaudePermissionMode,
     setCodexPermissionMode,
   ]);

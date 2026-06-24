@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { Injectable } from "@nestjs/common";
-import type { AgentType } from "@agework/shared";
+import { AGENT_TYPES, type AgentType } from "@agework/shared";
 
 type PackageJson = {
   name?: string;
@@ -27,6 +27,17 @@ export type AboutInfo = {
 
 const PLATFORM_DESCRIPTION =
   "支持本地化部署的多 Agent 工作台，通过 Web 页面使用 Claude、Codex 等 Agent，并集中管理模型服务、工作空间与对话";
+
+const AGENT_SDK_PACKAGES = {
+  claude: {
+    name: "Claude Agent SDK",
+    packageName: "@anthropic-ai/claude-agent-sdk",
+  },
+  codex: {
+    name: "Codex SDK",
+    packageName: "@openai/codex-sdk",
+  },
+} satisfies Record<AgentType, { name: string; packageName: string }>;
 
 const requireFromHere = createRequire(__filename);
 
@@ -107,24 +118,17 @@ export class SystemService {
         description: PLATFORM_DESCRIPTION,
         version: cleanVersion(this.rootPackage?.version),
       },
-      agents: [
-        {
-          id: "claude",
-          name: "Claude Agent SDK",
+      agents: AGENT_TYPES.map((id) => {
+        const sdk = AGENT_SDK_PACKAGES[id];
+        return {
+          id,
+          name: sdk.name,
           version: resolveInstalledPackageVersion(
-            "@anthropic-ai/claude-agent-sdk",
-            dependencies["@anthropic-ai/claude-agent-sdk"],
+            sdk.packageName,
+            dependencies[sdk.packageName],
           ),
-        },
-        {
-          id: "codex",
-          name: "Codex SDK",
-          version: resolveInstalledPackageVersion(
-            "@openai/codex-sdk",
-            dependencies["@openai/codex-sdk"],
-          ),
-        },
-      ],
+        };
+      }),
     };
   }
 }

@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import { AGENT_TYPES, type AgentType } from "@agework/shared";
 import type { CreateConversationRequest } from "@agework/shared/api";
 
 export class CreateConversationDto implements CreateConversationRequest {
@@ -12,7 +13,8 @@ export class CreateConversationDto implements CreateConversationRequest {
 
   @IsOptional()
   @IsString()
-  agentType?: string;
+  @IsIn(AGENT_TYPES)
+  agentType?: AgentType;
 
   @IsOptional()
   @IsString()

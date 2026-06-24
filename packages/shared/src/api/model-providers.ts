@@ -1,4 +1,4 @@
-import type { ListResponse } from "../common";
+import type { AgentType, ListResponse } from "../common";
 
 export type ModelProviderScope = "system" | "global" | "user";
 
@@ -17,7 +17,7 @@ export type ModelProviderSystemStatus = {
 
 export type ModelProviderResponse = {
   modelProviderId: string;
-  agentType: string;
+  agentType: AgentType;
   scope: ModelProviderScope;
   userId: string | null;
   name: string;
@@ -32,7 +32,7 @@ export type ModelProviderResponse = {
 };
 
 export type CreateModelProviderRequest = {
-  agentType: string;
+  agentType: AgentType;
   name: string;
   providerConfig: ProviderConfig;
 };

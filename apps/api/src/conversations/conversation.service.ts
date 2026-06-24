@@ -4,7 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import type { AgentType } from "@agework/shared";
+import { isAgentType, type AgentType } from "@agework/shared";
 import type {
   ConversationPendingUserAction,
   ConversationResponse,
@@ -15,7 +15,7 @@ import type {
 } from "@agework/shared/api";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
-import { extractText } from "./message-text";
+import { extractText } from "../common/message-text";
 import { swallow } from "../common/swallow";
 
 export type AssistantUserMessage = {
@@ -218,7 +218,7 @@ export class ConversationService {
 
   private resolveAgentType(agentType?: string): AgentType {
     const resolvedAgentType = agentType ?? "claude";
-    if (resolvedAgentType !== "claude" && resolvedAgentType !== "codex") {
+    if (!isAgentType(resolvedAgentType)) {
       throw new BadRequestException(
         `不支持的 agent 类型: ${resolvedAgentType}`
       );
@@ -268,37 +268,6 @@ export class ConversationService {
         ),
         updatedAt: conversation.updatedAt.toISOString(),
       })),
-    };
-  }
-
-  async getWorkspaceInfo(
-    userId: string,
-    conversationId: string
-  ): Promise<{
-    rootPath?: string;
-    name?: string;
-    runtimeType?: string;
-    isolationScope?: string | null;
-    sandboxEngine?: string | null;
-  }> {
-    const conversation = await this.prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-    });
-    if (!conversation) return {};
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id: conversation.workspaceId, deletedAt: null },
-      include: { directory: true },
-    });
-    return {
-      rootPath: workspace?.directory?.rootPath,
-      name: workspace?.name,
-      runtimeType: workspace?.runtimeType ?? undefined,
-      isolationScope: workspace?.isolationScope,
-      sandboxEngine: workspace?.sandboxEngine,
     };
   }
 

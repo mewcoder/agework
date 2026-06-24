@@ -1,5 +1,18 @@
 /** 支持的 agent 类型。 */
-export type AgentType = "claude" | "codex";
+export const AGENT_TYPES = ["claude", "codex"] as const;
+export type AgentType = (typeof AGENT_TYPES)[number];
+
+export const AGENT_LABELS: Record<AgentType, string> = {
+  claude: "Claude",
+  codex: "Codex",
+};
+
+export function isAgentType(value: unknown): value is AgentType {
+  return (
+    typeof value === "string" &&
+    AGENT_TYPES.includes(value as AgentType)
+  );
+}
 
 /** worker run 的生命周期状态。 */
 export type RunStatus =

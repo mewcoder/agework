@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
-import type { AgentType } from "@agework/shared";
 import { ModelProviderService } from "./model-provider.service";
 import { ModelProviderIdDto } from "./dto/model-provider-id.dto";
 
@@ -14,7 +13,7 @@ export class ModelProviderController {
 
   @Get("system-info")
   systemInfo(@Query("agentType") agentType: string) {
-    return this.modelProviderService.getSystemInfo(agentType as AgentType);
+    return this.modelProviderService.getSystemInfo(agentType);
   }
 
   @Post("ping")

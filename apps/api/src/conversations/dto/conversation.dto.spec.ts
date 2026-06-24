@@ -42,6 +42,15 @@ describe("CreateConversationDto", () => {
       transformBody(CreateConversationDto, { workspaceId: "proj-1", agentType: 123 })
     ).rejects.toThrow(BadRequestException);
   });
+
+  it("rejects an unsupported agentType", async () => {
+    await expect(
+      transformBody(CreateConversationDto, {
+        workspaceId: "proj-1",
+        agentType: "unknown",
+      })
+    ).rejects.toThrow(BadRequestException);
+  });
 });
 
 describe("UpdateConversationDto", () => {

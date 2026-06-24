@@ -109,9 +109,9 @@ describe("external API route convention", () => {
 
   it("uses body ids instead of path ids for agent controls", () => {
     expect(controllerPath(AgentController)).toBe("conversations/agent");
-    expectRoute(AgentController, "permissionOptions", "get", "permission-options");
+    expectRoute(AgentController, "options", "get", "options");
     expectRoute(AgentController, "run", "post", "run");
-    expectRoute(AgentController, "resumeStream", "get", "resume");
+    expectRoute(AgentController, "resume", "get", "resume");
     expectRoute(AgentController, "answerQuestion", "post", "reply");
     expectRoute(AgentController, "stop", "post", "stop");
   });

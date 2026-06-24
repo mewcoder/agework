@@ -1,18 +1,20 @@
 import { Injectable, BadRequestException, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
 import type { Response } from "express";
+import { isAgentType, type AgentType } from "@agework/shared";
 import type {
   AgentProviderConfig,
   CustomAgentProviderConfig,
 } from "@agework/shared/protocol";
-import { Prisma } from "../../../generated/prisma/client.js";
 import { ConversationService } from "../conversation.service";
 import type { JwtUser } from "../../auth/current-user.decorator";
 import { RunService } from "../../runs/run.service";
 import { safeLogJson } from "../../common/logging";
-import type { AgentRunRequestBody } from "./agent.types";
-import { getAgentPermissionOptions } from "./agent-permission-options";
+import type { AgentRunRequestDto } from "./dto/agent-run.dto";
+import { getAgentOptionsByType } from "./agent-options";
 import { ModelProviderService } from "../../model-providers/model-provider.service";
+
+type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
 
 /**
  * Agent 层入口：把 HTTP 请求翻成 RunService.start 的 StartRunInput。
@@ -30,35 +32,23 @@ export class AgentService {
   ) {}
 
   async run(
-    body: AgentRunRequestBody,
+    body: AgentRunRequestDto,
     res: Response,
     user: JwtUser
   ): Promise<void> {
     // body.threadId 是 AG-UI 协议字段，值等于 AgeWork conversationId
     const conversationId = body.threadId;
-    const runId =
-      typeof body.runId === "string" && body.runId ? body.runId : randomUUID();
+    const runId = body.runId?.trim() || randomUUID();
     const userId = user.userId;
-    const userMessage = body.messages?.[body.messages.length - 1];
-    const userMessageId =
-      typeof userMessage?.id === "string" && userMessage.id
-        ? userMessage.id
-        : userMessage?.id !== undefined && userMessage.id !== null
-          ? String(userMessage.id)
-          : undefined;
-    const requestedAgentType = body.forwardedProps?.agentType ?? "claude";
-    const requestedModelProviderId =
-      typeof body.forwardedProps?.modelProviderId === "string"
-        ? body.forwardedProps.modelProviderId
-        : undefined;
-    const requestedModel =
-      typeof body.forwardedProps?.model === "string"
-        ? body.forwardedProps.model
-        : undefined;
-    const interruptReason =
-      body.interruptReason === "user_steered"
-        ? body.interruptReason
-        : undefined;
+    const userMessage = this.getLastUserMessage(body);
+    const userMessageId = this.normalizeMessageId(userMessage?.id);
+    const requestedAgentType = this.normalizeAgentType(
+      body.forwardedProps.agentType
+    );
+    const modelProviderId = body.forwardedProps.modelProviderId.trim();
+    const requestedModel = this.optionalString(body.forwardedProps.model);
+    const interruptReason = body.interruptReason;
+
     this.logger.log(
       `agent run requested ${safeLogJson({
         conversationId,
@@ -66,67 +56,35 @@ export class AgentService {
         userId,
         userMessageId,
         requestedAgentType,
-        requestedModelProviderId,
+        requestedModelProviderId: modelProviderId,
         requestedModel,
         interruptReason,
       })}`
     );
 
-    // Determine which agent adapter to use
-    let agentType = requestedAgentType;
-    const modelProviderId = requestedModelProviderId;
-    let agentSessionId: string | undefined;
-    let workspaceId: string | undefined;
-    let workspaceRootPath: string | undefined;
-    let workspaceRuntimeType: string | undefined;
-    let workspaceIsolationScope: string | null | undefined;
-    let workspaceSandboxEngine: string | null | undefined;
-
-    if (conversationId) {
-      try {
-        const conversation = await this.conversationService.findOne(
-          userId,
-          conversationId
-        );
-        agentType = conversation.agentType ?? agentType;
-        agentSessionId = conversation.agentSessionId;
-        workspaceId = conversation.workspaceId;
-        const workspaceInfo = await this.conversationService.getWorkspaceInfo(
-          userId,
-          conversationId
-        );
-        workspaceRootPath = workspaceInfo.rootPath;
-        workspaceRuntimeType = workspaceInfo.runtimeType;
-        workspaceIsolationScope = workspaceInfo.isolationScope;
-        workspaceSandboxEngine = workspaceInfo.sandboxEngine;
-      } catch (err) {
-        // conversation 不存在（首次发送消息）时使用 forwardedProps 中的 agent 配置；
-        // 其他错误（如数据库异常）继续抛出，避免被掩盖成"必须关联工作空间"
-        if (
-          !(
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2025"
-          )
-        ) {
-          throw err;
-        }
-      }
+    const conversation = await this.conversationService.findOne(
+      userId,
+      conversationId
+    );
+    const agentType = this.normalizeAgentType(conversation.agentType);
+    if (requestedAgentType !== agentType) {
+      throw new BadRequestException(
+        `请求 agent 类型 ${requestedAgentType} 与对话 agent 类型 ${agentType} 不一致`
+      );
     }
+    const agentSessionId = conversation.agentSessionId;
+    const workspaceId = conversation.workspaceId;
 
-    // 对话必须关联工作空间才能运行 agent
-    if (!workspaceId || !workspaceRootPath) {
+    if (!workspaceId) {
       throw new BadRequestException(
         "Conversation 必须关联工作空间才能运行 agent"
       );
     }
-    if (!modelProviderId) {
-      throw new BadRequestException("缺少 modelProviderId");
-    }
 
     const forwardedProps = {
-      ...(body.forwardedProps ?? {}),
+      ...body.forwardedProps,
       agentType,
-      ...(modelProviderId ? { modelProviderId } : {}),
+      modelProviderId,
       ...(requestedModel ? { model: requestedModel } : {}),
     } as Record<string, unknown>;
     this.normalizePermissionForwardedProps(agentType, forwardedProps);
@@ -167,13 +125,7 @@ export class AgentService {
       agentProviderConfig,
       modelProviderId,
       input: runInput,
-      workspace: {
-        workspaceId,
-        workspaceRootPath,
-        runtimeType: workspaceRuntimeType,
-        isolationScope: workspaceIsolationScope,
-        sandboxEngine: workspaceSandboxEngine,
-      },
+      workspaceId,
       userMessage,
       userMessageId,
       res,
@@ -185,7 +137,7 @@ export class AgentService {
    * 刷新网页后续接进行中的 run：校验 conversation 归属后，把 SSE response
    * 交给 RunService.resumeStream 接到活跃 run 上。
    */
-  async resumeStream(
+  async resume(
     conversationId: string,
     res: Response,
     user: JwtUser
@@ -220,12 +172,40 @@ export class AgentService {
     }
   }
 
+  private getLastUserMessage(
+    body: AgentRunRequestDto
+  ): AgentRunUserMessage | undefined {
+    const messages = body.messages;
+    if (!messages?.length) return undefined;
+    return messages[messages.length - 1];
+  }
+
+  private optionalString(value: unknown): string | undefined {
+    if (typeof value !== "string") return undefined;
+    const trimmed = value.trim();
+    return trimmed ? trimmed : undefined;
+  }
+
+  private normalizeAgentType(agentType: string): AgentType {
+    const trimmed = agentType.trim();
+    if (!isAgentType(trimmed)) {
+      throw new BadRequestException(`不支持的 agent 类型: ${agentType}`);
+    }
+    return trimmed;
+  }
+
+  private normalizeMessageId(messageId: unknown): string | undefined {
+    return messageId === undefined || messageId === null
+      ? undefined
+      : String(messageId);
+  }
+
   private normalizePermissionForwardedProps(
-    agentType: string,
+    agentType: AgentType,
     forwardedProps: Record<string, unknown>
   ) {
     if (agentType !== "claude") return;
-    const permissionOptions = getAgentPermissionOptions().claude.permissionMode;
+    const permissionOptions = getAgentOptionsByType().claude.permissionMode;
     const allowed = new Set<string>(
       permissionOptions.options.map((option) => option.value)
     );
@@ -238,15 +218,11 @@ export class AgentService {
   }
 
   private async getAgentProviderConfig(params: {
-    agentType: string;
+    agentType: AgentType;
     modelProviderId: string;
     model?: string;
   }): Promise<AgentProviderConfig> {
     const { agentType, modelProviderId, model } = params;
-    // todo: 目前只支持 claude/codex，后续可扩展更多 agent 类型
-    if (agentType !== "claude" && agentType !== "codex") {
-      throw new BadRequestException(`不支持的 agent 类型: ${agentType}`);
-    }
 
     const resolved = await this.modelProviderService.resolveEnabledProvider(
       agentType,

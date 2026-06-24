@@ -4,21 +4,21 @@ import { AgentService } from "./agent.service";
 import { CurrentUser } from "../../auth/current-user.decorator";
 import type { JwtUser } from "../../auth/current-user.decorator";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
-import type { AgentRunRequestBody } from "./agent.types";
-import { getAgentPermissionOptions } from "./agent-permission-options";
+import { AgentRunRequestDto } from "./dto/agent-run.dto";
+import { getAgentOptions } from "./agent-options";
 
 @Controller("conversations/agent")
 export class AgentController {
   constructor(private readonly agentService: AgentService) {}
 
-  @Get("permission-options")
-  permissionOptions() {
-    return getAgentPermissionOptions();
+  @Get("options")
+  options() {
+    return getAgentOptions();
   }
 
   @Post("run")
   async run(
-    @Body() body: AgentRunRequestBody,
+    @Body() body: AgentRunRequestDto,
     @Res() res: Response,
     @CurrentUser() user: JwtUser
   ) {
@@ -26,12 +26,12 @@ export class AgentController {
   }
 
   @Get("resume")
-  async resumeStream(
+  async resume(
     @Query("id") conversationId: string,
     @Res() res: Response,
     @CurrentUser() user: JwtUser
   ) {
-    await this.agentService.resumeStream(conversationId, res, user);
+    await this.agentService.resume(conversationId, res, user);
   }
 
   @Post("reply")

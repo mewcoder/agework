@@ -36,7 +36,7 @@ describe('modelProvidersApi', () => {
   describe('create', () => {
     it('调用 admin create 端点', async () => {
       const body = {
-        agentType: 'claude',
+        agentType: 'claude' as const,
         name: 'test-provider',
         providerConfig: { baseUrl: 'https://example.com', apiKey: 'sk-test', models: ['m'], extraConfig: {} },
       };

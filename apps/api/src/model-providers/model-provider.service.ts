@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import type { AgentType } from "@agework/shared";
+import { AGENT_TYPES, isAgentType, type AgentType } from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -25,7 +25,6 @@ const SYSTEM_PREFIX = "system:";
 const SYSTEM_MODEL_PROVIDER_NAME = "系统环境";
 const MODEL_PROVIDER_SCOPE_SYSTEM = "system";
 const MODEL_PROVIDER_SCOPE_GLOBAL = "global";
-const SYSTEM_AGENT_TYPES = ["claude", "codex"] as const;
 
 type ModelProviderScope = "system" | "global" | "user";
 type ResolvedModelProvider =
@@ -47,13 +46,13 @@ function isSystemModelProviderId(id: string) {
   return id.startsWith(SYSTEM_PREFIX);
 }
 
-function systemModelProviderId(agentType: string) {
+function systemModelProviderId(agentType: AgentType) {
   return `${SYSTEM_PREFIX}${agentType}`;
 }
 
 function agentTypeFromSystemModelProviderId(id: string): AgentType {
   const agentType = id.slice(SYSTEM_PREFIX.length);
-  if (agentType !== "claude" && agentType !== "codex") {
+  if (!isAgentType(agentType)) {
     throw new BadRequestException(`模型服务不可用: ${id}`);
   }
   return agentType;
@@ -125,13 +124,13 @@ export class ModelProviderService implements OnModuleInit {
 
   async onModuleInit() {
     await Promise.all(
-      SYSTEM_AGENT_TYPES.map((agentType) =>
+      AGENT_TYPES.map((agentType) =>
         this.ensureSystemModelProvider(agentType)
       )
     );
   }
 
-  private async ensureSystemModelProvider(agentType: string) {
+  private async ensureSystemModelProvider(agentType: AgentType) {
     const id = systemModelProviderId(agentType);
     const placeholder = {
       agentType,
@@ -354,7 +353,8 @@ export class ModelProviderService implements OnModuleInit {
     await this.prisma.modelProvider.delete({ where: { id: modelProviderId } });
   }
 
-  getSystemInfo(agent: AgentType) {
+  getSystemInfo(agent: string) {
+    const agentType = this.resolveAgentType(agent);
     const home = homedir();
 
     const envVar = (name: string) => {
@@ -366,7 +366,7 @@ export class ModelProviderService implements OnModuleInit {
       };
     };
 
-    if (agent === "claude") {
+    if (agentType === "claude") {
       const configPath = join(home, ".claude.json");
       const configDir = claudeConfigDir(home);
 
@@ -488,7 +488,7 @@ export class ModelProviderService implements OnModuleInit {
   }
 
   private resolveAgentType(agentType: string): AgentType {
-    if (agentType !== "claude" && agentType !== "codex") {
+    if (!isAgentType(agentType)) {
       throw new BadRequestException(`不支持的 agent 类型: ${agentType}`);
     }
     return agentType;

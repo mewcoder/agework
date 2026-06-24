@@ -16,8 +16,10 @@ import { Input } from "@/components/ui/input";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { AgentIcon } from "@/components/icons/agent";
 import type { ModelProvider, ProviderConfigValues } from "@/hooks/model-provider-hooks";
+import { useAgentOptions } from "@/hooks/use-agent-options";
 import { errorMessage } from "@/utils/error";
 import { type ManagedAgent, isManagedAgent, agentOrDefault } from "@/utils/model-provider";
+import { AGENT_LABELS } from "@agework/shared";
 import {
   type ModelProviderDialogFormValues,
   MODEL_CONFIG_NAME_MAX_LENGTH,
@@ -102,6 +104,7 @@ function ModelProviderDialogForm({
 }: ModelProviderDialogFormProps) {
   const isEdit = !!modelProvider;
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const { data: agentOptions } = useAgentOptions();
   const form = useForm<ModelProviderDialogFormValues>({
     resolver: zodResolver(modelProviderDialogFormSchema),
     defaultValues: initialFormValues(modelProvider, agent),
@@ -156,6 +159,9 @@ function ModelProviderDialogForm({
   const apiKeyValue = useWatch({ control: form.control, name: "apiKey" }) ?? "";
   const formId = `model-provider-dialog-form-${modelProvider?.modelProviderId ?? "new"}`;
   const showAgentSelect = allowAgentSelect && !isEdit;
+  const agents = agentOptions?.agents ?? [
+    { id: agent, label: AGENT_LABELS[agent] },
+  ];
   const hasRequiredFields =
     !!baseUrlValue.trim() && !!apiKeyValue.trim() && modelFields.some((m) => m?.trim());
 
@@ -183,16 +189,21 @@ function ModelProviderDialogForm({
                       if (!next || !isManagedAgent(next)) return;
                       field.onChange(next);
                     }}
-                    className="grid w-full grid-cols-2"
+                    className="grid w-full"
+                    style={{
+                      gridTemplateColumns: `repeat(${agents.length}, minmax(0, 1fr))`,
+                    }}
                   >
-                    <ToggleGroupItem value="claude" className="w-full">
-                      <AgentIcon agent="claude" />
-                      Claude
-                    </ToggleGroupItem>
-                    <ToggleGroupItem value="codex" className="w-full">
-                      <AgentIcon agent="codex" />
-                      Codex
-                    </ToggleGroupItem>
+                    {agents.map((option) => (
+                      <ToggleGroupItem
+                        key={option.id}
+                        value={option.id}
+                        className="w-full"
+                      >
+                        <AgentIcon agent={option.id} />
+                        {option.label}
+                      </ToggleGroupItem>
+                    ))}
                   </ToggleGroup>
                   <FieldDescription>
                     选择后会显示对应 Agent 的连接参数
