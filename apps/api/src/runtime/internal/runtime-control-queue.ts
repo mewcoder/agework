@@ -1,8 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { Envelope, ControlPayload } from "@agework/shared/protocol";
+import type {
+  Envelope,
+  ControlPayload,
+  RunEventReceiver,
+} from "@agework/shared/protocol";
 import { errorLogFields, safeLogJson } from "../../common/logging";
-import { RunEventRecorder } from "../../runs/events/run-event-recorder";
-import { RunEventFacts } from "../../runs/events/run-event-facts";
 
 type WorkspaceWaiter = {
   afterSeq: number;
@@ -25,10 +27,11 @@ export class RuntimeControlQueue {
     Envelope<ControlPayload>[]
   >();
   private readonly workspaceWaiters = new Map<string, WorkspaceWaiter[]>();
+  private receiver!: RunEventReceiver;
 
-  constructor(
-    private readonly runEventRecorder: RunEventRecorder
-  ) {}
+  setRunEventReceiver(receiver: RunEventReceiver): void {
+    this.receiver = receiver;
+  }
 
   push(runId: string, envelope: Envelope<ControlPayload>): void {
     let queue = this.queues.get(runId);
@@ -152,14 +155,12 @@ export class RuntimeControlQueue {
   ): void {
     if (!runId) return;
     const control = envelope.payload;
-    this.runEventRecorder
-      .append(
-        RunEventFacts.controlSent({
-          runId,
-          commandId: control.commandId,
-          controlType: control.type,
-        })
-      )
+    this.receiver
+      .recordControlSent({
+        runId,
+        commandId: control.commandId,
+        controlType: control.type,
+      })
       .catch((err) =>
         this.logger.warn(
           `record control sent failed ${safeLogJson({

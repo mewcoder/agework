@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import { IS_PUBLIC_KEY } from "../../auth/public.decorator";
-import { RuntimeInternalController } from "./runtime-internal.controller";
-import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
-import { RunActiveStore } from "../../runs/execution/run-active.store";
-import { RuntimeConfigStore } from "./runtime-config-store";
-import { RuntimeService } from "../runtime.service";
-import { RuntimeControlQueue } from "./runtime-control-queue";
+import { IS_PUBLIC_KEY } from "../auth/public.decorator";
+import { RunInternalController } from "./run-internal.controller";
+import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
+import { RunActiveStore } from "./execution/run-active.store";
+import { RuntimeConfigStore } from "../runtime/internal/runtime-config-store";
+import { RuntimeService } from "../runtime/runtime.service";
+import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
 
 const activeHandle = {
   runtimeHandle: {
@@ -26,7 +26,7 @@ function makeController(opts: {
   const runRegistry: Partial<RunActiveStore> = {
     get: vi.fn().mockReturnValue(opts.handle),
   };
-  return new RuntimeInternalController(
+  return new RunInternalController(
     runEventProcessor as RunEnvelopeProcessor,
     {} as RuntimeConfigStore,
     runRegistry as RunActiveStore,
@@ -35,9 +35,9 @@ function makeController(opts: {
   );
 }
 
-describe("RuntimeInternalController", () => {
+describe("RunInternalController", () => {
   it("is marked @Public() so the global JwtAuthGuard does not block worker callbacks (auth is handled by RuntimeInternalAuthGuard)", () => {
-    expect(Reflect.getMetadata(IS_PUBLIC_KEY, RuntimeInternalController)).toBe(
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, RunInternalController)).toBe(
       true
     );
   });

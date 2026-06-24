@@ -6,8 +6,9 @@ describe("RuntimeControlQueue", () => {
   let queue: RuntimeControlQueue;
 
   beforeEach(() => {
-    queue = new RuntimeControlQueue({
-      append: vi.fn().mockResolvedValue({}),
+    queue = new RuntimeControlQueue();
+    queue.setRunEventReceiver({
+      recordControlSent: vi.fn().mockResolvedValue(undefined),
     } as never);
   });
 

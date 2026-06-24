@@ -8,7 +8,7 @@ import { AdminConfigController } from "../config/admin/admin-config.controller";
 import { ConversationController } from "../conversations/conversation.controller";
 import { AdminModelProviderController } from "../model-providers/admin/admin-model-provider.controller";
 import { ModelProviderController } from "../model-providers/model-provider.controller";
-import { AdminRunController } from "../runtime/admin/admin-run.controller";
+import { AdminRunController } from "../runs/admin/admin-run.controller";
 import { AdminRuntimeController } from "../runtime/admin/admin-runtime.controller";
 import { AdminUserController } from "../users/admin/admin-user.controller";
 import { AdminWorkspaceController } from "../workspaces/admin/admin-workspace.controller";

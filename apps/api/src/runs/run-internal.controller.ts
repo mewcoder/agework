@@ -15,15 +15,15 @@ import type {
   RunConfig,
   RunStatusPayload,
 } from "@agework/shared/protocol";
-import { Public } from "../../auth/public.decorator";
-import { RawResponse } from "../../common/decorators/raw-response.decorator";
-import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
-import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
-import { RunActiveStore } from "../../runs/execution/run-active.store";
-import { RuntimeConfigStore } from "./runtime-config-store";
-import { RuntimeService } from "../runtime.service";
-import { RuntimeControlQueue } from "./runtime-control-queue";
-import { safeLogJson, summarizeEnvelopePayload } from "../../common/logging";
+import { Public } from "../auth/public.decorator";
+import { RawResponse } from "../common/decorators/raw-response.decorator";
+import { RuntimeInternalAuthGuard } from "../runtime/internal/runtime-internal-auth.guard";
+import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
+import { RunActiveStore } from "./execution/run-active.store";
+import { RuntimeConfigStore } from "../runtime/internal/runtime-config-store";
+import { RuntimeService } from "../runtime/runtime.service";
+import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
+import { safeLogJson, summarizeEnvelopePayload } from "../common/logging";
 
 const TERMINAL_RUN_STATUSES: RunStatus[] = ["finished", "error", "cancelled"];
 
@@ -36,8 +36,8 @@ const TERMINAL_RUN_STATUSES: RunStatus[] = ["finished", "error", "cancelled"];
 @RawResponse()
 @Controller("internal/runs")
 @UseGuards(RuntimeInternalAuthGuard)
-export class RuntimeInternalController {
-  private readonly logger = new Logger(RuntimeInternalController.name);
+export class RunInternalController {
+  private readonly logger = new Logger(RunInternalController.name);
 
   constructor(
     private readonly runEventProcessor: RunEnvelopeProcessor,
