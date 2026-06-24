@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 const ACCESS_KEY_BYTES = 32;
 
@@ -13,7 +13,6 @@ export class RuntimeInternalAccessService {
   private readonly runtimeResourceScopeKeys = new Map<string, string>();
   /** RuntimeResource.id → runtimeType */
   private readonly runtimeResourceRuntimeTypes = new Map<string, string>();
-  readonly instanceId = randomUUID().slice(0, 8);
 
   /**
    * 为单个 run 签发内部访问 key。
@@ -120,7 +119,6 @@ export class RuntimeInternalAccessService {
       : undefined;
 
     return {
-      accessStoreInstanceId: this.instanceId,
       accessKeyCount: this.accessKeys.size,
       workspaceKeyCount: this.workspaceKeys.size,
       runtimeResourceKeyCount: this.runtimeResourceKeys.size,
