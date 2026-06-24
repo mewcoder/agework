@@ -42,7 +42,6 @@ import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 import { RunService } from "../runs/run.service";
 import { RunConfigAssembler } from "../runs/run-config.assembler";
 import { RuntimeService } from "./runtime.service";
-import { TitleService } from "../runs/title.service";
 
 // admin
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -107,7 +106,6 @@ import { ConfigService } from "../config/config.service";
     RunService,
     RunConfigAssembler,
     RuntimeService,
-    TitleService,
   ],
   exports: [
     RunRepository,

@@ -13,12 +13,12 @@ import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
 import { ConversationService } from "../conversations/conversation.service";
+import { TitleService } from "../conversations/title.service";
 import {
   RunMessageAggregator,
   type IncompleteMessageReason,
 } from "./execution/run-message.aggregator";
 import { RunConfigAssembler } from "./run-config.assembler";
-import { TitleService } from "./title.service";
 import { ConfigService, type IsolationScope } from "../config/config.service";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
@@ -162,7 +162,7 @@ export class RunService {
       }
     }
 
-    // 5. 保存用户消息 + 触发标题（标题只依赖首条用户消息，与助手回复并行）
+    // 5. 保存用户消息 + 触发会话标题（标题只依赖首条用户消息，与助手回复并行）
     if (conversationId && userMessage) {
       await this.conversationService.saveUserMessage(
         conversationId,
@@ -170,7 +170,7 @@ export class RunService {
       );
 
       this.titleService
-        .maybeGenerate(conversationId, agentType, modelProviderId)
+        .generateIfNeeded({ conversationId, agentType, modelProviderId })
         .catch(
           swallow(
             this.logger,

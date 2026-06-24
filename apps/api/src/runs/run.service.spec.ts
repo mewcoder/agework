@@ -5,9 +5,9 @@ import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
 import { ConversationService } from "../conversations/conversation.service";
+import { TitleService } from "../conversations/title.service";
 import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunConfigAssembler } from "./run-config.assembler";
-import { TitleService } from "./title.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import { PrismaService } from "../prisma/prisma.service";
@@ -135,7 +135,9 @@ describe("RunService", () => {
         agentEventTrace: AGENT_EVENT_TRACE,
       }),
     };
-    mockTitleService = { maybeGenerate: vi.fn().mockResolvedValue(undefined) };
+    mockTitleService = {
+      generateIfNeeded: vi.fn().mockResolvedValue(undefined),
+    };
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
@@ -222,11 +224,11 @@ describe("RunService", () => {
         "conversation-1",
         userMessage
       );
-      expect(mockTitleService.maybeGenerate).toHaveBeenCalledWith(
-        "conversation-1",
-        "claude",
-        "mp-1"
-      );
+      expect(mockTitleService.generateIfNeeded).toHaveBeenCalledWith({
+        conversationId: "conversation-1",
+        agentType: "claude",
+        modelProviderId: "mp-1",
+      });
     });
 
     it("throws BadRequestException when the runtime type is not allowed", async () => {
