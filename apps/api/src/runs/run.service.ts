@@ -5,7 +5,7 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import type { RunConfig, RuntimeHandle } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -453,7 +453,7 @@ export class RunService {
     }
     this.runtimeService.sendControl(handle.runtimeHandle, {
       type: "approval_resolved",
-      commandId: randomUUID(),
+      commandId: generateId(),
       conversationId,
       answers: answers ?? {},
     });

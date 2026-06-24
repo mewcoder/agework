@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { randomUUID } from "node:crypto";
+import { generateId } from "@agework/shared";
 import type {
   RuntimeProvider,
   RuntimeHandle,
@@ -126,7 +126,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
     this.pushScopeControl(resourceKey, runId, {
       type: "user_message",
-      commandId: randomUUID(),
+      commandId: generateId(),
       runId,
       input: runConfig.input,
     });
@@ -348,7 +348,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     }
     this.sendControl(handle, {
       type: "cancel",
-      commandId: randomUUID(),
+      commandId: generateId(),
       runId: handle.runId,
       conversationId: handle.conversationId,
     });

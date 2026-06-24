@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { generateId } from "@agework/shared";
 import type {
   RuntimeProvider,
   RuntimeHandle,
@@ -186,7 +187,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   }
 
   cancel(handle: RuntimeHandle): void {
-    this.sendControl(handle, { type: "cancel", commandId: randomUUID(), runId: handle.runId, conversationId: handle.conversationId });
+    this.sendControl(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
   }
 
   getHandle(runId: string): RuntimeHandle | undefined {
