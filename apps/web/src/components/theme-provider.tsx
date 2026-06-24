@@ -2,7 +2,7 @@
 import * as React from "react";
 
 export type Theme = "dark" | "light" | "system";
-export type ThemeSkin = "default" | "warm" | "harbor" | "cobalt";
+export type ThemeSkin = "default" | "warm" | "harbor" | "cobalt" | "sunset";
 type ResolvedTheme = "dark" | "light";
 
 type ThemeProviderProps = {
@@ -23,7 +23,7 @@ export type ThemeProviderState = {
 
 const COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 const THEME_VALUES: Theme[] = ["dark", "light", "system"];
-const THEME_SKIN_VALUES: ThemeSkin[] = ["default", "warm", "harbor", "cobalt"];
+const THEME_SKIN_VALUES: ThemeSkin[] = ["default", "warm", "harbor", "cobalt", "sunset"];
 
 export const ThemeProviderContext = React.createContext<
   ThemeProviderState | undefined

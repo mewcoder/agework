@@ -70,6 +70,7 @@ const skinOptions = [
   { value: "warm", label: "warm" },
   { value: "harbor", label: "harbor" },
   { value: "cobalt", label: "cobalt" },
+  { value: "sunset", label: "sunset" },
 ] as const;
 
 function UserFooter() {
