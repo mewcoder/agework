@@ -185,9 +185,32 @@ export interface RuntimeHandle {
   conversationId: string;
 }
 
+/**
+ * run 事件的接收端（receiver）：runtime provider 产出 worker 事件，由 run 层提供实现来消费。
+ * provider 只依赖此接口、不直接依赖 run 层实现，从而保持 runtime → run 零依赖。
+ */
+export interface RunEventReceiver {
+  /** 转发 worker 上行事件。 */
+  publish(envelope: Envelope<unknown>): Promise<void>;
+  /** run 是否已处于终态或正在收尾（避免覆盖 finished/cancelled）。 */
+  isTerminalOrFinalizing(runId: string): boolean;
+  /** 强制将 run 置为 error 终态（worker 异常退出 / 心跳超时）。 */
+  forceErrorStatus(runId: string, error: string): Promise<void>;
+  /** 强制将 run 置为 cancelled 终态。 */
+  forceCancelledStatus(runId: string): Promise<void>;
+  /** 记录一次「控制指令已下发」run 事件。 */
+  recordControlSent(input: {
+    runId: string;
+    commandId: string;
+    controlType: string;
+  }): Promise<void>;
+}
+
 /** API 控制面侧的 provider 接口。 */
 export interface RuntimeProvider {
   readonly type: string;
+  /** 注入 run 事件 receiver；由 run 层在启动时一次性 set 进每个 provider。 */
+  setRunEventReceiver(receiver: RunEventReceiver): void;
   /**
    * 启动 worker。`runtimeResourceId` 可能在返回时尚未就绪（如 DockerProvider 的容器 ID
    * 是异步获取的）；此时返回的 handle.runtimeResourceId 为空字符串，

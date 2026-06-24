@@ -7,8 +7,8 @@ import type {
   RuntimePlacement,
   IsolationScope,
   ControlPayload,
+  RunEventReceiver,
 } from "@agework/shared/protocol";
-import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 import { RuntimeConfigStore } from "../internal/runtime-config-store";
 import { RuntimeInternalAccessService } from "../internal/runtime-internal-access.service";
 import { RuntimeControlQueue } from "../internal/runtime-control-queue";
@@ -51,9 +51,9 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   private readonly controlSeqs = new Map<string, number>();
 
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
+  private receiver!: RunEventReceiver;
 
   constructor(
-    private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runtimeAccess: RuntimeInternalAccessService,
     private readonly controlQueue: RuntimeControlQueue,
@@ -62,6 +62,10 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));
+  }
+
+  setRunEventReceiver(receiver: RunEventReceiver): void {
+    this.receiver = receiver;
   }
 
   start(
@@ -157,7 +161,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
         })
         .catch((err) => {
           publishWorkerErrorStatus(
-            this.runEventProcessor,
+            this.receiver,
             runId,
             `sandbox create failed: ${String(err)}`
           );
@@ -274,7 +278,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
             }
             for (const rid of targetRunIds) {
               publishWorkerErrorStatus(
-                this.runEventProcessor,
+                this.receiver,
                 rid,
                 "worker heartbeat timeout"
               );
@@ -292,7 +296,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
             })}`
           );
           publishWorkerErrorStatus(
-            this.runEventProcessor,
+            this.receiver,
             runId,
             `sandbox create failed: ${String(err)}`
           );
@@ -575,8 +579,8 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   }
 
   private forceCancelled(runId: string): void {
-    if (this.runEventProcessor.isTerminalOrFinalizing(runId)) return;
-    this.runEventProcessor
+    if (this.receiver.isTerminalOrFinalizing(runId)) return;
+    this.receiver
       .forceCancelledStatus(runId)
       .catch(swallow(this.logger, `force cancelled status for run ${runId}`));
   }

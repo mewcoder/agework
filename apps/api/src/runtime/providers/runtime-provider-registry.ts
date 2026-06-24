@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { RuntimeProvider } from "@agework/shared/protocol";
+import type { RuntimeProvider, RunEventReceiver } from "@agework/shared/protocol";
 import { RUNTIME_PROVIDERS } from "./runtime-provider.token";
 
 @Injectable()
@@ -16,5 +16,12 @@ export class RuntimeProviderRegistry {
       throw new Error(`Unknown runtime provider: ${type}`);
     }
     return provider;
+  }
+
+  /** 由 run 层在启动时注入 receiver 到所有 provider。 */
+  setRunEventReceiver(receiver: RunEventReceiver): void {
+    for (const provider of this.providers.values()) {
+      provider.setRunEventReceiver(receiver);
+    }
   }
 }

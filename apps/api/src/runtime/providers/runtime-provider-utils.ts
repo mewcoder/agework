@@ -1,6 +1,9 @@
 import { Logger } from "@nestjs/common";
-import type { ControlPayload, Envelope } from "@agework/shared/protocol";
-import type { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
+import type {
+  ControlPayload,
+  Envelope,
+  RunEventReceiver,
+} from "@agework/shared/protocol";
 import { resolveApiBasePath } from "../../common/path.util";
 import { swallow } from "../../common/swallow";
 import { EnvKey } from "../../config/env-key";
@@ -55,15 +58,15 @@ export class HeartbeatWatchdog {
 /** 发布 run.status=error 终态事件（worker 异常退出 / 心跳超时），失败时静默忽略。
  *  若 run 已在终态处理中或已完成终态则跳过，避免覆盖 legitimate 的 finished/cancelled 状态。 */
 export function publishWorkerErrorStatus(
-  runEventProcessor: RunEnvelopeProcessor,
+  receiver: RunEventReceiver,
   runId: string,
   error: string
 ): Promise<void> {
-  if (runEventProcessor.isTerminalOrFinalizing(runId)) {
+  if (receiver.isTerminalOrFinalizing(runId)) {
     logger.debug(`Skipping error status for already-terminal run ${runId}`);
     return Promise.resolve();
   }
-  return runEventProcessor
+  return receiver
     .forceErrorStatus(runId, error)
     .catch(swallow(logger, `force error status for run ${runId}`));
 }

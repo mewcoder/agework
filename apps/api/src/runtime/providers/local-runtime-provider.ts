@@ -9,10 +9,8 @@ import type {
   RuntimePlacement,
   ControlPayload,
   Envelope,
+  RunEventReceiver,
 } from "@agework/shared/protocol";
-import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
-import { RunEventRecorder } from "../../runs/events/run-event-recorder";
-import { RunEventFacts } from "../../runs/events/run-event-facts";
 import {
   HeartbeatWatchdog,
   nextControlEnvelope,
@@ -43,11 +41,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   private readonly states = new Map<string, LocalRunState>();
   private readonly heartbeats = new HeartbeatWatchdog();
   private readonly controlSeqs = new Map<string, number>();
+  private receiver!: RunEventReceiver;
 
-  constructor(
-    private readonly runEventProcessor: RunEnvelopeProcessor,
-    private readonly runEventRecorder: RunEventRecorder
-  ) {}
+  setRunEventReceiver(receiver: RunEventReceiver): void {
+    this.receiver = receiver;
+  }
 
   start(runConfig: RunConfig, _placement: RuntimePlacement): RuntimeHandle {
     const startToken = randomUUID();
@@ -100,7 +98,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       if (envelope.type === "heartbeat") {
         this.heartbeats.beat(runId);
       }
-      this.runEventProcessor.publish(envelope).catch((err) => {
+      this.receiver.publish(envelope).catch((err) => {
         this.logger.warn(
           `runtime event publish failed ${safeLogJson({
             runId,
@@ -119,7 +117,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
           `local worker exited unexpectedly ${safeLogJson({ runId, code })}`
         );
         publishWorkerErrorStatus(
-          this.runEventProcessor,
+          this.receiver,
           runId,
           `worker exited with code ${code}`
         );
@@ -141,7 +139,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       );
       child.kill();
       this.cleanup(runId);
-      publishWorkerErrorStatus(this.runEventProcessor, runId, "worker heartbeat timeout");
+      publishWorkerErrorStatus(this.receiver, runId, "worker heartbeat timeout");
     });
 
     return handle;
@@ -166,14 +164,12 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       handle.runId,
       control
     );
-    this.runEventRecorder
-      .append(
-        RunEventFacts.controlSent({
-          runId: handle.runId,
-          commandId: control.commandId,
-          controlType: control.type,
-        })
-      )
+    this.receiver
+      .recordControlSent({
+        runId: handle.runId,
+        commandId: control.commandId,
+        controlType: control.type,
+      })
       .catch((err) => {
         this.logger.warn(
           `record control sent failed ${safeLogJson({

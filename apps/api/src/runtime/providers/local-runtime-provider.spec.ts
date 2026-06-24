@@ -1,19 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime-provider";
-import { RunEnvelopeProcessor } from "../../runs/execution/run-envelope.processor";
 
 describe("LocalRuntimeProvider", () => {
   let provider: LocalRuntimeProvider;
-  let mockEventProcessor: Partial<RunEnvelopeProcessor>;
 
   beforeEach(() => {
-    mockEventProcessor = {
+    provider = new LocalRuntimeProvider();
+    provider.setRunEventReceiver({
       publish: vi.fn().mockResolvedValue(undefined),
-    };
-    provider = new LocalRuntimeProvider(
-      mockEventProcessor as RunEnvelopeProcessor,
-      { append: vi.fn().mockResolvedValue({}) } as never
-    );
+      isTerminalOrFinalizing: vi.fn().mockReturnValue(false),
+      forceErrorStatus: vi.fn().mockResolvedValue(undefined),
+      forceCancelledStatus: vi.fn().mockResolvedValue(undefined),
+      recordControlSent: vi.fn().mockResolvedValue(undefined),
+    });
   });
 
   afterEach(() => {

@@ -64,7 +64,6 @@ function makeProvider(engineOverride?: SandboxEngine) {
   };
 
   const provider = new SandboxRuntimeProvider(
-    eventProcessor as never,
     configStore as never,
     access as never,
     controlQueue as never,
@@ -72,6 +71,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     workspaceRuntimeService as never,
     [engine]
   );
+  provider.setRunEventReceiver(eventProcessor as never);
 
   return {
     provider, engine, access, controlQueue, configStore, eventProcessor,

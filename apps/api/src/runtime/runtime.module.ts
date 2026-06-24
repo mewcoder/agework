@@ -42,6 +42,7 @@ import { RuntimeControlQueue } from "./internal/runtime-control-queue";
 // runner
 import { RunService } from "../runs/run.service";
 import { RunConfigAssembler } from "../runs/run-config.assembler";
+import { RunEventReceiverImpl } from "../runs/execution/run-event-receiver";
 import { RuntimeService } from "./runtime.service";
 
 // admin
@@ -107,6 +108,7 @@ import { ConfigService } from "../config/config.service";
     // runner
     RunService,
     RunConfigAssembler,
+    RunEventReceiverImpl,
     RuntimeService,
   ],
   exports: [
@@ -121,9 +123,15 @@ import { ConfigService } from "../config/config.service";
   ],
 })
 export class RuntimeModule implements OnModuleInit {
-  constructor(private readonly runRecovery: RunRecoveryUseCase) {}
+  constructor(
+    private readonly runRecovery: RunRecoveryUseCase,
+    private readonly providerRegistry: RuntimeProviderRegistry,
+    private readonly runEventReceiver: RunEventReceiverImpl
+  ) {}
 
   async onModuleInit() {
+    // run 层把事件 receiver 注入每个 runtime provider（provider 不直接依赖 run 实现）
+    this.providerRegistry.setRunEventReceiver(this.runEventReceiver);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

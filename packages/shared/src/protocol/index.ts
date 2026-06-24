@@ -36,6 +36,7 @@ export type {
   RuntimeTransport,
   RuntimeHandle,
   RuntimeProvider,
+  RunEventReceiver,
   IsolationScope,
   RuntimePlacement,
 } from "./transport";
