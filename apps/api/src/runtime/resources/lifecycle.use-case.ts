@@ -2,9 +2,9 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeProviderRegistry } from "../providers/provider-registry";
 import {
-  runtimeResourceMetadataJson,
-  stoppedResourceMetadata,
-} from "./runtime-resource-metadata";
+  runtimeInstanceMetadataJson,
+  stoppedInstanceMetadata,
+} from "./runtime-instance-metadata";
 import { runtimeResourceKeyForOwner } from "./runtime-resource";
 
 /**
@@ -13,8 +13,8 @@ import { runtimeResourceKeyForOwner } from "./runtime-resource";
  * - user 删除：关闭该用户名下的所有 user/workspace 隔离资源。
  */
 @Injectable()
-export class RuntimeResourceLifecycleUseCase {
-  private readonly logger = new Logger(RuntimeResourceLifecycleUseCase.name);
+export class RuntimeInstanceLifecycleUseCase {
+  private readonly logger = new Logger(RuntimeInstanceLifecycleUseCase.name);
 
   constructor(
     private readonly prisma: PrismaService,
@@ -23,7 +23,7 @@ export class RuntimeResourceLifecycleUseCase {
 
   /** 关闭专属于该 workspace 的 runtime 资源（user 隔离下的共享资源不受影响）。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
-    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
+    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -36,12 +36,12 @@ export class RuntimeResourceLifecycleUseCase {
         await this.shutdownResource(resource);
       }
     }
-    await this.prisma.workspaceRuntimeResource.deleteMany({ where: { workspaceId } });
+    await this.prisma.workspaceRuntimeInstance.deleteMany({ where: { workspaceId } });
   }
 
   /** 关闭该用户名下所有 runtime 资源（user 级共享资源 + 该用户所有 workspace 级资源）。 */
   async shutdownForUser(userId: string): Promise<void> {
-    const resources = await this.prisma.runtimeResource.findMany({
+    const resources = await this.prisma.runtimeInstance.findMany({
       where: { ownerUserId: userId, status: "running" },
     });
     for (const resource of resources) {
@@ -62,14 +62,14 @@ export class RuntimeResourceLifecycleUseCase {
         resource.runtimeType
       );
       await Promise.resolve(
-        provider.shutdownRuntimeResource?.(resourceKey)
+        provider.shutdownRuntimeInstance?.(resourceKey)
       );
-      await this.prisma.runtimeResource.update({
+      await this.prisma.runtimeInstance.update({
         where: { id: resource.id },
         data: {
           status: "stopped",
-          metadata: runtimeResourceMetadataJson(
-            stoppedResourceMetadata({
+          metadata: runtimeInstanceMetadataJson(
+            stoppedInstanceMetadata({
               runtimeType: resource.runtimeType,
               isolationScope: resource.isolationScope,
               resourceKey,

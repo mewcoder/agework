@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import type { RunConfig, SandboxRuntimePlacement } from "@agework/shared/protocol";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
-import { SandboxRuntimeResourceService } from "./runtime-resource.service";
+import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
 
 function makeEngine(): SandboxEngine {
   let nextId = 0;
@@ -63,17 +63,17 @@ function makeService(engine = makeEngine()) {
   const workspaceRuntimeService = {
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
-      workspaceRuntimeResource: { id: "wr-1" },
+      workspaceRuntimeInstance: { id: "wr-1" },
     }),
     markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
-    isRuntimeResourceBoundToWorkspace: vi.fn().mockResolvedValue(false),
+    isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const access = {
     issueWorkspaceKey: vi.fn().mockReturnValue("workspace-key"),
-    issueRuntimeResourceKey: vi.fn(),
+    issueRuntimeInstanceKey: vi.fn(),
     revokeWorkspace: vi.fn(),
   };
-  const service = new SandboxRuntimeResourceService(
+  const service = new SandboxRuntimeInstanceService(
     config as never,
     workspaceRuntimeService as never,
     access as never,
@@ -110,7 +110,7 @@ async function flushPromises() {
   }
 }
 
-describe("SandboxRuntimeResourceService", () => {
+describe("SandboxRuntimeInstanceService", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -149,7 +149,7 @@ describe("SandboxRuntimeResourceService", () => {
     const handle = service.createRunHandle(context);
     const onReady = vi.fn();
 
-    service.attachOrStartRuntimeResource(
+    service.attachOrStartRuntimeInstance(
       { context, scopeState, handle, onRuntimeResourceIdReady: onReady },
       makeCallbacks()
     );
@@ -175,7 +175,7 @@ describe("SandboxRuntimeResourceService", () => {
       "ws-1",
       "docker-resource-1"
     );
-    expect(access.issueRuntimeResourceKey).toHaveBeenCalledWith(
+    expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
       "rr-1",
       "ws-1",
       "sandbox"
@@ -198,7 +198,7 @@ describe("SandboxRuntimeResourceService", () => {
     const callbacks = makeCallbacks();
     callbacks.consumeCancelledStartingRun.mockReturnValueOnce(true);
 
-    service.attachOrStartRuntimeResource(
+    service.attachOrStartRuntimeInstance(
       { context, scopeState, handle: service.createRunHandle(context) },
       callbacks
     );
@@ -218,7 +218,7 @@ describe("SandboxRuntimeResourceService", () => {
     const context = service.resolveWorkerExecutionContext(makeStartInput());
     const scopeState = service.ensureScopeState(context);
     scopeState.activeRuns.set("run-1", "conversation-1");
-    service.attachOrStartRuntimeResource(
+    service.attachOrStartRuntimeInstance(
       { context, scopeState, handle: service.createRunHandle(context) },
       makeCallbacks()
     );
@@ -235,19 +235,19 @@ describe("SandboxRuntimeResourceService", () => {
     );
   });
 
-  it("shutdownRuntimeResource stops active resource and cleans workspace state", async () => {
+  it("shutdownRuntimeInstance stops active resource and cleans workspace state", async () => {
     const { service, engine, access, workspaceRuntimeService } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
     const scopeState = service.ensureScopeState(context);
     scopeState.activeRuns.set("run-1", "conversation-1");
-    service.attachOrStartRuntimeResource(
+    service.attachOrStartRuntimeInstance(
       { context, scopeState, handle: service.createRunHandle(context) },
       makeCallbacks()
     );
     await flushPromises();
     const callbacks = { cleanupWorkspace: vi.fn() };
 
-    service.shutdownRuntimeResource("ws-1", callbacks);
+    service.shutdownRuntimeInstance("ws-1", callbacks);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
     expect(access.revokeWorkspace).toHaveBeenCalledWith("ws-1");

@@ -3,11 +3,11 @@ import { generateId } from "@agework/shared";
 import type { SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
-  runtimeResourceMetadataJson,
-  runningResourceMetadata,
-  statusResourceMetadata,
-  stoppedResourceMetadata,
-} from "./runtime-resource-metadata";
+  runtimeInstanceMetadataJson,
+  runningInstanceMetadata,
+  statusInstanceMetadata,
+  stoppedInstanceMetadata,
+} from "./runtime-instance-metadata";
 
 function ownerWhere(placement: SandboxRuntimePlacement) {
   const isolationScope = placement.sandbox.isolationScope;
@@ -48,11 +48,11 @@ function ownerWhereByResourceKey(
  * WorkspaceRuntime 表达业务绑定，RuntimeResource 表达容器/沙箱资源生命周期。
  */
 @Injectable()
-export class WorkspaceRuntimeResourceRepository {
+export class WorkspaceRuntimeInstanceRepository {
   constructor(private prisma: PrismaService) {}
 
   async findActiveByWorkspace(workspaceId: string) {
-    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
+    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -67,13 +67,13 @@ export class WorkspaceRuntimeResourceRepository {
   ) {
     const where = ownerWhere(placement);
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.runtimeResource.findFirst({ where });
+      const existing = await tx.runtimeInstance.findFirst({ where });
       const data = {
         runtimeResourceId,
         status: "running",
         expiresAt: null,
-        metadata: runtimeResourceMetadataJson(
-          runningResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          runningInstanceMetadata({
             placement,
             resourceKey,
             runtimeResourceId,
@@ -83,18 +83,18 @@ export class WorkspaceRuntimeResourceRepository {
         ),
       };
       const resource = existing
-        ? await tx.runtimeResource.update({
+        ? await tx.runtimeInstance.update({
             where: { id: existing.id },
             data,
           })
-        : await tx.runtimeResource.create({
+        : await tx.runtimeInstance.create({
             data: {
               id: generateId(),
               ...where,
               ...data,
             },
           });
-      const workspaceRuntimeResource = await tx.workspaceRuntimeResource.upsert({
+      const workspaceRuntimeInstance = await tx.workspaceRuntimeInstance.upsert({
         where: { workspaceId: placement.workspaceId },
         create: {
           id: generateId(),
@@ -105,18 +105,18 @@ export class WorkspaceRuntimeResourceRepository {
           resourceId: resource.id,
         },
       });
-      return { resource, workspaceRuntimeResource };
+      return { resource, workspaceRuntimeInstance };
     });
   }
 
   async markStopped(placement: SandboxRuntimePlacement) {
     const isolationScope = placement.sandbox.isolationScope;
-    await this.prisma.runtimeResource.updateMany({
+    await this.prisma.runtimeInstance.updateMany({
       where: ownerWhere(placement),
       data: {
         status: "stopped",
-        metadata: runtimeResourceMetadataJson(
-          stoppedResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          stoppedInstanceMetadata({
             runtimeType: placement.runtimeType,
             isolationScope,
             resourceKey:
@@ -135,7 +135,7 @@ export class WorkspaceRuntimeResourceRepository {
     isolationScope: string,
     resourceKey: string
   ) {
-    await this.prisma.runtimeResource.updateMany({
+    await this.prisma.runtimeInstance.updateMany({
       where: ownerWhereByResourceKey(
         runtimeType,
         isolationScope,
@@ -143,8 +143,8 @@ export class WorkspaceRuntimeResourceRepository {
       ),
       data: {
         status: "stopped",
-        metadata: runtimeResourceMetadataJson(
-          stoppedResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          stoppedInstanceMetadata({
             runtimeType,
             isolationScope,
             resourceKey,
@@ -161,7 +161,7 @@ export class WorkspaceRuntimeResourceRepository {
     resourceKey: string,
     reason = "missing"
   ) {
-    await this.prisma.runtimeResource.updateMany({
+    await this.prisma.runtimeInstance.updateMany({
       where: ownerWhereByResourceKey(
         runtimeType,
         isolationScope,
@@ -169,8 +169,8 @@ export class WorkspaceRuntimeResourceRepository {
       ),
       data: {
         status: "missing",
-        metadata: runtimeResourceMetadataJson(
-          statusResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          statusInstanceMetadata({
             runtimeType,
             isolationScope,
             resourceKey,
@@ -187,7 +187,7 @@ export class WorkspaceRuntimeResourceRepository {
     resourceKey: string,
     errorMessage: string
   ) {
-    await this.prisma.runtimeResource.updateMany({
+    await this.prisma.runtimeInstance.updateMany({
       where: ownerWhereByResourceKey(
         runtimeType,
         isolationScope,
@@ -195,8 +195,8 @@ export class WorkspaceRuntimeResourceRepository {
       ),
       data: {
         status: "error",
-        metadata: runtimeResourceMetadataJson(
-          statusResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          statusInstanceMetadata({
             runtimeType,
             isolationScope,
             resourceKey,
@@ -212,7 +212,7 @@ export class WorkspaceRuntimeResourceRepository {
     runtimeType: string,
     runtimeResourceId: string
   ) {
-    const resource = await this.prisma.runtimeResource.findUnique({
+    const resource = await this.prisma.runtimeInstance.findUnique({
       where: {
         runtimeType_runtimeResourceId: {
           runtimeType,
@@ -223,12 +223,12 @@ export class WorkspaceRuntimeResourceRepository {
     return resource?.status === "running" ? resource : null;
   }
 
-  async isRuntimeResourceBoundToWorkspace(
+  async isRuntimeInstanceBoundToWorkspace(
     runtimeType: string,
     workspaceId: string,
     runtimeResourceId: string
   ) {
-    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
+    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -239,13 +239,13 @@ export class WorkspaceRuntimeResourceRepository {
   }
 
   async deleteWorkspaceBinding(workspaceId: string) {
-    await this.prisma.workspaceRuntimeResource.deleteMany({
+    await this.prisma.workspaceRuntimeInstance.deleteMany({
       where: { workspaceId },
     });
   }
 
   async deleteStaleResources() {
-    return this.prisma.runtimeResource.deleteMany({
+    return this.prisma.runtimeInstance.deleteMany({
       where: { status: "stale" },
     });
   }

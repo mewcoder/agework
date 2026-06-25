@@ -6,7 +6,7 @@ import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry"
 
 function makePrisma() {
   return {
-    runtimeResource: {
+    runtimeInstance: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
       update: vi.fn().mockResolvedValue({}),
@@ -108,7 +108,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
     };
     const prisma = makePrisma();
-    prisma.runtimeResource.findMany.mockResolvedValue([
+    prisma.runtimeInstance.findMany.mockResolvedValue([
       {
         id: "rr-1",
         runtimeType: "sandbox",
@@ -139,7 +139,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
     expect(mockProviderRegistry.resolve).toHaveBeenCalledWith("sandbox");
     expect(recoverOrphan).toHaveBeenCalledWith("container-ws1");
     expect(recoverOrphan).toHaveBeenCalledWith("container-ws2");
-    expect(prisma.runtimeResource.update).toHaveBeenCalledWith({
+    expect(prisma.runtimeInstance.update).toHaveBeenCalledWith({
       where: { id: "rr-1" },
       data: {
         status: "stopped",
@@ -150,7 +150,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         }),
       },
     });
-    expect(prisma.runtimeResource.update).toHaveBeenCalledWith({
+    expect(prisma.runtimeInstance.update).toHaveBeenCalledWith({
       where: { id: "rr-2" },
       data: {
         status: "stopped",
@@ -173,7 +173,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
     };
     const prisma = makePrisma();
-    prisma.runtimeResource.findMany.mockResolvedValue([
+    prisma.runtimeInstance.findMany.mockResolvedValue([
       {
         id: "rr-1",
         runtimeType: "sandbox",
@@ -194,6 +194,6 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
     await service.recoverOrphanRuns();
 
     expect(recoverOrphan).not.toHaveBeenCalled();
-    expect(prisma.runtimeResource.update).not.toHaveBeenCalled();
+    expect(prisma.runtimeInstance.update).not.toHaveBeenCalled();
   });
 });

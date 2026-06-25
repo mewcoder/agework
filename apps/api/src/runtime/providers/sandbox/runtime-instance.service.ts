@@ -10,7 +10,7 @@ import { isSandboxPlacement } from "../../resources/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
 import { RuntimeInternalAccessService } from "../../internal/access.service";
-import { WorkspaceRuntimeResourceRepository } from "../../resources/workspace-runtime-resource.repository";
+import { WorkspaceRuntimeInstanceRepository } from "../../resources/workspace-runtime-instance.repository";
 import { swallow } from "../../../common/swallow";
 import {
   HeartbeatWatchdog,
@@ -50,14 +50,14 @@ export type SandboxWorkerExecutionContext = {
   engine: SandboxEngine;
 };
 
-export type SandboxRuntimeResourceAttachment = {
+export type SandboxRuntimeInstanceAttachment = {
   context: SandboxWorkerExecutionContext;
   scopeState: SandboxScopeState;
   handle: WorkerExecutionHandle;
   onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
 };
 
-export type SandboxRuntimeResourceCallbacks = {
+export type SandboxRuntimeInstanceCallbacks = {
   consumeCancelledStartingRun(runId: string): boolean;
   forceCancelled(runId: string): void;
   publishWorkerError(runId: string, error: string): void;
@@ -65,8 +65,8 @@ export type SandboxRuntimeResourceCallbacks = {
 };
 
 @Injectable()
-export class SandboxRuntimeResourceService {
-  private readonly logger = new Logger(SandboxRuntimeResourceService.name);
+export class SandboxRuntimeInstanceService {
+  private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
   private readonly scopeStates = new Map<string, SandboxScopeState>();
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
@@ -76,7 +76,7 @@ export class SandboxRuntimeResourceService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeResourceRepository,
+    private readonly workspaceRuntimeService: WorkspaceRuntimeInstanceRepository,
     private readonly runtimeAccess: RuntimeInternalAccessService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
@@ -89,7 +89,7 @@ export class SandboxRuntimeResourceService {
     const placement = input.runtimeResource;
     if (!isSandboxPlacement(placement)) {
       throw new Error(
-        `SandboxRuntimeResourceService requires sandbox placement, got runtimeType=${placement.runtimeType}`
+        `SandboxRuntimeInstanceService requires sandbox placement, got runtimeType=${placement.runtimeType}`
       );
     }
     const engineType =
@@ -151,23 +151,23 @@ export class SandboxRuntimeResourceService {
     return scopeState;
   }
 
-  attachOrStartRuntimeResource(
-    attachment: SandboxRuntimeResourceAttachment,
-    callbacks: SandboxRuntimeResourceCallbacks
+  attachOrStartRuntimeInstance(
+    attachment: SandboxRuntimeInstanceAttachment,
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, scopeState } = attachment;
     if (scopeState.runtimeResourceId) {
-      this.attachReadyRuntimeResource(attachment);
+      this.attachReadyRuntimeInstance(attachment);
       return;
     }
 
     const existingPending = this.pendingSandboxes.get(context.resourceKey);
     if (existingPending) {
-      this.attachPendingRuntimeResource(attachment, existingPending, callbacks);
+      this.attachPendingRuntimeInstance(attachment, existingPending, callbacks);
       return;
     }
 
-    this.startRuntimeResourceForScope(attachment, callbacks);
+    this.startRuntimeInstanceForScope(attachment, callbacks);
   }
 
   findScopeKeyByRun(runId: string): string | undefined {
@@ -200,7 +200,7 @@ export class SandboxRuntimeResourceService {
     this.heartbeats.beat(scopeKey);
   }
 
-  heartbeatRuntimeResource(resourceKey: string): void {
+  heartbeatRuntimeInstance(resourceKey: string): void {
     this.heartbeats.beat(resourceKey);
   }
 
@@ -218,9 +218,9 @@ export class SandboxRuntimeResourceService {
     }
   }
 
-  shutdownRuntimeResource(
+  shutdownRuntimeInstance(
     resourceKey: string,
-    callbacks: Pick<SandboxRuntimeResourceCallbacks, "cleanupWorkspace">
+    callbacks: Pick<SandboxRuntimeInstanceCallbacks, "cleanupWorkspace">
   ): void {
     const state = this.scopeStates.get(resourceKey);
     this.heartbeats.stop(resourceKey);
@@ -259,8 +259,8 @@ export class SandboxRuntimeResourceService {
     }
   }
 
-  private attachReadyRuntimeResource(
-    attachment: SandboxRuntimeResourceAttachment
+  private attachReadyRuntimeInstance(
+    attachment: SandboxRuntimeInstanceAttachment
   ): void {
     const { context, scopeState, handle } = attachment;
     handle.runtimeResourceId = scopeState.runtimeResourceId;
@@ -271,10 +271,10 @@ export class SandboxRuntimeResourceService {
     );
   }
 
-  private attachPendingRuntimeResource(
-    attachment: SandboxRuntimeResourceAttachment,
+  private attachPendingRuntimeInstance(
+    attachment: SandboxRuntimeInstanceAttachment,
     runtimePromise: Promise<SandboxRuntime>,
-    callbacks: SandboxRuntimeResourceCallbacks
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, handle, onRuntimeResourceIdReady } = attachment;
     void runtimePromise
@@ -310,9 +310,9 @@ export class SandboxRuntimeResourceService {
       });
   }
 
-  private startRuntimeResourceForScope(
-    attachment: SandboxRuntimeResourceAttachment,
-    callbacks: SandboxRuntimeResourceCallbacks
+  private startRuntimeInstanceForScope(
+    attachment: SandboxRuntimeInstanceAttachment,
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, scopeState } = attachment;
     const engineInput = this.buildSandboxStartInput(
@@ -331,10 +331,10 @@ export class SandboxRuntimeResourceService {
 
     void runtimePromise
       .then((runtime) =>
-        this.onRuntimeResourceStarted(attachment, runtime, callbacks)
+        this.onRuntimeInstanceStarted(attachment, runtime, callbacks)
       )
       .catch((err) =>
-        this.onRuntimeResourceStartFailed(context, err, callbacks)
+        this.onRuntimeInstanceStartFailed(context, err, callbacks)
       );
   }
 
@@ -379,8 +379,8 @@ export class SandboxRuntimeResourceService {
       },
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
       runtimeLogMountPath: CONTAINER_RUNTIME_LOG_DIR,
-      isExpectedRuntimeResource: (runtimeResourceId: string) =>
-        this.workspaceRuntimeService.isRuntimeResourceBoundToWorkspace(
+      isExpectedRuntimeInstance: (runtimeResourceId: string) =>
+        this.workspaceRuntimeService.isRuntimeInstanceBoundToWorkspace(
           "sandbox",
           context.workspaceId,
           runtimeResourceId
@@ -388,10 +388,10 @@ export class SandboxRuntimeResourceService {
     };
   }
 
-  private onRuntimeResourceStarted(
-    attachment: SandboxRuntimeResourceAttachment,
+  private onRuntimeInstanceStarted(
+    attachment: SandboxRuntimeInstanceAttachment,
     runtime: SandboxRuntime,
-    callbacks: SandboxRuntimeResourceCallbacks
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, handle, onRuntimeResourceIdReady } = attachment;
     this.pendingSandboxes.delete(context.resourceKey);
@@ -429,10 +429,10 @@ export class SandboxRuntimeResourceService {
     );
   }
 
-  private onRuntimeResourceStartFailed(
+  private onRuntimeInstanceStartFailed(
     context: SandboxWorkerExecutionContext,
     err: unknown,
-    callbacks: SandboxRuntimeResourceCallbacks
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     this.pendingSandboxes.delete(context.resourceKey);
     this.logger.error(
@@ -460,7 +460,7 @@ export class SandboxRuntimeResourceService {
 
   private forceCancelledStartingRuns(
     state: SandboxScopeState,
-    callbacks: SandboxRuntimeResourceCallbacks
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     for (const runId of state.activeRuns.keys()) {
       if (callbacks.consumeCancelledStartingRun(runId)) {
@@ -474,7 +474,7 @@ export class SandboxRuntimeResourceService {
     resourceKey: string,
     fallbackRunId: string,
     runtime: SandboxRuntime,
-    callbacks: SandboxRuntimeResourceCallbacks
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     this.heartbeats.start(resourceKey, () => {
       const state = this.scopeStates.get(resourceKey);
@@ -583,7 +583,7 @@ export class SandboxRuntimeResourceService {
     return this.workspaceRuntimeService
       .upsertRunning(placement, resourceKey, runtimeResourceId)
       .then(({ resource }) => {
-        this.runtimeAccess.issueRuntimeResourceKey(
+        this.runtimeAccess.issueRuntimeInstanceKey(
           resource.id,
           resourceKey,
           resource.runtimeType

@@ -62,7 +62,7 @@ export class DockerSandboxEngine implements SandboxEngine {
       }));
     } catch (err) {
       const conflictingContainerId = parseDockerNameConflictContainerId(err);
-      if (!conflictingContainerId || !input.isExpectedRuntimeResource) {
+      if (!conflictingContainerId || !input.isExpectedRuntimeInstance) {
         throw err;
       }
 
@@ -74,10 +74,10 @@ export class DockerSandboxEngine implements SandboxEngine {
         throw err;
       }
 
-      let isExpectedRuntimeResource: boolean;
+      let isExpectedRuntimeInstance: boolean;
       try {
-        isExpectedRuntimeResource =
-          await input.isExpectedRuntimeResource(runtimeResourceId);
+        isExpectedRuntimeInstance =
+          await input.isExpectedRuntimeInstance(runtimeResourceId);
       } catch (lookupErr) {
         this.logger.warn(
           `workspace runtime binding lookup failed for ${runtimeResourceId.slice(0, 12)}: ${String(lookupErr)}`
@@ -85,7 +85,7 @@ export class DockerSandboxEngine implements SandboxEngine {
         throw err;
       }
 
-      if (isExpectedRuntimeResource) {
+      if (isExpectedRuntimeInstance) {
         throw err;
       }
 
@@ -136,8 +136,8 @@ export class DockerSandboxEngine implements SandboxEngine {
     runtimeResourceId: string,
     input: SandboxStartInput
   ): Promise<SandboxRuntime> {
-    if (input.isExpectedRuntimeResource) {
-      const isOurs = await input.isExpectedRuntimeResource(runtimeResourceId);
+    if (input.isExpectedRuntimeInstance) {
+      const isOurs = await input.isExpectedRuntimeInstance(runtimeResourceId);
       if (!isOurs) {
         throw new Error(
           `Container ${runtimeResourceId.slice(0, 12)} is not bound to the current workspace`

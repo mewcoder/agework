@@ -37,7 +37,7 @@ export type AdminRunResponse = {
 
 export type AdminRunListResponse = PaginatedListResponse<AdminRunResponse>;
 
-export type AdminRunRuntimeResourceResponse = {
+export type AdminRunRuntimeInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
@@ -72,7 +72,7 @@ export type AdminRunDetailResponse = AdminRunResponse & {
     id: string;
     username: string | null;
   };
-  runtimeResource: AdminRunRuntimeResourceResponse | null;
+  runtimeResource: AdminRunRuntimeInstanceResponse | null;
 };
 
 export type AdminRunEventResponse = {
@@ -117,9 +117,9 @@ export type AdminRunEventListQuery = {
 export type AdminRunEventListResponse =
   PaginatedListResponse<AdminRunEventResponse>;
 
-export type RuntimeResourceIdRequest = { id: string };
+export type RuntimeInstanceIdRequest = { id: string };
 
-export type RuntimeResourceStatus =
+export type RuntimeInstanceStatus =
   | "starting"
   | "running"
   | "stopped"
@@ -127,7 +127,7 @@ export type RuntimeResourceStatus =
   | "error"
   | "stale";
 
-export type RuntimeResourceDiagnosticsResponse = {
+export type RuntimeInstanceDiagnosticsResponse = {
   resourceKey?: string;
   workspaceId?: string;
   statusReason?: string;
@@ -138,7 +138,7 @@ export type RuntimeResourceDiagnosticsResponse = {
   runtimeResourceId?: string;
 };
 
-export type RuntimeResourceResponse = {
+export type RuntimeInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
@@ -146,12 +146,12 @@ export type RuntimeResourceResponse = {
   ownerWorkspaceId: string | null;
   resourceKey: string;
   runtimeResourceId: string;
-  status: RuntimeResourceStatus;
+  status: RuntimeInstanceStatus;
   isReusable: boolean;
   workspaceCount: number;
   expiresAt: string | null;
   metadata: unknown;
-  diagnostics: RuntimeResourceDiagnosticsResponse;
+  diagnostics: RuntimeInstanceDiagnosticsResponse;
   createdAt: string;
   updatedAt: string;
   workspaceRuntimes?: Array<{
@@ -162,5 +162,5 @@ export type RuntimeResourceResponse = {
   }>;
 };
 
-export type RuntimeResourceListResponse =
-  PaginatedListResponse<RuntimeResourceResponse>;
+export type RuntimeInstanceListResponse =
+  PaginatedListResponse<RuntimeInstanceResponse>;

@@ -8,7 +8,7 @@ import { nextControlEnvelope } from "../provider-utils";
 import type {
   SandboxScopeState,
   SandboxWorkerExecutionContext,
-} from "./runtime-resource.service";
+} from "./runtime-instance.service";
 
 @Injectable()
 export class SandboxWorkerSessionService {

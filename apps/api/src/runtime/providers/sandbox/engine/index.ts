@@ -28,7 +28,7 @@ export type SandboxStartInput = {
    * Docker/OpenSandbox resource id as a lookup key, but must not infer binding
    * from names or labels.
    */
-  isExpectedRuntimeResource?: (runtimeResourceId: string) => Promise<boolean>;
+  isExpectedRuntimeInstance?: (runtimeResourceId: string) => Promise<boolean>;
   /** OpenSandbox 专用：resource 恢复时传已有的 RuntimeResource.id */
   runtimeResourceId?: string;
 };

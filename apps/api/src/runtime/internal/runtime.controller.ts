@@ -42,7 +42,7 @@ export class RuntimeRuntimeController {
     const seq = Number.isFinite(parsed) ? parsed : 0;
     const wait = parseControlWaitMs(waitMs);
     const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeResource(runtimeResourceId);
+      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeResourceId);
     const controls = resourceKey
       ? wait > 0
         ? await this.controlQueue.waitForWorkspace(resourceKey, seq, wait)
@@ -76,12 +76,12 @@ export class RuntimeRuntimeController {
     @Param("runtimeResourceId") runtimeResourceId: string
   ): Promise<{ ok: boolean }> {
     const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeResource(runtimeResourceId);
+      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeResourceId);
     if (resourceKey) {
       this.logger.debug(
         `runtime heartbeat ${safeLogJson({ runtimeResourceId, resourceKey })}`
       );
-      this.runtimeService.heartbeatRuntimeResource(resourceKey);
+      this.runtimeService.heartbeatRuntimeInstance(resourceKey);
     } else {
       this.logger.warn(
         `runtime heartbeat without resource ${safeLogJson({ runtimeResourceId })}`

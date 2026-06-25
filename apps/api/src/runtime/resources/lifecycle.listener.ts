@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { RuntimeResourceLifecycleUseCase } from "./lifecycle.use-case";
+import { RuntimeInstanceLifecycleUseCase } from "./lifecycle.use-case";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -17,10 +17,10 @@ import {
  * best-effort：失败仅记录日志，不影响来源操作（idle 超时与 GC 仍是兜底）。
  */
 @Injectable()
-export class RuntimeResourceLifecycleListener {
-  private readonly logger = new Logger(RuntimeResourceLifecycleListener.name);
+export class RuntimeInstanceLifecycleListener {
+  private readonly logger = new Logger(RuntimeInstanceLifecycleListener.name);
 
-  constructor(private readonly lifecycle: RuntimeResourceLifecycleUseCase) {}
+  constructor(private readonly lifecycle: RuntimeInstanceLifecycleUseCase) {}
 
   @OnEvent(WORKSPACE_DELETED_EVENT)
   async onWorkspaceDeleted({

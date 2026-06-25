@@ -1,9 +1,9 @@
 import { Module } from "@nestjs/common";
 
 // core
-import { WorkspaceRuntimeResourceRepository } from "./resources/workspace-runtime-resource.repository";
-import { RuntimeResourceLifecycleUseCase } from "./resources/lifecycle.use-case";
-import { RuntimeResourceLifecycleListener } from "./resources/lifecycle.listener";
+import { WorkspaceRuntimeInstanceRepository } from "./resources/workspace-runtime-instance.repository";
+import { RuntimeInstanceLifecycleUseCase } from "./resources/lifecycle.use-case";
+import { RuntimeInstanceLifecycleListener } from "./resources/lifecycle.listener";
 
 // providers
 import { RuntimeConfigStore } from "./internal/config-store";
@@ -11,7 +11,7 @@ import { LocalRuntimeProvider } from "./providers/local-provider";
 import { DockerSandboxEngine } from "./providers/sandbox/engine/docker-engine";
 import { OpenSandboxEngine } from "./providers/sandbox/engine/opensandbox-engine";
 import { SandboxRuntimeProvider } from "./providers/sandbox/runtime-provider";
-import { SandboxRuntimeResourceService } from "./providers/sandbox/runtime-resource.service";
+import { SandboxRuntimeInstanceService } from "./providers/sandbox/runtime-instance.service";
 import { SandboxWorkerSessionService } from "./providers/sandbox/worker-session.service";
 import { OpenSandboxClient } from "./providers/sandbox/opensandbox-client";
 import { OPENSANDBOX_CLIENT } from "./providers/sandbox/opensandbox-client.token";
@@ -49,9 +49,9 @@ import { ConfigService } from "../config/config.service";
   ],
   providers: [
     // core
-    WorkspaceRuntimeResourceRepository,
-    RuntimeResourceLifecycleUseCase,
-    RuntimeResourceLifecycleListener,
+    WorkspaceRuntimeInstanceRepository,
+    RuntimeInstanceLifecycleUseCase,
+    RuntimeInstanceLifecycleListener,
     // providers
     RuntimeConfigStore,
     LocalRuntimeProvider,
@@ -68,7 +68,7 @@ import { ConfigService } from "../config/config.service";
       useFactory: (...engines: SandboxEngine[]) => engines,
       inject: [DockerSandboxEngine, OpenSandboxEngine],
     },
-    SandboxRuntimeResourceService,
+    SandboxRuntimeInstanceService,
     SandboxWorkerSessionService,
     SandboxRuntimeProvider,
     {
@@ -84,10 +84,10 @@ import { ConfigService } from "../config/config.service";
     RuntimeService,
   ],
   exports: [
-    WorkspaceRuntimeResourceRepository,
+    WorkspaceRuntimeInstanceRepository,
     RuntimeService,
     RuntimeProviderRegistry,
-    RuntimeResourceLifecycleUseCase,
+    RuntimeInstanceLifecycleUseCase,
     // 供 RunsModule 的 run-internal controller 与 receiver 注入使用
     RuntimeControlQueue,
     RuntimeConfigStore,

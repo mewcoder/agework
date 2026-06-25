@@ -17,7 +17,7 @@ function makeController(overrides: {
       ...overrides.configService,
     } as never,
     {
-      runtimeResource: {
+      runtimeInstance: {
         count: vi.fn().mockResolvedValue(0),
         findMany: vi.fn().mockResolvedValue([]),
         findUnique: vi.fn().mockResolvedValue(null),
@@ -26,7 +26,7 @@ function makeController(overrides: {
       ...overrides.prisma,
     } as never,
     {
-      shutdownRuntimeResource: vi.fn(),
+      shutdownRuntimeInstance: vi.fn(),
       ...overrides.runtimeService,
     } as never
   );
@@ -64,7 +64,7 @@ describe("AdminRuntimeController", () => {
     const count = vi.fn().mockResolvedValue(1);
     const controller = makeController({
       prisma: {
-        runtimeResource: {
+        runtimeInstance: {
           findMany,
           count,
         },
@@ -96,7 +96,7 @@ describe("AdminRuntimeController", () => {
   });
 
   it("stops a running runtime resource and records stop diagnostics", async () => {
-    const shutdownRuntimeResource = vi.fn();
+    const shutdownRuntimeInstance = vi.fn();
     const findUnique = vi.fn().mockResolvedValue({
       id: "rr-1",
       runtimeType: "sandbox",
@@ -108,13 +108,13 @@ describe("AdminRuntimeController", () => {
     const update = vi.fn().mockResolvedValue({});
     const controller = makeController({
       prisma: {
-        runtimeResource: {
+        runtimeInstance: {
           findUnique,
           update,
         },
       },
       runtimeService: {
-        shutdownRuntimeResource,
+        shutdownRuntimeInstance,
       },
     });
 
@@ -122,7 +122,7 @@ describe("AdminRuntimeController", () => {
       ok: true,
     });
 
-    expect(shutdownRuntimeResource).toHaveBeenCalledWith("sandbox", "ws-1");
+    expect(shutdownRuntimeInstance).toHaveBeenCalledWith("sandbox", "ws-1");
     expect(update).toHaveBeenCalledWith({
       where: { id: "rr-1" },
       data: {
@@ -139,7 +139,7 @@ describe("AdminRuntimeController", () => {
   it("throws when stopping a missing or non-running resource", async () => {
     const controller = makeController({
       prisma: {
-        runtimeResource: {
+        runtimeInstance: {
           findUnique: vi.fn().mockResolvedValue({ status: "stopped" }),
         },
       },

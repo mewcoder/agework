@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRuntimeProvider } from "./runtime-provider";
-import { SandboxRuntimeResourceService } from "./runtime-resource.service";
+import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
 import { SandboxWorkerSessionService } from "./worker-session.service";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
@@ -43,7 +43,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
   const configStore = { register: vi.fn(), unregister: vi.fn() };
   const access = {
     issueWorkspaceKey: vi.fn().mockReturnValue("ws-key"),
-    issueRuntimeResourceKey: vi.fn().mockReturnValue("resource-key"),
+    issueRuntimeInstanceKey: vi.fn().mockReturnValue("resource-key"),
     registerRun: vi.fn(),
     revokeWorkspace: vi.fn(),
     revokeAccess: vi.fn(),
@@ -63,13 +63,13 @@ function makeProvider(engineOverride?: SandboxEngine) {
     markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
-      workspaceRuntimeResource: { id: "wr-1" },
+      workspaceRuntimeInstance: { id: "wr-1" },
     }),
     findActiveByWorkspace: vi.fn().mockResolvedValue(null),
-    isRuntimeResourceBoundToWorkspace: vi.fn().mockResolvedValue(false),
+    isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
 
-  const runtimeResources = new SandboxRuntimeResourceService(
+  const runtimeInstances = new SandboxRuntimeInstanceService(
     config as never,
     workspaceRuntimeService as never,
     access as never,
@@ -81,7 +81,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     controlQueue as never
   );
   const provider = new SandboxRuntimeProvider(
-    runtimeResources,
+    runtimeInstances,
     workerSessions
   );
   provider.setRunEventReceiver(eventProcessor as never);
@@ -216,10 +216,10 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
     const input = (engine.getOrCreate as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
-    await input.isExpectedRuntimeResource("container-abc");
+    await input.isExpectedRuntimeInstance("container-abc");
 
     expect(
-      workspaceRuntimeService.isRuntimeResourceBoundToWorkspace
+      workspaceRuntimeService.isRuntimeInstanceBoundToWorkspace
     ).toHaveBeenCalledWith("sandbox", "ws-1", "container-abc");
   });
 
@@ -330,12 +330,12 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
-  it("shutdownRuntimeResource stops sandbox via engine and revokes workspace key", async () => {
+  it("shutdownRuntimeInstance stops sandbox via engine and revokes workspace key", async () => {
     const { provider, engine, access } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
-    provider.shutdownRuntimeResource("ws-1");
+    provider.shutdownRuntimeInstance("ws-1");
     expect(engine.stop).toHaveBeenCalled();
     expect(access.revokeWorkspace).toHaveBeenCalledWith("ws-1");
   });
@@ -402,7 +402,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       expect.any(String),
       expect.any(String)
     );
-    expect(access.issueRuntimeResourceKey).toHaveBeenCalledWith(
+    expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
       "rr-1",
       "ws-1",
       "sandbox"
@@ -478,7 +478,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
   });
 
-  it("heartbeatRuntimeResource feeds the heartbeat watchdog for user scope", async () => {
+  it("heartbeatRuntimeInstance feeds the heartbeat watchdog for user scope", async () => {
     const { provider } = makeProvider();
 
     startProvider(
@@ -490,11 +490,11 @@ describe("SandboxRuntimeProvider — user scope", () => {
 
     for (let i = 0; i < 3; i++) {
       await vi.advanceTimersByTimeAsync(25_000);
-      provider.heartbeatRuntimeResource("user-1");
+      provider.heartbeatRuntimeInstance("user-1");
     }
   });
 
-  it("shutdownRuntimeResource for user scope tears down the shared user sandbox", async () => {
+  it("shutdownRuntimeInstance for user scope tears down the shared user sandbox", async () => {
     const { provider, engine, workspaceRuntimeService } = makeProvider();
 
     startProvider(
@@ -503,7 +503,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
       userPlacement as never
     );
     await vi.runOnlyPendingTimersAsync();
-    provider.shutdownRuntimeResource("user-1");
+    provider.shutdownRuntimeInstance("user-1");
 
     expect(engine.stop).toHaveBeenCalled();
     expect(workspaceRuntimeService.markStoppedByResourceKey).toHaveBeenCalledWith(

@@ -3,12 +3,12 @@ import { Roles } from "../../auth/roles.decorator";
 import { ConfigService } from "../../config/config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeService } from "../runtime.service";
-import { RuntimeResourceIdDto } from "./dto/runtime-resource-id.dto";
+import { RuntimeInstanceIdDto } from "./dto/runtime-instance-id.dto";
 import {
-  runtimeResourceDiagnostics,
-  runtimeResourceMetadataJson,
-  stoppedResourceMetadata,
-} from "../resources/runtime-resource-metadata";
+  runtimeInstanceDiagnostics,
+  runtimeInstanceMetadataJson,
+  stoppedInstanceMetadata,
+} from "../resources/runtime-instance-metadata";
 import { runtimeResourceKeyForOwner } from "../resources/runtime-resource";
 
 @Controller("admin/runtime")
@@ -34,7 +34,7 @@ export class AdminRuntimeController {
 
   @Get("stats")
   async getRuntimeStats() {
-    const activeResources = await this.prisma.runtimeResource.count({
+    const activeResources = await this.prisma.runtimeInstance.count({
       where: { status: "running" },
     });
     return { activeRuntimes: activeResources };
@@ -50,17 +50,17 @@ export class AdminRuntimeController {
     const pageNum = Math.max(Number(pageNo) || 1, 1);
     const where = status ? { status } : {};
     const [items, total] = await Promise.all([
-      this.prisma.runtimeResource.findMany({
+      this.prisma.runtimeInstance.findMany({
         where,
         include: { workspaceRuntimeResources: true },
         orderBy: { updatedAt: "desc" },
         take,
         skip: (pageNum - 1) * take,
       }),
-      this.prisma.runtimeResource.count({ where }),
+      this.prisma.runtimeInstance.count({ where }),
     ]);
     return {
-      list: items.map((item) => this.toRuntimeResourceResponse(item)),
+      list: items.map((item) => this.toRuntimeInstanceResponse(item)),
       total,
       pageNo: pageNum,
       pageSize: take,
@@ -68,23 +68,23 @@ export class AdminRuntimeController {
   }
 
   @Post("resources/stop")
-  async stopResource(@Body() body: RuntimeResourceIdDto) {
+  async stopResource(@Body() body: RuntimeInstanceIdDto) {
     const { id } = body;
-    const resource = await this.prisma.runtimeResource.findUnique({ where: { id } });
+    const resource = await this.prisma.runtimeInstance.findUnique({ where: { id } });
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(`Runtime resource ${id} not found or not running`);
     }
     const resourceKey = this.getResourceKey(resource);
-    this.runtimeService.shutdownRuntimeResource(
+    this.runtimeService.shutdownRuntimeInstance(
       resource.runtimeType,
       resourceKey
     );
-    await this.prisma.runtimeResource.update({
+    await this.prisma.runtimeInstance.update({
       where: { id },
       data: {
         status: "stopped",
-        metadata: runtimeResourceMetadataJson(
-          stoppedResourceMetadata({
+        metadata: runtimeInstanceMetadataJson(
+          stoppedInstanceMetadata({
             runtimeType: resource.runtimeType,
             isolationScope: resource.isolationScope,
             resourceKey,
@@ -96,7 +96,7 @@ export class AdminRuntimeController {
     return { ok: true };
   }
 
-  private toRuntimeResourceResponse(resource: {
+  private toRuntimeInstanceResponse(resource: {
     id: string;
     runtimeType: string;
     isolationScope: string;
@@ -116,7 +116,7 @@ export class AdminRuntimeController {
     }>;
   }) {
     const resourceKey = runtimeResourceKeyForOwner(resource);
-    const diagnostics = runtimeResourceDiagnostics(resource.metadata);
+    const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
     const workspaceRuntimeResources = resource.workspaceRuntimeResources?.map((binding) => ({
       id: binding.id,
       workspaceId: binding.workspaceId,

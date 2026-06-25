@@ -8,16 +8,16 @@ describe("RuntimeService", () => {
   let providerRegistry: Partial<RuntimeProviderRegistry>;
   let provider: {
     type: string;
-    heartbeatRuntimeResource: ReturnType<typeof vi.fn>;
-    shutdownRuntimeResource: ReturnType<typeof vi.fn>;
+    heartbeatRuntimeInstance: ReturnType<typeof vi.fn>;
+    shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
   };
   let service: RuntimeService;
 
   beforeEach(() => {
     provider = {
       type: "local",
-      heartbeatRuntimeResource: vi.fn(),
-      shutdownRuntimeResource: vi.fn(),
+      heartbeatRuntimeInstance: vi.fn(),
+      shutdownRuntimeInstance: vi.fn(),
     };
     configService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
@@ -47,15 +47,15 @@ describe("RuntimeService", () => {
     expect(configService.getDefaultRuntimeType).toHaveBeenCalled();
   });
 
-  it("heartbeatRuntimeResource broadcasts to all providers by resource key", () => {
-    service.heartbeatRuntimeResource("ws-1");
+  it("heartbeatRuntimeInstance broadcasts to all providers by resource key", () => {
+    service.heartbeatRuntimeInstance("ws-1");
     expect(providerRegistry.all).toHaveBeenCalled();
-    expect(provider.heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
+    expect(provider.heartbeatRuntimeInstance).toHaveBeenCalledWith("ws-1");
   });
 
-  it("shutdownRuntimeResource dispatches to the resolved provider by type", () => {
-    service.shutdownRuntimeResource("sandbox", "ws-1");
+  it("shutdownRuntimeInstance dispatches to the resolved provider by type", () => {
+    service.shutdownRuntimeInstance("sandbox", "ws-1");
     expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
-    expect(provider.shutdownRuntimeResource).toHaveBeenCalledWith("ws-1");
+    expect(provider.shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
   });
 });

@@ -148,7 +148,7 @@ describe("DockerSandboxEngine", () => {
     const engine = new DockerSandboxEngine();
     const conflictingContainerId =
       "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-    const isExpectedRuntimeResource = vi.fn().mockResolvedValue(false);
+    const isExpectedRuntimeInstance = vi.fn().mockResolvedValue(false);
     let runAttempts = 0;
     mockExecFile.mockImplementation(((...args: any[]) => {
       const cmdArgs = args[1] as string[];
@@ -174,11 +174,11 @@ describe("DockerSandboxEngine", () => {
     }) as any);
 
     const result = await engine.getOrCreate(
-      makeInput({ isExpectedRuntimeResource })
+      makeInput({ isExpectedRuntimeInstance })
     );
 
     expect(result.runtimeResourceId).toBe("container-next");
-    expect(isExpectedRuntimeResource).toHaveBeenCalledWith(
+    expect(isExpectedRuntimeInstance).toHaveBeenCalledWith(
       conflictingContainerId
     );
     expect(mockExecFile).toHaveBeenCalledWith(
@@ -192,7 +192,7 @@ describe("DockerSandboxEngine", () => {
     const engine = new DockerSandboxEngine();
     const conflictingContainerId =
       "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-    const isExpectedRuntimeResource = vi.fn().mockResolvedValue(true);
+    const isExpectedRuntimeInstance = vi.fn().mockResolvedValue(true);
     mockExecFile.mockImplementation(((...args: any[]) => {
       const cmdArgs = args[1] as string[];
       const callback = args[args.length - 1];
@@ -208,7 +208,7 @@ describe("DockerSandboxEngine", () => {
     }) as any);
 
     await expect(
-      engine.getOrCreate(makeInput({ isExpectedRuntimeResource }))
+      engine.getOrCreate(makeInput({ isExpectedRuntimeInstance }))
     ).rejects.toThrow("Conflict");
 
     expect(mockExecFile).not.toHaveBeenCalledWith(

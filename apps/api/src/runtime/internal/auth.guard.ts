@@ -49,7 +49,7 @@ export class RuntimeInternalAuthGuard implements CanActivate {
     }
     if (
       runtimeResourceId &&
-      this.runtimeAccess.verifyRuntimeResourceKey(runtimeResourceId, accessKey)
+      this.runtimeAccess.verifyRuntimeInstanceKey(runtimeResourceId, accessKey)
     ) {
       request.runtimeResourceId = runtimeResourceId;
       return true;

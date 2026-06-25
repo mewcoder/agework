@@ -1,9 +1,9 @@
 import type { RuntimePlacement } from "@agework/shared/protocol";
 import type { Prisma } from "../../../generated/prisma/client.js";
 
-type RuntimeResourceMetadata = Record<string, unknown>;
+type RuntimeInstanceMetadata = Record<string, unknown>;
 
-export type RuntimeResourceDiagnosticMetadata = RuntimeResourceMetadata & {
+export type RuntimeInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
   resourceKey: string;
   workspaceId?: string;
   statusReason: string;
@@ -15,7 +15,7 @@ export type RuntimeResourceDiagnosticMetadata = RuntimeResourceMetadata & {
 
 export function isMetadataRecord(
   metadata: unknown
-): metadata is RuntimeResourceMetadata {
+): metadata is RuntimeInstanceMetadata {
   return (
     typeof metadata === "object" &&
     metadata !== null &&
@@ -23,14 +23,14 @@ export function isMetadataRecord(
   );
 }
 
-export function runningResourceMetadata(input: {
+export function runningInstanceMetadata(input: {
   placement: RuntimePlacement;
   resourceKey: string;
   runtimeResourceId: string;
   existing?: unknown;
   metadata?: object;
   now?: Date;
-}): RuntimeResourceDiagnosticMetadata {
+}): RuntimeInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     ...(isMetadataRecord(input.existing) ? input.existing : {}),
@@ -44,14 +44,14 @@ export function runningResourceMetadata(input: {
   };
 }
 
-export function stoppedResourceMetadata(input: {
+export function stoppedInstanceMetadata(input: {
   runtimeType: string;
   isolationScope: string;
   resourceKey: string;
   reason: string;
   errorMessage?: string;
   now?: Date;
-}): RuntimeResourceDiagnosticMetadata {
+}): RuntimeInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     resourceKey: input.resourceKey,
@@ -64,14 +64,14 @@ export function stoppedResourceMetadata(input: {
   };
 }
 
-export function statusResourceMetadata(input: {
+export function statusInstanceMetadata(input: {
   runtimeType: string;
   isolationScope: string;
   resourceKey: string;
   reason: string;
   errorMessage?: string;
   now?: Date;
-}): RuntimeResourceDiagnosticMetadata {
+}): RuntimeInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     resourceKey: input.resourceKey,
@@ -83,7 +83,7 @@ export function statusResourceMetadata(input: {
   };
 }
 
-export function runtimeResourceDiagnostics(metadata: unknown) {
+export function runtimeInstanceDiagnostics(metadata: unknown) {
   const record = isMetadataRecord(metadata) ? metadata : {};
   return {
     resourceKey:
@@ -113,8 +113,8 @@ export function runtimeResourceDiagnostics(metadata: unknown) {
   };
 }
 
-export function runtimeResourceMetadataJson(
-  metadata: RuntimeResourceDiagnosticMetadata
+export function runtimeInstanceMetadataJson(
+  metadata: RuntimeInstanceDiagnosticMetadata
 ): Prisma.InputJsonValue {
   return metadata as Prisma.InputJsonValue;
 }

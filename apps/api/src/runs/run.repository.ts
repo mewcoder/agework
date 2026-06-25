@@ -202,7 +202,7 @@ export class RunRepository {
     }
 
     const runtimeResource = run.runtimeResourceId
-      ? await this.prisma.runtimeResource.findUnique({
+      ? await this.prisma.runtimeInstance.findUnique({
           where: {
             runtimeType_runtimeResourceId: {
               runtimeType: run.runtimeType,

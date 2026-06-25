@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { RuntimeResourceLifecycleUseCase } from "./lifecycle.use-case";
+import { RuntimeInstanceLifecycleUseCase } from "./lifecycle.use-case";
 import { RuntimeProviderRegistry } from "../providers/provider-registry";
 
 function makeResource(overrides: Record<string, unknown> = {}) {
@@ -14,10 +14,10 @@ function makeResource(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("RuntimeResourceLifecycleUseCase", () => {
+describe("RuntimeInstanceLifecycleUseCase", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned runtime resource and deletes the workspace binding", async () => {
-      const shutdownRuntimeResource = vi.fn();
+      const shutdownRuntimeInstance = vi.fn();
       const findUnique = vi.fn().mockResolvedValue({
         id: "wr-1",
         workspaceId: "ws-1",
@@ -26,12 +26,12 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
       const update = vi.fn().mockResolvedValue({});
       const registry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
+        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
       };
-      const service = new RuntimeResourceLifecycleUseCase(
+      const service = new RuntimeInstanceLifecycleUseCase(
         {
-          workspaceRuntimeResource: { findUnique, deleteMany },
-          runtimeResource: { update },
+          workspaceRuntimeInstance: { findUnique, deleteMany },
+          runtimeInstance: { update },
         } as never,
         registry as RuntimeProviderRegistry
       );
@@ -43,7 +43,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
         include: { resource: true },
       });
       expect(registry.resolve).toHaveBeenCalledWith("sandbox");
-      expect(shutdownRuntimeResource).toHaveBeenCalledWith("ws-1");
+      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
       expect(update).toHaveBeenCalledWith({
         where: { id: "rr-1" },
         data: {
@@ -59,7 +59,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
     });
 
     it("does not stop a shared user-isolated resource when one workspace is deleted", async () => {
-      const shutdownRuntimeResource = vi.fn();
+      const shutdownRuntimeInstance = vi.fn();
       const findUnique = vi.fn().mockResolvedValue({
         id: "wr-1",
         workspaceId: "ws-1",
@@ -70,10 +70,10 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       });
       const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
       const registry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
+        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
       };
-      const service = new RuntimeResourceLifecycleUseCase(
-        { workspaceRuntimeResource: { findUnique, deleteMany } } as never,
+      const service = new RuntimeInstanceLifecycleUseCase(
+        { workspaceRuntimeInstance: { findUnique, deleteMany } } as never,
         registry as RuntimeProviderRegistry
       );
 
@@ -86,7 +86,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
 
   describe("shutdownForUser", () => {
     it("shuts down all runtime resources owned by the user", async () => {
-      const shutdownRuntimeResource = vi.fn();
+      const shutdownRuntimeInstance = vi.fn();
       const findMany = vi.fn().mockResolvedValue([
         makeResource({
           id: "rr-user",
@@ -98,10 +98,10 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       ]);
       const update = vi.fn().mockResolvedValue({});
       const registry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
+        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
       };
-      const service = new RuntimeResourceLifecycleUseCase(
-        { runtimeResource: { findMany, update } } as never,
+      const service = new RuntimeInstanceLifecycleUseCase(
+        { runtimeInstance: { findMany, update } } as never,
         registry as RuntimeProviderRegistry
       );
 
@@ -110,9 +110,9 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       expect(findMany).toHaveBeenCalledWith({
         where: { ownerUserId: "user-1", status: "running" },
       });
-      expect(shutdownRuntimeResource).toHaveBeenCalledWith("user-1");
-      expect(shutdownRuntimeResource).toHaveBeenCalledWith("ws-2");
-      expect(shutdownRuntimeResource).toHaveBeenCalledTimes(2);
+      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("user-1");
+      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-2");
+      expect(shutdownRuntimeInstance).toHaveBeenCalledTimes(2);
       expect(update).toHaveBeenCalledWith({
         where: { id: "rr-user" },
         data: {
@@ -141,21 +141,21 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       makeResource({ id: "rr-1", ownerWorkspaceId: "ws-1" }),
       makeResource({ id: "rr-2", ownerWorkspaceId: "ws-2" }),
     ]);
-    const shutdownRuntimeResource = vi
+    const shutdownRuntimeInstance = vi
       .fn()
       .mockImplementationOnce(() => {
         throw new Error("boom");
       })
       .mockImplementationOnce(() => undefined);
     const registry: Partial<RuntimeProviderRegistry> = {
-      resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
+      resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
     };
-    const service = new RuntimeResourceLifecycleUseCase(
-      { runtimeResource: { findMany, update: vi.fn() } } as never,
+    const service = new RuntimeInstanceLifecycleUseCase(
+      { runtimeInstance: { findMany, update: vi.fn() } } as never,
       registry as RuntimeProviderRegistry
     );
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
-    expect(shutdownRuntimeResource).toHaveBeenCalledTimes(2);
+    expect(shutdownRuntimeInstance).toHaveBeenCalledTimes(2);
   });
 });

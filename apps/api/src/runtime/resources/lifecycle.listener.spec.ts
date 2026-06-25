@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { RuntimeResourceLifecycleListener } from "./lifecycle.listener";
+import { RuntimeInstanceLifecycleListener } from "./lifecycle.listener";
 import { WorkspaceDeletedEvent } from "../../workspaces/workspace.events";
 import {
   UserDeletedEvent,
   UserDisabledEvent,
 } from "../../users/user.events";
 
-describe("RuntimeResourceLifecycleListener", () => {
+describe("RuntimeInstanceLifecycleListener", () => {
   it("shuts down the workspace runtime resource on WorkspaceDeletedEvent", async () => {
     const shutdownForWorkspace = vi.fn().mockResolvedValue(undefined);
-    const listener = new RuntimeResourceLifecycleListener({
+    const listener = new RuntimeInstanceLifecycleListener({
       shutdownForWorkspace,
     } as never);
 
@@ -22,7 +22,7 @@ describe("RuntimeResourceLifecycleListener", () => {
     const shutdownForWorkspace = vi
       .fn()
       .mockRejectedValue(new Error("boom"));
-    const listener = new RuntimeResourceLifecycleListener({
+    const listener = new RuntimeInstanceLifecycleListener({
       shutdownForWorkspace,
     } as never);
 
@@ -33,7 +33,7 @@ describe("RuntimeResourceLifecycleListener", () => {
 
   it("shuts down user runtime resources on UserDeletedEvent and UserDisabledEvent", async () => {
     const shutdownForUser = vi.fn().mockResolvedValue(undefined);
-    const listener = new RuntimeResourceLifecycleListener({
+    const listener = new RuntimeInstanceLifecycleListener({
       shutdownForUser,
     } as never);
 
@@ -46,7 +46,7 @@ describe("RuntimeResourceLifecycleListener", () => {
 
   it("swallows user shutdown failures", async () => {
     const shutdownForUser = vi.fn().mockRejectedValue(new Error("boom"));
-    const listener = new RuntimeResourceLifecycleListener({
+    const listener = new RuntimeInstanceLifecycleListener({
       shutdownForUser,
     } as never);
 

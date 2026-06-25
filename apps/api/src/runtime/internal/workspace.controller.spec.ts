@@ -5,7 +5,7 @@ import { RuntimeService } from "../runtime.service";
 
 function makeRuntimeService(): RuntimeService {
   return {
-    heartbeatRuntimeResource: vi.fn(),
+    heartbeatRuntimeInstance: vi.fn(),
   } as unknown as RuntimeService;
 }
 
@@ -77,7 +77,7 @@ describe("RuntimeWorkspaceController", () => {
 
       const result = controller.heartbeat("ws-1");
 
-      expect(runtimeService.heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
+      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith("ws-1");
       expect(result).toEqual({ ok: true });
     });
   });

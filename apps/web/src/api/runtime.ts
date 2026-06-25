@@ -1,10 +1,10 @@
 import { apiGet, apiPost } from '@/lib/http';
 import type {
-  RuntimeResourceResponse,
-  RuntimeResourceListResponse,
+  RuntimeInstanceResponse,
+  RuntimeInstanceListResponse,
 } from '@agework/shared/api';
 
-export type { RuntimeResourceResponse as RuntimeResource };
+export type { RuntimeInstanceResponse as RuntimeResource };
 
 export interface RuntimePolicy {
   runtimeType: string;
@@ -27,7 +27,7 @@ export const runtimeApi = {
     if (params.pageNo) query.set('pageNo', String(params.pageNo));
     if (params.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
-    return apiGet<RuntimeResourceListResponse>(`/api/v1/admin/runtime/resources${qs ? `?${qs}` : ''}`);
+    return apiGet<RuntimeInstanceListResponse>(`/api/v1/admin/runtime/resources${qs ? `?${qs}` : ''}`);
   },
   stopResource: (id: string) => apiPost<{ ok: boolean }>('/api/v1/admin/runtime/resources/stop', { id }),
 };

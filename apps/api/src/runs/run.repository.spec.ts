@@ -184,7 +184,7 @@ describe("RunRepository", () => {
         },
       },
     });
-    const findRuntimeResource = vi.fn().mockResolvedValue({
+    const findRuntimeInstance = vi.fn().mockResolvedValue({
       id: "resource-1",
       runtimeType: "sandbox",
       isolationScope: "workspace",
@@ -206,7 +206,7 @@ describe("RunRepository", () => {
     });
     const service = new RunRepository({
       run: { findUnique: findRun },
-      runtimeResource: { findUnique: findRuntimeResource },
+      runtimeInstance: { findUnique: findRuntimeInstance },
     } as never);
 
     const detail = await service.detailAdmin("run-1");
@@ -214,7 +214,7 @@ describe("RunRepository", () => {
     expect(findRun).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "run-1" } })
     );
-    expect(findRuntimeResource).toHaveBeenCalledWith(
+    expect(findRuntimeInstance).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           runtimeType_runtimeResourceId: {

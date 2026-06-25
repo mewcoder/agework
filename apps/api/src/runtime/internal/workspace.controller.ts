@@ -71,7 +71,7 @@ export class RuntimeWorkspaceController {
     @Param("workspaceId") workspaceId: string
   ): { ok: boolean } {
     this.logger.debug(`Workspace heartbeat workspaceId=${workspaceId}`);
-    this.runtimeService.heartbeatRuntimeResource(workspaceId);
+    this.runtimeService.heartbeatRuntimeInstance(workspaceId);
     return { ok: true };
   }
 }

@@ -5,9 +5,9 @@ import { ConversationService } from "../conversations/conversation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { swallow } from "../common/swallow";
 import {
-  runtimeResourceMetadataJson,
-  stoppedResourceMetadata,
-} from "../runtime/resources/runtime-resource-metadata";
+  runtimeInstanceMetadataJson,
+  stoppedInstanceMetadata,
+} from "../runtime/resources/runtime-instance-metadata";
 import { runtimeResourceKeyForOwner } from "../runtime/resources/runtime-resource";
 
 /**
@@ -77,7 +77,7 @@ export class RunRecoveryUseCase {
     }
 
     await this.recoverOrphanContainers();
-    await this.cleanupStaleRuntimeResources();
+    await this.cleanupStaleRuntimeInstances();
   }
 
   /**
@@ -92,7 +92,7 @@ export class RunRecoveryUseCase {
     runtimeType: string
   ): Promise<boolean> {
     try {
-      const resource = await this.prisma.runtimeResource.findUnique({
+      const resource = await this.prisma.runtimeInstance.findUnique({
         where: {
           runtimeType_runtimeResourceId: {
             runtimeType,
@@ -117,7 +117,7 @@ export class RunRecoveryUseCase {
    */
   private async recoverOrphanContainers(): Promise<void> {
     try {
-      const runningResources = await this.prisma.runtimeResource.findMany({
+      const runningResources = await this.prisma.runtimeInstance.findMany({
         where: { status: "running" },
       });
 
@@ -158,12 +158,12 @@ export class RunRecoveryUseCase {
             )
           );
         const resourceKey = runtimeResourceKeyForOwner(resource);
-        await this.prisma.runtimeResource.update({
+        await this.prisma.runtimeInstance.update({
           where: { id: resource.id },
           data: {
             status: "stopped",
-            metadata: runtimeResourceMetadataJson(
-              stoppedResourceMetadata({
+            metadata: runtimeInstanceMetadataJson(
+              stoppedInstanceMetadata({
                 runtimeType: resource.runtimeType,
                 isolationScope: resource.isolationScope,
                 resourceKey,
@@ -185,9 +185,9 @@ export class RunRecoveryUseCase {
    * 不能只因为服务重启后内存为空就清理 running resource；运行环境可能仍在外部存活，
    * 应由 provider 下次启动时通过 runtimeResourceId 验证。
    */
-  private async cleanupStaleRuntimeResources(): Promise<void> {
+  private async cleanupStaleRuntimeInstances(): Promise<void> {
     try {
-      const resourceResult = await this.prisma.runtimeResource.deleteMany({
+      const resourceResult = await this.prisma.runtimeInstance.deleteMany({
         where: { status: "stale" },
       });
       if (resourceResult.count > 0) {

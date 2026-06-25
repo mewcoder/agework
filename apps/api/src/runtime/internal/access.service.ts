@@ -8,11 +8,11 @@ export class RuntimeInternalAccessService {
   private readonly accessKeys = new Map<string, string>();
   private readonly workspaceKeys = new Map<string, string>();
   /** RuntimeResource.id → accessKey */
-  private readonly runtimeResourceKeys = new Map<string, string>();
+  private readonly runtimeInstanceKeys = new Map<string, string>();
   /** RuntimeResource.id → resourceKey (用于 heartbeat 时查找 provider 内部 key) */
-  private readonly runtimeResourceScopeKeys = new Map<string, string>();
+  private readonly runtimeInstanceScopeKeys = new Map<string, string>();
   /** RuntimeResource.id → runtimeType */
-  private readonly runtimeResourceRuntimeTypes = new Map<string, string>();
+  private readonly runtimeInstanceRuntimeTypes = new Map<string, string>();
 
   /**
    * 为单个 run 签发内部访问 key。
@@ -66,40 +66,40 @@ export class RuntimeInternalAccessService {
    * 复用 resourceKey 对应的 workspaceKey，使同一个 key 可同时用于
    * /internal/workspaces/:workspaceId 和 /internal/runtimes/:runtimeResourceId。
    */
-  issueRuntimeResourceKey(
+  issueRuntimeInstanceKey(
     runtimeResourceId: string,
     resourceKey: string,
     runtimeType: string
   ): string {
     const existingKey = this.workspaceKeys.get(resourceKey);
     if (existingKey) {
-      this.runtimeResourceKeys.set(runtimeResourceId, existingKey);
+      this.runtimeInstanceKeys.set(runtimeResourceId, existingKey);
     } else {
       const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
-      this.runtimeResourceKeys.set(runtimeResourceId, accessKey);
+      this.runtimeInstanceKeys.set(runtimeResourceId, accessKey);
     }
-    this.runtimeResourceScopeKeys.set(runtimeResourceId, resourceKey);
-    this.runtimeResourceRuntimeTypes.set(runtimeResourceId, runtimeType);
-    return this.runtimeResourceKeys.get(runtimeResourceId)!;
+    this.runtimeInstanceScopeKeys.set(runtimeResourceId, resourceKey);
+    this.runtimeInstanceRuntimeTypes.set(runtimeResourceId, runtimeType);
+    return this.runtimeInstanceKeys.get(runtimeResourceId)!;
   }
 
-  verifyRuntimeResourceKey(runtimeResourceId: string, accessKey: string): boolean {
-    return this.constantTimeEqual(this.runtimeResourceKeys.get(runtimeResourceId), accessKey);
+  verifyRuntimeInstanceKey(runtimeResourceId: string, accessKey: string): boolean {
+    return this.constantTimeEqual(this.runtimeInstanceKeys.get(runtimeResourceId), accessKey);
   }
 
   /** 获取 RuntimeResource.id 对应的 resourceKey（用于 heartbeat 等）。 */
-  getResourceKeyForRuntimeResource(runtimeResourceId: string): string | undefined {
-    return this.runtimeResourceScopeKeys.get(runtimeResourceId);
+  getResourceKeyForRuntimeInstance(runtimeResourceId: string): string | undefined {
+    return this.runtimeInstanceScopeKeys.get(runtimeResourceId);
   }
 
-  getRuntimeTypeForRuntimeResource(runtimeResourceId: string): string | undefined {
-    return this.runtimeResourceRuntimeTypes.get(runtimeResourceId);
+  getRuntimeTypeForRuntimeInstance(runtimeResourceId: string): string | undefined {
+    return this.runtimeInstanceRuntimeTypes.get(runtimeResourceId);
   }
 
-  revokeRuntimeResource(runtimeResourceId: string): void {
-    this.runtimeResourceKeys.delete(runtimeResourceId);
-    this.runtimeResourceScopeKeys.delete(runtimeResourceId);
-    this.runtimeResourceRuntimeTypes.delete(runtimeResourceId);
+  revokeRuntimeInstance(runtimeResourceId: string): void {
+    this.runtimeInstanceKeys.delete(runtimeResourceId);
+    this.runtimeInstanceScopeKeys.delete(runtimeResourceId);
+    this.runtimeInstanceRuntimeTypes.delete(runtimeResourceId);
   }
 
   diagnostics(params: {
@@ -114,14 +114,14 @@ export class RuntimeInternalAccessService {
     const workspaceKey = params.workspaceId
       ? this.workspaceKeys.get(params.workspaceId)
       : undefined;
-    const runtimeResourceKey = params.runtimeResourceId
-      ? this.runtimeResourceKeys.get(params.runtimeResourceId)
+    const runtimeInstanceKey = params.runtimeResourceId
+      ? this.runtimeInstanceKeys.get(params.runtimeResourceId)
       : undefined;
 
     return {
       accessKeyCount: this.accessKeys.size,
       workspaceKeyCount: this.workspaceKeys.size,
-      runtimeResourceKeyCount: this.runtimeResourceKeys.size,
+      runtimeInstanceKeyCount: this.runtimeInstanceKeys.size,
       runId: params.runId,
       workspaceId: params.workspaceId,
       runtimeResourceId: params.runtimeResourceId,
@@ -136,11 +136,11 @@ export class RuntimeInternalAccessService {
       workspaceKeyMatches:
         Boolean(params.accessKey) &&
         this.constantTimeEqual(workspaceKey, params.accessKey ?? ""),
-      hasRuntimeResourceKey: Boolean(runtimeResourceKey),
-      runtimeResourceKeyFingerprint: fingerprint(runtimeResourceKey),
-      runtimeResourceKeyMatches:
+      hasRuntimeInstanceKey: Boolean(runtimeInstanceKey),
+      runtimeInstanceKeyFingerprint: fingerprint(runtimeInstanceKey),
+      runtimeInstanceKeyMatches:
         Boolean(params.accessKey) &&
-        this.constantTimeEqual(runtimeResourceKey, params.accessKey ?? ""),
+        this.constantTimeEqual(runtimeInstanceKey, params.accessKey ?? ""),
     };
   }
 

@@ -4,7 +4,7 @@ import { SandboxWorkerSessionService } from "./worker-session.service";
 import type {
   SandboxScopeState,
   SandboxWorkerExecutionContext,
-} from "./runtime-resource.service";
+} from "./runtime-instance.service";
 
 function makeContext(
   overrides: Partial<SandboxWorkerExecutionContext> = {}

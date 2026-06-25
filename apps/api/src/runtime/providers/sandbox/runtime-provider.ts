@@ -11,10 +11,10 @@ import { publishWorkerErrorStatus } from "../provider-utils";
 import type { RunEventReceiver } from "../run-event-receiver";
 import type { RuntimeProvider } from "../provider-contracts";
 import {
-  SandboxRuntimeResourceService,
-  type SandboxRuntimeResourceCallbacks,
+  SandboxRuntimeInstanceService,
+  type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
-} from "./runtime-resource.service";
+} from "./runtime-instance.service";
 import { SandboxWorkerSessionService } from "./worker-session.service";
 
 @Injectable()
@@ -24,7 +24,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   private receiver!: RunEventReceiver;
 
   constructor(
-    private readonly runtimeResources: SandboxRuntimeResourceService,
+    private readonly runtimeInstances: SandboxRuntimeInstanceService,
     private readonly workerSessions: SandboxWorkerSessionService
   ) {}
 
@@ -42,29 +42,29 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     }
 
     const context =
-      this.runtimeResources.resolveWorkerExecutionContext(input);
+      this.runtimeInstances.resolveWorkerExecutionContext(input);
     this.logWorkerExecutionStart(context);
     this.workerSessions.registerRunConfig(context);
 
-    const handle = this.runtimeResources.createRunHandle(context);
-    const scopeState = this.runtimeResources.ensureScopeState(context);
+    const handle = this.runtimeInstances.createRunHandle(context);
+    const scopeState = this.runtimeInstances.ensureScopeState(context);
 
     this.workerSessions.registerRunSession(context, scopeState);
-    this.runtimeResources.attachOrStartRuntimeResource(
+    this.runtimeInstances.attachOrStartRuntimeInstance(
       {
         context,
         scopeState,
         handle,
         onRuntimeResourceIdReady: input.onRuntimeResourceIdReady,
       },
-      this.runtimeResourceCallbacks()
+      this.runtimeInstanceCallbacks()
     );
 
     return handle;
   }
 
   sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void {
-    const scopeKey = this.runtimeResources.findScopeKeyByRun(handle.runId);
+    const scopeKey = this.runtimeInstances.findScopeKeyByRun(handle.runId);
     if (!scopeKey) {
       this.logger.warn(
         `sandbox send control dropped ${safeLogJson({
@@ -79,9 +79,9 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    const scopeKey = this.runtimeResources.findScopeKeyByRun(handle.runId);
+    const scopeKey = this.runtimeInstances.findScopeKeyByRun(handle.runId);
     const scopeState = scopeKey
-      ? this.runtimeResources.getScopeState(scopeKey)
+      ? this.runtimeInstances.getScopeState(scopeKey)
       : undefined;
     if (!scopeState?.runtimeResourceId) {
       this.workerSessions.markCancelledBeforeReady(handle.runId);
@@ -102,29 +102,29 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   }
 
   getHandle(runId: string): WorkerExecutionHandle | undefined {
-    return this.runtimeResources.getHandle(runId);
+    return this.runtimeInstances.getHandle(runId);
   }
 
   heartbeat(runId: string): void {
-    this.runtimeResources.heartbeatRun(runId);
+    this.runtimeInstances.heartbeatRun(runId);
   }
 
-  heartbeatRuntimeResource(resourceKey: string): void {
-    this.runtimeResources.heartbeatRuntimeResource(resourceKey);
+  heartbeatRuntimeInstance(resourceKey: string): void {
+    this.runtimeInstances.heartbeatRuntimeInstance(resourceKey);
   }
 
-  shutdownRuntimeResource(resourceKey: string): void {
-    this.runtimeResources.shutdownRuntimeResource(resourceKey, {
+  shutdownRuntimeInstance(resourceKey: string): void {
+    this.runtimeInstances.shutdownRuntimeInstance(resourceKey, {
       cleanupWorkspace: (key) => this.workerSessions.cleanupWorkspace(key),
     });
   }
 
   recoverOrphan(runtimeResourceId: string): Promise<void> {
-    return this.runtimeResources.recoverOrphan(runtimeResourceId);
+    return this.runtimeInstances.recoverOrphan(runtimeResourceId);
   }
 
   cleanup(runId: string): void {
-    this.runtimeResources.cleanupRun(runId);
+    this.runtimeInstances.cleanupRun(runId);
     this.workerSessions.cleanupRun(runId);
   }
 
@@ -143,7 +143,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     );
   }
 
-  private runtimeResourceCallbacks(): SandboxRuntimeResourceCallbacks {
+  private runtimeInstanceCallbacks(): SandboxRuntimeInstanceCallbacks {
     return {
       consumeCancelledStartingRun: (runId) =>
         this.workerSessions.consumeCancelledStartingRun(runId),

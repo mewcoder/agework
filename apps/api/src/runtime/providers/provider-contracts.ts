@@ -24,7 +24,7 @@ export interface RuntimeProvider extends WorkerExecutionProvider {
   /** 服务重启后，根据持久化的 runtimeResourceId 终止孤儿 run 对应的进程/容器。幂等。 */
   recoverOrphan(runtimeResourceId: string): Promise<void>;
   /** 收到 worker 心跳时按 runtime resource key 喂容器级 watchdog。 */
-  heartbeatRuntimeResource?(resourceKey: string): void;
+  heartbeatRuntimeInstance?(resourceKey: string): void;
   /** 停止并删除指定 runtime resource key 对应的持久容器/沙箱。 */
-  shutdownRuntimeResource?(resourceKey: string): void;
+  shutdownRuntimeInstance?(resourceKey: string): void;
 }
