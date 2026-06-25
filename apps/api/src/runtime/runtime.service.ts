@@ -88,9 +88,7 @@ export class RuntimeService {
 
     const isolationScope =
       input.isolationScope ?? this.configService.getDefaultIsolationScope();
-    return isolationScope === "user"
-      ? this.sandboxUserPlacement(input)
-      : this.sandboxWorkspacePlacement(input);
+    return this.sandboxPlacement(input, isolationScope);
   }
 
   /** local：一律用宿主机 workspace 路径，runtimePath === hostPath。 */
@@ -106,49 +104,47 @@ export class RuntimeService {
   }
 
   /**
-   * sandbox + user：整个用户根目录挂进共享容器，挂载根为 CONTAINER_WORKSPACES_ROOT；
-   * 该 workspace 在容器内的路径按其相对用户根的子路径拼接。要求 workspace 在用户根内。
+   * sandbox：隔离粒度只影响 hostPath / runtimePath / mountTarget 三处,其余装配一致。
+   *   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），
+   *                workspace 按相对用户根的子路径定位；要求 workspace 在用户根内。
+   *   workspace —— 每个 workspace 独占容器，挂载与运行路径都是 <root>/<workspaceId>。
    */
-  private sandboxUserPlacement(
-    input: ResolvePlacementInput
+  private sandboxPlacement(
+    input: ResolvePlacementInput,
+    isolationScope: IsolationScope
   ): SandboxRuntimePlacement {
     const { userId, workspaceId, workspaceRootPath, userWorkspaceRootPath } =
       input;
-    const relativePath = relative(userWorkspaceRootPath, workspaceRootPath);
-    if (!this.isInsideUserRoot(relativePath)) {
-      throw new Error(
-        `workspaceRootPath must be inside userWorkspaceRootPath for sandbox user isolation: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
-      );
-    }
-    const segments = relativePath.split(sep).filter(Boolean);
-    return {
-      runtimeType: "sandbox",
-      userId,
-      workspaceId,
-      hostPath: userWorkspaceRootPath,
-      runtimePath: [CONTAINER_WORKSPACES_ROOT, ...segments].join("/"),
-      sandbox: {
-        isolationScope: "user",
-        mountTarget: CONTAINER_WORKSPACES_ROOT,
-        sandboxEngineType: this.resolveSandboxEngine(input),
-      },
-    };
-  }
 
-  /** sandbox + workspace：该 workspace 独占容器，挂载与运行路径都是 <root>/<workspaceId>。 */
-  private sandboxWorkspacePlacement(
-    input: ResolvePlacementInput
-  ): SandboxRuntimePlacement {
-    const { userId, workspaceId, workspaceRootPath } = input;
-    const mountTarget = `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
+    let hostPath: string;
+    let runtimePath: string;
+    let mountTarget: string;
+
+    if (isolationScope === "user") {
+      const relativePath = relative(userWorkspaceRootPath, workspaceRootPath);
+      if (!this.isInsideUserRoot(relativePath)) {
+        throw new Error(
+          `workspaceRootPath must be inside userWorkspaceRootPath for sandbox user isolation: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
+        );
+      }
+      const segments = relativePath.split(sep).filter(Boolean);
+      hostPath = userWorkspaceRootPath;
+      runtimePath = [CONTAINER_WORKSPACES_ROOT, ...segments].join("/");
+      mountTarget = CONTAINER_WORKSPACES_ROOT;
+    } else {
+      mountTarget = `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
+      hostPath = workspaceRootPath;
+      runtimePath = mountTarget;
+    }
+
     return {
       runtimeType: "sandbox",
       userId,
       workspaceId,
-      hostPath: workspaceRootPath,
-      runtimePath: mountTarget,
+      hostPath,
+      runtimePath,
       sandbox: {
-        isolationScope: "workspace",
+        isolationScope,
         mountTarget,
         sandboxEngineType: this.resolveSandboxEngine(input),
       },
