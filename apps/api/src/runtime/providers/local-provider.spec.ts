@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type {
   LocalRuntimePlacement,
   RunConfig,
-  ResolvedRuntimeResource,
+  RuntimeResource,
 } from "@agework/shared/protocol";
 import { LocalRuntimeProvider } from "./local-provider";
 
@@ -50,16 +50,9 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
 }
 
 function makeRuntimeResource(
-  overrides: Partial<ResolvedRuntimeResource> = {}
-): ResolvedRuntimeResource {
-  const placement = makePlacement();
-  return {
-    runtimeType: "local",
-    resourceKey: "ws-1",
-    workspaceId: "ws-1",
-    placement,
-    ...overrides,
-  };
+  overrides: Partial<RuntimeResource> = {}
+): RuntimeResource {
+  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeResource;
 }
 
 describe("LocalRuntimeProvider", () => {

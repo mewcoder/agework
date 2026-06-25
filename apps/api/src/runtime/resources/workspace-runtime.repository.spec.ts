@@ -71,6 +71,7 @@ describe("WorkspaceRuntimeRepository", () => {
 
     const result = await service.upsertRunning(
       placement(),
+      "u1",
       "container-abc",
       { foo: "bar" }
     );
@@ -137,6 +138,7 @@ describe("WorkspaceRuntimeRepository", () => {
           sandboxEngineType: "docker",
         },
       }),
+      "w1",
       "container-next"
     );
 

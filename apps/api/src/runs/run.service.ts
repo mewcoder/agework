@@ -98,7 +98,7 @@ export class RunService {
       isolationScope,
       sandboxEngine: workspace.sandboxEngine ?? undefined,
     });
-    const placement = runtimeResource.placement;
+    const placement = runtimeResource;
     const runtimeType = placement.runtimeType;
     const sandbox =
       placement.runtimeType === "sandbox" ? placement.sandbox : undefined;

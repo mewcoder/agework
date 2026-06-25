@@ -5,7 +5,7 @@ import {
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
 } from "./runtime-resource-metadata";
-import { runtimeResourceKeyForOwner } from "./resolved-runtime-resource";
+import { runtimeResourceKeyForOwner } from "./runtime-resource";
 
 /**
  * Runtime 资源生命周期清理：

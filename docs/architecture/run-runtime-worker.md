@@ -26,7 +26,7 @@ Worker 不依赖 Runtime 语义。
 
 ```text
 RunService 调 RuntimeService 准备环境;
-RunService 再用 ResolvedRuntimeResource + RunConfig 驱动 WorkerExecution;
+RunService 再用 RuntimeResource + RunConfig 驱动 WorkerExecution;
 Worker 只产出事件;
 RunService 拥有生命周期、状态、持久化和 SSE。
 ```
@@ -34,7 +34,7 @@ RunService 拥有生命周期、状态、持久化和 SSE。
 当前代码已经完成 Phase 1-3（含 2f / 3f）的主线重构:
 
 - Run 层 `RunWorkerExecutionService` 是 worker execution owner:自己注入 `RuntimeProviderRegistry`、持有 `runId -> WorkerExecutionHandle` 派发表,直接驱动 provider 的 `startWorkerExecution / sendControl / cancel / heartbeat / cleanup`。
-- Runtime 层 `RuntimeService` 已瘦身为纯运行环境门面:只有 `resolveRuntimeResource / heartbeatRuntimeResource / shutdownRuntimeResource`,**不再持有任何 worker execution 方法**。`resolveRuntimeResource` 把原先的 `resolvePlacement + provision` 两步合一:placement 解析与 runtime resource 身份计算都是纯计算,合成一个方法返回 `ResolvedRuntimeResource`(内含 `placement`)。
+- Runtime 层 `RuntimeService` 已瘦身为纯运行环境门面:只有 `resolveRuntimeResource / heartbeatRuntimeResource / shutdownRuntimeResource`,**不再持有任何 worker execution 方法**。`resolveRuntimeResource` 委托给 `resources/runtime-resource.ts` 里的纯函数 `resolveRuntimeResource(input, config)`,后者一次性算出 placement + resourceKey,直接返回扁平的 `RuntimeResource`(= `RuntimePlacement & { resourceKey }`)。
 - Provider 只保留 `startWorkerExecution()`;原先空转的 provider 端 `provision()`(两个实现都只是 `runtimeResourceHandleFromPlacement(placement)`)与 `RuntimeResourceProvider` 契约已删除,handle 计算直接在 `RuntimeService` 里完成。
 - 旧 `RuntimeProvider.start()` / `RuntimeService.startWorker()` / 过渡期的 `RuntimeService.startWorkerExecution()` 均已退场。
 - `WorkerExecutionHandle` 已独立为共享协议类型,旧 `RuntimeHandle` 已删除。
@@ -74,7 +74,7 @@ RunService
 RuntimeService.resolveRuntimeResource()
     |
     v
-ResolvedRuntimeResource  (内含 placement)
+RuntimeResource  (= placement + resourceKey)
     |
     | 2. assemble run config
     v
@@ -100,7 +100,7 @@ Claude / Codex Agent Adapter
 关键点:
 
 - `RuntimeService.resolveRuntimeResource()` 只算出环境资源句柄(纯计算),不启动 worker。
-- `RunWorkerExecutionService` 是 Run 层边界,负责把 `ResolvedRuntimeResource` 和
+- `RunWorkerExecutionService` 是 Run 层边界,负责把 `RuntimeResource` 和
   `RunConfig` 组合成一次 worker execution。
 - 当前 provider 仍负责 local fork / sandbox startWorker 的物理细节,但对外不再暴露旧
   `start(runConfig, placement)` 合并入口。
@@ -159,7 +159,7 @@ Run 是业务生命周期 owner。
 - 管 conversation active run 状态。
 - 组装 `RunConfig`。
 - 调 Runtime 准备运行环境。
-- 用 `ResolvedRuntimeResource + RunConfig` 驱动 worker execution。
+- 用 `RuntimeResource + RunConfig` 驱动 worker execution。
 - 持有 `WorkerExecutionHandle`。
 - 下发 cancel / approval_resolved / user_message 等 control。
 - 接收 worker 事件并做聚合、持久化、SSE。
@@ -178,7 +178,7 @@ Runtime 只负责环境。
 职责:
 
 - placement 解析 + runtime resource 身份计算(`resolveRuntimeResource`,纯计算)。
-- 返回 `ResolvedRuntimeResource`。
+- 返回 `RuntimeResource`。
 - 管 runtime resource 生命周期:starting / running / stopped / missing / error。
 - 管 heartbeat、idle、stop、cleanup、orphan recovery。
 - 维护 workspace/user -> runtime resource 绑定。
@@ -264,35 +264,29 @@ apps/api/src/runtime/providers/sandbox/worker-session.service.ts
   per-run cleanup
 
 packages/shared/src/protocol/transport.ts
-  ResolvedRuntimeResource
+  RuntimeResource
   WorkerExecutionHandle
   WorkerExecutionStartInput
 ```
 
 ## 4. 核心接口
 
-### 4.1 ResolvedRuntimeResource
+### 4.1 RuntimeResource
 
-只描述运行环境资源,不承载 run/session 语义。
+一次 run 的目标运行环境:就是 `RuntimePlacement` 加一个算出的 `resourceKey`,不再额外套层。
 
 ```ts
-type ResolvedRuntimeResource = {
-  runtimeType: string;
-  resourceKey: string;
-  workspaceId: string;
-  runtimeResourceId?: string;
-  placement: RuntimePlacement;
-};
+type RuntimeResource = RuntimePlacement & { resourceKey: string };
 ```
 
-`isolationScope` 不再出现在 handle 顶层——它是沙箱专属语义,归在
-`placement.sandbox.isolationScope`;local 模式 `placement.sandbox` 为 undefined。
-（前端 admin run detail 看到的 `runtimeResource.isolationScope` 来自 DB
-`RuntimeResource` 表的同名列,与本进程内 handle 无关。）
+`resourceKey` 是容器复用键(隔离粒度决定:user→userId,workspace→workspaceId),
+其余字段都来自 placement。`isolationScope` 是沙箱专属语义,归在 `placement.sandbox.isolationScope`;
+local 模式 `placement.sandbox` 为 undefined。（前端 admin run detail 看到的
+`runtimeResource.isolationScope` 来自 DB `RuntimeResource` 表的同名列,与本进程内类型无关。）
 
 ### 4.1a RuntimePlacement 与 SandboxPlacementInfo
 
-`RuntimePlacement` 是 run 的环境放置快照(纯计算,`resolveRuntimeResource` 内部由 placement policy 产出后包进 handle)。
+`RuntimePlacement` 是 run 的环境放置快照(纯计算,`resolveRuntimeResource` 直接产出)。
 沙箱专属字段收进可选 `sandbox` 对象,local 不带:
 
 ```ts
@@ -334,7 +328,7 @@ type WorkerExecutionHandle = {
 
 ```ts
 type WorkerExecutionStartInput = {
-  runtimeResource: ResolvedRuntimeResource;
+  runtimeResource: RuntimeResource;
   runConfig: RunConfig;
   onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
 };
@@ -343,7 +337,7 @@ type WorkerExecutionStartInput = {
 这体现目标边界:
 
 ```text
-ResolvedRuntimeResource = environment
+RuntimeResource = environment
 RunConfig = run intent
 WorkerExecutionHandle = session
 ```
@@ -419,7 +413,7 @@ AgeWork 应保持同样不变量:
 
 ```text
 Run API 不随 local / sandbox / future remote runtime 改变。
-ResolvedRuntimeResource 抹平 runtime resource 差异。
+RuntimeResource 抹平 runtime resource 差异。
 Worker event/control 协议保持稳定。
 ```
 
@@ -472,7 +466,7 @@ Worker emits events
 
 结果:
 
-- 引入 `ResolvedRuntimeResource`。
+- 引入 `RuntimeResource`。
 - `RuntimeService.provision()` 不启动 worker。
 - `RunService` 先 provision runtime,再 assemble `RunConfig`,再启动 worker execution。
 - Local provider 拆出 `provision()` 和 `startWorkerExecution()`。
@@ -540,7 +534,7 @@ SandboxRuntimeProvider.startWorkerExecution()
 结果:
 
 - `RuntimeService.resolvePlacement + provision` 合并为单一纯计算方法 `resolveRuntimeResource(input)`,
-  返回 `ResolvedRuntimeResource`(内含 `placement`)。`async` 去掉。
+  返回 `RuntimeResource`(内含 `placement`)。`async` 去掉。
 - 删除 provider 端 `provision()`、`RuntimeResourceProvider` 契约、`hasRuntimeResourceProvision`
   类型守卫与兜底分支;provider 现在只实现 `RuntimeProvider` + `WorkerExecutionProvider`。
 - `RunService` 两次调用收成一次,后续 `placement` 取自 `runtimeResource.placement`。

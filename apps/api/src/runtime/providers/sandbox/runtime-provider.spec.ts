@@ -6,9 +6,8 @@ import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
   IsolationScope,
   RuntimePlacement,
-  ResolvedRuntimeResource,
+  RuntimeResource,
 } from "@agework/shared/protocol";
-import { resolvedRuntimeResourceFromPlacement } from "../../resources/resolved-runtime-resource";
 
 // ── Mock engine ──────────────────────────────────────────────────────
 
@@ -120,16 +119,9 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
 }
 
 function makeRuntimeResource(
-  overrides: Partial<ResolvedRuntimeResource> = {}
-): ResolvedRuntimeResource {
-  const placement = overrides.placement ?? makePlacement();
-  return {
-    runtimeType: "sandbox",
-    resourceKey: "ws-1",
-    workspaceId: "ws-1",
-    placement,
-    ...overrides,
-  };
+  overrides: Partial<RuntimeResource> = {}
+): RuntimeResource {
+  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeResource;
 }
 
 function startProvider(
@@ -138,7 +130,13 @@ function startProvider(
   placement = makePlacement()
 ) {
   return provider.startWorkerExecution({
-    runtimeResource: resolvedRuntimeResourceFromPlacement(placement),
+    runtimeResource: {
+      ...placement,
+      resourceKey:
+        (placement as { sandbox: { isolationScope: string } }).sandbox.isolationScope === "user"
+          ? placement.userId
+          : placement.workspaceId,
+    },
     runConfig: runConfig as never,
   });
 }
@@ -401,6 +399,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
     expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
       expect.objectContaining({ runtimeType: "sandbox" }),
+      expect.any(String),
       expect.any(String)
     );
     expect(access.issueRuntimeResourceKey).toHaveBeenCalledWith(

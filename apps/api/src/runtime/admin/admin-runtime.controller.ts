@@ -9,7 +9,7 @@ import {
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
 } from "../resources/runtime-resource-metadata";
-import { runtimeResourceKeyForOwner } from "../resources/resolved-runtime-resource";
+import { runtimeResourceKeyForOwner } from "../resources/runtime-resource";
 
 @Controller("admin/runtime")
 @Roles("admin")

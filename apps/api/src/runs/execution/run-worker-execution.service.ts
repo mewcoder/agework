@@ -7,7 +7,7 @@ import type {
 } from "./run-worker-execution.types";
 
 /**
- * Run 层拥有的 worker execution 边界：把 ResolvedRuntimeResource + RunConfig 组装成一次
+ * Run 层拥有的 worker execution 边界：把 RuntimeResource + RunConfig 组装成一次
  * worker 执行，并维护 runId → handle 的派发表，下发 control / cancel / cleanup。
  *
  * worker 的物理启动（local fork / sandbox 容器会话）仍在 runtime provider 内实现，

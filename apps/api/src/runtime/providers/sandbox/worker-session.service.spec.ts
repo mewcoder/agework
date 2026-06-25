@@ -29,12 +29,7 @@ function makeContext(
   } as SandboxRuntimePlacement;
   return {
     runConfig,
-    runtimeResource: {
-      runtimeType: "sandbox",
-      resourceKey: "ws-1",
-      workspaceId: "ws-1",
-      placement,
-    },
+    runtimeResource: { ...placement, resourceKey: "ws-1" },
     placement,
     runId: "run-1",
     workspaceId: "ws-1",

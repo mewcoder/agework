@@ -193,10 +193,10 @@ export type SandboxRuntimePlacement = {
 
 export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
 
-// ── WorkerExecutionHandle / ResolvedRuntimeResource ───────────────────────────
+// ── WorkerExecutionHandle / RuntimeResource ───────────────────────────
 // worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
 // worker execution are split at the service boundary:
-// RuntimeService.resolveRuntimeResource() returns ResolvedRuntimeResource, while
+// RuntimeService.resolveRuntimeResource() returns RuntimeResource, while
 // startWorkerExecution() starts/attaches a per-run worker session.
 //
 // 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
@@ -210,17 +210,14 @@ export interface WorkerExecutionHandle {
   conversationId: string;
 }
 
-/** Runtime resource 句柄：只描述运行环境资源，不承载 run/worker session 语义。 */
-export interface ResolvedRuntimeResource {
-  runtimeType: string;
-  resourceKey: string;
-  workspaceId: string;
-  runtimeResourceId?: string;
-  placement: RuntimePlacement;
-}
+/**
+ * 一次 run 的目标运行环境：放置方案 + 算出的 resourceKey（容器复用粒度键）。
+ * 它就是 placement 加一个 key，不再额外套层。
+ */
+export type RuntimeResource = RuntimePlacement & { resourceKey: string };
 
 export type WorkerExecutionStartInput = {
-  runtimeResource: ResolvedRuntimeResource;
+  runtimeResource: RuntimeResource;
   runConfig: RunConfig;
   onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
 };

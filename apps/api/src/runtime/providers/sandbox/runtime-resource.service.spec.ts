@@ -86,13 +86,11 @@ function makeStartInput(placement = makePlacement()) {
   return {
     runConfig: makeRunConfig({ workspaceId: placement.workspaceId }),
     runtimeResource: {
-      runtimeType: "sandbox",
+      ...placement,
       resourceKey:
         placement.sandbox?.isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
-      workspaceId: placement.workspaceId,
-      placement,
     },
   };
 }
@@ -174,6 +172,7 @@ describe("SandboxRuntimeResourceService", () => {
     expect(onReady).toHaveBeenCalledWith("docker-resource-1");
     expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
       context.placement,
+      "ws-1",
       "docker-resource-1"
     );
     expect(access.issueRuntimeResourceKey).toHaveBeenCalledWith(

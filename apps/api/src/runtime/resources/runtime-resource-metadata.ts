@@ -1,6 +1,5 @@
 import type { RuntimePlacement } from "@agework/shared/protocol";
 import type { Prisma } from "../../../generated/prisma/client.js";
-import { runtimeResourceKeyForPlacement } from "./resolved-runtime-resource";
 
 type RuntimeResourceMetadata = Record<string, unknown>;
 
@@ -26,6 +25,7 @@ export function isMetadataRecord(
 
 export function runningResourceMetadata(input: {
   placement: RuntimePlacement;
+  resourceKey: string;
   runtimeResourceId: string;
   existing?: unknown;
   metadata?: object;
@@ -35,7 +35,7 @@ export function runningResourceMetadata(input: {
   return {
     ...(isMetadataRecord(input.existing) ? input.existing : {}),
     ...(input.metadata ?? {}),
-    resourceKey: runtimeResourceKeyForPlacement(input.placement),
+    resourceKey: input.resourceKey,
     workspaceId: input.placement.workspaceId,
     statusReason: "running",
     lastSeenAt: now,

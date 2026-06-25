@@ -1,12 +1,12 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   IsolationScope,
-  ResolvedRuntimeResource,
+  RuntimeResource,
   SandboxRuntimePlacement,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { isSandboxPlacement } from "../../resources/resolved-runtime-resource";
+import { isSandboxPlacement } from "../../resources/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
 import { RuntimeInternalAccessService } from "../../internal/access.service";
@@ -40,7 +40,7 @@ export type SandboxScopeState = {
 
 export type SandboxWorkerExecutionContext = {
   runConfig: WorkerExecutionStartInput["runConfig"];
-  runtimeResource: ResolvedRuntimeResource;
+  runtimeResource: RuntimeResource;
   placement: SandboxRuntimePlacement;
   runId: string;
   workspaceId: string;
@@ -86,7 +86,7 @@ export class SandboxRuntimeResourceService {
   resolveWorkerExecutionContext(
     input: WorkerExecutionStartInput
   ): SandboxWorkerExecutionContext {
-    const placement = input.runtimeResource.placement;
+    const placement = input.runtimeResource;
     if (!isSandboxPlacement(placement)) {
       throw new Error(
         `SandboxRuntimeResourceService requires sandbox placement, got runtimeType=${placement.runtimeType}`
@@ -111,7 +111,7 @@ export class SandboxRuntimeResourceService {
     return {
       runId: context.runId,
       runtimeType: context.runtimeResource.runtimeType,
-      runtimeResourceId: context.runtimeResource.runtimeResourceId ?? "",
+      runtimeResourceId: "",
       conversationId: context.runConfig.conversationId,
     };
   }
@@ -155,7 +155,7 @@ export class SandboxRuntimeResourceService {
     attachment: SandboxRuntimeResourceAttachment,
     callbacks: SandboxRuntimeResourceCallbacks
   ): void {
-    const { context, scopeState, handle } = attachment;
+    const { context, scopeState } = attachment;
     if (scopeState.runtimeResourceId) {
       this.attachReadyRuntimeResource(attachment);
       return;
@@ -167,8 +167,6 @@ export class SandboxRuntimeResourceService {
       return;
     }
 
-    handle.runtimeResourceId =
-      context.runtimeResource.runtimeResourceId ?? handle.runtimeResourceId;
     this.startRuntimeResourceForScope(attachment, callbacks);
   }
 
@@ -583,7 +581,7 @@ export class SandboxRuntimeResourceService {
     runtimeResourceId: string
   ): Promise<void> {
     return this.workspaceRuntimeService
-      .upsertRunning(placement, runtimeResourceId)
+      .upsertRunning(placement, resourceKey, runtimeResourceId)
       .then(({ resource }) => {
         this.runtimeAccess.issueRuntimeResourceKey(
           resource.id,

@@ -61,6 +61,7 @@ export class WorkspaceRuntimeRepository {
 
   async upsertRunning(
     placement: SandboxRuntimePlacement,
+    resourceKey: string,
     runtimeResourceId: string,
     metadata?: object
   ) {
@@ -74,6 +75,7 @@ export class WorkspaceRuntimeRepository {
         metadata: runtimeResourceMetadataJson(
           runningResourceMetadata({
             placement,
+            resourceKey,
             runtimeResourceId,
             existing: existing?.metadata,
             metadata,

@@ -13,7 +13,7 @@ import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type {
   RuntimePlacement,
-  ResolvedRuntimeResource,
+  RuntimeResource,
 } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -40,16 +40,14 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
 
 function makeRuntimeResource(
   placement = makePlacement("local")
-): ResolvedRuntimeResource {
+): RuntimeResource {
   return {
-    runtimeType: placement.runtimeType,
+    ...placement,
     resourceKey:
       placement.runtimeType === "sandbox" &&
       placement.sandbox.isolationScope === "user"
         ? placement.userId
         : placement.workspaceId,
-    workspaceId: placement.workspaceId,
-    placement,
   };
 }
 
