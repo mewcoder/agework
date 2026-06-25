@@ -6,10 +6,10 @@ import { RuntimeService } from "../runtime.service";
 import { RuntimeResourceIdDto } from "./dto/runtime-resource-id.dto";
 import {
   runtimeResourceDiagnostics,
-  runtimeResourceKeyForOwner,
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
 } from "../resources/runtime-resource-metadata";
+import { runtimeResourceKeyForOwner } from "../resources/resolved-runtime-resource";
 
 @Controller("admin/runtime")
 @Roles("admin")

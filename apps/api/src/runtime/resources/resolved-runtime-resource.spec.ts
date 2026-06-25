@@ -1,6 +1,65 @@
 import { describe, it, expect } from "vitest";
 import type { IsolationScope, RuntimePlacement } from "@agework/shared/protocol";
-import { resolvedRuntimeResourceFromPlacement } from "./resolved-runtime-resource";
+import {
+  resolvedRuntimeResourceFromPlacement,
+  runtimeResourceKey,
+  runtimeResourceKeyForOwner,
+} from "./resolved-runtime-resource";
+
+describe("runtimeResourceKey", () => {
+  it("user scope → userId, workspace scope → workspaceId", () => {
+    expect(runtimeResourceKey("user", "u-1", "ws-1")).toBe("u-1");
+    expect(runtimeResourceKey("workspace", "u-1", "ws-1")).toBe("ws-1");
+  });
+
+  it("throws on an unknown scope", () => {
+    expect(() => runtimeResourceKey("nope", "u-1", "ws-1")).toThrow(
+      "Unknown runtime isolation scope: nope"
+    );
+  });
+});
+
+describe("runtimeResourceKeyForOwner", () => {
+  it("user scope uses ownerUserId", () => {
+    expect(
+      runtimeResourceKeyForOwner({
+        isolationScope: "user",
+        ownerUserId: "u-1",
+        ownerWorkspaceId: null,
+      })
+    ).toBe("u-1");
+  });
+
+  it("workspace scope uses ownerWorkspaceId", () => {
+    expect(
+      runtimeResourceKeyForOwner({
+        isolationScope: "workspace",
+        ownerUserId: "u-1",
+        ownerWorkspaceId: "ws-1",
+      })
+    ).toBe("ws-1");
+  });
+
+  it("throws when workspace scope is missing ownerWorkspaceId", () => {
+    expect(() =>
+      runtimeResourceKeyForOwner({
+        isolationScope: "workspace",
+        ownerUserId: "u-1",
+        ownerWorkspaceId: null,
+      })
+    ).toThrow("Runtime resource ownerWorkspaceId is required");
+  });
+
+  it("throws on an unknown scope", () => {
+    expect(() =>
+      runtimeResourceKeyForOwner({
+        isolationScope: "weird",
+        ownerUserId: "u-1",
+        ownerWorkspaceId: "ws-1",
+      })
+    ).toThrow("Unknown runtime isolation scope: weird");
+  });
+});
 
 const sandbox = (
   isolationScope: IsolationScope,

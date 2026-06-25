@@ -2,10 +2,10 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeProviderRegistry } from "../providers/provider-registry";
 import {
-  runtimeResourceKeyForOwner,
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
 } from "./runtime-resource-metadata";
+import { runtimeResourceKeyForOwner } from "./resolved-runtime-resource";
 
 /**
  * Runtime 资源生命周期清理：

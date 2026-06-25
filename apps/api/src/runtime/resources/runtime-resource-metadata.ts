@@ -83,23 +83,6 @@ export function statusResourceMetadata(input: {
   };
 }
 
-export function runtimeResourceKeyForOwner(input: {
-  isolationScope: string;
-  ownerUserId: string;
-  ownerWorkspaceId: string | null;
-}): string {
-  if (input.isolationScope === "user") {
-    return input.ownerUserId;
-  }
-  if (input.isolationScope === "workspace") {
-    if (!input.ownerWorkspaceId) {
-      throw new Error("Runtime resource ownerWorkspaceId is required");
-    }
-    return input.ownerWorkspaceId;
-  }
-  throw new Error(`Unknown runtime isolation scope: ${input.isolationScope}`);
-}
-
 export function runtimeResourceDiagnostics(metadata: unknown) {
   const record = isMetadataRecord(metadata) ? metadata : {};
   return {
