@@ -5,27 +5,34 @@ import {
   runtimeResourceKey,
   runtimeResourceKeyForOwner,
   type ResolveRuntimeResourceInput,
+  type RuntimeResourceDefaults,
 } from "./runtime-resource";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
+
+const DEFAULTS: RuntimeResourceDefaults = {
+  runtimeType: "sandbox",
+  isolationScope: "user",
+  sandboxEngine: "docker",
+};
 
 const BASE: ResolveRuntimeResourceInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
   userWorkspaceRootPath: "/data/users/user-1",
-  runtimeType: "sandbox",
-  isolationScope: "user",
-  sandboxEngine: "docker",
 };
 
 const withInput = (
   overrides: Partial<ResolveRuntimeResourceInput>
 ): ResolveRuntimeResourceInput => ({ ...BASE, ...overrides });
 
+const resolve = (overrides: Partial<ResolveRuntimeResourceInput> = {}) =>
+  resolveRuntimeResource(withInput(overrides), DEFAULTS);
+
 describe("resolveRuntimeResource", () => {
   describe("sandbox, user isolation", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, resourceKey=userId", () => {
-      const r = resolveRuntimeResource(BASE);
+      const r = resolve();
       expect(r.runtimeType).toBe("sandbox");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
@@ -39,12 +46,8 @@ describe("resolveRuntimeResource", () => {
     });
 
     it("different workspaces of the same user get different runtimePaths, same resourceKey", () => {
-      const a = resolveRuntimeResource(
-        withInput({ workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" })
-      );
-      const b = resolveRuntimeResource(
-        withInput({ workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" })
-      );
+      const a = resolve({ workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" });
+      const b = resolve({ workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" });
       expect(a.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-a`);
       expect(b.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-b`);
       expect(a.resourceKey).toBe(b.resourceKey); // 同用户共享桶
@@ -53,7 +56,7 @@ describe("resolveRuntimeResource", () => {
 
   describe("sandbox, workspace isolation", () => {
     it("hostPath=workspaceRoot, mountTarget per-workspace, resourceKey=workspaceId", () => {
-      const r = resolveRuntimeResource(withInput({ isolationScope: "workspace" }));
+      const r = resolve({ isolationScope: "workspace" });
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
       expect(r.resourceKey).toBe("ws-1");
@@ -66,7 +69,7 @@ describe("resolveRuntimeResource", () => {
 
   describe("local", () => {
     it("runtimePath === hostPath === workspaceRootPath, no sandbox info, resourceKey=workspaceId", () => {
-      const r = resolveRuntimeResource(withInput({ runtimeType: "local" }));
+      const r = resolve({ runtimeType: "local" });
       expect(r.runtimeType).toBe("local");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
@@ -77,24 +80,16 @@ describe("resolveRuntimeResource", () => {
 
   describe("validation", () => {
     it("throws when workspaceRootPath is outside userWorkspaceRootPath (user isolation)", () => {
-      expect(() =>
-        resolveRuntimeResource(
-          withInput({ workspaceRootPath: "/data/users/user-2/ws-1" })
-        )
-      ).toThrow();
+      expect(() => resolve({ workspaceRootPath: "/data/users/user-2/ws-1" })).toThrow();
     });
 
     it("throws when workspaceRootPath is relative", () => {
-      expect(() =>
-        resolveRuntimeResource(withInput({ workspaceRootPath: "relative/ws-1" }))
-      ).toThrow();
+      expect(() => resolve({ workspaceRootPath: "relative/ws-1" })).toThrow();
     });
 
     it("throws when userWorkspaceRootPath is relative", () => {
       expect(() =>
-        resolveRuntimeResource(
-          withInput({ userWorkspaceRootPath: "relative/users/user-1" })
-        )
+        resolve({ userWorkspaceRootPath: "relative/users/user-1" })
       ).toThrow();
     });
   });

@@ -16,10 +16,18 @@ export type ResolveRuntimeResourceInput = {
   workspaceId: string;
   workspaceRootPath: string;
   userWorkspaceRootPath: string;
+  /** 不传则用 defaults.runtimeType */
+  runtimeType?: RuntimeType;
+  /** sandbox 下不传则用 defaults.isolationScope；local 不消费 */
+  isolationScope?: IsolationScope;
+  /** sandbox 下不传则用 defaults.sandboxEngine；local 不消费 */
+  sandboxEngine?: "docker" | "opensandbox";
+};
+
+/** 部署默认值（由 RuntimeService 从 ConfigService 取出后传入）。 */
+export type RuntimeResourceDefaults = {
   runtimeType: RuntimeType;
-  /** sandbox 必填；local 不消费 */
   isolationScope: IsolationScope;
-  /** sandbox 必填；local 不消费 */
   sandboxEngine: "docker" | "opensandbox";
 };
 
@@ -31,19 +39,19 @@ export function isSandboxPlacement(
 }
 
 /**
- * 解析一次 run 的目标运行环境：根据 run 输入算出路径映射与容器复用键 resourceKey，
- * 直接返回一个 RuntimeResource 对象。纯计算，不启动也不 attach worker。
- * runtimeType / isolationScope / sandboxEngine 由调用方（RuntimeService）从配置填好默认值后传入。
+ * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
+ * 路径映射与容器复用键 resourceKey，直接返回一个 RuntimeResource 对象。纯计算，不启动
+ * 也不 attach worker。
  */
 export function resolveRuntimeResource(
-  input: ResolveRuntimeResourceInput
+  input: ResolveRuntimeResourceInput,
+  defaults: RuntimeResourceDefaults
 ): RuntimeResource {
   const {
     userId,
     workspaceId,
     workspaceRootPath,
     userWorkspaceRootPath,
-    runtimeType,
   } = input;
 
   if (!isAbsolute(workspaceRootPath) || !isAbsolute(userWorkspaceRootPath)) {
@@ -51,6 +59,8 @@ export function resolveRuntimeResource(
       `workspaceRootPath and userWorkspaceRootPath must be absolute paths: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
     );
   }
+
+  const runtimeType = input.runtimeType ?? defaults.runtimeType;
 
   // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
   // resourceKey 无复用语义，用 workspaceId 兜底。
@@ -65,7 +75,8 @@ export function resolveRuntimeResource(
     return { ...local, resourceKey: workspaceId };
   }
 
-  const { isolationScope, sandboxEngine } = input;
+  const isolationScope = input.isolationScope ?? defaults.isolationScope;
+  const sandboxEngine = input.sandboxEngine ?? defaults.sandboxEngine;
 
   // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget：
   //   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），

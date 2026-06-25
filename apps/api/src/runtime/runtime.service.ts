@@ -1,26 +1,12 @@
 import { Injectable } from "@nestjs/common";
 import type { RuntimeResource } from "@agework/shared/protocol";
-import {
-  ConfigService,
-  type IsolationScope,
-  type RuntimeType,
-} from "../config/config.service";
+import { ConfigService } from "../config/config.service";
 import {
   resolveRuntimeResource,
   type ResolveRuntimeResourceInput,
+  type RuntimeResourceDefaults,
 } from "./resources/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
-
-/** run 层提供的原始输入（runtimeType / isolationScope / sandboxEngine 可选，由 service 填默认）。 */
-export type ResolveRuntimeResourceRequest = {
-  userId: string;
-  workspaceId: string;
-  workspaceRootPath: string;
-  userWorkspaceRootPath: string;
-  runtimeType?: RuntimeType;
-  isolationScope?: IsolationScope;
-  sandboxEngine?: "docker" | "opensandbox";
-};
 
 /**
  * Runtime 层对上层的门面：只负责运行环境——解析 runtime resource、管理 resource 生命周期
@@ -29,29 +15,22 @@ export type ResolveRuntimeResourceRequest = {
  */
 @Injectable()
 export class RuntimeService {
+  private readonly defaults: RuntimeResourceDefaults;
+
   constructor(
-    private readonly configService: ConfigService,
+    configService: ConfigService,
     private readonly providerRegistry: RuntimeProviderRegistry
-  ) {}
+  ) {
+    this.defaults = {
+      runtimeType: configService.getDefaultRuntimeType(),
+      isolationScope: configService.getDefaultIsolationScope(),
+      sandboxEngine: configService.getSandboxEngine(),
+    };
+  }
 
   /** 从 run 输入解析出目标运行环境（纯计算，不启动 worker）。 */
-  resolveRuntimeResource(
-    request: ResolveRuntimeResourceRequest
-  ): RuntimeResource {
-    const input: ResolveRuntimeResourceInput = {
-      userId: request.userId,
-      workspaceId: request.workspaceId,
-      workspaceRootPath: request.workspaceRootPath,
-      userWorkspaceRootPath: request.userWorkspaceRootPath,
-      runtimeType:
-        request.runtimeType ?? this.configService.getDefaultRuntimeType(),
-      isolationScope:
-        request.isolationScope ??
-        this.configService.getDefaultIsolationScope(),
-      sandboxEngine:
-        request.sandboxEngine ?? this.configService.getSandboxEngine(),
-    };
-    return resolveRuntimeResource(input);
+  resolveRuntimeResource(input: ResolveRuntimeResourceInput): RuntimeResource {
+    return resolveRuntimeResource(input, this.defaults);
   }
 
   /**
