@@ -6,8 +6,9 @@ import type { SandboxEngine, SandboxRuntime } from "./sandbox-engine";
 import type {
   IsolationScope,
   RuntimePlacement,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
 } from "@agework/shared/protocol";
+import { resolvedRuntimeResourceFromPlacement } from "../core/runtime-resources/runtime-resource-handle";
 
 // ── Mock engine ──────────────────────────────────────────────────────
 
@@ -119,8 +120,8 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
 }
 
 function makeRuntimeResource(
-  overrides: Partial<RuntimeResourceHandle> = {}
-): RuntimeResourceHandle {
+  overrides: Partial<ResolvedRuntimeResource> = {}
+): ResolvedRuntimeResource {
   const placement = overrides.placement ?? makePlacement();
   return {
     runtimeType: "sandbox",
@@ -137,7 +138,7 @@ function startProvider(
   placement = makePlacement()
 ) {
   return provider.startWorkerExecution({
-    runtimeResource: provider.provision(placement),
+    runtimeResource: resolvedRuntimeResourceFromPlacement(placement),
     runConfig: runConfig as never,
   });
 }
@@ -147,22 +148,6 @@ function startProvider(
 describe("SandboxRuntimeProvider — provider contracts", () => {
   beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => { vi.useRealTimers(); });
-
-  it("provision returns a runtime resource handle without starting a sandbox", () => {
-    const { provider, engine } = makeProvider();
-    const placement = makePlacement();
-
-    const runtimeResource = provider.provision(placement);
-
-    expect(runtimeResource).toEqual({
-      runtimeType: "sandbox",
-      resourceKey: "ws-1",
-      workspaceId: "ws-1",
-      placement,
-    });
-    expect(engine.getOrCreate).not.toHaveBeenCalled();
-    expect(engine.startWorker).not.toHaveBeenCalled();
-  });
 
   it("startWorkerExecution fails fast when the runtime resource is not sandbox", () => {
     const { provider, engine } = makeProvider();

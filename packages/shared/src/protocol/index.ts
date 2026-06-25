@@ -34,7 +34,7 @@ export type {
   UpstreamMessage,
   Unsubscribe,
   RuntimeTransport,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
   IsolationScope,

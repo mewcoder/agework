@@ -1,6 +1,6 @@
 import type {
   RuntimePlacement,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
 
@@ -45,9 +45,9 @@ export function runtimeResourceKeyForPlacement(
   throw new Error(`Unknown runtime isolation scope: ${isolationScope}`);
 }
 
-export function runtimeResourceHandleFromPlacement(
+export function resolvedRuntimeResourceFromPlacement(
   placement: RuntimePlacement
-): RuntimeResourceHandle {
+): ResolvedRuntimeResource {
   return {
     runtimeType: requirePlacementString(placement, "runtimeType"),
     resourceKey: runtimeResourceKeyForPlacement(placement),

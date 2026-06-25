@@ -193,11 +193,11 @@ export type SandboxRuntimePlacement = {
 
 export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
 
-// ── WorkerExecutionHandle / RuntimeResourceHandle ───────────────────────────
+// ── WorkerExecutionHandle / ResolvedRuntimeResource ───────────────────────────
 // worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
-// worker execution are split at the service boundary: RuntimeService.provision()
-// returns RuntimeResourceHandle, while startWorkerExecution() starts/attaches
-// a per-run worker session.
+// worker execution are split at the service boundary:
+// RuntimeService.resolveRuntimeResource() returns ResolvedRuntimeResource, while
+// startWorkerExecution() starts/attaches a per-run worker session.
 //
 // 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
 // 不是跨进程线缆协议，定义在 apps/api/src/runtime 下，不在此处。
@@ -211,7 +211,7 @@ export interface WorkerExecutionHandle {
 }
 
 /** Runtime resource 句柄：只描述运行环境资源，不承载 run/worker session 语义。 */
-export interface RuntimeResourceHandle {
+export interface ResolvedRuntimeResource {
   runtimeType: string;
   resourceKey: string;
   workspaceId: string;
@@ -220,7 +220,7 @@ export interface RuntimeResourceHandle {
 }
 
 export type WorkerExecutionStartInput = {
-  runtimeResource: RuntimeResourceHandle;
+  runtimeResource: ResolvedRuntimeResource;
   runConfig: RunConfig;
   onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
 };

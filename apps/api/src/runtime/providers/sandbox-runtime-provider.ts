@@ -1,22 +1,15 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type {
-  RuntimePlacement,
-  RuntimeResourceHandle,
   WorkerExecutionHandle,
+  WorkerExecutionStartInput,
   ControlPayload,
 } from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import { safeLogJson } from "../../common/logging";
-import { runtimeResourceHandleFromPlacement } from "../core/runtime-resources/runtime-resource-handle";
 import { publishWorkerErrorStatus } from "./runtime-provider-utils";
 import type { RunEventReceiver } from "../run-event-receiver";
-import type {
-  ProviderWorkerExecutionStartInput,
-  RuntimeProvider,
-  RuntimeResourceProvider,
-  WorkerExecutionProvider,
-} from "./runtime-provider-contracts";
+import type { RuntimeProvider } from "./runtime-provider-contracts";
 import {
   SandboxRuntimeResourceService,
   type SandboxRuntimeResourceCallbacks,
@@ -25,9 +18,7 @@ import {
 import { SandboxWorkerSessionService } from "./sandbox-worker-session.service";
 
 @Injectable()
-export class SandboxRuntimeProvider
-  implements RuntimeProvider, RuntimeResourceProvider, WorkerExecutionProvider
-{
+export class SandboxRuntimeProvider implements RuntimeProvider {
   readonly type = "sandbox" as const;
   private readonly logger = new Logger(SandboxRuntimeProvider.name);
   private receiver!: RunEventReceiver;
@@ -41,12 +32,8 @@ export class SandboxRuntimeProvider
     this.receiver = receiver;
   }
 
-  provision(placement: RuntimePlacement): RuntimeResourceHandle {
-    return runtimeResourceHandleFromPlacement(placement);
-  }
-
   startWorkerExecution(
-    input: ProviderWorkerExecutionStartInput
+    input: WorkerExecutionStartInput
   ): WorkerExecutionHandle {
     if (input.runtimeResource.runtimeType !== this.type) {
       throw new Error(

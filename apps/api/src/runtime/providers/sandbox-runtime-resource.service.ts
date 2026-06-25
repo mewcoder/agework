@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   IsolationScope,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
   SandboxRuntimePlacement,
   WorkerExecutionHandle,
+  WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { isSandboxPlacement } from "../core/runtime-resources/runtime-resource-handle";
 import { ConfigService } from "../../config/config.service";
@@ -16,9 +17,6 @@ import {
   IdleWatchdog,
   resolveDockerApiBase,
 } from "./runtime-provider-utils";
-import type {
-  ProviderWorkerExecutionStartInput,
-} from "./runtime-provider-contracts";
 import type {
   SandboxEngine,
   SandboxEngineType,
@@ -41,8 +39,8 @@ export type SandboxScopeState = {
 };
 
 export type SandboxWorkerExecutionContext = {
-  runConfig: ProviderWorkerExecutionStartInput["runConfig"];
-  runtimeResource: RuntimeResourceHandle;
+  runConfig: WorkerExecutionStartInput["runConfig"];
+  runtimeResource: ResolvedRuntimeResource;
   placement: SandboxRuntimePlacement;
   runId: string;
   workspaceId: string;
@@ -86,7 +84,7 @@ export class SandboxRuntimeResourceService {
   }
 
   resolveWorkerExecutionContext(
-    input: ProviderWorkerExecutionStartInput
+    input: WorkerExecutionStartInput
   ): SandboxWorkerExecutionContext {
     const placement = input.runtimeResource.placement;
     if (!isSandboxPlacement(placement)) {

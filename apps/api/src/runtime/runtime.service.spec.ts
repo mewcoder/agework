@@ -60,23 +60,24 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("resolvePlacement delegates to RuntimePlacementPolicy", () => {
+  it("resolveRuntimeResource delegates placement to RuntimePlacementPolicy", () => {
     const input = {
       userId: "u",
       workspaceId: "w",
       workspaceRootPath: "/a",
       userWorkspaceRootPath: "/a",
     };
-    service.resolvePlacement(input);
+    service.resolveRuntimeResource(input);
     expect(placementPolicy.resolveForRun).toHaveBeenCalledWith(input);
   });
 
-  it("provision returns a runtime resource handle without starting a worker", async () => {
-    const p = placement("sandbox", {
-      workspaceId: "ws-1",
-    });
+  it("resolveRuntimeResource returns a runtime resource handle without starting a worker", () => {
+    const p = placement("sandbox", { workspaceId: "ws-1" });
+    (placementPolicy.resolveForRun as ReturnType<typeof vi.fn>).mockReturnValue(
+      p
+    );
 
-    const result = await service.provision(p);
+    const result = service.resolveRuntimeResource({} as never);
 
     expect(result).toEqual({
       runtimeType: "sandbox",
@@ -84,31 +85,10 @@ describe("RuntimeService", () => {
       workspaceId: "ws-1",
       placement: p,
     });
-    expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
     expect(provider.startWorkerExecution).not.toHaveBeenCalled();
   });
 
-  it("provision delegates to provider-side provision when available", async () => {
-    const p = placement("local");
-    const expected = {
-      runtimeType: "local",
-      resourceKey: "ws-1",
-      workspaceId: "ws-1",
-      placement: p,
-    };
-    const provision = vi.fn().mockReturnValue(expected);
-    Object.assign(provider, {
-      provision,
-    });
-
-    await expect(service.provision(p)).resolves.toBe(expected);
-
-    expect(providerRegistry.resolve).toHaveBeenCalledWith("local");
-    expect(provision).toHaveBeenCalledWith(p);
-    expect(provider.startWorkerExecution).not.toHaveBeenCalled();
-  });
-
-  it("provision uses userId as resourceKey for user isolation", async () => {
+  it("resolveRuntimeResource uses userId as resourceKey for user isolation", () => {
     const p = placement("sandbox", {
       sandbox: {
         isolationScope: "user",
@@ -118,14 +98,17 @@ describe("RuntimeService", () => {
       userId: "user-1",
       workspaceId: "ws-2",
     });
+    (placementPolicy.resolveForRun as ReturnType<typeof vi.fn>).mockReturnValue(
+      p
+    );
 
-    await expect(service.provision(p)).resolves.toMatchObject({
+    expect(service.resolveRuntimeResource({} as never)).toMatchObject({
       resourceKey: "user-1",
       workspaceId: "ws-2",
     });
   });
 
-  it("provision fails fast for an unknown isolation scope", async () => {
+  it("resolveRuntimeResource fails fast for an unknown isolation scope", () => {
     const p = placement("sandbox", {
       sandbox: {
         isolationScope: "unknown" as IsolationScope,
@@ -133,37 +116,43 @@ describe("RuntimeService", () => {
         sandboxEngineType: "docker",
       },
     });
+    (placementPolicy.resolveForRun as ReturnType<typeof vi.fn>).mockReturnValue(
+      p
+    );
 
-    await expect(service.provision(p)).rejects.toThrow(
+    expect(() => service.resolveRuntimeResource({} as never)).toThrow(
       "Unknown runtime isolation scope: unknown"
     );
   });
 
-  it("provision fails fast when required placement fields are missing", async () => {
-    await expect(
-      service.provision(placement(""))
-    ).rejects.toThrow("Runtime placement runtimeType is required");
+  it("resolveRuntimeResource fails fast when required placement fields are missing", () => {
+    const resolveForRun = placementPolicy.resolveForRun as ReturnType<
+      typeof vi.fn
+    >;
 
-    await expect(
-      service.provision(
-        placement("sandbox", {
-          sandbox: {
-            isolationScope: "user",
-            mountTarget: "/ws",
-            sandboxEngineType: "docker",
-          },
-          userId: "",
-        })
-      )
-    ).rejects.toThrow("Runtime placement userId is required");
+    resolveForRun.mockReturnValue(placement(""));
+    expect(() => service.resolveRuntimeResource({} as never)).toThrow(
+      "Runtime placement runtimeType is required"
+    );
 
-    await expect(
-      service.provision(
-        placement("sandbox", {
-          workspaceId: "",
-        })
-      )
-    ).rejects.toThrow("Runtime placement workspaceId is required");
+    resolveForRun.mockReturnValue(
+      placement("sandbox", {
+        sandbox: {
+          isolationScope: "user",
+          mountTarget: "/ws",
+          sandboxEngineType: "docker",
+        },
+        userId: "",
+      })
+    );
+    expect(() => service.resolveRuntimeResource({} as never)).toThrow(
+      "Runtime placement userId is required"
+    );
+
+    resolveForRun.mockReturnValue(placement("sandbox", { workspaceId: "" }));
+    expect(() => service.resolveRuntimeResource({} as never)).toThrow(
+      "Runtime placement workspaceId is required"
+    );
   });
 
   it("heartbeatRuntimeResource broadcasts to all providers by resource key", () => {

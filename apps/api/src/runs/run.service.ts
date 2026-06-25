@@ -87,7 +87,7 @@ export class RunService {
       }
       isolationScope = resolvedIsolationScope;
     }
-    const placement = this.runtimeService.resolvePlacement({
+    const runtimeResource = this.runtimeService.resolveRuntimeResource({
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
@@ -98,7 +98,7 @@ export class RunService {
       isolationScope,
       sandboxEngine: workspace.sandboxEngine ?? undefined,
     });
-    const runtimeResource = await this.runtimeService.provision(placement);
+    const placement = runtimeResource.placement;
     const runtimeType = placement.runtimeType;
     const sandbox =
       placement.runtimeType === "sandbox" ? placement.sandbox : undefined;

@@ -3,7 +3,7 @@ import type {
   ControlPayload,
   RunConfig,
   RuntimePlacement,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { RuntimeProviderRegistry } from "../../runtime/providers/runtime-provider-registry";
@@ -47,7 +47,7 @@ describe("RunWorkerExecutionService", () => {
       workspaceId: "ws-1",
       isolationScope: "workspace",
       placement: { runtimeType: "local" } as RuntimePlacement,
-    } as RuntimeResourceHandle;
+    } as ResolvedRuntimeResource;
     const onReady = vi.fn();
 
     const result = service.start({
@@ -92,7 +92,7 @@ describe("RunWorkerExecutionService", () => {
 
     service.start({
       runConfig: { runId: "run-1" } as RunConfig,
-      runtimeResource: { runtimeType: "local" } as RuntimeResourceHandle,
+      runtimeResource: { runtimeType: "local" } as ResolvedRuntimeResource,
     });
 
     service.heartbeat("run-1");

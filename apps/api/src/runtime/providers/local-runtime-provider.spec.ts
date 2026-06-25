@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type {
   LocalRuntimePlacement,
   RunConfig,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
 } from "@agework/shared/protocol";
 import { LocalRuntimeProvider } from "./local-runtime-provider";
 
@@ -50,8 +50,8 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
 }
 
 function makeRuntimeResource(
-  overrides: Partial<RuntimeResourceHandle> = {}
-): RuntimeResourceHandle {
+  overrides: Partial<ResolvedRuntimeResource> = {}
+): ResolvedRuntimeResource {
   const placement = makePlacement();
   return {
     runtimeType: "local",
@@ -93,20 +93,6 @@ describe("LocalRuntimeProvider", () => {
 
   it("getHandle returns undefined for unknown runId", () => {
     expect(provider.getHandle("nonexistent")).toBeUndefined();
-  });
-
-  it("provision returns a local runtime resource handle without forking a worker", () => {
-    const placement = makePlacement();
-
-    const runtimeResource = provider.provision(placement);
-
-    expect(runtimeResource).toEqual({
-      runtimeType: "local",
-      resourceKey: "ws-1",
-      workspaceId: "ws-1",
-      placement,
-    });
-    expect(childProcessMock.fork).not.toHaveBeenCalled();
   });
 
   it("startWorkerExecution forks a local worker and sends the run config", () => {

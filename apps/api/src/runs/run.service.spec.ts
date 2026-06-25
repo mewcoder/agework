@@ -13,7 +13,7 @@ import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type {
   RuntimePlacement,
-  RuntimeResourceHandle,
+  ResolvedRuntimeResource,
 } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -40,7 +40,7 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
 
 function makeRuntimeResource(
   placement = makePlacement("local")
-): RuntimeResourceHandle {
+): ResolvedRuntimeResource {
   return {
     runtimeType: placement.runtimeType,
     resourceKey:
@@ -134,10 +134,9 @@ describe("RunService", () => {
       get: vi.fn().mockReturnValue(undefined),
     };
     mockRuntimeService = {
-      resolvePlacement: vi.fn().mockReturnValue(makePlacement("local")),
-      provision: vi.fn().mockImplementation((placement) =>
-        Promise.resolve(makeRuntimeResource(placement))
-      ),
+      resolveRuntimeResource: vi
+        .fn()
+        .mockReturnValue(makeRuntimeResource(makePlacement("local"))),
     };
     mockRunWorkerExecution = {
       start: vi.fn().mockReturnValue({
@@ -207,11 +206,8 @@ describe("RunService", () => {
       const res = makeRes();
       await service.start(makeStartInput({ res }));
 
-      expect(mockRuntimeService.resolvePlacement).toHaveBeenCalledWith(
+      expect(mockRuntimeService.resolveRuntimeResource).toHaveBeenCalledWith(
         expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
-      );
-      expect(mockRuntimeService.provision).toHaveBeenCalledWith(
-        expect.objectContaining({ runtimeType: "local" })
       );
       expect(mockRunConfigAssembler.assemble).toHaveBeenCalled();
       expect(mockRunRepository.create).toHaveBeenCalledWith({
@@ -284,7 +280,7 @@ describe("RunService", () => {
       await expect(service.start(makeStartInput())).rejects.toThrow(
         BadRequestException
       );
-      expect(mockRuntimeService.resolvePlacement).not.toHaveBeenCalled();
+      expect(mockRuntimeService.resolveRuntimeResource).not.toHaveBeenCalled();
     });
 
     it("wraps RunConfig assembly errors as BadRequestException", async () => {
@@ -328,9 +324,9 @@ describe("RunService", () => {
 
     it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
       // placement.runtimeType=sandbox，runtimeResourceId 由 sandbox provider 异步解析
-      mockRuntimeService.resolvePlacement = vi
+      mockRuntimeService.resolveRuntimeResource = vi
         .fn()
-        .mockReturnValue(makePlacement("sandbox"));
+        .mockReturnValue(makeRuntimeResource(makePlacement("sandbox")));
       mockRunWorkerExecution.start = vi
         .fn()
         .mockImplementation(({ onRuntimeResourceIdReady }) => {

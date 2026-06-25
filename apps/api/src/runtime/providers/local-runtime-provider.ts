@@ -4,20 +4,13 @@ import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import type {
   RunConfig,
-  RuntimePlacement,
-  RuntimeResourceHandle,
   WorkerExecutionHandle,
+  WorkerExecutionStartInput,
   ControlPayload,
   Envelope,
 } from "@agework/shared/protocol";
-import { runtimeResourceHandleFromPlacement } from "../core/runtime-resources/runtime-resource-handle";
 import type { RunEventReceiver } from "../run-event-receiver";
-import type {
-  ProviderWorkerExecutionStartInput,
-  RuntimeProvider,
-  RuntimeResourceProvider,
-  WorkerExecutionProvider,
-} from "./runtime-provider-contracts";
+import type { RuntimeProvider } from "./runtime-provider-contracts";
 import {
   HeartbeatWatchdog,
   nextControlEnvelope,
@@ -49,9 +42,7 @@ const TSX_CLI = require.resolve("tsx/cli");
  * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
  */
 @Injectable()
-export class LocalRuntimeProvider
-  implements RuntimeProvider, RuntimeResourceProvider, WorkerExecutionProvider
-{
+export class LocalRuntimeProvider implements RuntimeProvider {
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly states = new Map<string, LocalRunState>();
@@ -63,12 +54,8 @@ export class LocalRuntimeProvider
     this.receiver = receiver;
   }
 
-  provision(placement: RuntimePlacement): RuntimeResourceHandle {
-    return runtimeResourceHandleFromPlacement(placement);
-  }
-
   startWorkerExecution(
-    input: ProviderWorkerExecutionStartInput
+    input: WorkerExecutionStartInput
   ): WorkerExecutionHandle {
     const { runConfig, runtimeResource } = input;
     if (runtimeResource.runtimeType !== this.type) {
