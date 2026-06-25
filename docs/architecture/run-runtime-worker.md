@@ -615,6 +615,70 @@ RunWorkerExecutionService
 - 给 `resourceKey/runtimeType/status/owner` 增加索引。
 - 把 access key fingerprint、spec/version、lastSeenAt 等字段从 metadata 提升出来。
 
+### Phase 7: 拆出 `workers` 模块（worker 通信独立成层）
+
+状态:计划已定,待执行。与"后期统一整理 internal"合并做。
+
+**动机**:API 与 worker 进程之间的通信管道（配置下发、控制下发、心跳上报、鉴权）目前散在
+`runtime/internal/`，并由 run 层的 `run-internal.controller` 直接注入使用。它既不属于 runtime
+（local/sandbox 的 worker 都走同一套，不是某 runtime 的私产），也不该塞进 run（run 已重，
+通信是平级基础设施）。独立成层后 run / runtime 都瘦、边界更清晰。
+
+**目标结构**:
+
+```text
+apps/api/src/workers/                      ← 新模块，与 run / runtime 平级
+├── config-store.ts        ← runConfig 存储（run 塞、worker 拉）
+├── control-queue.ts       ← 控制指令队列（run 塞、worker 拉）
+├── access.service.ts      ← access key 管理
+├── auth.guard.ts          ← worker 鉴权守卫
+├── worker-runtime.controller.ts   ← HTTP 端点：worker 按 runtimeResourceId 拉 controls / 报心跳
+└── worker-workspace.controller.ts ← HTTP 端点：worker 按 workspaceId 拉 controls / 报心跳
+```
+
+**依赖方向**（workers 是底层，不依赖任何一方）:
+
+```text
+run ──► workers ◄─── runtime（provider 编排时调）
+            ▲
+            │ HTTP
+         worker 进程
+```
+
+**搬移清单**:
+
+- `runtime/internal/` 下 6 个文件全部搬进 `workers/`:
+  `config-store` / `control-queue` / `access.service` / `auth.guard` /
+  `runtime.controller` / `workspace.controller`。
+- `SandboxWorkerSessionService` 解耦后也搬进来（见下），改名中性名（如
+  `WorkerControlDispatcher`），去掉 `Sandbox` 前缀——它本就是 local/sandbox 共用的"塞入侧"。
+
+**必须先解的耦合**:`SandboxWorkerSessionService` 现在直接依赖 sandbox 专属类型并改写容器状态:
+
+- `registerRunSession(context, scopeState)` 里 `scopeState.activeRuns.set(runId, conversationId)` ——
+  session 直接改 sandbox 容器状态。
+- 方法签名接收 `SandboxWorkerExecutionContext` / `SandboxScopeState`（从
+  `runtime-resource.service` 导入）。
+
+解法:把 `activeRuns.set` 这一步**挪到 `SandboxRuntimeProvider` 编排里**（provider 同时持有
+resource 和 session,它来写 scopeState,session 不碰）。session 的方法签名改为接收原始值
+（`runId` / `accessKey` / `resourceKey` / `runConfig`），不再接收 `SandboxScopeState`。
+解耦后 session 不再依赖 `providers/sandbox/`，可安全搬进 `workers/`。
+
+**不搬的东西**:
+
+- `runs/run-internal.controller.ts`（`@Controller("internal/runs")`）**留在 run 层**。它注入
+  workers 模块那套（config-store / control-queue / auth.guard），但它管的是"worker 上报事件给
+  run"——消费侧是 run 业务，归 run。只是它的 import 来源从 `runtime/internal/` 改成 `workers/`。
+
+**验证**:
+
+- 搬完后依赖方向必须仍是 `run → workers ← runtime`，workers 不反向依赖 run 或 runtime。
+- `runtime/internal/` 目录清空删除。
+- 两个 module 文件（`runtime.module.ts` / `runs.module.ts`）的 provider/export 跟着调整，
+  新建 `workers.module.ts`。
+- typecheck + 全量单测通过；重点验 sandbox 复用 / cancel-before-ready / 心跳 / per-run 清理路径。
+
 ## 10. 风险与护栏
 
 ### 10.1 不让 Runtime 重新变厚
