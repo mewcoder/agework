@@ -83,6 +83,12 @@ describe("AdminRuntimeController", () => {
       id: "rr-1",
       scopeKey: "ws-1",
       workspaceCount: 1,
+      workspaceRuntimes: [
+        expect.objectContaining({
+          id: "wr-1",
+          workspaceId: "ws-1",
+        }),
+      ],
       isReusable: true,
       diagnostics: {
         scopeKey: "ws-1",
@@ -93,6 +99,7 @@ describe("AdminRuntimeController", () => {
       createdAt: "2026-06-25T00:00:00.000Z",
       updatedAt: "2026-06-25T00:01:00.000Z",
     });
+    expect(result.list[0]).not.toHaveProperty("workspaceRuntimeInstances");
   });
 
   it("stops a running runtime resource and records stop diagnostics", async () => {

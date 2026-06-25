@@ -117,7 +117,7 @@ export class AdminRuntimeController {
   }) {
     const scopeKey = runtimeScopeKeyForOwner(resource);
     const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
-    const workspaceRuntimeInstances = resource.workspaceRuntimeInstances?.map((binding) => ({
+    const workspaceRuntimes = resource.workspaceRuntimeInstances?.map((binding) => ({
       id: binding.id,
       workspaceId: binding.workspaceId,
       createdAt: this.toIsoString(binding.createdAt),
@@ -134,7 +134,7 @@ export class AdminRuntimeController {
       runtimeInstanceId: resource.runtimeInstanceId,
       status: resource.status,
       isReusable: resource.status === "running",
-      workspaceCount: workspaceRuntimeInstances?.length ?? 0,
+      workspaceCount: workspaceRuntimes?.length ?? 0,
       expiresAt: resource.expiresAt ? this.toIsoString(resource.expiresAt) : null,
       metadata: resource.metadata,
       diagnostics: {
@@ -145,7 +145,7 @@ export class AdminRuntimeController {
       },
       createdAt: this.toIsoString(resource.createdAt),
       updatedAt: this.toIsoString(resource.updatedAt),
-      workspaceRuntimeInstances,
+      workspaceRuntimes,
     };
   }
 

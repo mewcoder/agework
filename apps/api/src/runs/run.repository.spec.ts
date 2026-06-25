@@ -242,8 +242,15 @@ describe("RunRepository", () => {
         id: "resource-1",
         isolationScope: "workspace",
         status: "running",
+        workspaceRuntimes: [
+          expect.objectContaining({
+            id: "binding-1",
+            workspaceId: "workspace-1",
+          }),
+        ],
       },
     });
+    expect(detail.runtimeInstance).not.toHaveProperty("workspaceRuntimeInstances");
     // 详情不再内嵌事件列表，事件改由 listAdminEvents 独立分页提供
     expect(detail).not.toHaveProperty("events");
   });

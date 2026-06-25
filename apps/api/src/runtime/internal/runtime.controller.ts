@@ -12,7 +12,7 @@ const MAX_CONTROL_WAIT_MS = 30_000;
 
 /**
  * Internal runtime resource API — 仅供持久容器内的 worker 调用。
- * 与 RuntimeWorkspaceController 类似，但以 RuntimeTarget.id 为分区键，
+ * 与 RuntimeWorkspaceController 类似，但以 runtimeInstanceId 为分区键，
  * 使得 user scope 下同一容器可服务多个 workspace 的请求。
  */
 @Public()
@@ -30,7 +30,7 @@ export class RuntimeRuntimeController {
 
   /**
    * GET /internal/runtimes/:runtimeInstanceId/controls?afterSeq=N
-   * 持久容器的 worker 按 RuntimeTarget.id 轮询下行控制指令。
+   * 持久容器的 worker 按 runtimeInstanceId 轮询下行控制指令。
    */
   @Get(":runtimeInstanceId/controls")
   async pollRuntimeControls(
@@ -68,7 +68,7 @@ export class RuntimeRuntimeController {
 
   /**
    * POST /internal/runtimes/:runtimeInstanceId/heartbeat
-   * 持久容器 worker 定期上报心跳，通过 RuntimeTarget.id 反查 scopeKey
+   * 持久容器 worker 定期上报心跳，通过 runtimeInstanceId 反查 scopeKey
    * 后分发到对应 provider。
    */
   @Post(":runtimeInstanceId/heartbeat")

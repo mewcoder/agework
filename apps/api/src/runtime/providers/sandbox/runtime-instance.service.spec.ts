@@ -176,9 +176,14 @@ describe("SandboxRuntimeInstanceService", () => {
       "docker-resource-1"
     );
     expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
-      "rr-1",
+      "docker-resource-1",
       "ws-1",
       "sandbox"
+    );
+    expect(
+      vi.mocked(access.issueRuntimeInstanceKey).mock.invocationCallOrder[0]
+    ).toBeLessThan(
+      vi.mocked(engine.startWorker).mock.invocationCallOrder[0]
     );
   });
 

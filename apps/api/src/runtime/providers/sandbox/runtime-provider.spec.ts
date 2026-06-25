@@ -403,7 +403,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       expect.any(String)
     );
     expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
-      "rr-1",
+      "docker-resource-1",
       "ws-1",
       "sandbox"
     );

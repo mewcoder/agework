@@ -323,6 +323,7 @@ export class SandboxRuntimeInstanceService {
     scopeState.lastStoppedRuntimeInstanceId = undefined;
 
     const runtimePromise = this.createSandbox(
+      context,
       context.engine,
       engineInput,
       resumeRuntimeInstanceId
@@ -500,6 +501,7 @@ export class SandboxRuntimeInstanceService {
   }
 
   private async createSandbox(
+    context: SandboxWorkerExecutionContext,
     engine: SandboxEngine,
     input: SandboxStartInput,
     resumeRuntimeInstanceId?: string
@@ -507,6 +509,7 @@ export class SandboxRuntimeInstanceService {
     if (resumeRuntimeInstanceId && engine.resume) {
       try {
         const runtime = await engine.resume(resumeRuntimeInstanceId, input);
+        this.registerRuntimeInstanceAccess(context, runtime.runtimeInstanceId);
         await engine.startWorker(runtime, input);
         return runtime;
       } catch (err) {
@@ -520,6 +523,7 @@ export class SandboxRuntimeInstanceService {
     }
 
     const runtime = await engine.getOrCreate(input);
+    this.registerRuntimeInstanceAccess(context, runtime.runtimeInstanceId);
     await engine.startWorker(runtime, input);
     return runtime;
   }
@@ -582,13 +586,7 @@ export class SandboxRuntimeInstanceService {
   ): Promise<void> {
     return this.workspaceRuntimeService
       .upsertRunning(placement, scopeKey, runtimeInstanceId)
-      .then(({ resource }) => {
-        this.runtimeAccess.issueRuntimeInstanceKey(
-          resource.id,
-          scopeKey,
-          resource.runtimeType
-        );
-      })
+      .then(() => undefined)
       .catch(
         swallow(
           this.logger,
@@ -603,5 +601,16 @@ export class SandboxRuntimeInstanceService {
       throw new Error(`Unknown sandbox engine: ${engineType}`);
     }
     return engine;
+  }
+
+  private registerRuntimeInstanceAccess(
+    context: SandboxWorkerExecutionContext,
+    runtimeInstanceId: string
+  ): void {
+    this.runtimeAccess.issueRuntimeInstanceKey(
+      runtimeInstanceId,
+      context.scopeKey,
+      context.runtimeTarget.runtimeType
+    );
   }
 }

@@ -8,6 +8,7 @@ import { OPENSANDBOX_CLIENT } from "../opensandbox-client.token";
 export class OpenSandboxEngine implements SandboxEngine {
   readonly type: SandboxEngineType = "opensandbox";
   private readonly logger = new Logger(OpenSandboxEngine.name);
+  private readonly sandboxes = new Map<string, OpenSandboxSandboxLike>();
 
   constructor(@Inject(OPENSANDBOX_CLIENT) private readonly client: OpenSandboxClientLike) {}
 
@@ -53,8 +54,7 @@ export class OpenSandboxEngine implements SandboxEngine {
       `Sandbox created: scopeKey=${scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
     );
 
-    // 创建后立即启动 worker，避免 getSdk 重新查找时因延迟找不到
-    await this.startWorkerInSandbox(sandbox, input);
+    this.sandboxes.set(sandbox.id, sandbox);
 
     return {
       engineType: "opensandbox",
@@ -64,14 +64,23 @@ export class OpenSandboxEngine implements SandboxEngine {
   }
 
   async startWorker(
-    _runtime: SandboxRuntime,
-    _input: SandboxStartInput
+    runtime: SandboxRuntime,
+    input: SandboxStartInput
   ): Promise<void> {
-    // OpenSandbox 的 worker 在 getOrCreate 中启动，此处为空操作。
-    // 如果后续需要 DB resource 恢复场景下重启 worker，可在此实现。
+    const sandbox =
+      this.sandboxes.get(runtime.runtimeInstanceId) ??
+      (await this.client.getSandbox(runtime.runtimeInstanceId));
+    if (!sandbox) {
+      throw new Error(
+        `Cannot start worker: sandbox ${runtime.runtimeInstanceId.slice(0, 12)} not found`
+      );
+    }
+    this.sandboxes.set(sandbox.id, sandbox);
+    await this.startWorkerInSandbox(sandbox, input);
   }
 
   async stop(runtimeInstanceId: string): Promise<void> {
+    this.sandboxes.delete(runtimeInstanceId);
     await this.client.pauseSandbox(runtimeInstanceId);
   }
 
@@ -80,6 +89,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     input: SandboxStartInput
   ): Promise<SandboxRuntime> {
     const sandbox = await this.client.resumeSandbox(runtimeInstanceId);
+    this.sandboxes.set(sandbox.id, sandbox);
     this.logger.log(
       `Sandbox resumed: scopeKey=${input.placement.scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
     );
@@ -91,6 +101,7 @@ export class OpenSandboxEngine implements SandboxEngine {
   }
 
   async recoverOrphan(runtimeInstanceId: string): Promise<void> {
+    this.sandboxes.delete(runtimeInstanceId);
     await this.client.deleteSandbox(runtimeInstanceId);
   }
 

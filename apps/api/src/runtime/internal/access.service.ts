@@ -7,11 +7,11 @@ const ACCESS_KEY_BYTES = 32;
 export class RuntimeInternalAccessService {
   private readonly accessKeys = new Map<string, string>();
   private readonly workspaceKeys = new Map<string, string>();
-  /** RuntimeTarget.id → accessKey */
+  /** runtimeInstanceId → accessKey */
   private readonly runtimeInstanceKeys = new Map<string, string>();
-  /** RuntimeTarget.id → scopeKey (用于 heartbeat 时查找 provider 内部 key) */
+  /** runtimeInstanceId → scopeKey (用于 heartbeat 时查找 provider 内部 key) */
   private readonly runtimeInstanceScopeKeys = new Map<string, string>();
-  /** RuntimeTarget.id → runtimeType */
+  /** runtimeInstanceId → runtimeType */
   private readonly runtimeInstanceRuntimeTypes = new Map<string, string>();
 
   /**
@@ -62,7 +62,7 @@ export class RuntimeInternalAccessService {
   }
 
   /**
-   * 为 RuntimeTarget 签发内部访问 key。
+   * 为 runtimeInstanceId 签发内部访问 key。
    * 复用 scopeKey 对应的 workspaceKey，使同一个 key 可同时用于
    * /internal/workspaces/:workspaceId 和 /internal/runtimes/:runtimeInstanceId。
    */
@@ -87,7 +87,7 @@ export class RuntimeInternalAccessService {
     return this.constantTimeEqual(this.runtimeInstanceKeys.get(runtimeInstanceId), accessKey);
   }
 
-  /** 获取 RuntimeTarget.id 对应的 scopeKey（用于 heartbeat 等）。 */
+  /** 获取 runtimeInstanceId 对应的 scopeKey（用于 heartbeat 等）。 */
   getScopeKeyForRuntimeInstance(runtimeInstanceId: string): string | undefined {
     return this.runtimeInstanceScopeKeys.get(runtimeInstanceId);
   }

@@ -58,7 +58,7 @@ function makeClient(): OpenSandboxClientLike {
 }
 
 describe("OpenSandboxEngine", () => {
-  it("getOrCreate creates a sandbox and starts worker, returns SandboxRuntime", async () => {
+  it("getOrCreate creates a sandbox without starting worker, returns SandboxRuntime", async () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
@@ -73,8 +73,11 @@ describe("OpenSandboxEngine", () => {
       })
     );
 
-    // worker 应该在 createSandbox 返回后立即启动
     const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    expect(createdSandbox.runCommand).not.toHaveBeenCalled();
+
+    await engine.startWorker(result, makeInput());
+
     expect(createdSandbox.runCommand).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -146,15 +149,17 @@ describe("OpenSandboxEngine", () => {
     );
   });
 
-  it("getOrCreate starts worker with correct env vars", async () => {
+  it("startWorker starts worker with correct env vars", async () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    await engine.getOrCreate(makeInput({
+    const input = makeInput({
       env: {
         AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
       },
-    }));
+    });
+    const runtime = await engine.getOrCreate(input);
+    await engine.startWorker(runtime, input);
 
     const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(createdSandbox.runCommand).toHaveBeenCalledWith(
@@ -172,7 +177,9 @@ describe("OpenSandboxEngine", () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    await engine.getOrCreate(makeInput());
+    const input = makeInput();
+    const runtime = await engine.getOrCreate(input);
+    await engine.startWorker(runtime, input);
 
     const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
     expect(createdSandbox.runCommand).toHaveBeenCalledWith(
@@ -185,19 +192,21 @@ describe("OpenSandboxEngine", () => {
     );
   });
 
-  it("startWorker is a no-op (worker started in getOrCreate)", async () => {
+  it("startWorker starts the cached sandbox", async () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    const runtime = await engine.getOrCreate(makeInput());
+    const input = makeInput();
+    const runtime = await engine.getOrCreate(input);
     const runCommandCallsBefore = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value
       .then((s: OpenSandboxSandboxLike) => (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length);
 
-    await engine.startWorker(runtime, makeInput());
+    await engine.startWorker(runtime, input);
 
     const runCommandCallsAfter = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value
       .then((s: OpenSandboxSandboxLike) => (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length);
-    expect(runCommandCallsAfter).toBe(runCommandCallsBefore);
+    expect(runCommandCallsBefore).toBe(0);
+    expect(runCommandCallsAfter).toBe(1);
   });
 
   it("stop pauses the sandbox via client", async () => {
