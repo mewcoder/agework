@@ -5,10 +5,9 @@ import type {
   RuntimeResource,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import {
-  ConfigService,
-  type IsolationScope,
-  type RuntimeType,
+import type {
+  IsolationScope,
+  RuntimeType,
 } from "../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
 
@@ -17,10 +16,11 @@ export type ResolveRuntimeResourceInput = {
   workspaceId: string;
   workspaceRootPath: string;
   userWorkspaceRootPath: string;
-  runtimeType?: RuntimeType;
-  isolationScope?: IsolationScope;
-  /** workspace 持久化的 sandboxEngine，不传则从 ConfigService 读取 */
-  sandboxEngine?: string;
+  runtimeType: RuntimeType;
+  /** sandbox 必填；local 不消费 */
+  isolationScope: IsolationScope;
+  /** sandbox 必填；local 不消费 */
+  sandboxEngine: "docker" | "opensandbox";
 };
 
 /** 类型守卫：narrow 出 sandbox 分支（placement.sandbox 必填）。 */
@@ -31,22 +31,19 @@ export function isSandboxPlacement(
 }
 
 /**
- * 解析一次 run 的目标运行环境：根据 run 输入与部署配置，算出 runtime 类型、隔离粒度、
- * 路径映射，以及容器复用键 resourceKey，直接返回一个 RuntimeResource 对象。纯计算，
- * 不启动也不 attach worker。
+ * 解析一次 run 的目标运行环境：根据 run 输入算出路径映射与容器复用键 resourceKey，
+ * 直接返回一个 RuntimeResource 对象。纯计算，不启动也不 attach worker。
+ * runtimeType / isolationScope / sandboxEngine 由调用方（RuntimeService）从配置填好默认值后传入。
  */
 export function resolveRuntimeResource(
-  input: ResolveRuntimeResourceInput,
-  config: Pick<
-    ConfigService,
-    "getDefaultRuntimeType" | "getDefaultIsolationScope" | "getSandboxEngine"
-  >
+  input: ResolveRuntimeResourceInput
 ): RuntimeResource {
   const {
     userId,
     workspaceId,
     workspaceRootPath,
     userWorkspaceRootPath,
+    runtimeType,
   } = input;
 
   if (!isAbsolute(workspaceRootPath) || !isAbsolute(userWorkspaceRootPath)) {
@@ -54,8 +51,6 @@ export function resolveRuntimeResource(
       `workspaceRootPath and userWorkspaceRootPath must be absolute paths: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
     );
   }
-
-  const runtimeType = input.runtimeType ?? config.getDefaultRuntimeType();
 
   // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
   // resourceKey 无复用语义，用 workspaceId 兜底。
@@ -70,10 +65,7 @@ export function resolveRuntimeResource(
     return { ...local, resourceKey: workspaceId };
   }
 
-  const isolationScope =
-    input.isolationScope ?? config.getDefaultIsolationScope();
-  const sandboxEngineType = (input.sandboxEngine ??
-    config.getSandboxEngine()) as SandboxRuntimePlacement["sandbox"]["sandboxEngineType"];
+  const { isolationScope, sandboxEngine } = input;
 
   // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget：
   //   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），
@@ -109,7 +101,7 @@ export function resolveRuntimeResource(
     workspaceId,
     hostPath,
     runtimePath,
-    sandbox: { isolationScope, mountTarget, sandboxEngineType },
+    sandbox: { isolationScope, mountTarget, sandboxEngineType: sandboxEngine },
   };
   return { ...placement, resourceKey };
 }

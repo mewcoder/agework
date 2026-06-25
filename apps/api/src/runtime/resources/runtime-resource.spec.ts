@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { IsolationScope } from "@agework/shared/protocol";
 import {
   resolveRuntimeResource,
@@ -6,32 +6,26 @@ import {
   runtimeResourceKeyForOwner,
   type ResolveRuntimeResourceInput,
 } from "./runtime-resource";
-import type { ConfigService } from "../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
-
-function makeConfig(overrides: Partial<ConfigService> = {}): Pick<
-  ConfigService,
-  "getDefaultRuntimeType" | "getDefaultIsolationScope" | "getSandboxEngine"
-> {
-  return {
-    getDefaultRuntimeType: vi.fn().mockReturnValue("sandbox"),
-    getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
-    getSandboxEngine: vi.fn().mockReturnValue("docker"),
-    ...overrides,
-  } as never;
-}
 
 const BASE: ResolveRuntimeResourceInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
   userWorkspaceRootPath: "/data/users/user-1",
+  runtimeType: "sandbox",
+  isolationScope: "user",
+  sandboxEngine: "docker",
 };
 
+const withInput = (
+  overrides: Partial<ResolveRuntimeResourceInput>
+): ResolveRuntimeResourceInput => ({ ...BASE, ...overrides });
+
 describe("resolveRuntimeResource", () => {
-  describe("sandbox, user isolation (default)", () => {
+  describe("sandbox, user isolation", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, resourceKey=userId", () => {
-      const r = resolveRuntimeResource(BASE, makeConfig());
+      const r = resolveRuntimeResource(BASE);
       expect(r.runtimeType).toBe("sandbox");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
@@ -45,14 +39,11 @@ describe("resolveRuntimeResource", () => {
     });
 
     it("different workspaces of the same user get different runtimePaths, same resourceKey", () => {
-      const cfg = makeConfig();
       const a = resolveRuntimeResource(
-        { ...BASE, workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" },
-        cfg
+        withInput({ workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" })
       );
       const b = resolveRuntimeResource(
-        { ...BASE, workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" },
-        cfg
+        withInput({ workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" })
       );
       expect(a.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-a`);
       expect(b.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-b`);
@@ -62,12 +53,7 @@ describe("resolveRuntimeResource", () => {
 
   describe("sandbox, workspace isolation", () => {
     it("hostPath=workspaceRoot, mountTarget per-workspace, resourceKey=workspaceId", () => {
-      const r = resolveRuntimeResource(
-        BASE,
-        makeConfig({
-          getDefaultIsolationScope: vi.fn().mockReturnValue("workspace"),
-        })
-      );
+      const r = resolveRuntimeResource(withInput({ isolationScope: "workspace" }));
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
       expect(r.resourceKey).toBe("ws-1");
@@ -80,10 +66,7 @@ describe("resolveRuntimeResource", () => {
 
   describe("local", () => {
     it("runtimePath === hostPath === workspaceRootPath, no sandbox info, resourceKey=workspaceId", () => {
-      const r = resolveRuntimeResource(
-        BASE,
-        makeConfig({ getDefaultRuntimeType: vi.fn().mockReturnValue("local") })
-      );
+      const r = resolveRuntimeResource(withInput({ runtimeType: "local" }));
       expect(r.runtimeType).toBe("local");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
@@ -92,48 +75,25 @@ describe("resolveRuntimeResource", () => {
     });
   });
 
-  describe("explicit overrides win over config defaults", () => {
-    it("runtimeType", () => {
-      const r = resolveRuntimeResource(
-        { ...BASE, runtimeType: "local" },
-        makeConfig()
-      );
-      expect(r.runtimeType).toBe("local");
-    });
-
-    it("isolationScope", () => {
-      const r = resolveRuntimeResource(
-        { ...BASE, runtimeType: "sandbox", isolationScope: "workspace" },
-        makeConfig()
-      );
-      expect((r as { sandbox?: { isolationScope?: string } }).sandbox?.isolationScope).toBe("workspace");
-    });
-  });
-
   describe("validation", () => {
     it("throws when workspaceRootPath is outside userWorkspaceRootPath (user isolation)", () => {
       expect(() =>
         resolveRuntimeResource(
-          { ...BASE, workspaceRootPath: "/data/users/user-2/ws-1" },
-          makeConfig()
+          withInput({ workspaceRootPath: "/data/users/user-2/ws-1" })
         )
       ).toThrow();
     });
 
     it("throws when workspaceRootPath is relative", () => {
       expect(() =>
-        resolveRuntimeResource(
-          { ...BASE, workspaceRootPath: "relative/ws-1" },
-          makeConfig()
-        )
+        resolveRuntimeResource(withInput({ workspaceRootPath: "relative/ws-1" }))
       ).toThrow();
     });
 
     it("throws when userWorkspaceRootPath is relative", () => {
       expect(() =>
         resolveRuntimeResource(
-          { ...BASE, userWorkspaceRootPath: "relative/users/user-1" },
-          makeConfig()
+          withInput({ userWorkspaceRootPath: "relative/users/user-1" })
         )
       ).toThrow();
     });

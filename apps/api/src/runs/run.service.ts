@@ -96,7 +96,8 @@ export class RunService {
       ),
       runtimeType: requestedRuntimeType,
       isolationScope,
-      sandboxEngine: workspace.sandboxEngine ?? undefined,
+      sandboxEngine:
+        (workspace.sandboxEngine as "docker" | "opensandbox") ?? undefined,
     });
     const placement = runtimeResource;
     const runtimeType = placement.runtimeType;
