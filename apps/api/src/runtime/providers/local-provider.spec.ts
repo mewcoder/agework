@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type {
   LocalRuntimePlacement,
   RunConfig,
-  RuntimeResource,
+  RuntimeTarget,
 } from "@agework/shared/protocol";
 import { LocalRuntimeProvider } from "./local-provider";
 
@@ -49,10 +49,10 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
   } as RunConfig;
 }
 
-function makeRuntimeResource(
-  overrides: Partial<RuntimeResource> = {}
-): RuntimeResource {
-  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeResource;
+function makeRuntimeTarget(
+  overrides: Partial<RuntimeTarget> = {}
+): RuntimeTarget {
+  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeTarget;
 }
 
 describe("LocalRuntimeProvider", () => {
@@ -90,10 +90,10 @@ describe("LocalRuntimeProvider", () => {
 
   it("startWorkerExecution forks a local worker and sends the run config", () => {
     const runConfig = makeRunConfig();
-    const runtimeResource = makeRuntimeResource();
+    const runtimeTarget = makeRuntimeTarget();
 
     const handle = provider.startWorkerExecution({
-      runtimeResource,
+      runtimeTarget,
       runConfig,
     });
 
@@ -112,7 +112,7 @@ describe("LocalRuntimeProvider", () => {
   it("startWorkerExecution fails fast when the runtime resource is not local", () => {
     expect(() =>
       provider.startWorkerExecution({
-        runtimeResource: makeRuntimeResource({ runtimeType: "sandbox" }),
+        runtimeTarget: makeRuntimeTarget({ runtimeType: "sandbox" }),
         runConfig: makeRunConfig(),
       })
     ).toThrow(

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   IsolationScope,
-  RuntimeResource,
+  RuntimeTarget,
   SandboxRuntimePlacement,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
@@ -40,7 +40,7 @@ export type SandboxScopeState = {
 
 export type SandboxWorkerExecutionContext = {
   runConfig: WorkerExecutionStartInput["runConfig"];
-  runtimeResource: RuntimeResource;
+  runtimeTarget: RuntimeTarget;
   placement: SandboxRuntimePlacement;
   runId: string;
   workspaceId: string;
@@ -86,7 +86,7 @@ export class SandboxRuntimeInstanceService {
   resolveWorkerExecutionContext(
     input: WorkerExecutionStartInput
   ): SandboxWorkerExecutionContext {
-    const placement = input.runtimeResource;
+    const placement = input.runtimeTarget;
     if (!isSandboxPlacement(placement)) {
       throw new Error(
         `SandboxRuntimeInstanceService requires sandbox placement, got runtimeType=${placement.runtimeType}`
@@ -96,11 +96,11 @@ export class SandboxRuntimeInstanceService {
       placement.sandbox.sandboxEngineType ?? this.configService.getSandboxEngine();
     return {
       runConfig: input.runConfig,
-      runtimeResource: input.runtimeResource,
+      runtimeTarget: input.runtimeTarget,
       placement,
       runId: input.runConfig.runId,
       workspaceId: input.runConfig.workspaceId,
-      resourceKey: input.runtimeResource.resourceKey,
+      resourceKey: input.runtimeTarget.resourceKey,
       isolationScope: placement.sandbox.isolationScope,
       engineType,
       engine: this.resolveEngine(engineType),
@@ -110,7 +110,7 @@ export class SandboxRuntimeInstanceService {
   createRunHandle(context: SandboxWorkerExecutionContext): WorkerExecutionHandle {
     return {
       runId: context.runId,
-      runtimeType: context.runtimeResource.runtimeType,
+      runtimeType: context.runtimeTarget.runtimeType,
       runtimeResourceId: "",
       conversationId: context.runConfig.conversationId,
     };
@@ -548,7 +548,7 @@ export class SandboxRuntimeInstanceService {
   /**
    * 放弃对某个 runtime resource 当前容器/沙箱的引用：停止心跳与空闲计时、清空
    * activeRuns 与 runtimeResourceId（转存为 lastStoppedRuntimeResourceId 供下次 resume），
-   * 并将 RuntimeResource 标记为 stopped。access key 保留，供 resume 复用。
+   * 并将 RuntimeTarget 标记为 stopped。access key 保留，供 resume 复用。
    * 不负责真正停止/删除容器——是否需要 engine.stop() 由调用方决定。
    */
   private releaseScopeRuntime(

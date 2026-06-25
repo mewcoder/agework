@@ -34,14 +34,14 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("resolveRuntimeResource delegates to the pure resolver with config", () => {
+  it("resolveRuntimeTarget delegates to the pure resolver with config", () => {
     const input = {
       userId: "u-1",
       workspaceId: "ws-1",
       workspaceRootPath: "/data/u-1/ws-1",
       userWorkspaceRootPath: "/data/u-1",
     };
-    const result = service.resolveRuntimeResource(input);
+    const result = service.resolveRuntimeTarget(input);
     expect(result.runtimeType).toBe("local");
     expect(result.resourceKey).toBe("ws-1");
     expect(configService.getDefaultRuntimeType).toHaveBeenCalled();

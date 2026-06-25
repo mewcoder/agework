@@ -35,9 +35,9 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
   startWorkerExecution(
     input: WorkerExecutionStartInput
   ): WorkerExecutionHandle {
-    if (input.runtimeResource.runtimeType !== this.type) {
+    if (input.runtimeTarget.runtimeType !== this.type) {
       throw new Error(
-        `SandboxRuntimeProvider cannot start worker for runtime type: ${input.runtimeResource.runtimeType}`
+        `SandboxRuntimeProvider cannot start worker for runtime type: ${input.runtimeTarget.runtimeType}`
       );
     }
 

@@ -87,7 +87,7 @@ export class RunService {
       }
       isolationScope = resolvedIsolationScope;
     }
-    const runtimeResource = this.runtimeService.resolveRuntimeResource({
+    const runtimeTarget = this.runtimeService.resolveRuntimeTarget({
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
@@ -99,7 +99,7 @@ export class RunService {
       sandboxEngine:
         (workspace.sandboxEngine as "docker" | "opensandbox") ?? undefined,
     });
-    const placement = runtimeResource;
+    const placement = runtimeTarget;
     const runtimeType = placement.runtimeType;
     const sandbox =
       placement.runtimeType === "sandbox" ? placement.sandbox : undefined;
@@ -324,7 +324,7 @@ export class RunService {
         );
       runtimeHandle = this.runWorkerExecution.start({
         runConfig,
-        runtimeResource,
+        runtimeTarget,
         onRuntimeResourceIdReady: (runtimeResourceId) => {
           this.runRepository
             .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)

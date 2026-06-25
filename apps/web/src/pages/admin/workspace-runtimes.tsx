@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RuntimeResource } from "@/api/runtime";
+import type { RuntimeTarget } from "@/api/runtime";
 import { useRuntimeResources, useStopRuntimeResource } from "@/hooks/runtime-hooks";
 import {
   DataTable,
@@ -72,7 +72,7 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
     }
   }
 
-  const columns: DataTableColumnDef<RuntimeResource>[] = [
+  const columns: DataTableColumnDef<RuntimeTarget>[] = [
     {
       id: "isolationScope",
       header: "隔离级别",

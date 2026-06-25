@@ -238,7 +238,7 @@ describe("RunRepository", () => {
       },
       workspace: { id: "workspace-1", name: "AgeWork" },
       user: { id: "user-1", username: "mew" },
-      runtimeResource: {
+      runtimeInstance: {
         id: "resource-1",
         isolationScope: "workspace",
         status: "running",

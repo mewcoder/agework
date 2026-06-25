@@ -4,7 +4,7 @@ import type {
   RuntimeInstanceListResponse,
 } from '@agework/shared/api';
 
-export type { RuntimeInstanceResponse as RuntimeResource };
+export type { RuntimeInstanceResponse as RuntimeTarget };
 
 export interface RuntimePolicy {
   runtimeType: string;

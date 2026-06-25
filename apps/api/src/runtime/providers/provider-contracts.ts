@@ -5,7 +5,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "./run-event-receiver";
 
-/** Run 层驱动的执行切片：把 RuntimeResource + RunConfig 跑成一次 worker execution。 */
+/** Run 层驱动的执行切片：把 RuntimeTarget + RunConfig 跑成一次 worker execution。 */
 export interface WorkerExecutionProvider {
   readonly type: string;
   startWorkerExecution(input: WorkerExecutionStartInput): WorkerExecutionHandle;

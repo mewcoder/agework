@@ -85,7 +85,7 @@ function makeService(engine = makeEngine()) {
 function makeStartInput(placement = makePlacement()) {
   return {
     runConfig: makeRunConfig({ workspaceId: placement.workspaceId }),
-    runtimeResource: {
+    runtimeTarget: {
       ...placement,
       resourceKey:
         placement.sandbox?.isolationScope === "user"

@@ -72,7 +72,7 @@ export type AdminRunDetailResponse = AdminRunResponse & {
     id: string;
     username: string | null;
   };
-  runtimeResource: AdminRunRuntimeInstanceResponse | null;
+  runtimeInstance: AdminRunRuntimeInstanceResponse | null;
 };
 
 export type AdminRunEventResponse = {

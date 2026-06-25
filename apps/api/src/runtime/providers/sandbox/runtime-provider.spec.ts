@@ -6,7 +6,7 @@ import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
   IsolationScope,
   RuntimePlacement,
-  RuntimeResource,
+  RuntimeTarget,
 } from "@agework/shared/protocol";
 
 // ── Mock engine ──────────────────────────────────────────────────────
@@ -118,10 +118,10 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
   };
 }
 
-function makeRuntimeResource(
-  overrides: Partial<RuntimeResource> = {}
-): RuntimeResource {
-  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeResource;
+function makeRuntimeTarget(
+  overrides: Partial<RuntimeTarget> = {}
+): RuntimeTarget {
+  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeTarget;
 }
 
 function startProvider(
@@ -130,7 +130,7 @@ function startProvider(
   placement = makePlacement()
 ) {
   return provider.startWorkerExecution({
-    runtimeResource: {
+    runtimeTarget: {
       ...placement,
       resourceKey:
         (placement as { sandbox: { isolationScope: string } }).sandbox.isolationScope === "user"
@@ -152,7 +152,7 @@ describe("SandboxRuntimeProvider — provider contracts", () => {
 
     expect(() =>
       provider.startWorkerExecution({
-        runtimeResource: makeRuntimeResource({ runtimeType: "local" }),
+        runtimeTarget: makeRuntimeTarget({ runtimeType: "local" }),
         runConfig: baseRun as never,
       })
     ).toThrow(

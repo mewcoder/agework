@@ -37,7 +37,7 @@ const TSX_CLI = require.resolve("tsx/cli");
 /**
  * Local runtime provider：one run = one child process，无容器、无跨 run 复用。
  *
- * 因此 local 不写 RuntimeResource / WorkspaceRuntime 表——没有持久容器要登记，
+ * 因此 local 不写 RuntimeTarget / WorkspaceRuntime 表——没有持久容器要登记，
  * runtimeResourceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
  * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
  */
@@ -57,10 +57,10 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   startWorkerExecution(
     input: WorkerExecutionStartInput
   ): WorkerExecutionHandle {
-    const { runConfig, runtimeResource } = input;
-    if (runtimeResource.runtimeType !== this.type) {
+    const { runConfig, runtimeTarget } = input;
+    if (runtimeTarget.runtimeType !== this.type) {
       throw new Error(
-        `LocalRuntimeProvider cannot start worker for runtime type: ${runtimeResource.runtimeType}`
+        `LocalRuntimeProvider cannot start worker for runtime type: ${runtimeTarget.runtimeType}`
       );
     }
     const startToken = randomUUID();
@@ -89,7 +89,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
 
     const handle: WorkerExecutionHandle = {
       runId,
-      runtimeType: runtimeResource.runtimeType,
+      runtimeType: runtimeTarget.runtimeType,
       runtimeResourceId: `${child.pid}:${startToken}`,
       conversationId: runConfig.conversationId,
     };

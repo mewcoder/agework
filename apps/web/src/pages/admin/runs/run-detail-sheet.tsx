@@ -199,18 +199,18 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
           <DetailSection title="执行环境">
             <DetailGrid>
               <DetailItem label="类型" value={run.runtimeType} />
-              {run.runtimeResource && (
+              {run.runtimeInstance && (
                 <>
                   <DetailItem
                     label="Resource ID"
-                    value={run.runtimeResource.id}
+                    value={run.runtimeInstance.id}
                     mono
                   />
                   <DetailItem
                     label="隔离粒度"
                     value={
                       <Badge variant="outline">
-                        {run.runtimeResource.isolationScope}
+                        {run.runtimeInstance.isolationScope}
                       </Badge>
                     }
                   />
@@ -218,30 +218,30 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     label="资源状态"
                     value={
                       <Badge
-                        variant={statusVariant(run.runtimeResource.status)}
-                        className={runStatusBadgeClassName(run.runtimeResource.status)}
+                        variant={statusVariant(run.runtimeInstance.status)}
+                        className={runStatusBadgeClassName(run.runtimeInstance.status)}
                       >
-                        {run.runtimeResource.status}
+                        {run.runtimeInstance.status}
                       </Badge>
                     }
                   />
                   <DetailItem
                     label="Owner User"
-                    value={run.runtimeResource.ownerUserId}
+                    value={run.runtimeInstance.ownerUserId}
                     mono
                   />
                   <DetailItem
                     label="Owner Workspace"
-                    value={run.runtimeResource.ownerWorkspaceId}
+                    value={run.runtimeInstance.ownerWorkspaceId}
                     mono
                   />
                   <DetailItem
                     label="绑定工作空间"
-                    value={String(run.runtimeResource.workspaceRuntimes.length)}
+                    value={String(run.runtimeInstance.workspaceRuntimes.length)}
                   />
                   <DetailItem
                     label="过期时间"
-                    value={formatDateTime(run.runtimeResource.expiresAt)}
+                    value={formatDateTime(run.runtimeInstance.expiresAt)}
                   />
                 </>
               )}

@@ -29,7 +29,7 @@ export type SandboxStartInput = {
    * from names or labels.
    */
   isExpectedRuntimeInstance?: (runtimeResourceId: string) => Promise<boolean>;
-  /** OpenSandbox 专用：resource 恢复时传已有的 RuntimeResource.id */
+  /** OpenSandbox 专用：resource 恢复时传已有的 RuntimeTarget.id */
   runtimeResourceId?: string;
 };
 

@@ -1,12 +1,12 @@
 import type {
   RunConfig,
-  RuntimeResource,
+  RuntimeTarget,
 } from "@agework/shared/protocol";
 
 export type { WorkerExecutionHandle } from "@agework/shared/protocol";
 
 export type RunWorkerExecutionStartInput = {
   runConfig: RunConfig;
-  runtimeResource: RuntimeResource;
+  runtimeTarget: RuntimeTarget;
   onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
 };

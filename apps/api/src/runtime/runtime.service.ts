@@ -1,10 +1,10 @@
 import { Injectable } from "@nestjs/common";
-import type { RuntimeResource } from "@agework/shared/protocol";
+import type { RuntimeTarget } from "@agework/shared/protocol";
 import { ConfigService } from "../config/config.service";
 import {
-  resolveRuntimeResource,
-  type ResolveRuntimeResourceInput,
-  type RuntimeResourceDefaults,
+  resolveRuntimeTarget,
+  type ResolveRuntimeTargetInput,
+  type RuntimeTargetDefaults,
 } from "./resources/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
@@ -15,7 +15,7 @@ import { RuntimeProviderRegistry } from "./providers/provider-registry";
  */
 @Injectable()
 export class RuntimeService {
-  private readonly defaults: RuntimeResourceDefaults;
+  private readonly defaults: RuntimeTargetDefaults;
 
   constructor(
     configService: ConfigService,
@@ -29,8 +29,8 @@ export class RuntimeService {
   }
 
   /** 从 run 输入解析出目标运行环境（纯计算，不启动 worker）。 */
-  resolveRuntimeResource(input: ResolveRuntimeResourceInput): RuntimeResource {
-    return resolveRuntimeResource(input, this.defaults);
+  resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
+    return resolveRuntimeTarget(input, this.defaults);
   }
 
   /**

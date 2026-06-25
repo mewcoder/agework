@@ -201,7 +201,7 @@ export class RunRepository {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
 
-    const runtimeResource = run.runtimeResourceId
+    const runtimeInstance = run.runtimeResourceId
       ? await this.prisma.runtimeInstance.findUnique({
           where: {
             runtimeType_runtimeResourceId: {
@@ -257,7 +257,7 @@ export class RunRepository {
         id: workspace.user.id,
         username: workspace.user.username,
       },
-      runtimeResource,
+      runtimeInstance,
     };
   }
 }

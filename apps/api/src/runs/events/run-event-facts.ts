@@ -28,7 +28,7 @@ export const RunEventFacts = {
     /**
      * 隔离粒度，仅 sandbox run 有值（user/workspace）。
      * local run 无容器隔离语义，此字段为 undefined——不要按 isolationScope 过滤/分组
-     * RunEvent；admin 列表/详情里的 isolationScope 维度走 RuntimeResource DB 列，不依赖此处。
+     * RunEvent；admin 列表/详情里的 isolationScope 维度走 RuntimeTarget DB 列，不依赖此处。
      */
     isolationScope?: string;
   }): RecordRunEventInput {

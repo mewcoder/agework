@@ -1,21 +1,21 @@
 import { describe, it, expect } from "vitest";
 import type { IsolationScope } from "@agework/shared/protocol";
 import {
-  resolveRuntimeResource,
+  resolveRuntimeTarget,
   runtimeResourceKey,
   runtimeResourceKeyForOwner,
-  type ResolveRuntimeResourceInput,
-  type RuntimeResourceDefaults,
+  type ResolveRuntimeTargetInput,
+  type RuntimeTargetDefaults,
 } from "./runtime-resource";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
 
-const DEFAULTS: RuntimeResourceDefaults = {
+const DEFAULTS: RuntimeTargetDefaults = {
   runtimeType: "sandbox",
   isolationScope: "user",
   sandboxEngine: "docker",
 };
 
-const BASE: ResolveRuntimeResourceInput = {
+const BASE: ResolveRuntimeTargetInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
@@ -23,13 +23,13 @@ const BASE: ResolveRuntimeResourceInput = {
 };
 
 const withInput = (
-  overrides: Partial<ResolveRuntimeResourceInput>
-): ResolveRuntimeResourceInput => ({ ...BASE, ...overrides });
+  overrides: Partial<ResolveRuntimeTargetInput>
+): ResolveRuntimeTargetInput => ({ ...BASE, ...overrides });
 
-const resolve = (overrides: Partial<ResolveRuntimeResourceInput> = {}) =>
-  resolveRuntimeResource(withInput(overrides), DEFAULTS);
+const resolve = (overrides: Partial<ResolveRuntimeTargetInput> = {}) =>
+  resolveRuntimeTarget(withInput(overrides), DEFAULTS);
 
-describe("resolveRuntimeResource", () => {
+describe("resolveRuntimeTarget", () => {
   describe("sandbox, user isolation", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, resourceKey=userId", () => {
       const r = resolve();

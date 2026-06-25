@@ -45,7 +45,7 @@ function ownerWhereByResourceKey(
 
 /**
  * 维护 workspace -> runtime resource 的绑定关系。
- * WorkspaceRuntime 表达业务绑定，RuntimeResource 表达容器/沙箱资源生命周期。
+ * WorkspaceRuntime 表达业务绑定，RuntimeTarget 表达容器/沙箱资源生命周期。
  */
 @Injectable()
 export class WorkspaceRuntimeInstanceRepository {

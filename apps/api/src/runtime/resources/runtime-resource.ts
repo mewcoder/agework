@@ -2,7 +2,7 @@ import { isAbsolute, relative, sep } from "node:path";
 import type {
   LocalRuntimePlacement,
   RuntimePlacement,
-  RuntimeResource,
+  RuntimeTarget,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
 import type {
@@ -11,7 +11,7 @@ import type {
 } from "../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/defaults";
 
-export type ResolveRuntimeResourceInput = {
+export type ResolveRuntimeTargetInput = {
   userId: string;
   workspaceId: string;
   workspaceRootPath: string;
@@ -25,7 +25,7 @@ export type ResolveRuntimeResourceInput = {
 };
 
 /** 部署默认值（由 RuntimeService 从 ConfigService 取出后传入）。 */
-export type RuntimeResourceDefaults = {
+export type RuntimeTargetDefaults = {
   runtimeType: RuntimeType;
   isolationScope: IsolationScope;
   sandboxEngine: "docker" | "opensandbox";
@@ -40,13 +40,13 @@ export function isSandboxPlacement(
 
 /**
  * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
- * 路径映射与容器复用键 resourceKey，直接返回一个 RuntimeResource 对象。纯计算，不启动
+ * 路径映射与容器复用键 resourceKey，直接返回一个 RuntimeTarget 对象。纯计算，不启动
  * 也不 attach worker。
  */
-export function resolveRuntimeResource(
-  input: ResolveRuntimeResourceInput,
-  defaults: RuntimeResourceDefaults
-): RuntimeResource {
+export function resolveRuntimeTarget(
+  input: ResolveRuntimeTargetInput,
+  defaults: RuntimeTargetDefaults
+): RuntimeTarget {
   const {
     userId,
     workspaceId,
@@ -139,7 +139,7 @@ export function runtimeResourceKey(
   throw new Error(`Unknown runtime isolation scope: ${isolationScope}`);
 }
 
-/** 从持久化的 RuntimeResource owner 记录算 resource key（容器存活台账侧用）。 */
+/** 从持久化的 RuntimeTarget owner 记录算 resource key（容器存活台账侧用）。 */
 export function runtimeResourceKeyForOwner(input: {
   isolationScope: string;
   ownerUserId: string;

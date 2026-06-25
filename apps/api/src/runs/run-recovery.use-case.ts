@@ -83,8 +83,8 @@ export class RunRecoveryUseCase {
   /**
    * Determine whether we should call provider.recoverOrphan() for a given run.
    * Returns false when the run's runtimeResourceId belongs to a user-isolated
-   * RuntimeResource — destroying a shared user runtime would be destructive.
-   * Returns true when no RuntimeResource exists (legacy data) or when the
+   * RuntimeTarget — destroying a shared user runtime would be destructive.
+   * Returns true when no RuntimeTarget exists (legacy data) or when the
    * resource is not user-isolated.
    */
   private async shouldRecoverOrphanRuntime(
@@ -112,7 +112,7 @@ export class RunRecoveryUseCase {
 
   /**
    * 服务重启后，所有内存中的 scope 状态都已丢失：将所有仍标记为 running 的
-   * RuntimeResource 视为孤儿，停止其底层容器/沙箱。user-scope 的资源在所属用户
+   * RuntimeTarget 视为孤儿，停止其底层容器/沙箱。user-scope 的资源在所属用户
    * 仍然存在时保留，用户已删除的则一并清理。清理后将状态标记为 stopped。
    */
   private async recoverOrphanContainers(): Promise<void> {
@@ -181,7 +181,7 @@ export class RunRecoveryUseCase {
   }
 
   /**
-   * 清理已明确标记为 stale 的 RuntimeResource。
+   * 清理已明确标记为 stale 的 RuntimeTarget。
    * 不能只因为服务重启后内存为空就清理 running resource；运行环境可能仍在外部存活，
    * 应由 provider 下次启动时通过 runtimeResourceId 验证。
    */

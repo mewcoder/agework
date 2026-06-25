@@ -7,12 +7,12 @@ import type {
 } from "./run-worker-execution.types";
 
 /**
- * Run 层拥有的 worker execution 边界：把 RuntimeResource + RunConfig 组装成一次
+ * Run 层拥有的 worker execution 边界：把 RuntimeTarget + RunConfig 组装成一次
  * worker 执行，并维护 runId → handle 的派发表，下发 control / cancel / cleanup。
  *
  * worker 的物理启动（local fork / sandbox 容器会话）仍在 runtime provider 内实现，
  * 这里只按 runtimeType 解析 provider 并驱动其 WorkerExecutionProvider 契约——
- * 即「Run 驱动执行」，区别于「Runtime 准备环境」(RuntimeService.resolveRuntimeResource)。
+ * 即「Run 驱动执行」，区别于「Runtime 准备环境」(RuntimeService.resolveRuntimeTarget)。
  */
 @Injectable()
 export class RunWorkerExecutionService {
@@ -22,7 +22,7 @@ export class RunWorkerExecutionService {
 
   start(input: RunWorkerExecutionStartInput): WorkerExecutionHandle {
     const provider = this.providerRegistry.resolve(
-      input.runtimeResource.runtimeType
+      input.runtimeTarget.runtimeType
     );
     const handle = provider.startWorkerExecution(input);
     this.handles.set(handle.runId, handle);
