@@ -8,7 +8,7 @@ import {
   runtimeResourceKeyForOwner,
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
-} from "../runtime/resources/diagnostics";
+} from "../runtime/resources/runtime-resource-metadata";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，

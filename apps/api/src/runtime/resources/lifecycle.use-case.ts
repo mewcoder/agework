@@ -5,7 +5,7 @@ import {
   runtimeResourceKeyForOwner,
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
-} from "./diagnostics";
+} from "./runtime-resource-metadata";
 
 /**
  * Runtime 资源生命周期清理：

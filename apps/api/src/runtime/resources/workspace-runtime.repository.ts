@@ -7,7 +7,7 @@ import {
   runningResourceMetadata,
   statusResourceMetadata,
   stoppedResourceMetadata,
-} from "./diagnostics";
+} from "./runtime-resource-metadata";
 
 function ownerWhere(placement: SandboxRuntimePlacement) {
   const isolationScope = placement.sandbox.isolationScope;
