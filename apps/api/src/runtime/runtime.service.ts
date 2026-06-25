@@ -1,8 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { isAbsolute, relative, sep } from "node:path";
 import type {
+  LocalRuntimePlacement,
   ResolvedRuntimeResource,
   RuntimePlacement,
+  SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
 import {
   ConfigService,
@@ -63,13 +65,15 @@ export class RuntimeService {
   }
 
   /**
-   * 放置策略（纯计算）：根据 run 输入与部署配置算出 runtime 类型、隔离粒度、沙箱引擎，
-   * 以及宿主机/执行环境内的路径映射。不产生副作用、不碰容器。
+   * 放置策略（纯计算）：先解析 runtime 类型与隔离粒度，再分派到对应策略。
+   * 三种策略各自决定宿主机/执行环境内的路径映射，互不耦合：
+   *   local            —— 直接用宿主机 workspace 路径，无容器
+   *   sandbox + user   —— 该用户所有 workspace 共享一个容器，按相对路径挂进容器
+   *   sandbox + workspace —— 每个 workspace 独占容器，挂到 <root>/<workspaceId>
+   * 不产生副作用、不碰容器。
    */
   private resolvePlacement(input: ResolvePlacementInput): RuntimePlacement {
-    const { userId, workspaceId, workspaceRootPath, userWorkspaceRootPath } =
-      input;
-
+    const { workspaceRootPath, userWorkspaceRootPath } = input;
     if (!isAbsolute(workspaceRootPath) || !isAbsolute(userWorkspaceRootPath)) {
       throw new Error(
         `workspaceRootPath and userWorkspaceRootPath must be absolute paths: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
@@ -78,78 +82,91 @@ export class RuntimeService {
 
     const runtimeType =
       input.runtimeType ?? this.configService.getDefaultRuntimeType();
+    if (runtimeType === "local") {
+      return this.localPlacement(input);
+    }
+
     const isolationScope =
       input.isolationScope ?? this.configService.getDefaultIsolationScope();
-    const relativePath = relative(userWorkspaceRootPath, workspaceRootPath);
-    const isInsideUserWorkspaceRoot =
-      relativePath === "" ||
-      (!relativePath.startsWith("..") && !isAbsolute(relativePath));
+    return isolationScope === "user"
+      ? this.sandboxUserPlacement(input)
+      : this.sandboxWorkspacePlacement(input);
+  }
 
-    if (
-      runtimeType === "sandbox" &&
-      isolationScope === "user" &&
-      !isInsideUserWorkspaceRoot
-    ) {
+  /** local：一律用宿主机 workspace 路径，runtimePath === hostPath。 */
+  private localPlacement(input: ResolvePlacementInput): LocalRuntimePlacement {
+    const { userId, workspaceId, workspaceRootPath } = input;
+    return {
+      runtimeType: "local",
+      userId,
+      workspaceId,
+      hostPath: workspaceRootPath,
+      runtimePath: workspaceRootPath,
+    };
+  }
+
+  /**
+   * sandbox + user：整个用户根目录挂进共享容器，挂载根为 CONTAINER_WORKSPACES_ROOT；
+   * 该 workspace 在容器内的路径按其相对用户根的子路径拼接。要求 workspace 在用户根内。
+   */
+  private sandboxUserPlacement(
+    input: ResolvePlacementInput
+  ): SandboxRuntimePlacement {
+    const { userId, workspaceId, workspaceRootPath, userWorkspaceRootPath } =
+      input;
+    const relativePath = relative(userWorkspaceRootPath, workspaceRootPath);
+    if (!this.isInsideUserRoot(relativePath)) {
       throw new Error(
         `workspaceRootPath must be inside userWorkspaceRootPath for sandbox user isolation: workspaceRootPath=${workspaceRootPath}, userWorkspaceRootPath=${userWorkspaceRootPath}`
       );
     }
-
-    const sandboxEngineType =
-      runtimeType === "sandbox"
-        ? ((input.sandboxEngine ?? this.configService.getSandboxEngine()) as
-            | "docker"
-            | "opensandbox")
-        : undefined;
-
-    // 容器/沙箱内的挂载目标路径：user 隔离下该用户的所有 workspace 共享挂载到
-    // CONTAINER_WORKSPACES_ROOT；workspace 隔离下该容器只服务单个 workspace，
-    // 挂载到 CONTAINER_WORKSPACES_ROOT/<workspaceId>。
-    const mountTarget =
-      isolationScope === "user"
-        ? CONTAINER_WORKSPACES_ROOT
-        : `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
-
-    if (runtimeType === "local") {
-      return {
-        runtimeType,
-        userId,
-        workspaceId,
-        hostPath: workspaceRootPath,
-        runtimePath: workspaceRootPath,
-      };
-    }
-
-    if (isolationScope === "user") {
-      const relativeSegments = relativePath.split(sep).filter(Boolean);
-      const runtimePath = [CONTAINER_WORKSPACES_ROOT, ...relativeSegments].join(
-        "/"
-      );
-      return {
-        runtimeType,
-        userId,
-        workspaceId,
-        hostPath: userWorkspaceRootPath,
-        runtimePath,
-        sandbox: {
-          isolationScope,
-          mountTarget,
-          sandboxEngineType: sandboxEngineType!,
-        },
-      };
-    }
-
+    const segments = relativePath.split(sep).filter(Boolean);
     return {
-      runtimeType,
+      runtimeType: "sandbox",
+      userId,
+      workspaceId,
+      hostPath: userWorkspaceRootPath,
+      runtimePath: [CONTAINER_WORKSPACES_ROOT, ...segments].join("/"),
+      sandbox: {
+        isolationScope: "user",
+        mountTarget: CONTAINER_WORKSPACES_ROOT,
+        sandboxEngineType: this.resolveSandboxEngine(input),
+      },
+    };
+  }
+
+  /** sandbox + workspace：该 workspace 独占容器，挂载与运行路径都是 <root>/<workspaceId>。 */
+  private sandboxWorkspacePlacement(
+    input: ResolvePlacementInput
+  ): SandboxRuntimePlacement {
+    const { userId, workspaceId, workspaceRootPath } = input;
+    const mountTarget = `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
+    return {
+      runtimeType: "sandbox",
       userId,
       workspaceId,
       hostPath: workspaceRootPath,
       runtimePath: mountTarget,
       sandbox: {
-        isolationScope,
+        isolationScope: "workspace",
         mountTarget,
-        sandboxEngineType: sandboxEngineType!,
+        sandboxEngineType: this.resolveSandboxEngine(input),
       },
     };
+  }
+
+  private resolveSandboxEngine(
+    input: ResolvePlacementInput
+  ): SandboxRuntimePlacement["sandbox"]["sandboxEngineType"] {
+    return (input.sandboxEngine ??
+      this.configService.getSandboxEngine()) as SandboxRuntimePlacement["sandbox"]["sandboxEngineType"];
+  }
+
+  /** workspace 目录是否落在用户根目录内（同目录或子目录）。 */
+  private isInsideUserRoot(relativePath: string): boolean {
+    return (
+      relativePath === "" ||
+      (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+    );
   }
 }
