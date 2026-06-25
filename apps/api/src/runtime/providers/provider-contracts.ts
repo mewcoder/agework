@@ -3,7 +3,7 @@ import type {
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import type { RunEventReceiver } from "../run-event-receiver";
+import type { RunEventReceiver } from "./run-event-receiver";
 
 /** Run 层驱动的执行切片：把 ResolvedRuntimeResource + RunConfig 跑成一次 worker execution。 */
 export interface WorkerExecutionProvider {

@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import type { RuntimeProvider } from "./provider-contracts";
-import type { RunEventReceiver } from "../run-event-receiver";
+import type { RunEventReceiver } from "./run-event-receiver";
 import { RUNTIME_PROVIDERS } from "./provider.token";
 
 @Injectable()

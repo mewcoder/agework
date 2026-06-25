@@ -38,7 +38,7 @@ RunService 拥有生命周期、状态、持久化和 SSE。
 - Provider 只保留 `startWorkerExecution()`;原先空转的 provider 端 `provision()`(两个实现都只是 `runtimeResourceHandleFromPlacement(placement)`)与 `RuntimeResourceProvider` 契约已删除,handle 计算直接在 `RuntimeService` 里完成。
 - 旧 `RuntimeProvider.start()` / `RuntimeService.startWorker()` / 过渡期的 `RuntimeService.startWorkerExecution()` 均已退场。
 - `WorkerExecutionHandle` 已独立为共享协议类型,旧 `RuntimeHandle` 已删除。
-- `RuntimeProvider` / `RunEventReceiver` 是 API 进程内接口,已移出 `shared/protocol`(分别落在 `runtime/providers/provider-contracts.ts` 与 `runtime/run-event-receiver.ts`);`shared/protocol` 只留 worker↔api 线缆协议。
+- `RuntimeProvider` / `RunEventReceiver` 是 API 进程内接口,已移出 `shared/protocol`(分别落在 `runtime/providers/provider-contracts.ts` 与 `runtime/providers/run-event-receiver.ts`);`shared/protocol` 只留 worker↔api 线缆协议。
 - Sandbox provider 已拆成薄 facade + runtime resource service + worker session service。
 - worker 心跳 / 手动 stop 的 provider 派发已收口到 `RuntimeService` 门面,内部 / admin 控制器不再注入 `RuntimeProviderRegistry`、不再硬编码 provider type。
 - RuntimeResource diagnostics 已落到现有 metadata,暂不改 Prisma schema。
@@ -241,7 +241,7 @@ apps/api/src/runtime/runtime.service.ts
 apps/api/src/runtime/providers/provider-contracts.ts
   RuntimeProvider / WorkerExecutionProvider 接口（API 进程内）
 
-apps/api/src/runtime/run-event-receiver.ts
+apps/api/src/runtime/providers/run-event-receiver.ts
   RunEventReceiver 端口（runtime 拥有，run 实现）
 
 apps/api/src/runtime/providers/local-provider.ts

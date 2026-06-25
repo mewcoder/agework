@@ -8,7 +8,7 @@ import type {
 import { swallow } from "../../../common/swallow";
 import { safeLogJson } from "../../../common/logging";
 import { publishWorkerErrorStatus } from "../provider-utils";
-import type { RunEventReceiver } from "../../run-event-receiver";
+import type { RunEventReceiver } from "../run-event-receiver";
 import type { RuntimeProvider } from "../provider-contracts";
 import {
   SandboxRuntimeResourceService,

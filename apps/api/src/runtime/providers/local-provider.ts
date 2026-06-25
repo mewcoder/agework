@@ -9,7 +9,7 @@ import type {
   ControlPayload,
   Envelope,
 } from "@agework/shared/protocol";
-import type { RunEventReceiver } from "../run-event-receiver";
+import type { RunEventReceiver } from "./run-event-receiver";
 import type { RuntimeProvider } from "./provider-contracts";
 import {
   HeartbeatWatchdog,
