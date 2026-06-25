@@ -28,16 +28,16 @@ export type SandboxStartInput = {
    * Docker/OpenSandbox resource id as a lookup key, but must not infer binding
    * from names or labels.
    */
-  isExpectedRuntimeInstance?: (runtimeResourceId: string) => Promise<boolean>;
+  isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
   /** OpenSandbox 专用：resource 恢复时传已有的 RuntimeTarget.id */
-  runtimeResourceId?: string;
+  runtimeInstanceId?: string;
 };
 
 // ── Engine 返回的运行时信息 ────────────────────────────────────────────
 
 export type SandboxRuntime = {
   engineType: SandboxEngineType;
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   workspaceMountPath: string;
 };
 
@@ -65,7 +65,7 @@ export interface SandboxEngine {
    * Docker: docker stop（保留容器对象与可写层数据，可通过 resume() 恢复）。
    * OpenSandbox: pause sandbox（保留状态，可通过 resume() 恢复）。
    */
-  stop(runtimeResourceId: string): Promise<void>;
+  stop(runtimeInstanceId: string): Promise<void>;
 
   /**
    * 恢复一个此前被 stop() 的沙箱运行环境（可选）。
@@ -73,19 +73,19 @@ export interface SandboxEngine {
    * OpenSandbox: resume sandbox，复用 paused sandbox。
    */
   resume?(
-    runtimeResourceId: string,
+    runtimeInstanceId: string,
     input: SandboxStartInput
   ): Promise<SandboxRuntime>;
 
   /**
-   * 服务重启后，根据持久化的 runtimeResourceId 终止孤儿资源。幂等。
+   * 服务重启后，根据持久化的 runtimeInstanceId 终止孤儿资源。幂等。
    */
-  recoverOrphan(runtimeResourceId: string): Promise<void>;
+  recoverOrphan(runtimeInstanceId: string): Promise<void>;
 
   /**
    * 检查沙箱是否健康。可选，用于 DB resource 恢复时验证。
    */
-  isHealthy?(runtimeResourceId: string): Promise<boolean>;
+  isHealthy?(runtimeInstanceId: string): Promise<boolean>;
 }
 
 // ── DI token ──────────────────────────────────────────────────────────

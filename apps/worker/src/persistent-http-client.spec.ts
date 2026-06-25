@@ -209,9 +209,9 @@ describe("PersistentHttpClient", () => {
     expect(seqInLastCall()).toBe("1");
   });
 
-  describe("with AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID", () => {
+  describe("with AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", () => {
     beforeEach(() => {
-      vi.stubEnv("AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID", "rr-42");
+      vi.stubEnv("AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", "rr-42");
     });
 
     it("polls the runtime controls endpoint", async () => {
@@ -251,7 +251,7 @@ describe("PersistentHttpClient", () => {
     });
   });
 
-  describe("without AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID", () => {
+  describe("without AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", () => {
     it("uses workspace endpoint for pollControls", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,

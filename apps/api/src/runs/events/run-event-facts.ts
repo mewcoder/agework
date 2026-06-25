@@ -80,7 +80,7 @@ export const RunEventFacts = {
   runtimeStatusChanged(input: RunFactBase & {
     status: string;
     runtimeType?: string;
-    runtimeResourceId?: string;
+    runtimeInstanceId?: string;
     /** 见 runCreated.isolationScope：local run 为 undefined。 */
     isolationScope?: string;
     /** 沙箱引擎类型，仅 sandbox run 有值；local run 为 undefined。 */
@@ -100,7 +100,7 @@ export const RunEventFacts = {
       data: compactData({
         status: input.status,
         runtimeType: input.runtimeType,
-        runtimeResourceId: input.runtimeResourceId,
+        runtimeInstanceId: input.runtimeInstanceId,
         isolationScope: input.isolationScope,
         sandboxEngineType: input.sandboxEngineType,
         error: input.error,

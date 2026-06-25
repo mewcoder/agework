@@ -10,7 +10,7 @@ function makeHandle(overrides: Partial<RunHandle> = {}): RunHandle {
     runtimeHandle: {
       runId: "run-1",
       runtimeType: "local",
-      runtimeResourceId: "1:token",
+      runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },
     res: null,

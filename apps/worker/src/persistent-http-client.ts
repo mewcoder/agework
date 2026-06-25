@@ -16,7 +16,7 @@ const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export class PersistentHttpClient {
   private readonly apiBase: string;
   private readonly workspaceId: string;
-  private readonly runtimeResourceId: string | undefined;
+  private readonly runtimeInstanceId: string | undefined;
   private readonly accessKey: string;
   private controlSeq = 0;
   private emptyPolls = 0;
@@ -27,12 +27,12 @@ export class PersistentHttpClient {
   constructor() {
     this.apiBase = process.env.AGEWORK_INTERNAL_API_BASE ?? "http://localhost:3000";
     this.workspaceId = process.env.AGEWORK_INTERNAL_WORKSPACE_ID ?? "";
-    this.runtimeResourceId =
-      process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID || undefined;
+    this.runtimeInstanceId =
+      process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID || undefined;
     this.accessKey = process.env.AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY ?? "";
 
-    if (!this.workspaceId && !this.runtimeResourceId) {
-      throw new Error("AGEWORK_INTERNAL_WORKSPACE_ID or AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID is required for persistent worker");
+    if (!this.workspaceId && !this.runtimeInstanceId) {
+      throw new Error("AGEWORK_INTERNAL_WORKSPACE_ID or AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID is required for persistent worker");
     }
     if (!this.accessKey) {
       throw new Error("AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY is required for persistent worker");
@@ -41,7 +41,7 @@ export class PersistentHttpClient {
     workerLog("persistent http client initialized", {
       apiBase: this.apiBase,
       workspaceId: this.workspaceId,
-      runtimeResourceId: this.runtimeResourceId,
+      runtimeInstanceId: this.runtimeInstanceId,
       accessKeyPresent: Boolean(this.accessKey),
       logFile:
         process.env.AGEWORK_INTERNAL_WORKER_LOG_FILE ??
@@ -54,8 +54,8 @@ export class PersistentHttpClient {
   }
 
   async pollControls(waitMs = 0): Promise<Envelope<ControlPayload>[]> {
-    const controlsPath = this.runtimeResourceId
-      ? `/internal/runtimes/${this.runtimeResourceId}/controls`
+    const controlsPath = this.runtimeInstanceId
+      ? `/internal/runtimes/${this.runtimeInstanceId}/controls`
       : `/internal/workspaces/${this.workspaceId}/controls`;
     const params = new URLSearchParams({ afterSeq: String(this.controlSeq) });
     if (waitMs > 0) {
@@ -68,7 +68,7 @@ export class PersistentHttpClient {
     } catch (err) {
       workerLog("control poll failed", {
         workspaceId: this.workspaceId,
-        runtimeResourceId: this.runtimeResourceId,
+        runtimeInstanceId: this.runtimeInstanceId,
         afterSeq: this.controlSeq,
         ...errorDetails(err),
       }, "warn");
@@ -80,7 +80,7 @@ export class PersistentHttpClient {
       const body = await safeText(res);
       workerLog("control poll returned non-ok", {
         workspaceId: this.workspaceId,
-        runtimeResourceId: this.runtimeResourceId,
+        runtimeInstanceId: this.runtimeInstanceId,
         afterSeq: this.controlSeq,
         status: res.status,
         body,
@@ -88,7 +88,7 @@ export class PersistentHttpClient {
       if (res.status === 401) {
         workerLog("runtime access key invalid, exiting", {
           workspaceId: this.workspaceId,
-          runtimeResourceId: this.runtimeResourceId,
+          runtimeInstanceId: this.runtimeInstanceId,
         }, "error");
         process.exit(1);
       }
@@ -100,7 +100,7 @@ export class PersistentHttpClient {
       this.emptyPolls = 0;
       workerLog("control poll received controls", {
         workspaceId: this.workspaceId,
-        runtimeResourceId: this.runtimeResourceId,
+        runtimeInstanceId: this.runtimeInstanceId,
         afterSeq: this.controlSeq,
         count: data.controls.length,
         controls: data.controls.map((control) => ({
@@ -115,7 +115,7 @@ export class PersistentHttpClient {
       if (this.emptyPolls <= 3 || this.emptyPolls % 30 === 0) {
         workerLog("control poll empty", {
           workspaceId: this.workspaceId,
-          runtimeResourceId: this.runtimeResourceId,
+          runtimeInstanceId: this.runtimeInstanceId,
           afterSeq: this.controlSeq,
           emptyPolls: this.emptyPolls,
         }, "debug");
@@ -133,7 +133,7 @@ export class PersistentHttpClient {
     workerLog("fetch run config", {
       runId,
       workspaceId: this.workspaceId,
-      runtimeResourceId: this.runtimeResourceId,
+      runtimeInstanceId: this.runtimeInstanceId,
     }, "debug");
     const res = await fetch(`${this.apiBase}/internal/runs/${runId}`, {
       headers: this.authHeaders,
@@ -251,8 +251,8 @@ export class PersistentHttpClient {
   }
 
   async emitWorkspaceHeartbeat(): Promise<void> {
-    const heartbeatPath = this.runtimeResourceId
-      ? `/internal/runtimes/${this.runtimeResourceId}/heartbeat`
+    const heartbeatPath = this.runtimeInstanceId
+      ? `/internal/runtimes/${this.runtimeInstanceId}/heartbeat`
       : `/internal/workspaces/${this.workspaceId}/heartbeat`;
     const res = await fetch(`${this.apiBase}${heartbeatPath}`, {
       method: "POST",
@@ -260,7 +260,7 @@ export class PersistentHttpClient {
     }).catch((err) => {
       workerLog("workspace heartbeat failed", {
         workspaceId: this.workspaceId,
-        runtimeResourceId: this.runtimeResourceId,
+        runtimeInstanceId: this.runtimeInstanceId,
         ...errorDetails(err),
       }, "warn");
       return undefined;
@@ -268,7 +268,7 @@ export class PersistentHttpClient {
     if (res && !res.ok) {
       workerLog("workspace heartbeat returned non-ok", {
         workspaceId: this.workspaceId,
-        runtimeResourceId: this.runtimeResourceId,
+        runtimeInstanceId: this.runtimeInstanceId,
         status: res.status,
         body: await safeText(res),
       }, "warn");

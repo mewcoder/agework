@@ -17,14 +17,14 @@ function makeMockEngine(type: "docker" | "opensandbox"): SandboxEngine {
     type,
     getOrCreate: vi.fn().mockImplementation(async () => ({
       engineType: type,
-      runtimeResourceId: `${type}-resource-${++nextId}`,
+      runtimeInstanceId: `${type}-resource-${++nextId}`,
       workspaceMountPath: "/workspace",
     })),
     startWorker: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
-    resume: vi.fn().mockImplementation(async (runtimeResourceId: string) => ({
+    resume: vi.fn().mockImplementation(async (runtimeInstanceId: string) => ({
       engineType: type,
-      runtimeResourceId,
+      runtimeInstanceId,
       workspaceMountPath: "/workspace",
     })),
     recoverOrphan: vi.fn().mockResolvedValue(undefined),
@@ -311,7 +311,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
     resolveGetOrCreate!({
       engineType: "docker",
-      runtimeResourceId: "resource-1",
+      runtimeInstanceId: "resource-1",
       workspaceMountPath: "/workspace",
     });
     await vi.runOnlyPendingTimersAsync();
@@ -552,7 +552,7 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
-  it("after idle timeout, marks resource stopped and resets runtimeResourceId without revoking access", async () => {
+  it("after idle timeout, marks resource stopped and resets runtimeInstanceId without revoking access", async () => {
     const { provider, config, workspaceRuntimeService, access } = makeProvider();
     config.getIdleTimeoutSeconds.mockReturnValue(5);
 

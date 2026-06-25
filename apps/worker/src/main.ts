@@ -54,7 +54,7 @@ async function main() {
   if (
     process.env.AGEWORK_INTERNAL_TRANSPORT === "http" &&
     (process.env.AGEWORK_INTERNAL_WORKSPACE_ID ||
-      process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID)
+      process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID)
   ) {
     return runPersistent();
   }
@@ -259,7 +259,7 @@ async function runPersistent() {
   });
   workerLog("persistent worker started", {
     workspaceId: process.env.AGEWORK_INTERNAL_WORKSPACE_ID,
-    runtimeResourceId: process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID,
+    runtimeInstanceId: process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID,
     runtimeTransport: process.env.AGEWORK_INTERNAL_TRANSPORT,
   });
 

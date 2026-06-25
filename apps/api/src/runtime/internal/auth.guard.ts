@@ -13,7 +13,7 @@ type RequestWithRunId = {
   params: Record<string, string>;
   runId?: string;
   workspaceId?: string;
-  runtimeResourceId?: string;
+  runtimeInstanceId?: string;
 };
 
 /**
@@ -38,7 +38,7 @@ export class RuntimeInternalAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing runtime access key");
     }
 
-    const { runId, workspaceId, runtimeResourceId } = request.params;
+    const { runId, workspaceId, runtimeInstanceId } = request.params;
     if (runId && this.runtimeAccess.verifyAccessKey(runId, accessKey)) {
       request.runId = runId;
       return true;
@@ -48,16 +48,16 @@ export class RuntimeInternalAuthGuard implements CanActivate {
       return true;
     }
     if (
-      runtimeResourceId &&
-      this.runtimeAccess.verifyRuntimeInstanceKey(runtimeResourceId, accessKey)
+      runtimeInstanceId &&
+      this.runtimeAccess.verifyRuntimeInstanceKey(runtimeInstanceId, accessKey)
     ) {
-      request.runtimeResourceId = runtimeResourceId;
+      request.runtimeInstanceId = runtimeInstanceId;
       return true;
     }
 
     this.logger.warn(
       `Invalid runtime access key diagnostics=${JSON.stringify(
-        this.runtimeAccess.diagnostics({ runId, workspaceId, runtimeResourceId, accessKey })
+        this.runtimeAccess.diagnostics({ runId, workspaceId, runtimeInstanceId, accessKey })
       )}`
     );
     throw new UnauthorizedException("Invalid runtime access key");

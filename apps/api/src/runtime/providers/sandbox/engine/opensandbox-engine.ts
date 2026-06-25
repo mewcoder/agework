@@ -58,7 +58,7 @@ export class OpenSandboxEngine implements SandboxEngine {
 
     return {
       engineType: "opensandbox",
-      runtimeResourceId: sandbox.id,
+      runtimeInstanceId: sandbox.id,
       workspaceMountPath,
     };
   }
@@ -71,32 +71,32 @@ export class OpenSandboxEngine implements SandboxEngine {
     // 如果后续需要 DB resource 恢复场景下重启 worker，可在此实现。
   }
 
-  async stop(runtimeResourceId: string): Promise<void> {
-    await this.client.pauseSandbox(runtimeResourceId);
+  async stop(runtimeInstanceId: string): Promise<void> {
+    await this.client.pauseSandbox(runtimeInstanceId);
   }
 
   async resume(
-    runtimeResourceId: string,
+    runtimeInstanceId: string,
     input: SandboxStartInput
   ): Promise<SandboxRuntime> {
-    const sandbox = await this.client.resumeSandbox(runtimeResourceId);
+    const sandbox = await this.client.resumeSandbox(runtimeInstanceId);
     this.logger.log(
       `Sandbox resumed: resourceKey=${input.placement.resourceKey} sandboxId=${sandbox.id.slice(0, 12)}`
     );
     return {
       engineType: "opensandbox",
-      runtimeResourceId: sandbox.id,
+      runtimeInstanceId: sandbox.id,
       workspaceMountPath: input.placement.workspaceMountPath,
     };
   }
 
-  async recoverOrphan(runtimeResourceId: string): Promise<void> {
-    await this.client.deleteSandbox(runtimeResourceId);
+  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
+    await this.client.deleteSandbox(runtimeInstanceId);
   }
 
-  async isHealthy(runtimeResourceId: string): Promise<boolean> {
+  async isHealthy(runtimeInstanceId: string): Promise<boolean> {
     try {
-      const sandbox = await this.client.getSandbox(runtimeResourceId);
+      const sandbox = await this.client.getSandbox(runtimeInstanceId);
       if (!sandbox) return false;
       return await sandbox.isHealthy();
     } catch {
@@ -126,7 +126,7 @@ export class OpenSandboxEngine implements SandboxEngine {
         AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_INTERNAL_ISOLATION_SCOPE: isolationScope,
         ...env,
-        AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID: sandbox.id,
+        AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID: sandbox.id,
       };
 
       await sandbox.runCommand("node /app/dist/main.js", {

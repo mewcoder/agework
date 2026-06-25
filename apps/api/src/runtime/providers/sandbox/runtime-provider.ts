@@ -55,7 +55,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
         context,
         scopeState,
         handle,
-        onRuntimeResourceIdReady: input.onRuntimeResourceIdReady,
+        onRuntimeInstanceIdReady: input.onRuntimeInstanceIdReady,
       },
       this.runtimeInstanceCallbacks()
     );
@@ -83,7 +83,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     const scopeState = scopeKey
       ? this.runtimeInstances.getScopeState(scopeKey)
       : undefined;
-    if (!scopeState?.runtimeResourceId) {
+    if (!scopeState?.runtimeInstanceId) {
       this.workerSessions.markCancelledBeforeReady(handle.runId);
       this.logger.debug(
         `sandbox cancel queued before ready ${safeLogJson({
@@ -119,8 +119,8 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     });
   }
 
-  recoverOrphan(runtimeResourceId: string): Promise<void> {
-    return this.runtimeInstances.recoverOrphan(runtimeResourceId);
+  recoverOrphan(runtimeInstanceId: string): Promise<void> {
+    return this.runtimeInstances.recoverOrphan(runtimeInstanceId);
   }
 
   cleanup(runId: string): void {

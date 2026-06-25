@@ -66,21 +66,21 @@ export class DockerSandboxEngine implements SandboxEngine {
         throw err;
       }
 
-      const runtimeResourceId =
+      const runtimeInstanceId =
         await this.inspectContainerId(conflictingContainerId).catch(
           swallow(this.logger, `docker inspect ${conflictingContainerId}`)
         );
-      if (!runtimeResourceId) {
+      if (!runtimeInstanceId) {
         throw err;
       }
 
       let isExpectedRuntimeInstance: boolean;
       try {
         isExpectedRuntimeInstance =
-          await input.isExpectedRuntimeInstance(runtimeResourceId);
+          await input.isExpectedRuntimeInstance(runtimeInstanceId);
       } catch (lookupErr) {
         this.logger.warn(
-          `workspace runtime binding lookup failed for ${runtimeResourceId.slice(0, 12)}: ${String(lookupErr)}`
+          `workspace runtime binding lookup failed for ${runtimeInstanceId.slice(0, 12)}: ${String(lookupErr)}`
         );
         throw err;
       }
@@ -90,9 +90,9 @@ export class DockerSandboxEngine implements SandboxEngine {
       }
 
       this.logger.warn(
-        `Removing Docker container ${runtimeResourceId.slice(0, 12)} not bound to current workspace before retrying sandbox create`
+        `Removing Docker container ${runtimeInstanceId.slice(0, 12)} not bound to current workspace before retrying sandbox create`
       );
-      await this.dockerRemove(runtimeResourceId);
+      await this.dockerRemove(runtimeInstanceId);
       ({ stdout } = await execFileAsync("docker", args, {
         timeout: DOCKER_RUN_TIMEOUT_MS,
       }));
@@ -107,7 +107,7 @@ export class DockerSandboxEngine implements SandboxEngine {
     );
     return {
       engineType: "docker",
-      runtimeResourceId: containerId,
+      runtimeInstanceId: containerId,
       workspaceMountPath,
     };
   }
@@ -119,47 +119,47 @@ export class DockerSandboxEngine implements SandboxEngine {
     // Docker worker 通过容器 entrypoint / CMD 启动，无需额外操作
   }
 
-  async stop(runtimeResourceId: string): Promise<void> {
+  async stop(runtimeInstanceId: string): Promise<void> {
     try {
-      await this.dockerStop(runtimeResourceId);
+      await this.dockerStop(runtimeInstanceId);
     } catch (err) {
       this.logger.warn(
-        `docker stop failed for ${runtimeResourceId.slice(0, 12)}: ${String(err)}, force killing`
+        `docker stop failed for ${runtimeInstanceId.slice(0, 12)}: ${String(err)}, force killing`
       );
-      await this.dockerKill(runtimeResourceId).catch(
-        swallow(this.logger, `docker kill ${runtimeResourceId.slice(0, 12)}`)
+      await this.dockerKill(runtimeInstanceId).catch(
+        swallow(this.logger, `docker kill ${runtimeInstanceId.slice(0, 12)}`)
       );
     }
   }
 
   async resume(
-    runtimeResourceId: string,
+    runtimeInstanceId: string,
     input: SandboxStartInput
   ): Promise<SandboxRuntime> {
     if (input.isExpectedRuntimeInstance) {
-      const isOurs = await input.isExpectedRuntimeInstance(runtimeResourceId);
+      const isOurs = await input.isExpectedRuntimeInstance(runtimeInstanceId);
       if (!isOurs) {
         throw new Error(
-          `Container ${runtimeResourceId.slice(0, 12)} is not bound to the current workspace`
+          `Container ${runtimeInstanceId.slice(0, 12)} is not bound to the current workspace`
         );
       }
     }
-    await execFileAsync("docker", ["start", runtimeResourceId]);
+    await execFileAsync("docker", ["start", runtimeInstanceId]);
     return {
       engineType: "docker",
-      runtimeResourceId,
+      runtimeInstanceId,
       workspaceMountPath: input.placement.workspaceMountPath,
     };
   }
 
-  async recoverOrphan(runtimeResourceId: string): Promise<void> {
+  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
     try {
-      await this.dockerStop(runtimeResourceId);
+      await this.dockerStop(runtimeInstanceId);
     } catch {
-      await this.dockerKill(runtimeResourceId).catch(
+      await this.dockerKill(runtimeInstanceId).catch(
         swallow(
           this.logger,
-          `recover orphan: docker kill ${runtimeResourceId.slice(0, 12)}`
+          `recover orphan: docker kill ${runtimeInstanceId.slice(0, 12)}`
         )
       );
     }

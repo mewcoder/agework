@@ -43,7 +43,7 @@ function makeContext(
 
 function makeScopeState(): SandboxScopeState {
   return {
-    runtimeResourceId: "",
+    runtimeInstanceId: "",
     accessKey: "workspace-key",
     activeRuns: new Map(),
     isolationScope: "workspace",

@@ -41,7 +41,7 @@ describe("AdminRuntimeController", () => {
         isolationScope: "workspace",
         ownerUserId: "user-1",
         ownerWorkspaceId: "ws-1",
-        runtimeResourceId: "container-abc",
+        runtimeInstanceId: "container-abc",
         status: "running",
         expiresAt: null,
         metadata: {
@@ -88,7 +88,7 @@ describe("AdminRuntimeController", () => {
         resourceKey: "ws-1",
         statusReason: "running",
         lastSeenAt: "2026-06-25T00:00:00.000Z",
-        runtimeResourceId: "container-abc",
+        runtimeInstanceId: "container-abc",
       },
       createdAt: "2026-06-25T00:00:00.000Z",
       updatedAt: "2026-06-25T00:01:00.000Z",

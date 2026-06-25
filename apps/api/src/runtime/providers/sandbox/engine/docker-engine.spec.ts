@@ -53,7 +53,7 @@ describe("DockerSandboxEngine", () => {
     const result = await engine.getOrCreate(makeInput());
 
     expect(result.engineType).toBe("docker");
-    expect(result.runtimeResourceId).toBe("container-abc");
+    expect(result.runtimeInstanceId).toBe("container-abc");
     expect(result.workspaceMountPath).toBe("/workspace");
 
     const runCall = mockExecFile.mock.calls.find(
@@ -177,7 +177,7 @@ describe("DockerSandboxEngine", () => {
       makeInput({ isExpectedRuntimeInstance })
     );
 
-    expect(result.runtimeResourceId).toBe("container-next");
+    expect(result.runtimeInstanceId).toBe("container-next");
     expect(isExpectedRuntimeInstance).toHaveBeenCalledWith(
       conflictingContainerId
     );
@@ -310,7 +310,7 @@ describe("DockerSandboxEngine", () => {
     );
     expect(result).toEqual({
       engineType: "docker",
-      runtimeResourceId: "container-abc",
+      runtimeInstanceId: "container-abc",
       workspaceMountPath: "/workspace",
     });
   });
@@ -318,7 +318,7 @@ describe("DockerSandboxEngine", () => {
   it("startWorker is a no-op for Docker", async () => {
     const engine = new DockerSandboxEngine();
     await engine.startWorker(
-      { engineType: "docker", runtimeResourceId: "container-abc", workspaceMountPath: "/workspace" },
+      { engineType: "docker", runtimeInstanceId: "container-abc", workspaceMountPath: "/workspace" },
       makeInput()
     );
   });

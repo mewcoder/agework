@@ -29,12 +29,12 @@ export class RuntimeRuntimeController {
   ) {}
 
   /**
-   * GET /internal/runtimes/:runtimeResourceId/controls?afterSeq=N
+   * GET /internal/runtimes/:runtimeInstanceId/controls?afterSeq=N
    * 持久容器的 worker 按 RuntimeTarget.id 轮询下行控制指令。
    */
-  @Get(":runtimeResourceId/controls")
+  @Get(":runtimeInstanceId/controls")
   async pollRuntimeControls(
-    @Param("runtimeResourceId") runtimeResourceId: string,
+    @Param("runtimeInstanceId") runtimeInstanceId: string,
     @Query("afterSeq") afterSeq?: string,
     @Query("waitMs") waitMs?: string
   ): Promise<{ controls: Envelope[] }> {
@@ -42,7 +42,7 @@ export class RuntimeRuntimeController {
     const seq = Number.isFinite(parsed) ? parsed : 0;
     const wait = parseControlWaitMs(waitMs);
     const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeResourceId);
+      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeInstanceId);
     const controls = resourceKey
       ? wait > 0
         ? await this.controlQueue.waitForWorkspace(resourceKey, seq, wait)
@@ -51,7 +51,7 @@ export class RuntimeRuntimeController {
     if (controls.length > 0) {
       this.logger.debug(
         `runtime controls fetched ${safeLogJson({
-          runtimeResourceId,
+          runtimeInstanceId,
           resourceKey,
           afterSeq: seq,
           count: controls.length,
@@ -67,24 +67,24 @@ export class RuntimeRuntimeController {
   }
 
   /**
-   * POST /internal/runtimes/:runtimeResourceId/heartbeat
+   * POST /internal/runtimes/:runtimeInstanceId/heartbeat
    * 持久容器 worker 定期上报心跳，通过 RuntimeTarget.id 反查 resourceKey
    * 后分发到对应 provider。
    */
-  @Post(":runtimeResourceId/heartbeat")
+  @Post(":runtimeInstanceId/heartbeat")
   async heartbeat(
-    @Param("runtimeResourceId") runtimeResourceId: string
+    @Param("runtimeInstanceId") runtimeInstanceId: string
   ): Promise<{ ok: boolean }> {
     const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeResourceId);
+      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeInstanceId);
     if (resourceKey) {
       this.logger.debug(
-        `runtime heartbeat ${safeLogJson({ runtimeResourceId, resourceKey })}`
+        `runtime heartbeat ${safeLogJson({ runtimeInstanceId, resourceKey })}`
       );
       this.runtimeService.heartbeatRuntimeInstance(resourceKey);
     } else {
       this.logger.warn(
-        `runtime heartbeat without resource ${safeLogJson({ runtimeResourceId })}`
+        `runtime heartbeat without resource ${safeLogJson({ runtimeInstanceId })}`
       );
     }
     return { ok: true };

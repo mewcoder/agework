@@ -197,7 +197,7 @@ function initialWorkerLogContext(): Record<string, unknown> {
     runtimeResourceKey:
       process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY ??
       process.env.AGEWORK_INTERNAL_WORKSPACE_ID,
-    runtimeResourceId: process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID,
+    runtimeInstanceId: process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID,
     runtimeResourceName: process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME,
     containerHostname: hostname(),
     workerPid: process.pid,

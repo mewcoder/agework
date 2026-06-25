@@ -325,9 +325,9 @@ export class RunService {
       runtimeHandle = this.runWorkerExecution.start({
         runConfig,
         runtimeTarget,
-        onRuntimeResourceIdReady: (runtimeResourceId) => {
+        onRuntimeInstanceIdReady: (runtimeInstanceId) => {
           this.runRepository
-            .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
+            .updateRuntimeHandle(runId, runtimeType, runtimeInstanceId)
             .catch(
               swallow(this.logger, `persist runtime handle for run ${runId}`)
             );
@@ -335,11 +335,11 @@ export class RunService {
             .append(
               RunEventFacts.runtimeStatusChanged({
                 runId,
-                eventKey: `runtime:${runtimeResourceId}:ready`,
+                eventKey: `runtime:${runtimeInstanceId}:ready`,
                 status: "ready",
-                targetId: runtimeResourceId,
+                targetId: runtimeInstanceId,
                 runtimeType,
-                runtimeResourceId,
+                runtimeInstanceId,
               })
             )
             .catch(
@@ -391,23 +391,23 @@ export class RunService {
     }
 
     // Persist runtime handle for orphan recovery after a service restart.
-    if (runtimeHandle.runtimeResourceId) {
+    if (runtimeHandle.runtimeInstanceId) {
       await this.runRepository
         .updateRuntimeHandle(
           runId,
           runtimeHandle.runtimeType,
-          runtimeHandle.runtimeResourceId
+          runtimeHandle.runtimeInstanceId
         )
         .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
       this.runEventRecorder
         .append(
           RunEventFacts.runtimeStatusChanged({
             runId,
-            eventKey: `runtime:${runtimeHandle.runtimeResourceId}:ready`,
+            eventKey: `runtime:${runtimeHandle.runtimeInstanceId}:ready`,
             status: "ready",
-            targetId: runtimeHandle.runtimeResourceId,
+            targetId: runtimeHandle.runtimeInstanceId,
             runtimeType: runtimeHandle.runtimeType,
-            runtimeResourceId: runtimeHandle.runtimeResourceId,
+            runtimeInstanceId: runtimeHandle.runtimeInstanceId,
           })
         )
         .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
@@ -440,7 +440,7 @@ export class RunService {
         runId,
         conversationId,
         runtimeType,
-        runtimeResourceId: runtimeHandle.runtimeResourceId,
+        runtimeInstanceId: runtimeHandle.runtimeInstanceId,
       })}`
     );
   }

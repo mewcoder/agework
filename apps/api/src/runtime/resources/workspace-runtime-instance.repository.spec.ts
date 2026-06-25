@@ -91,7 +91,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
         isolationScope: "user",
         ownerUserId: "u1",
         ownerWorkspaceId: null,
-        runtimeResourceId: "container-abc",
+        runtimeInstanceId: "container-abc",
         status: "running",
         expiresAt: null,
         metadata: expect.objectContaining({
@@ -99,7 +99,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
           resourceKey: "u1",
           workspaceId: "w1",
           statusReason: "running",
-          runtimeResourceId: "container-abc",
+          runtimeInstanceId: "container-abc",
           lastSeenAt: expect.any(String),
           lastStartedAt: expect.any(String),
         }),
@@ -115,7 +115,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
 
   it("updates an existing workspace-isolated resource", async () => {
     const existing = { id: "rr-1" };
-    const resource = { id: "rr-1", runtimeResourceId: "container-next" };
+    const resource = { id: "rr-1", runtimeInstanceId: "container-next" };
     const findFirst = vi.fn().mockResolvedValue(existing);
     const update = vi.fn().mockResolvedValue(resource);
     const upsert = vi.fn().mockResolvedValue({ id: "wr-1" });
@@ -153,14 +153,14 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     expect(update).toHaveBeenCalledWith({
       where: { id: "rr-1" },
       data: {
-        runtimeResourceId: "container-next",
+        runtimeInstanceId: "container-next",
         status: "running",
         expiresAt: null,
         metadata: expect.objectContaining({
           resourceKey: "w1",
           workspaceId: "w1",
           statusReason: "running",
-          runtimeResourceId: "container-next",
+          runtimeInstanceId: "container-next",
           lastSeenAt: expect.any(String),
           lastStartedAt: expect.any(String),
         }),
@@ -304,9 +304,9 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
 
     expect(findUnique).toHaveBeenCalledWith({
       where: {
-        runtimeType_runtimeResourceId: {
+        runtimeType_runtimeInstanceId: {
           runtimeType: "sandbox",
-          runtimeResourceId: "container-abc",
+          runtimeInstanceId: "container-abc",
         },
       },
     });
@@ -318,7 +318,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       id: "wr-1",
       resource: {
         runtimeType: "sandbox",
-        runtimeResourceId: "container-abc",
+        runtimeInstanceId: "container-abc",
       },
     });
     const service = new WorkspaceRuntimeInstanceRepository({

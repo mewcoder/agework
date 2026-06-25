@@ -102,7 +102,7 @@ export class AdminRuntimeController {
     isolationScope: string;
     ownerUserId: string;
     ownerWorkspaceId: string | null;
-    runtimeResourceId: string;
+    runtimeInstanceId: string;
     status: string;
     expiresAt: Date | string | null;
     metadata: unknown;
@@ -131,7 +131,7 @@ export class AdminRuntimeController {
       ownerUserId: resource.ownerUserId,
       ownerWorkspaceId: resource.ownerWorkspaceId,
       resourceKey,
-      runtimeResourceId: resource.runtimeResourceId,
+      runtimeInstanceId: resource.runtimeInstanceId,
       status: resource.status,
       isReusable: resource.status === "running",
       workspaceCount: workspaceRuntimeResources?.length ?? 0,
@@ -140,8 +140,8 @@ export class AdminRuntimeController {
       diagnostics: {
         ...diagnostics,
         resourceKey: diagnostics.resourceKey ?? resourceKey,
-        runtimeResourceId:
-          diagnostics.runtimeResourceId ?? resource.runtimeResourceId,
+        runtimeInstanceId:
+          diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
       },
       createdAt: this.toIsoString(resource.createdAt),
       updatedAt: this.toIsoString(resource.updatedAt),

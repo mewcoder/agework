@@ -62,21 +62,21 @@ export class WorkspaceRuntimeInstanceRepository {
   async upsertRunning(
     placement: SandboxRuntimePlacement,
     resourceKey: string,
-    runtimeResourceId: string,
+    runtimeInstanceId: string,
     metadata?: object
   ) {
     const where = ownerWhere(placement);
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.runtimeInstance.findFirst({ where });
       const data = {
-        runtimeResourceId,
+        runtimeInstanceId,
         status: "running",
         expiresAt: null,
         metadata: runtimeInstanceMetadataJson(
           runningInstanceMetadata({
             placement,
             resourceKey,
-            runtimeResourceId,
+            runtimeInstanceId,
             existing: existing?.metadata,
             metadata,
           })
@@ -210,13 +210,13 @@ export class WorkspaceRuntimeInstanceRepository {
 
   async findActiveResourceByRuntimeId(
     runtimeType: string,
-    runtimeResourceId: string
+    runtimeInstanceId: string
   ) {
     const resource = await this.prisma.runtimeInstance.findUnique({
       where: {
-        runtimeType_runtimeResourceId: {
+        runtimeType_runtimeInstanceId: {
           runtimeType,
-          runtimeResourceId,
+          runtimeInstanceId,
         },
       },
     });
@@ -226,7 +226,7 @@ export class WorkspaceRuntimeInstanceRepository {
   async isRuntimeInstanceBoundToWorkspace(
     runtimeType: string,
     workspaceId: string,
-    runtimeResourceId: string
+    runtimeInstanceId: string
   ) {
     const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
       where: { workspaceId },
@@ -234,7 +234,7 @@ export class WorkspaceRuntimeInstanceRepository {
     });
     return (
       binding?.resource.runtimeType === runtimeType &&
-      binding.resource.runtimeResourceId === runtimeResourceId
+      binding.resource.runtimeInstanceId === runtimeInstanceId
     );
   }
 

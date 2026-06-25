@@ -11,7 +11,7 @@ const activeHandle = {
   runtimeHandle: {
     runId: "run-1",
     runtimeType: "docker",
-    runtimeResourceId: "container-abc",
+    runtimeInstanceId: "container-abc",
     conversationId: "conversation-1",
   },
 };

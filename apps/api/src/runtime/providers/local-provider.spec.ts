@@ -122,7 +122,7 @@ describe("LocalRuntimeProvider", () => {
   });
 
   describe("recoverOrphan()", () => {
-    it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeResourceId", async () => {
+    it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
       await provider.recoverOrphan("12345:some-token");
@@ -130,7 +130,7 @@ describe("LocalRuntimeProvider", () => {
       expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
     });
 
-    it("does nothing for a malformed runtimeResourceId", async () => {
+    it("does nothing for a malformed runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
       await provider.recoverOrphan("not-a-valid-runtime-id");

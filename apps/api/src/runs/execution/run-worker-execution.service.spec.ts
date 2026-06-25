@@ -29,7 +29,7 @@ function makeRegistry(provider: ReturnType<typeof makeProvider>) {
 const handle: WorkerExecutionHandle = {
   runId: "run-1",
   runtimeType: "local",
-  runtimeResourceId: "1:token",
+  runtimeInstanceId: "1:token",
   conversationId: "conversation-1",
 };
 
@@ -51,14 +51,14 @@ describe("RunWorkerExecutionService", () => {
     const result = service.start({
       runConfig,
       runtimeTarget,
-      onRuntimeResourceIdReady: onReady,
+      onRuntimeInstanceIdReady: onReady,
     });
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(provider.startWorkerExecution).toHaveBeenCalledWith({
       runConfig,
       runtimeTarget,
-      onRuntimeResourceIdReady: onReady,
+      onRuntimeInstanceIdReady: onReady,
     });
     expect(result).toBe(handle);
   });

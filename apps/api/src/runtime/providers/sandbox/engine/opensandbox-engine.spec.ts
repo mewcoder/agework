@@ -65,7 +65,7 @@ describe("OpenSandboxEngine", () => {
     const result = await engine.getOrCreate(makeInput());
 
     expect(result.engineType).toBe("opensandbox");
-    expect(result.runtimeResourceId).toMatch(/^sandbox-/);
+    expect(result.runtimeInstanceId).toMatch(/^sandbox-/);
     expect(client.createSandbox).toHaveBeenCalledWith(
       expect.objectContaining({
         image: "agework/worker:latest",
@@ -179,7 +179,7 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID: "sandbox-1",
+          AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID: "sandbox-1",
         }),
       })
     );
@@ -218,7 +218,7 @@ describe("OpenSandboxEngine", () => {
     expect(client.resumeSandbox).toHaveBeenCalledWith("sandbox-abc");
     expect(runtime).toEqual({
       engineType: "opensandbox",
-      runtimeResourceId: "sandbox-abc",
+      runtimeInstanceId: "sandbox-abc",
       workspaceMountPath: "/workspace",
     });
   });

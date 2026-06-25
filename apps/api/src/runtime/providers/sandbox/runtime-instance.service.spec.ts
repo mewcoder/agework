@@ -9,14 +9,14 @@ function makeEngine(): SandboxEngine {
     type: "docker",
     getOrCreate: vi.fn().mockImplementation(async () => ({
       engineType: "docker",
-      runtimeResourceId: `docker-resource-${++nextId}`,
+      runtimeInstanceId: `docker-resource-${++nextId}`,
       workspaceMountPath: "/workspace",
     })),
     startWorker: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
-    resume: vi.fn().mockImplementation(async (runtimeResourceId: string) => ({
+    resume: vi.fn().mockImplementation(async (runtimeInstanceId: string) => ({
       engineType: "docker",
-      runtimeResourceId,
+      runtimeInstanceId,
       workspaceMountPath: "/workspace",
     })),
     recoverOrphan: vi.fn().mockResolvedValue(undefined),
@@ -133,7 +133,7 @@ describe("SandboxRuntimeInstanceService", () => {
       engineType: "docker",
     });
     expect(scopeState).toMatchObject({
-      runtimeResourceId: "",
+      runtimeInstanceId: "",
       accessKey: "workspace-key",
       isolationScope: "workspace",
       engineType: "docker",
@@ -150,7 +150,7 @@ describe("SandboxRuntimeInstanceService", () => {
     const onReady = vi.fn();
 
     service.attachOrStartRuntimeInstance(
-      { context, scopeState, handle, onRuntimeResourceIdReady: onReady },
+      { context, scopeState, handle, onRuntimeInstanceIdReady: onReady },
       makeCallbacks()
     );
     await flushPromises();
@@ -168,7 +168,7 @@ describe("SandboxRuntimeInstanceService", () => {
       })
     );
     expect(engine.startWorker).toHaveBeenCalled();
-    expect(handle.runtimeResourceId).toBe("docker-resource-1");
+    expect(handle.runtimeInstanceId).toBe("docker-resource-1");
     expect(onReady).toHaveBeenCalledWith("docker-resource-1");
     expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
       context.placement,
@@ -204,7 +204,7 @@ describe("SandboxRuntimeInstanceService", () => {
     );
     resolveGetOrCreate!({
       engineType: "docker",
-      runtimeResourceId: "docker-resource-1",
+      runtimeInstanceId: "docker-resource-1",
       workspaceMountPath: "/workspace",
     });
     await flushPromises();

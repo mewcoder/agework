@@ -21,8 +21,8 @@ export interface RuntimeProvider extends WorkerExecutionProvider {
   getHandle(runId: string): WorkerExecutionHandle | undefined;
   /** 收到 worker 心跳时调用，重置该 run 的心跳 watchdog 计时。 */
   heartbeat(runId: string): void;
-  /** 服务重启后，根据持久化的 runtimeResourceId 终止孤儿 run 对应的进程/容器。幂等。 */
-  recoverOrphan(runtimeResourceId: string): Promise<void>;
+  /** 服务重启后，根据持久化的 runtimeInstanceId 终止孤儿 run 对应的进程/容器。幂等。 */
+  recoverOrphan(runtimeInstanceId: string): Promise<void>;
   /** 收到 worker 心跳时按 runtime resource key 喂容器级 watchdog。 */
   heartbeatRuntimeInstance?(resourceKey: string): void;
   /** 停止并删除指定 runtime resource key 对应的持久容器/沙箱。 */

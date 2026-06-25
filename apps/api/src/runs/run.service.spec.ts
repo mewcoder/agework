@@ -140,7 +140,7 @@ describe("RunService", () => {
       start: vi.fn().mockReturnValue({
         runId: "run-1",
         runtimeType: "local",
-        runtimeResourceId: "1:token",
+        runtimeInstanceId: "1:token",
       }),
       sendControl: vi.fn(),
       cancel: vi.fn(),
@@ -321,20 +321,20 @@ describe("RunService", () => {
     });
 
     it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
-      // placement.runtimeType=sandbox，runtimeResourceId 由 sandbox provider 异步解析
+      // placement.runtimeType=sandbox，runtimeInstanceId 由 sandbox provider 异步解析
       mockRuntimeService.resolveRuntimeTarget = vi
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
       mockRunWorkerExecution.start = vi
         .fn()
-        .mockImplementation(({ onRuntimeResourceIdReady }) => {
+        .mockImplementation(({ onRuntimeInstanceIdReady }) => {
           const handle = {
             runId: "run-1",
             runtimeType: "sandbox",
-            runtimeResourceId: "",
+            runtimeInstanceId: "",
             conversationId: "conversation-1",
           };
-          queueMicrotask(() => onRuntimeResourceIdReady?.("container-abc"));
+          queueMicrotask(() => onRuntimeInstanceIdReady?.("container-abc"));
           return handle;
         });
       mockWorkspaceFindFirst.mockResolvedValue(
@@ -391,7 +391,7 @@ describe("RunService", () => {
         runtimeHandle: {
           runId: "run-1",
           runtimeType: "local",
-          runtimeResourceId: "1:token",
+          runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
       };
@@ -431,7 +431,7 @@ describe("RunService", () => {
         runtimeHandle: {
           runId: "run-1",
           runtimeType: "local",
-          runtimeResourceId: "1:token",
+          runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
         stopRequested: false,

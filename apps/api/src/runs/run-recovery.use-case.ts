@@ -36,7 +36,7 @@ export class RunRecoveryUseCase {
         );
 
         for (const run of activeRuns) {
-          if (run.runtimeResourceId) {
+          if (run.runtimeInstanceId) {
             const provider = this.runtimeProviderRegistry.resolve(
               run.runtimeType
             );
@@ -45,14 +45,14 @@ export class RunRecoveryUseCase {
             // container/sandbox because one run is orphaned would kill the others.
             // Only call recoverOrphan when the runtime is NOT user-scoped.
             const shouldRecoverOrphan =
-              await this.shouldRecoverOrphanRuntime(run.runtimeResourceId, run.runtimeType);
+              await this.shouldRecoverOrphanRuntime(run.runtimeInstanceId, run.runtimeType);
             if (shouldRecoverOrphan) {
               await provider
-                .recoverOrphan(run.runtimeResourceId)
+                .recoverOrphan(run.runtimeInstanceId)
                 .catch(swallow(this.logger, `recover orphan run ${run.id}`));
             } else {
               this.logger.log(
-                `Skipping recoverOrphan for user-scope runtime resource ${run.runtimeResourceId} (run ${run.id})`
+                `Skipping recoverOrphan for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`
               );
             }
           }
@@ -82,21 +82,21 @@ export class RunRecoveryUseCase {
 
   /**
    * Determine whether we should call provider.recoverOrphan() for a given run.
-   * Returns false when the run's runtimeResourceId belongs to a user-isolated
+   * Returns false when the run's runtimeInstanceId belongs to a user-isolated
    * RuntimeTarget — destroying a shared user runtime would be destructive.
    * Returns true when no RuntimeTarget exists (legacy data) or when the
    * resource is not user-isolated.
    */
   private async shouldRecoverOrphanRuntime(
-    runtimeResourceId: string,
+    runtimeInstanceId: string,
     runtimeType: string
   ): Promise<boolean> {
     try {
       const resource = await this.prisma.runtimeInstance.findUnique({
         where: {
-          runtimeType_runtimeResourceId: {
+          runtimeType_runtimeInstanceId: {
             runtimeType,
-            runtimeResourceId,
+            runtimeInstanceId,
           },
         },
       });
@@ -137,12 +137,12 @@ export class RunRecoveryUseCase {
           });
           if (owner) {
             this.logger.log(
-              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeResourceId} (user ${resource.ownerUserId} still exists)`
+              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeInstanceId} (user ${resource.ownerUserId} still exists)`
             );
             continue;
           }
           this.logger.log(
-            `User ${resource.ownerUserId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeResourceId}`
+            `User ${resource.ownerUserId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeInstanceId}`
           );
         }
 
@@ -150,11 +150,11 @@ export class RunRecoveryUseCase {
           resource.runtimeType
         );
         await provider
-          .recoverOrphan(resource.runtimeResourceId)
+          .recoverOrphan(resource.runtimeInstanceId)
           .catch(
             swallow(
               this.logger,
-              `recover orphan runtime resource ${resource.runtimeResourceId}`
+              `recover orphan runtime resource ${resource.runtimeInstanceId}`
             )
           );
         const resourceKey = runtimeResourceKeyForOwner(resource);
@@ -183,7 +183,7 @@ export class RunRecoveryUseCase {
   /**
    * 清理已明确标记为 stale 的 RuntimeTarget。
    * 不能只因为服务重启后内存为空就清理 running resource；运行环境可能仍在外部存活，
-   * 应由 provider 下次启动时通过 runtimeResourceId 验证。
+   * 应由 provider 下次启动时通过 runtimeInstanceId 验证。
    */
   private async cleanupStaleRuntimeInstances(): Promise<void> {
     try {

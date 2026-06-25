@@ -28,7 +28,7 @@ describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
           id: "run-1",
           conversationId: "conversation-1",
           runtimeType: "docker",
-          runtimeResourceId: "container-abc",
+          runtimeInstanceId: "container-abc",
         },
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
@@ -61,14 +61,14 @@ describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
     );
   });
 
-  it("skips provider recovery when a run has no persisted runtimeResourceId", async () => {
+  it("skips provider recovery when a run has no persisted runtimeInstanceId", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
           id: "run-1",
           conversationId: "conversation-1",
           runtimeType: "local",
-          runtimeResourceId: null,
+          runtimeInstanceId: null,
         },
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
@@ -115,7 +115,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         isolationScope: "workspace",
         ownerUserId: "user-1",
         ownerWorkspaceId: "ws-1",
-        runtimeResourceId: "container-ws1",
+        runtimeInstanceId: "container-ws1",
       },
       {
         id: "rr-2",
@@ -123,7 +123,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         isolationScope: "workspace",
         ownerUserId: "user-1",
         ownerWorkspaceId: "ws-2",
-        runtimeResourceId: "container-ws2",
+        runtimeInstanceId: "container-ws2",
       },
     ]);
 
@@ -180,7 +180,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         isolationScope: "user",
         ownerUserId: "user-1",
         ownerWorkspaceId: null,
-        runtimeResourceId: "container-user1",
+        runtimeInstanceId: "container-user1",
       },
     ]);
 

@@ -17,7 +17,7 @@ export type AdminRunResponse = {
   userId: string;
   agentType: string;
   runtimeType: string;
-  runtimeResourceId: string | null;
+  runtimeInstanceId: string | null;
   status: RunStatus;
   phase: string | null;
   error: string | null;
@@ -43,7 +43,7 @@ export type AdminRunRuntimeInstanceResponse = {
   isolationScope: string;
   ownerUserId: string;
   ownerWorkspaceId: string | null;
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   status: string;
   expiresAt: string | null;
   createdAt: string;
@@ -135,7 +135,7 @@ export type RuntimeInstanceDiagnosticsResponse = {
   lastStartedAt?: string;
   stoppedAt?: string;
   errorMessage?: string;
-  runtimeResourceId?: string;
+  runtimeInstanceId?: string;
 };
 
 export type RuntimeInstanceResponse = {
@@ -145,7 +145,7 @@ export type RuntimeInstanceResponse = {
   ownerUserId: string;
   ownerWorkspaceId: string | null;
   resourceKey: string;
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   status: RuntimeInstanceStatus;
   isReusable: boolean;
   workspaceCount: number;

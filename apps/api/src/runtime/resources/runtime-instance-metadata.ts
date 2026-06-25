@@ -10,7 +10,7 @@ export type RuntimeInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
   lastSeenAt: string;
   lastStartedAt?: string;
   stoppedAt?: string;
-  runtimeResourceId?: string;
+  runtimeInstanceId?: string;
 };
 
 export function isMetadataRecord(
@@ -26,7 +26,7 @@ export function isMetadataRecord(
 export function runningInstanceMetadata(input: {
   placement: RuntimePlacement;
   resourceKey: string;
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   existing?: unknown;
   metadata?: object;
   now?: Date;
@@ -40,7 +40,7 @@ export function runningInstanceMetadata(input: {
     statusReason: "running",
     lastSeenAt: now,
     lastStartedAt: now,
-    runtimeResourceId: input.runtimeResourceId,
+    runtimeInstanceId: input.runtimeInstanceId,
   };
 }
 
@@ -106,9 +106,9 @@ export function runtimeInstanceDiagnostics(metadata: unknown) {
       typeof record.errorMessage === "string"
         ? record.errorMessage
         : undefined,
-    runtimeResourceId:
-      typeof record.runtimeResourceId === "string"
-        ? record.runtimeResourceId
+    runtimeInstanceId:
+      typeof record.runtimeInstanceId === "string"
+        ? record.runtimeInstanceId
         : undefined,
   };
 }

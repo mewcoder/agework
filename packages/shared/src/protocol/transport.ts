@@ -206,7 +206,7 @@ export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
 export interface WorkerExecutionHandle {
   runId: string;
   runtimeType: string;
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   conversationId: string;
 }
 
@@ -219,5 +219,5 @@ export type RuntimeTarget = RuntimePlacement & { resourceKey: string };
 export type WorkerExecutionStartInput = {
   runtimeTarget: RuntimeTarget;
   runConfig: RunConfig;
-  onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
+  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };

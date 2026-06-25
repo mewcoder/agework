@@ -141,7 +141,7 @@ model Run {
   conversationId    String
   agentType         String
   runtimeType       String       @default("local")
-  runtimeResourceId String?
+  runtimeInstanceId String?
   status            String       @default("queued")
   phase             String?
   lastSeq           Int          @default(0)
@@ -189,16 +189,16 @@ model RunEvent {
 }
 
 /// 持久沙箱资源（容器/沙箱会话）存活台账。实际只有 runtimeType="sandbox" 写入：
-/// local 模式 one run = one 子进程，runtimeResourceId 即 `pid:startToken`，只记内存、
+/// local 模式 one run = one 子进程，runtimeInstanceId 即 `pid:startToken`，只记内存、
 /// 不持久化（进程随 API 重启即销毁，pid 会被 OS 回收复用，入库只会留下过期脏数据）。
-/// 实体语义即"一个活着的容器实例"（有 status / runtimeResourceId / metadata）。
+/// 实体语义即"一个活着的容器实例"（有 status / runtimeInstanceId / metadata）。
 model RuntimeInstance {
   id                String             @id
   runtimeType       String
   isolationScope    String
   ownerUserId       String
   ownerWorkspaceId  String?
-  runtimeResourceId String
+  runtimeInstanceId String
   status            String             @default("running")
   expiresAt         DateTime?
   metadata          Json
@@ -206,7 +206,7 @@ model RuntimeInstance {
   updatedAt         DateTime           @updatedAt
   workspaceRuntimeResources WorkspaceRuntimeInstance[]
 
-  @@unique([runtimeType, runtimeResourceId])
+  @@unique([runtimeType, runtimeInstanceId])
   @@index([runtimeType, isolationScope, status])
   @@index([ownerUserId])
   @@index([ownerWorkspaceId])

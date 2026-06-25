@@ -118,7 +118,7 @@ describe("RunRepository", () => {
     });
   });
 
-  it("persists the runtime handle (runtimeType + runtimeResourceId) for a run", async () => {
+  it("persists the runtime handle (runtimeType + runtimeInstanceId) for a run", async () => {
     const update = vi.fn().mockResolvedValue({});
     const service = new RunRepository({ run: { update } } as never);
 
@@ -126,7 +126,7 @@ describe("RunRepository", () => {
 
     expect(update).toHaveBeenCalledWith({
       where: { id: "run-1" },
-      data: { runtimeType: "docker", runtimeResourceId: "container-abc" },
+      data: { runtimeType: "docker", runtimeInstanceId: "container-abc" },
     });
   });
 
@@ -159,7 +159,7 @@ describe("RunRepository", () => {
       conversationId: "conversation-1",
       agentType: "claude",
       runtimeType: "sandbox",
-      runtimeResourceId: "container-abc",
+      runtimeInstanceId: "container-abc",
       status: "running",
       phase: null,
       lastSeq: 2,
@@ -190,7 +190,7 @@ describe("RunRepository", () => {
       isolationScope: "workspace",
       ownerUserId: "user-1",
       ownerWorkspaceId: "workspace-1",
-      runtimeResourceId: "container-abc",
+      runtimeInstanceId: "container-abc",
       status: "running",
       expiresAt: null,
       createdAt: now,
@@ -217,9 +217,9 @@ describe("RunRepository", () => {
     expect(findRuntimeInstance).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          runtimeType_runtimeResourceId: {
+          runtimeType_runtimeInstanceId: {
             runtimeType: "sandbox",
-            runtimeResourceId: "container-abc",
+            runtimeInstanceId: "container-abc",
           },
         },
       })

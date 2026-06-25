@@ -172,7 +172,7 @@ describe("RunEnvelopeProcessor", () => {
       agentType: "claude",
     };
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -210,7 +210,7 @@ describe("RunEnvelopeProcessor", () => {
   it("should not forward MESSAGES_SNAPSHOT events to the SSE response", async () => {
     const res = { write: vi.fn(), writableEnded: false } as any;
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -239,7 +239,7 @@ describe("RunEnvelopeProcessor", () => {
   it("streamingSnapshot=true 推送累积快照而非原始事件", async () => {
     const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -270,7 +270,7 @@ describe("RunEnvelopeProcessor", () => {
   it("streamingSnapshot=false 走原始事件转发（回归）", async () => {
     const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
     runRegistry.register("run-2", {
-      runtimeHandle: { runId: "run-2", runtimeType: "local", runtimeResourceId: "2:token", conversationId: "conversation-2" },
+      runtimeHandle: { runId: "run-2", runtimeType: "local", runtimeInstanceId: "2:token", conversationId: "conversation-2" },
       runId: "run-2",
       conversationId: "conversation-2",
       workspaceId: "ws-1",
@@ -294,7 +294,7 @@ describe("RunEnvelopeProcessor", () => {
 
   it("records failed tool results as tool.failed facts", async () => {
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -349,7 +349,7 @@ describe("RunEnvelopeProcessor", () => {
       agentType: "claude",
     };
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeResourceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",

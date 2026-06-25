@@ -29,9 +29,9 @@ import { errorLogFields, safeLogJson } from "../../../common/logging";
 import { safePathPart } from "../../../common/safe-path";
 
 export type SandboxScopeState = {
-  runtimeResourceId: string;
+  runtimeInstanceId: string;
   /** 上次 idle/心跳超时释放时的容器 ID，供下次 start() resume；resume 成功或全新创建后清空。 */
-  lastStoppedRuntimeResourceId?: string;
+  lastStoppedRuntimeInstanceId?: string;
   accessKey: string;
   activeRuns: Map<string, string>;
   isolationScope: IsolationScope;
@@ -54,7 +54,7 @@ export type SandboxRuntimeInstanceAttachment = {
   context: SandboxWorkerExecutionContext;
   scopeState: SandboxScopeState;
   handle: WorkerExecutionHandle;
-  onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
+  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };
 
 export type SandboxRuntimeInstanceCallbacks = {
@@ -111,7 +111,7 @@ export class SandboxRuntimeInstanceService {
     return {
       runId: context.runId,
       runtimeType: context.runtimeTarget.runtimeType,
-      runtimeResourceId: "",
+      runtimeInstanceId: "",
       conversationId: context.runConfig.conversationId,
     };
   }
@@ -125,7 +125,7 @@ export class SandboxRuntimeInstanceService {
         context.resourceKey
       );
       scopeState = {
-        runtimeResourceId: "",
+        runtimeInstanceId: "",
         accessKey,
         activeRuns: new Map(),
         isolationScope: context.isolationScope,
@@ -137,9 +137,9 @@ export class SandboxRuntimeInstanceService {
     }
 
     if (
-      !scopeState.runtimeResourceId &&
+      !scopeState.runtimeInstanceId &&
       !this.pendingSandboxes.has(context.resourceKey) &&
-      !scopeState.lastStoppedRuntimeResourceId
+      !scopeState.lastStoppedRuntimeInstanceId
     ) {
       scopeState.accessKey = this.runtimeAccess.issueWorkspaceKey(
         context.resourceKey
@@ -156,7 +156,7 @@ export class SandboxRuntimeInstanceService {
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, scopeState } = attachment;
-    if (scopeState.runtimeResourceId) {
+    if (scopeState.runtimeInstanceId) {
       this.attachReadyRuntimeInstance(attachment);
       return;
     }
@@ -189,7 +189,7 @@ export class SandboxRuntimeInstanceService {
     return {
       runId,
       runtimeType: "sandbox",
-      runtimeResourceId: state.runtimeResourceId,
+      runtimeInstanceId: state.runtimeInstanceId,
       conversationId: state.activeRuns.get(runId) ?? "",
     };
   }
@@ -210,7 +210,7 @@ export class SandboxRuntimeInstanceService {
 
     this.scopeStates.get(scopeKey)?.activeRuns.delete(runId);
     const state = this.scopeStates.get(scopeKey);
-    if (state && state.activeRuns.size === 0 && state.runtimeResourceId) {
+    if (state && state.activeRuns.size === 0 && state.runtimeInstanceId) {
       const idleTimeoutMs = this.configService.getIdleTimeoutSeconds() * 1000;
       this.idleWatchdog.start(scopeKey, idleTimeoutMs, () =>
         this.handleIdle(scopeKey)
@@ -225,9 +225,9 @@ export class SandboxRuntimeInstanceService {
     const state = this.scopeStates.get(resourceKey);
     this.heartbeats.stop(resourceKey);
     this.idleWatchdog.cancel(resourceKey);
-    if (state?.runtimeResourceId) {
+    if (state?.runtimeInstanceId) {
       const engine = this.engines.get(state.engineType);
-      engine?.stop(state.runtimeResourceId).catch(
+      engine?.stop(state.runtimeInstanceId).catch(
         swallow(this.logger, `stop sandbox for runtime resource ${resourceKey}`)
       );
     }
@@ -251,9 +251,9 @@ export class SandboxRuntimeInstanceService {
     this.pendingSandboxes.delete(resourceKey);
   }
 
-  async recoverOrphan(runtimeResourceId: string): Promise<void> {
+  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
     for (const engine of this.engines.values()) {
-      await engine.recoverOrphan(runtimeResourceId).catch(
+      await engine.recoverOrphan(runtimeInstanceId).catch(
         swallow(this.logger, `recover orphan via ${engine.type} engine`)
       );
     }
@@ -263,11 +263,11 @@ export class SandboxRuntimeInstanceService {
     attachment: SandboxRuntimeInstanceAttachment
   ): void {
     const { context, scopeState, handle } = attachment;
-    handle.runtimeResourceId = scopeState.runtimeResourceId;
+    handle.runtimeInstanceId = scopeState.runtimeInstanceId;
     void this.recordWorkspaceRuntime(
       context.placement,
       context.resourceKey,
-      scopeState.runtimeResourceId
+      scopeState.runtimeInstanceId
     );
   }
 
@@ -276,7 +276,7 @@ export class SandboxRuntimeInstanceService {
     runtimePromise: Promise<SandboxRuntime>,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, handle, onRuntimeResourceIdReady } = attachment;
+    const { context, handle, onRuntimeInstanceIdReady } = attachment;
     void runtimePromise
       .then((runtime) => {
         if (callbacks.consumeCancelledStartingRun(context.runId)) {
@@ -289,10 +289,10 @@ export class SandboxRuntimeInstanceService {
         void this.recordWorkspaceRuntime(
           context.placement,
           context.resourceKey,
-          runtime.runtimeResourceId
+          runtime.runtimeInstanceId
         );
-        handle.runtimeResourceId = runtime.runtimeResourceId;
-        onRuntimeResourceIdReady?.(runtime.runtimeResourceId);
+        handle.runtimeInstanceId = runtime.runtimeInstanceId;
+        onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
       })
       .catch((err) => {
         callbacks.publishWorkerError(
@@ -319,13 +319,13 @@ export class SandboxRuntimeInstanceService {
       context,
       scopeState.accessKey
     );
-    const resumeRuntimeResourceId = scopeState.lastStoppedRuntimeResourceId;
-    scopeState.lastStoppedRuntimeResourceId = undefined;
+    const resumeRuntimeInstanceId = scopeState.lastStoppedRuntimeInstanceId;
+    scopeState.lastStoppedRuntimeInstanceId = undefined;
 
     const runtimePromise = this.createSandbox(
       context.engine,
       engineInput,
-      resumeRuntimeResourceId
+      resumeRuntimeInstanceId
     );
     this.pendingSandboxes.set(context.resourceKey, runtimePromise);
 
@@ -379,11 +379,11 @@ export class SandboxRuntimeInstanceService {
       },
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
       runtimeLogMountPath: CONTAINER_RUNTIME_LOG_DIR,
-      isExpectedRuntimeInstance: (runtimeResourceId: string) =>
+      isExpectedRuntimeInstance: (runtimeInstanceId: string) =>
         this.workspaceRuntimeService.isRuntimeInstanceBoundToWorkspace(
           "sandbox",
           context.workspaceId,
-          runtimeResourceId
+          runtimeInstanceId
         ),
     };
   }
@@ -393,17 +393,17 @@ export class SandboxRuntimeInstanceService {
     runtime: SandboxRuntime,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, handle, onRuntimeResourceIdReady } = attachment;
+    const { context, handle, onRuntimeInstanceIdReady } = attachment;
     this.pendingSandboxes.delete(context.resourceKey);
     const state = this.scopeStates.get(context.resourceKey);
     if (!state) return;
 
-    state.runtimeResourceId = runtime.runtimeResourceId;
+    state.runtimeInstanceId = runtime.runtimeInstanceId;
     this.logger.log(
       `sandbox created ${safeLogJson({
         resourceKey: context.resourceKey,
         engine: runtime.engineType,
-        resourceId: runtime.runtimeResourceId.slice(0, 12),
+        resourceId: runtime.runtimeInstanceId.slice(0, 12),
         activeRuns: state.activeRuns.size,
       })}`
     );
@@ -411,14 +411,14 @@ export class SandboxRuntimeInstanceService {
     void this.recordWorkspaceRuntime(
       context.placement,
       context.resourceKey,
-      runtime.runtimeResourceId
+      runtime.runtimeInstanceId
     );
 
     this.forceCancelledStartingRuns(state, callbacks);
 
     if (state.activeRuns.has(context.runId)) {
-      handle.runtimeResourceId = runtime.runtimeResourceId;
-      onRuntimeResourceIdReady?.(runtime.runtimeResourceId);
+      handle.runtimeInstanceId = runtime.runtimeInstanceId;
+      onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
     }
 
     this.startRuntimeHeartbeat(
@@ -502,17 +502,17 @@ export class SandboxRuntimeInstanceService {
   private async createSandbox(
     engine: SandboxEngine,
     input: SandboxStartInput,
-    resumeRuntimeResourceId?: string
+    resumeRuntimeInstanceId?: string
   ): Promise<SandboxRuntime> {
-    if (resumeRuntimeResourceId && engine.resume) {
+    if (resumeRuntimeInstanceId && engine.resume) {
       try {
-        const runtime = await engine.resume(resumeRuntimeResourceId, input);
+        const runtime = await engine.resume(resumeRuntimeInstanceId, input);
         await engine.startWorker(runtime, input);
         return runtime;
       } catch (err) {
         this.logger.warn(
           `resume failed, falling back to getOrCreate ${safeLogJson({
-            resumeRuntimeResourceId,
+            resumeRuntimeInstanceId,
             ...errorLogFields(err),
           })}`
         );
@@ -526,19 +526,19 @@ export class SandboxRuntimeInstanceService {
 
   private handleIdle(resourceKey: string): void {
     const state = this.scopeStates.get(resourceKey);
-    if (!state || !state.runtimeResourceId) return;
+    if (!state || !state.runtimeInstanceId) return;
     if (state.activeRuns.size > 0) return;
 
     this.logger.log(
       `sandbox idle timeout ${safeLogJson({
         resourceKey,
-        resourceId: state.runtimeResourceId.slice(0, 12),
+        resourceId: state.runtimeInstanceId.slice(0, 12),
         engineType: state.engineType,
       })}`
     );
 
     const engine = this.engines.get(state.engineType);
-    engine?.stop(state.runtimeResourceId).catch(
+    engine?.stop(state.runtimeInstanceId).catch(
       swallow(this.logger, `stop idle sandbox for runtime resource ${resourceKey}`)
     );
 
@@ -547,7 +547,7 @@ export class SandboxRuntimeInstanceService {
 
   /**
    * 放弃对某个 runtime resource 当前容器/沙箱的引用：停止心跳与空闲计时、清空
-   * activeRuns 与 runtimeResourceId（转存为 lastStoppedRuntimeResourceId 供下次 resume），
+   * activeRuns 与 runtimeInstanceId（转存为 lastStoppedRuntimeInstanceId 供下次 resume），
    * 并将 RuntimeTarget 标记为 stopped。access key 保留，供 resume 复用。
    * 不负责真正停止/删除容器——是否需要 engine.stop() 由调用方决定。
    */
@@ -558,8 +558,8 @@ export class SandboxRuntimeInstanceService {
     this.heartbeats.stop(resourceKey);
     this.idleWatchdog.cancel(resourceKey);
     state.activeRuns.clear();
-    state.lastStoppedRuntimeResourceId = state.runtimeResourceId;
-    state.runtimeResourceId = "";
+    state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
+    state.runtimeInstanceId = "";
 
     this.workspaceRuntimeService
       .markStoppedByResourceKey(
@@ -578,10 +578,10 @@ export class SandboxRuntimeInstanceService {
   private recordWorkspaceRuntime(
     placement: SandboxRuntimePlacement,
     resourceKey: string,
-    runtimeResourceId: string
+    runtimeInstanceId: string
   ): Promise<void> {
     return this.workspaceRuntimeService
-      .upsertRunning(placement, resourceKey, runtimeResourceId)
+      .upsertRunning(placement, resourceKey, runtimeInstanceId)
       .then(({ resource }) => {
         this.runtimeAccess.issueRuntimeInstanceKey(
           resource.id,

@@ -38,7 +38,7 @@ const TSX_CLI = require.resolve("tsx/cli");
  * Local runtime provider：one run = one child process，无容器、无跨 run 复用。
  *
  * 因此 local 不写 RuntimeTarget / WorkspaceRuntime 表——没有持久容器要登记，
- * runtimeResourceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
+ * runtimeInstanceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
  * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
  */
 @Injectable()
@@ -90,7 +90,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     const handle: WorkerExecutionHandle = {
       runId,
       runtimeType: runtimeTarget.runtimeType,
-      runtimeResourceId: `${child.pid}:${startToken}`,
+      runtimeInstanceId: `${child.pid}:${startToken}`,
       conversationId: runConfig.conversationId,
     };
 
@@ -216,9 +216,9 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     this.controlSeqs.delete(runId);
   }
 
-  /** runtimeResourceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
-  async recoverOrphan(runtimeResourceId: string): Promise<void> {
-    const [pidStr] = runtimeResourceId.split(":");
+  /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
+  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
+    const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
     if (!Number.isInteger(pid)) return;
     try {

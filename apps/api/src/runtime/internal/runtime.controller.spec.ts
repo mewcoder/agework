@@ -12,7 +12,7 @@ function makeRuntimeService(): RuntimeService {
 
 describe("RuntimeRuntimeController", () => {
   describe("pollRuntimeControls()", () => {
-    it("resolves resourceKey from runtimeResourceId and polls the workspace queue", async () => {
+    it("resolves resourceKey from runtimeInstanceId and polls the workspace queue", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
         pollByWorkspace: vi.fn().mockReturnValue([{ seq: 1, runId: "run-1", payload: { type: "cancel" } }]),
       };

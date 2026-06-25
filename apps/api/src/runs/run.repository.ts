@@ -58,11 +58,11 @@ export class RunRepository {
   async updateRuntimeHandle(
     runId: string,
     runtimeType: string,
-    runtimeResourceId: string
+    runtimeInstanceId: string
   ) {
     await this.prisma.run.update({
       where: { id: runId },
-      data: { runtimeType, runtimeResourceId },
+      data: { runtimeType, runtimeInstanceId },
     });
   }
 
@@ -201,12 +201,12 @@ export class RunRepository {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
 
-    const runtimeInstance = run.runtimeResourceId
+    const runtimeInstance = run.runtimeInstanceId
       ? await this.prisma.runtimeInstance.findUnique({
           where: {
-            runtimeType_runtimeResourceId: {
+            runtimeType_runtimeInstanceId: {
               runtimeType: run.runtimeType,
-              runtimeResourceId: run.runtimeResourceId,
+              runtimeInstanceId: run.runtimeInstanceId,
             },
           },
           select: {
@@ -215,7 +215,7 @@ export class RunRepository {
             isolationScope: true,
             ownerUserId: true,
             ownerWorkspaceId: true,
-            runtimeResourceId: true,
+            runtimeInstanceId: true,
             status: true,
             expiresAt: true,
             createdAt: true,
