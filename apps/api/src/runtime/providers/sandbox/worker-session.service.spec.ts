@@ -29,11 +29,11 @@ function makeContext(
   } as SandboxRuntimePlacement;
   return {
     runConfig,
-    runtimeTarget: { ...placement, resourceKey: "ws-1" },
+    runtimeTarget: { ...placement, scopeKey: "ws-1" },
     placement,
     runId: "run-1",
     workspaceId: "ws-1",
-    resourceKey: "ws-1",
+    scopeKey: "ws-1",
     isolationScope: "workspace",
     engineType: "docker",
     engine: {} as never,

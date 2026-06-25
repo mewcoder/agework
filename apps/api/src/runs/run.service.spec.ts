@@ -43,7 +43,7 @@ function makeRuntimeTarget(
 ): RuntimeTarget {
   return {
     ...placement,
-    resourceKey:
+    scopeKey:
       placement.runtimeType === "sandbox" &&
       placement.sandbox.isolationScope === "user"
         ? placement.userId
@@ -219,7 +219,7 @@ describe("RunService", () => {
           runConfig: expect.objectContaining({ runId: "run-1" }),
           runtimeTarget: expect.objectContaining({
             runtimeType: "local",
-            resourceKey: "ws-1",
+            scopeKey: "ws-1",
           }),
         })
       );

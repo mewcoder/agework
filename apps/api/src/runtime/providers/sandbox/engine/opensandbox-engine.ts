@@ -16,7 +16,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     const {
       workspaceHostPath,
       workspaceMountPath,
-      resourceKey,
+      scopeKey,
       isolationScope,
     } = placement;
 
@@ -33,7 +33,7 @@ export class OpenSandboxEngine implements SandboxEngine {
         AGEWORK_INTERNAL_TRANSPORT: "http",
         AGEWORK_INTERNAL_API_BASE: apiBaseUrl,
         AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_INTERNAL_WORKSPACE_ID: resourceKey,
+        AGEWORK_INTERNAL_WORKSPACE_ID: scopeKey,
         AGEWORK_INTERNAL_ISOLATION_SCOPE: isolationScope,
         ...env,
       },
@@ -43,14 +43,14 @@ export class OpenSandboxEngine implements SandboxEngine {
       runtimeLogHostPath: input.runtimeLogHostPath,
       runtimeLogMountPath: input.runtimeLogMountPath,
       metadata: {
-        "agework.io/runtime-resource-key": resourceKey,
+        "agework.io/runtime-scope-key": scopeKey,
         "agework.io/isolation-scope": isolationScope,
         ...metadata,
       },
     });
 
     this.logger.log(
-      `Sandbox created: resourceKey=${resourceKey} sandboxId=${sandbox.id.slice(0, 12)}`
+      `Sandbox created: scopeKey=${scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
     );
 
     // 创建后立即启动 worker，避免 getSdk 重新查找时因延迟找不到
@@ -81,7 +81,7 @@ export class OpenSandboxEngine implements SandboxEngine {
   ): Promise<SandboxRuntime> {
     const sandbox = await this.client.resumeSandbox(runtimeInstanceId);
     this.logger.log(
-      `Sandbox resumed: resourceKey=${input.placement.resourceKey} sandboxId=${sandbox.id.slice(0, 12)}`
+      `Sandbox resumed: scopeKey=${input.placement.scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
     );
     return {
       engineType: "opensandbox",
@@ -115,13 +115,13 @@ export class OpenSandboxEngine implements SandboxEngine {
     input: SandboxStartInput
   ): Promise<void> {
     const { placement, apiBaseUrl, accessKey, env } = input;
-    const { resourceKey, isolationScope, workspaceMountPath } = placement;
+    const { scopeKey, isolationScope, workspaceMountPath } = placement;
 
     try {
       const envs: Record<string, string> = {
         AGEWORK_INTERNAL_TRANSPORT: "http",
         AGEWORK_INTERNAL_WORKER_MODE: "persistent",
-        AGEWORK_INTERNAL_WORKSPACE_ID: resourceKey,
+        AGEWORK_INTERNAL_WORKSPACE_ID: scopeKey,
         AGEWORK_INTERNAL_API_BASE: apiBaseUrl,
         AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_INTERNAL_ISOLATION_SCOPE: isolationScope,

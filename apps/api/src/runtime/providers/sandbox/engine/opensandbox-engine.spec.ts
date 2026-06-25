@@ -22,7 +22,7 @@ function makeSandboxMock(id: string): OpenSandboxSandboxLike {
 function makePlacement(overrides?: Partial<SandboxPlacement>): SandboxPlacement {
   return {
     isolationScope: "workspace",
-    resourceKey: "ws-1",
+    scopeKey: "ws-1",
     workspaceId: "ws-1",
     workspaceHostPath: "/tmp/workspace",
     workspaceMountPath: "/workspace",
@@ -152,7 +152,7 @@ describe("OpenSandboxEngine", () => {
 
     await engine.getOrCreate(makeInput({
       env: {
-        AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY: "ws-1",
+        AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
       },
     }));
 
@@ -161,7 +161,7 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY: "ws-1",
+          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
           AGEWORK_INTERNAL_WORKER_MODE: "persistent",
         }),
       })

@@ -63,7 +63,7 @@ export class RuntimeWorkspaceController {
 
   /**
    * POST /internal/workspaces/:workspaceId/heartbeat
-   * Docker 持久容器 worker 定期上报心跳；这里的 workspaceId 实际是 resourceKey。
+   * Docker 持久容器 worker 定期上报心跳；这里的 workspaceId 实际是 scopeKey。
    * 广播给所有 provider 喂 watchdog，不依赖 DB binding 是否可见。
    */
   @Post(":workspaceId/heartbeat")

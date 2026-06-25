@@ -128,7 +128,7 @@ export type RuntimeInstanceStatus =
   | "stale";
 
 export type RuntimeInstanceDiagnosticsResponse = {
-  resourceKey?: string;
+  scopeKey?: string;
   workspaceId?: string;
   statusReason?: string;
   lastSeenAt?: string;
@@ -144,7 +144,7 @@ export type RuntimeInstanceResponse = {
   isolationScope: string;
   ownerUserId: string;
   ownerWorkspaceId: string | null;
-  resourceKey: string;
+  scopeKey: string;
   runtimeInstanceId: string;
   status: RuntimeInstanceStatus;
   isReusable: boolean;

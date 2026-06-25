@@ -681,7 +681,36 @@ resource 和 session,它来写 scopeState,session 不碰）。session 的方法�
 
 ### Phase 8: `RuntimeResource` 命名拆分（Target / Instance）
 
+状态:已完成（分四个 commit A→B→C→D 落地，各自 typecheck + 全量单测通过）。
+
+落地结果:
+
+- 语义 A「实例」:`model RuntimeResource` → `RuntimeInstance`、`WorkspaceRuntimeResource` →
+  `WorkspaceRuntimeInstance`；repository / lifecycle / sandbox instance service / 诊断 metadata /
+  admin 响应类型 / access.service 实例鉴权方法 / `heartbeatRuntimeInstance` ·
+  `shutdownRuntimeInstance` 门面与 provider 契约全部改完；关系字段
+  `workspaceRuntimeResources` → `workspaceRuntimeInstances`。
+- 语义 B「目标」:协议类型 `RuntimeResource` → `RuntimeTarget`、`resolveRuntimeResource` →
+  `resolveRuntimeTarget`、`ResolveRuntimeTargetInput` / `RuntimeTargetDefaults`、目标值变量/字段
+  `runtimeResource` → `runtimeTarget`（含 `WorkerExecutionStartInput` /
+  `SandboxWorkerExecutionContext`）。admin run detail 里持有实例的字段更正为 `runtimeInstance`。
+- 语义 C「实例 id」:`runtimeResourceId` → `runtimeInstanceId`,跨 shared/api/worker 三端同步,
+  含 Prisma 列、`WorkerExecutionHandle` / `onRuntimeInstanceIdReady` 及 env var
+  `AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID`。
+- 语义 D「复用桶 key」:`runtimeResourceKey(ForOwner)` → `runtimeScopeKey(ForOwner)`、
+  `resourceKey` → `scopeKey`(metadata / 诊断 / admin 响应 / 内存结构)、env var
+  `AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY`、docker label `agework.io/runtime-scope-key`。
+
+命名体系自洽:Placement → Target → Instance → InstanceId → ScopeKey,不再混用 `Resource`
+(仅余 web 本地 hook 名与一处 worker 既有诊断 env 字段未在本轮范围内)。
+
+----
+
+原始计划(保留备查):
+
 状态:计划已定，待执行。与 Phase 7 分开做，避免一次堆太多。
+
+**执行原则**:按语义分四波，A -> B -> C -> D。每波只改一类名字，等这一波的代码、测试和文档都收口后，再进入下一波。不要在同一波里同时碰旧实体名和跨进程字段。
 
 **动机**:`RuntimeResource` 一个名字指两个不同的东西，都不贴切:
 
@@ -698,90 +727,52 @@ RuntimeTarget     = 放置方案 + 复用键（目标）   ← 原 RuntimeResour
 RuntimeInstance   = 一个活着的容器（实例）      ← 原 RuntimeResource DB 表
 ```
 
-**改（语义 A「实例」—— DB 表及其周边）**:
+**推荐顺序**:
 
-- `model RuntimeResource` → `model RuntimeInstance`；`prisma.runtimeResource.*` → `prisma.runtimeInstance.*`。
-- `model WorkspaceRuntimeResource` → `model WorkspaceRuntimeInstance`；访问点同步。
-- `WorkspaceRuntimeResourceRepository` → `WorkspaceRuntimeInstanceRepository`；文件名同步。
-- `RuntimeResourceLifecycleUseCase` / `RuntimeResourceLifecycleListener` → `RuntimeInstanceLifecycle...`。
-- `RuntimeResourceMetadata` / `runtimeResourceDiagnostics` / `RuntimeResourceDiagnosticMetadata` →
-  `RuntimeInstanceMetadata` / `runtimeInstanceDiagnostics` / ...。
-- `issueRuntimeResourceKey` / `verifyRuntimeResourceKey` / `getResourceKeyForRuntimeResource` /
-  `getRuntimeTypeForRuntimeResource`（access.service 里围绕容器实例鉴权的方法）→
-  `...RuntimeInstanceKey` / `...`。
-- `heartbeatRuntimeResource` / `shutdownRuntimeResource`（RuntimeService + provider 契约）→
-  `heartbeatRuntimeInstance` / `shutdownRuntimeInstance`。
-- `SandboxRuntimeResourceService` → `SandboxRuntimeInstanceService`；文件名
-  `runtime-resource.service.ts` → `runtime-instance.service.ts`。
-- `attachOrStartRuntimeResource` / `attachPendingRuntimeResource` / `attachReadyRuntimeResource` /
-  `startRuntimeResourceForScope` / `cleanupStaleRuntimeResources` / `deleteManyRuntimeResource` /
-  `findRuntimeResource` / `isExpectedRuntimeResource` / `isRuntimeResourceBoundToWorkspace` /
-  `revokeRuntimeResource` / `hasRuntimeResourceKey` / `runtimeResourceKeyCount` /
-  `runtimeResourceKeyFingerprint` / `runtimeResourceKeyMatches` / `runtimeResourceKeys` /
-  `runtimeResourceRuntimeTypes` / `runtimeResourceScopeKeys` /
-  `RuntimeResourceStatus` / `RuntimeResourceResponse` / `RuntimeResourceListResponse` /
-  `RuntimeResourceDiagnosticsResponse` / `AdminRunRuntimeResourceResponse` /
-  `RuntimeResourceIdDto` / `RuntimeResourceIdRequest` / `toRuntimeResourceResponse` /
-  `onRuntimeResourceStarted` / `onRuntimeResourceStartFailed` / `SandboxRuntimeResourceAttachment` /
-  `SandboxRuntimeResourceCallbacks` / `runtimeResourceCallbacks` / `runtimeResources`（变量）→
-  把其中 `RuntimeResource` 部分替换为 `RuntimeInstance`。
+1. **语义 A「实例」**:先改 DB 表及其周边，只处理“容器实例”这一层。
+   - `model RuntimeResource` → `model RuntimeInstance`。
+   - `model WorkspaceRuntimeResource` → `model WorkspaceRuntimeInstance`。
+   - repository / admin response / diagnostics / lifecycle / spec 全部跟着改完。
+   - 这一步不碰 shared 协议类型，不碰 `runtimeResourceId` 跨进程字段。
 
-**改（语义 B「目标」—— 协议类型及其周边）**:
+2. **语义 B「目标」**:再改 shared/protocol 里的目标类型，只处理“run 算出来的目标环境”这一层。
+   - `RuntimeResource` → `RuntimeTarget`。
+   - `resolveRuntimeResource` → `resolveRuntimeTarget`。
+   - `ResolveRuntimeResourceInput` / `RuntimeResourceDefaults` → `ResolveRuntimeTargetInput` /
+     `RuntimeTargetDefaults`。
+   - `runtimeResource`（变量/参数名，指协议目标值的）→ `runtimeTarget`。
+   - 这一步不碰 `runtimeResourceId`，只统一“目标环境”的名字。
 
-- 协议类型 `RuntimeResource` → `RuntimeTarget`（`transport.ts`）。
-- `resolveRuntimeResource`（RuntimeService 方法 + 纯函数）→ `resolveRuntimeTarget`。
-- `ResolveRuntimeResourceInput` / `RuntimeResourceDefaults` → `ResolveRuntimeTargetInput` /
-  `RuntimeTargetDefaults`。
-- `runtimeResource`（变量/参数名，指协议目标值的）→ `runtimeTarget`。
-- `WorkerExecutionStartInput.runtimeResource` 字段 → `runtimeTarget`。
-- `provider-contracts.ts` 注释里的 `RuntimeResource` → `RuntimeTarget`。
+3. **语义 C「实例 id」**:再改跨进程字段，只处理容器真实 id。
+   - `runtimeResourceId` → `runtimeInstanceId`。
+   - `WorkerExecutionHandle.runtimeResourceId`、`onRuntimeResourceIdReady`、`Run.runtimeResourceId`、
+     `Conversation.runtimeResourceId`、`AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID` 等一起改。
+   - 这一步跨 api + worker + shared，要一次同步完。
+   - 这一步不碰复用桶 key。
 
-**改（语义 C「容器实例 id」—— 跨进程协议字段）**:
+4. **语义 D「复用桶 key」**:最后改复用粒度键，只处理“容器按谁复用”这一层。
+   - `runtimeResourceKey` → `runtimeScopeKey`。
+   - `runtimeResourceKeyForOwner` → `runtimeScopeKeyForOwner`。
+   - `resourceKey`（DB 列 / metadata / admin response）→ `scopeKey`。
+   - `AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY`、`agework.io/runtime-resource-key` 同步改名。
+   - 这一波要和 `runtimeInstanceId` 严格区分开，不要混着改。
 
-- `runtimeResourceId`（字段，容器的真实 id）→ `runtimeInstanceId`。涉及面最广:
-  - `shared/protocol/transport.ts`（`WorkerExecutionHandle.runtimeResourceId`、
-    `onRuntimeResourceIdReady`）、`shared/api/runs.ts`（多处）。
-  - Prisma 列:`RuntimeResource.runtimeResourceId`、`Run.runtimeResourceId`、
-    `Conversation.runtimeResourceId`（`schema.prisma`）。
-  - env var:`AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID` → `AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID`
-    （api 侧 sandbox engine 注入、worker 侧 `main.ts` / `persistent-http-client.ts` / `worker-log.ts` 读取）。
-  - `RuntimeResourceIdDto` / `RuntimeResourceIdRequest` → `RuntimeInstanceIdDto` / ...。
-  - `lastStoppedRuntimeResourceId` / `resumeRuntimeResourceId` / `onRuntimeResourceIdReady` 等
-    连带字段/参数同步。
-  - worker 进程侧代码（`apps/worker/`）同步改。
-  - **注意**:这是跨进程线缆字段，api + worker + shared 必须同步改，否则两端对不上。
+**补充说明**:
 
-**改（语义 D「复用桶 key」—— 容器复用粒度键）**:
-
-- `runtimeResourceKey`（函数，按隔离粒度算复用桶 key）→ `runtimeScopeKey`。
-- `runtimeResourceKeyForOwner` → `runtimeScopeKeyForOwner`。
-- `RuntimeResource.resourceKey`（DB 列，存的就是这个桶 key）→ `scopeKey`。
-- `RuntimeResource.resourceKey` 在 `runtimeResourceMetadata` / diagnostics / admin response
-  里的字段名同步 → `scopeKey`。
-- `WorkerExecutionHandle` 不含此字段；`SandboxScopeState` 等内存结构里 `resourceKey` 变量
-  → `scopeKey`。
-- `AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY` env var → `AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY`。
-- `agework.io/runtime-resource-key` docker label → `agework.io/runtime-scope-key`。
-- **注意**:`scopeKey` 是复用桶标签（user→userId / workspace→workspaceId），与 `runtimeInstanceId`
-  （容器真实 id）是两个不同概念，改名后更要分清。
+无论哪一波，都只允许一种语义在场:要么全是旧名，要么这一波的目标新名，不要半旧半新地挂在同一层里。
 
 **不改（留）**:
 
 - `RuntimeResourceHandle` —— 早已删除，不存在。
-- 无其他保留项；本轮把 `runtimeResourceId` 和 `runtimeResourceKey` 也一并改掉。
+- 其余旧名不在这里一次性保留或一次性清掉；`runtimeResourceId` 和 `runtimeResourceKey`
+  分别按第 3 / 4 波处理。
 
 **执行顺序**（分四个 commit，各自验证，降低单次风险）:
 
-1. **DB 表 + 实例语义（语义 A）**:`model RuntimeResource` → `RuntimeInstance`，连带
-   `WorkspaceRuntimeResource` → `WorkspaceRuntimeInstance`，及所有"实例"语义的类/方法。
-   `pnpm --filter api exec prisma db push` 重新生成。api typecheck + 全量单测。
-2. **协议类型 + 目标语义（语义 B）**:`RuntimeResource` → `RuntimeTarget`，连带
-   `resolveRuntimeResource` → `resolveRuntimeTarget` 及变量/字段名。shared + api typecheck
-   + 全量单测。
-3. **容器实例 id 字段（语义 C）**:`runtimeResourceId` → `runtimeInstanceId`，跨 api + worker
-   + shared 三端同步改，env var 改名。shared + api + worker typecheck + 全量单测。
-4. **复用桶 key（语义 D）**:`runtimeResourceKey` → `runtimeScopeKey`，DB 列 `resourceKey` →
-   `scopeKey`，env var / docker label 同步。`prisma db push`。全量单测。
+1. DB 表 + 实例语义（语义 A）。`pnpm --filter api exec prisma db push` 重新生成，随后跑 api typecheck + 全量单测。
+2. 协议类型 + 目标语义（语义 B）。shared + api typecheck + 全量单测。
+3. 容器实例 id 字段（语义 C）。shared + api + worker typecheck + 全量单测。
+4. 复用桶 key（语义 D）。`prisma db push`，再跑全量单测。
 
 **验证**:
 

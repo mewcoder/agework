@@ -2,8 +2,8 @@ import { describe, it, expect } from "vitest";
 import type { IsolationScope } from "@agework/shared/protocol";
 import {
   resolveRuntimeTarget,
-  runtimeResourceKey,
-  runtimeResourceKeyForOwner,
+  runtimeScopeKey,
+  runtimeScopeKeyForOwner,
   type ResolveRuntimeTargetInput,
   type RuntimeTargetDefaults,
 } from "./runtime-resource";
@@ -31,12 +31,12 @@ const resolve = (overrides: Partial<ResolveRuntimeTargetInput> = {}) =>
 
 describe("resolveRuntimeTarget", () => {
   describe("sandbox, user isolation", () => {
-    it("hostPath=userRoot, runtimePath under /workspaces/, resourceKey=userId", () => {
+    it("hostPath=userRoot, runtimePath under /workspaces/, scopeKey=userId", () => {
       const r = resolve();
       expect(r.runtimeType).toBe("sandbox");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
-      expect(r.resourceKey).toBe("user-1");
+      expect(r.scopeKey).toBe("user-1");
       expect(r.workspaceId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
         isolationScope: "user",
@@ -45,21 +45,21 @@ describe("resolveRuntimeTarget", () => {
       });
     });
 
-    it("different workspaces of the same user get different runtimePaths, same resourceKey", () => {
+    it("different workspaces of the same user get different runtimePaths, same scopeKey", () => {
       const a = resolve({ workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" });
       const b = resolve({ workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" });
       expect(a.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-a`);
       expect(b.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-b`);
-      expect(a.resourceKey).toBe(b.resourceKey); // 同用户共享桶
+      expect(a.scopeKey).toBe(b.scopeKey); // 同用户共享桶
     });
   });
 
   describe("sandbox, workspace isolation", () => {
-    it("hostPath=workspaceRoot, mountTarget per-workspace, resourceKey=workspaceId", () => {
+    it("hostPath=workspaceRoot, mountTarget per-workspace, scopeKey=workspaceId", () => {
       const r = resolve({ isolationScope: "workspace" });
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
-      expect(r.resourceKey).toBe("ws-1");
+      expect(r.scopeKey).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
         isolationScope: "workspace",
         mountTarget: `${CONTAINER_WORKSPACES_ROOT}/ws-1`,
@@ -68,13 +68,13 @@ describe("resolveRuntimeTarget", () => {
   });
 
   describe("local", () => {
-    it("runtimePath === hostPath === workspaceRootPath, no sandbox info, resourceKey=workspaceId", () => {
+    it("runtimePath === hostPath === workspaceRootPath, no sandbox info, scopeKey=workspaceId", () => {
       const r = resolve({ runtimeType: "local" });
       expect(r.runtimeType).toBe("local");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toBeUndefined();
-      expect(r.resourceKey).toBe("ws-1");
+      expect(r.scopeKey).toBe("ws-1");
     });
   });
 
@@ -95,23 +95,23 @@ describe("resolveRuntimeTarget", () => {
   });
 });
 
-describe("runtimeResourceKey", () => {
+describe("runtimeScopeKey", () => {
   it("user scope → userId, workspace scope → workspaceId", () => {
-    expect(runtimeResourceKey("user", "u-1", "ws-1")).toBe("u-1");
-    expect(runtimeResourceKey("workspace", "u-1", "ws-1")).toBe("ws-1");
+    expect(runtimeScopeKey("user", "u-1", "ws-1")).toBe("u-1");
+    expect(runtimeScopeKey("workspace", "u-1", "ws-1")).toBe("ws-1");
   });
 
   it("throws on an unknown scope", () => {
-    expect(() => runtimeResourceKey("nope" as IsolationScope, "u-1", "ws-1")).toThrow(
+    expect(() => runtimeScopeKey("nope" as IsolationScope, "u-1", "ws-1")).toThrow(
       "Unknown runtime isolation scope: nope"
     );
   });
 });
 
-describe("runtimeResourceKeyForOwner", () => {
+describe("runtimeScopeKeyForOwner", () => {
   it("user scope uses ownerUserId", () => {
     expect(
-      runtimeResourceKeyForOwner({
+      runtimeScopeKeyForOwner({
         isolationScope: "user",
         ownerUserId: "u-1",
         ownerWorkspaceId: null,
@@ -121,7 +121,7 @@ describe("runtimeResourceKeyForOwner", () => {
 
   it("workspace scope uses ownerWorkspaceId", () => {
     expect(
-      runtimeResourceKeyForOwner({
+      runtimeScopeKeyForOwner({
         isolationScope: "workspace",
         ownerUserId: "u-1",
         ownerWorkspaceId: "ws-1",
@@ -131,7 +131,7 @@ describe("runtimeResourceKeyForOwner", () => {
 
   it("throws when workspace scope is missing ownerWorkspaceId", () => {
     expect(() =>
-      runtimeResourceKeyForOwner({
+      runtimeScopeKeyForOwner({
         isolationScope: "workspace",
         ownerUserId: "u-1",
         ownerWorkspaceId: null,
@@ -141,7 +141,7 @@ describe("runtimeResourceKeyForOwner", () => {
 
   it("throws on an unknown scope", () => {
     expect(() =>
-      runtimeResourceKeyForOwner({
+      runtimeScopeKeyForOwner({
         isolationScope: "weird",
         ownerUserId: "u-1",
         ownerWorkspaceId: "ws-1",

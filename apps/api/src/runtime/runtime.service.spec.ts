@@ -43,7 +43,7 @@ describe("RuntimeService", () => {
     };
     const result = service.resolveRuntimeTarget(input);
     expect(result.runtimeType).toBe("local");
-    expect(result.resourceKey).toBe("ws-1");
+    expect(result.scopeKey).toBe("ws-1");
     expect(configService.getDefaultRuntimeType).toHaveBeenCalled();
   });
 

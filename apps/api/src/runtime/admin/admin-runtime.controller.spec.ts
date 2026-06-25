@@ -45,13 +45,13 @@ describe("AdminRuntimeController", () => {
         status: "running",
         expiresAt: null,
         metadata: {
-          resourceKey: "ws-1",
+          scopeKey: "ws-1",
           statusReason: "running",
           lastSeenAt: "2026-06-25T00:00:00.000Z",
         },
         createdAt: new Date("2026-06-25T00:00:00.000Z"),
         updatedAt: new Date("2026-06-25T00:01:00.000Z"),
-        workspaceRuntimeResources: [
+        workspaceRuntimeInstances: [
           {
             id: "wr-1",
             workspaceId: "ws-1",
@@ -76,16 +76,16 @@ describe("AdminRuntimeController", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { status: "running" },
-        include: { workspaceRuntimeResources: true },
+        include: { workspaceRuntimeInstances: true },
       })
     );
     expect(result.list[0]).toMatchObject({
       id: "rr-1",
-      resourceKey: "ws-1",
+      scopeKey: "ws-1",
       workspaceCount: 1,
       isReusable: true,
       diagnostics: {
-        resourceKey: "ws-1",
+        scopeKey: "ws-1",
         statusReason: "running",
         lastSeenAt: "2026-06-25T00:00:00.000Z",
         runtimeInstanceId: "container-abc",
@@ -128,7 +128,7 @@ describe("AdminRuntimeController", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          resourceKey: "ws-1",
+          scopeKey: "ws-1",
           statusReason: "manual_stop",
           stoppedAt: expect.any(String),
         }),

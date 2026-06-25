@@ -6,7 +6,7 @@ export type SandboxEngineType = "docker" | "opensandbox";
 
 export type SandboxPlacement = {
   isolationScope: import("@agework/shared/protocol").IsolationScope;
-  resourceKey: string;
+  scopeKey: string;
   workspaceId: string;
   workspaceHostPath: string;
   workspaceMountPath: string;
@@ -48,7 +48,7 @@ export interface SandboxEngine {
 
   /**
    * 获取或创建沙箱运行环境。
-   * - 如果对应 resourceKey 的沙箱已存在（内存/DB），返回已有实例。
+   * - 如果对应 scopeKey 的沙箱已存在（内存/DB），返回已有实例。
    * - 如果不存在，创建新实例并返回。
    */
   getOrCreate(input: SandboxStartInput): Promise<SandboxRuntime>;

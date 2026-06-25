@@ -194,8 +194,8 @@ function initialWorkerLogContext(): Record<string, unknown> {
     runtimeType: process.env.AGEWORK_INTERNAL_RUNTIME_TYPE,
     sandboxEngine: process.env.AGEWORK_INTERNAL_SANDBOX_ENGINE,
     isolationScope: process.env.AGEWORK_INTERNAL_ISOLATION_SCOPE,
-    runtimeResourceKey:
-      process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY ??
+    runtimeScopeKey:
+      process.env.AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY ??
       process.env.AGEWORK_INTERNAL_WORKSPACE_ID,
     runtimeInstanceId: process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID,
     runtimeResourceName: process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME,

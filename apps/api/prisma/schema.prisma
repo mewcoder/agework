@@ -204,7 +204,7 @@ model RuntimeInstance {
   metadata          Json
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
-  workspaceRuntimeResources WorkspaceRuntimeInstance[]
+  workspaceRuntimeInstances WorkspaceRuntimeInstance[]
 
   @@unique([runtimeType, runtimeInstanceId])
   @@index([runtimeType, isolationScope, status])
@@ -218,9 +218,9 @@ model RuntimeInstance {
 /// 为什么需要独立成表（而非合并进 RuntimeInstance 或 Workspace）：
 ///   1. findActiveByWorkspace —— 沙箱复用入口：按 workspaceId 反查"当前绑着的 running 容器"，
 ///      workspaceId @unique 保证一个 workspace 同时只绑一个活容器（复用语义基石）。
-///   2. isRuntimeResourceBoundToWorkspace —— 安全校验：worker 上报心跳/事件时验证容器确实
+///   2. isRuntimeInstanceBoundToWorkspace —— 安全校验：worker 上报心跳/事件时验证容器确实
 ///      属于该 workspace，防伪造/串扰。
-///   3. 反向查询 —— admin 面板要展示"一个容器绑了哪些 workspace"（workspaceRuntimeResources 关联 +
+///   3. 反向查询 —— admin 面板要展示"一个容器绑了哪些 workspace"（workspaceRuntimeInstances 关联 +
 ///      @@index([resourceId])）；合并进 Workspace 会丢失此反向查询能力，只能全表扫。
 /// 一对多关系规范化，不宜塞 JSON 数组进 RuntimeInstance（丢失查询能力与唯一约束）。
 model WorkspaceRuntimeInstance {

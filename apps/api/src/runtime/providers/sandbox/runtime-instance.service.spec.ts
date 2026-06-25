@@ -65,7 +65,7 @@ function makeService(engine = makeEngine()) {
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
-    markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
+    markStoppedByScopeKey: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const access = {
@@ -87,7 +87,7 @@ function makeStartInput(placement = makePlacement()) {
     runConfig: makeRunConfig({ workspaceId: placement.workspaceId }),
     runtimeTarget: {
       ...placement,
-      resourceKey:
+      scopeKey:
         placement.sandbox?.isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
@@ -128,7 +128,7 @@ describe("SandboxRuntimeInstanceService", () => {
     expect(context).toMatchObject({
       runId: "run-1",
       workspaceId: "ws-1",
-      resourceKey: "ws-1",
+      scopeKey: "ws-1",
       isolationScope: "workspace",
       engineType: "docker",
     });
@@ -158,12 +158,12 @@ describe("SandboxRuntimeInstanceService", () => {
     expect(engine.getOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         placement: expect.objectContaining({
-          resourceKey: "ws-1",
+          scopeKey: "ws-1",
           workspaceId: "ws-1",
         }),
         env: expect.objectContaining({
           AGEWORK_INTERNAL_RUNTIME_TYPE: "sandbox",
-          AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY: "ws-1",
+          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
         }),
       })
     );
@@ -228,7 +228,7 @@ describe("SandboxRuntimeInstanceService", () => {
     await vi.advanceTimersByTimeAsync(5_500);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
-    expect(workspaceRuntimeService.markStoppedByResourceKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"
@@ -252,7 +252,7 @@ describe("SandboxRuntimeInstanceService", () => {
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
     expect(access.revokeWorkspace).toHaveBeenCalledWith("ws-1");
     expect(callbacks.cleanupWorkspace).toHaveBeenCalledWith("ws-1");
-    expect(workspaceRuntimeService.markStoppedByResourceKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"

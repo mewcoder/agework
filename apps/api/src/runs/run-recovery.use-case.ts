@@ -8,7 +8,7 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "../runtime/resources/runtime-instance-metadata";
-import { runtimeResourceKeyForOwner } from "../runtime/resources/runtime-resource";
+import { runtimeScopeKeyForOwner } from "../runtime/resources/runtime-resource";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
@@ -157,7 +157,7 @@ export class RunRecoveryUseCase {
               `recover orphan runtime resource ${resource.runtimeInstanceId}`
             )
           );
-        const resourceKey = runtimeResourceKeyForOwner(resource);
+        const scopeKey = runtimeScopeKeyForOwner(resource);
         await this.prisma.runtimeInstance.update({
           where: { id: resource.id },
           data: {
@@ -166,7 +166,7 @@ export class RunRecoveryUseCase {
               stoppedInstanceMetadata({
                 runtimeType: resource.runtimeType,
                 isolationScope: resource.isolationScope,
-                resourceKey,
+                scopeKey,
                 reason: "orphan_recovered",
               })
             ),

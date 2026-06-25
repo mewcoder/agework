@@ -109,12 +109,12 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     this.runtimeInstances.heartbeatRun(runId);
   }
 
-  heartbeatRuntimeInstance(resourceKey: string): void {
-    this.runtimeInstances.heartbeatRuntimeInstance(resourceKey);
+  heartbeatRuntimeInstance(scopeKey: string): void {
+    this.runtimeInstances.heartbeatRuntimeInstance(scopeKey);
   }
 
-  shutdownRuntimeInstance(resourceKey: string): void {
-    this.runtimeInstances.shutdownRuntimeInstance(resourceKey, {
+  shutdownRuntimeInstance(scopeKey: string): void {
+    this.runtimeInstances.shutdownRuntimeInstance(scopeKey, {
       cleanupWorkspace: (key) => this.workerSessions.cleanupWorkspace(key),
     });
   }
@@ -136,7 +136,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
         runId: context.runId,
         conversationId: context.runConfig.conversationId,
         workspaceId: context.workspaceId,
-        resourceKey: context.resourceKey,
+        scopeKey: context.scopeKey,
         isolationScope: context.isolationScope,
         engineType: context.engineType,
       })}`
@@ -150,8 +150,8 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
       forceCancelled: (runId) => this.forceCancelled(runId),
       publishWorkerError: (runId, error) =>
         publishWorkerErrorStatus(this.receiver, runId, error),
-      cleanupWorkspace: (resourceKey) =>
-        this.workerSessions.cleanupWorkspace(resourceKey),
+      cleanupWorkspace: (scopeKey) =>
+        this.workerSessions.cleanupWorkspace(scopeKey),
     };
   }
 

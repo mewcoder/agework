@@ -12,7 +12,7 @@ const mockExecFile = vi.mocked(execFile);
 function makePlacement(overrides?: Partial<SandboxPlacement>): SandboxPlacement {
   return {
     isolationScope: "workspace",
-    resourceKey: "ws-1",
+    scopeKey: "ws-1",
     workspaceId: "ws-1",
     workspaceHostPath: "/tmp/workspace",
     workspaceMountPath: "/workspace",
@@ -77,7 +77,7 @@ describe("DockerSandboxEngine", () => {
 
     await engine.getOrCreate(makeInput({
       metadata: {
-        "agework.io/runtime-resource-key": "ws-1",
+        "agework.io/runtime-scope-key": "ws-1",
         "agework.io/isolation-scope": "workspace",
       },
     }));
@@ -87,7 +87,7 @@ describe("DockerSandboxEngine", () => {
     );
     const runArgs = runCall![1] as string[];
     expect(runArgs).toContain("--label");
-    expect(runArgs).toContain("agework.io/runtime-resource-key=ws-1");
+    expect(runArgs).toContain("agework.io/runtime-scope-key=ws-1");
     expect(runArgs).toContain("agework.io/isolation-scope=workspace");
   });
 

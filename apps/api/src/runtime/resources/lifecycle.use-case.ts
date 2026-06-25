@@ -5,7 +5,7 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "./runtime-instance-metadata";
-import { runtimeResourceKeyForOwner } from "./runtime-resource";
+import { runtimeScopeKeyForOwner } from "./runtime-resource";
 
 /**
  * Runtime 资源生命周期清理：
@@ -57,12 +57,12 @@ export class RuntimeInstanceLifecycleUseCase {
     ownerWorkspaceId: string | null;
   }): Promise<void> {
     try {
-      const resourceKey = runtimeResourceKeyForOwner(resource);
+      const scopeKey = runtimeScopeKeyForOwner(resource);
       const provider = this.runtimeProviderRegistry.resolve(
         resource.runtimeType
       );
       await Promise.resolve(
-        provider.shutdownRuntimeInstance?.(resourceKey)
+        provider.shutdownRuntimeInstance?.(scopeKey)
       );
       await this.prisma.runtimeInstance.update({
         where: { id: resource.id },
@@ -72,7 +72,7 @@ export class RuntimeInstanceLifecycleUseCase {
             stoppedInstanceMetadata({
               runtimeType: resource.runtimeType,
               isolationScope: resource.isolationScope,
-              resourceKey,
+              scopeKey,
               reason: "owner_released",
             })
           ),

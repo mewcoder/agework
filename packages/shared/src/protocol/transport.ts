@@ -211,10 +211,10 @@ export interface WorkerExecutionHandle {
 }
 
 /**
- * 一次 run 的目标运行环境：放置方案 + 算出的 resourceKey（容器复用粒度键）。
+ * 一次 run 的目标运行环境：放置方案 + 算出的 scopeKey（容器复用粒度键）。
  * 它就是 placement 加一个 key，不再额外套层。
  */
-export type RuntimeTarget = RuntimePlacement & { resourceKey: string };
+export type RuntimeTarget = RuntimePlacement & { scopeKey: string };
 
 export type WorkerExecutionStartInput = {
   runtimeTarget: RuntimeTarget;

@@ -73,7 +73,7 @@ describe("RuntimeInternalAccessService", () => {
       expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(true);
     });
 
-    it("reuses workspace key when resourceKey already has one", () => {
+    it("reuses workspace key when scopeKey already has one", () => {
       const workspaceKey = service.issueWorkspaceKey("ws-1");
       const resourceAccessKey = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
 
@@ -83,7 +83,7 @@ describe("RuntimeInternalAccessService", () => {
       expect(service.verifyRuntimeInstanceKey("rr-1", workspaceKey)).toBe(true);
     });
 
-    it("issues a new key when resourceKey has no workspace key", () => {
+    it("issues a new key when scopeKey has no workspace key", () => {
       const key = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
 
       expect(key).toBeTruthy();
@@ -96,15 +96,15 @@ describe("RuntimeInternalAccessService", () => {
       expect(service.verifyRuntimeInstanceKey("rr-1", "wrong")).toBe(false);
     });
 
-    it("returns resourceKey for runtime resource", () => {
+    it("returns scopeKey for runtime resource", () => {
       service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
 
-      expect(service.getResourceKeyForRuntimeInstance("rr-1")).toBe("ws-1");
+      expect(service.getScopeKeyForRuntimeInstance("rr-1")).toBe("ws-1");
       expect(service.getRuntimeTypeForRuntimeInstance("rr-1")).toBe("sandbox");
     });
 
-    it("returns undefined for unknown runtime resource resourceKey", () => {
-      expect(service.getResourceKeyForRuntimeInstance("nonexistent")).toBeUndefined();
+    it("returns undefined for unknown runtime resource scopeKey", () => {
+      expect(service.getScopeKeyForRuntimeInstance("nonexistent")).toBeUndefined();
     });
 
     it("revokes a runtime resource key", () => {
@@ -112,7 +112,7 @@ describe("RuntimeInternalAccessService", () => {
       service.revokeRuntimeInstance("rr-1");
 
       expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(false);
-      expect(service.getResourceKeyForRuntimeInstance("rr-1")).toBeUndefined();
+      expect(service.getScopeKeyForRuntimeInstance("rr-1")).toBeUndefined();
       expect(service.getRuntimeTypeForRuntimeInstance("rr-1")).toBeUndefined();
     });
   });

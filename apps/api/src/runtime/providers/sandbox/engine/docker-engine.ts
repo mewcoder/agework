@@ -17,14 +17,14 @@ export class DockerSandboxEngine implements SandboxEngine {
 
   async getOrCreate(input: SandboxStartInput): Promise<SandboxRuntime> {
     const { placement, image, env, metadata } = input;
-    const { workspaceHostPath, workspaceMountPath, resourceKey } = placement;
+    const { workspaceHostPath, workspaceMountPath, scopeKey } = placement;
 
     const args = [
       "run",
       "-d",
       "--init",
       "--name",
-      `agework-worker-${resourceKey}`,
+      `agework-worker-${scopeKey}`,
       // Docker Desktop 按 com.docker.compose.project label 对容器分组展示
       "--label",
       "com.docker.compose.project=agework",
@@ -103,7 +103,7 @@ export class DockerSandboxEngine implements SandboxEngine {
       throw new Error("docker run returned empty container ID");
     }
     this.logger.log(
-      `Container started: resourceKey=${resourceKey} containerId=${containerId.slice(0, 12)}`
+      `Container started: scopeKey=${scopeKey} containerId=${containerId.slice(0, 12)}`
     );
     return {
       engineType: "docker",

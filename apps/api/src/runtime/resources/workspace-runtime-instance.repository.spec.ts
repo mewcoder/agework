@@ -96,7 +96,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
         expiresAt: null,
         metadata: expect.objectContaining({
           foo: "bar",
-          resourceKey: "u1",
+          scopeKey: "u1",
           workspaceId: "w1",
           statusReason: "running",
           runtimeInstanceId: "container-abc",
@@ -157,7 +157,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
         status: "running",
         expiresAt: null,
         metadata: expect.objectContaining({
-          resourceKey: "w1",
+          scopeKey: "w1",
           workspaceId: "w1",
           statusReason: "running",
           runtimeInstanceId: "container-next",
@@ -186,7 +186,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          resourceKey: "u1",
+          scopeKey: "u1",
           runtimeType: "sandbox",
           isolationScope: "user",
           statusReason: "stopped",
@@ -203,7 +203,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markStoppedByResourceKey("sandbox", "user", "u1");
+    await service.markStoppedByScopeKey("sandbox", "user", "u1");
 
     expect(updateMany).toHaveBeenCalledWith({
       where: {
@@ -215,7 +215,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          resourceKey: "u1",
+          scopeKey: "u1",
           runtimeType: "sandbox",
           isolationScope: "user",
           statusReason: "stopped",
@@ -232,7 +232,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markMissingByResourceKey(
+    await service.markMissingByScopeKey(
       "sandbox",
       "workspace",
       "w1",
@@ -248,7 +248,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       data: {
         status: "missing",
         metadata: expect.objectContaining({
-          resourceKey: "w1",
+          scopeKey: "w1",
           runtimeType: "sandbox",
           isolationScope: "workspace",
           statusReason: "heartbeat_lost",
@@ -264,7 +264,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markErrorByResourceKey(
+    await service.markErrorByScopeKey(
       "sandbox",
       "workspace",
       "w1",
@@ -280,7 +280,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       data: {
         status: "error",
         metadata: expect.objectContaining({
-          resourceKey: "w1",
+          scopeKey: "w1",
           runtimeType: "sandbox",
           isolationScope: "workspace",
           statusReason: "error",

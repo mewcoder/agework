@@ -144,7 +144,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          resourceKey: "ws-1",
+          scopeKey: "ws-1",
           statusReason: "orphan_recovered",
           stoppedAt: expect.any(String),
         }),
@@ -155,7 +155,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          resourceKey: "ws-2",
+          scopeKey: "ws-2",
           statusReason: "orphan_recovered",
           stoppedAt: expect.any(String),
         }),

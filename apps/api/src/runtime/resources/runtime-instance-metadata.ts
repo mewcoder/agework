@@ -4,7 +4,7 @@ import type { Prisma } from "../../../generated/prisma/client.js";
 type RuntimeInstanceMetadata = Record<string, unknown>;
 
 export type RuntimeInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
-  resourceKey: string;
+  scopeKey: string;
   workspaceId?: string;
   statusReason: string;
   lastSeenAt: string;
@@ -25,7 +25,7 @@ export function isMetadataRecord(
 
 export function runningInstanceMetadata(input: {
   placement: RuntimePlacement;
-  resourceKey: string;
+  scopeKey: string;
   runtimeInstanceId: string;
   existing?: unknown;
   metadata?: object;
@@ -35,7 +35,7 @@ export function runningInstanceMetadata(input: {
   return {
     ...(isMetadataRecord(input.existing) ? input.existing : {}),
     ...(input.metadata ?? {}),
-    resourceKey: input.resourceKey,
+    scopeKey: input.scopeKey,
     workspaceId: input.placement.workspaceId,
     statusReason: "running",
     lastSeenAt: now,
@@ -47,14 +47,14 @@ export function runningInstanceMetadata(input: {
 export function stoppedInstanceMetadata(input: {
   runtimeType: string;
   isolationScope: string;
-  resourceKey: string;
+  scopeKey: string;
   reason: string;
   errorMessage?: string;
   now?: Date;
 }): RuntimeInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
-    resourceKey: input.resourceKey,
+    scopeKey: input.scopeKey,
     runtimeType: input.runtimeType,
     isolationScope: input.isolationScope,
     statusReason: input.reason,
@@ -67,14 +67,14 @@ export function stoppedInstanceMetadata(input: {
 export function statusInstanceMetadata(input: {
   runtimeType: string;
   isolationScope: string;
-  resourceKey: string;
+  scopeKey: string;
   reason: string;
   errorMessage?: string;
   now?: Date;
 }): RuntimeInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
-    resourceKey: input.resourceKey,
+    scopeKey: input.scopeKey,
     runtimeType: input.runtimeType,
     isolationScope: input.isolationScope,
     statusReason: input.reason,
@@ -86,8 +86,8 @@ export function statusInstanceMetadata(input: {
 export function runtimeInstanceDiagnostics(metadata: unknown) {
   const record = isMetadataRecord(metadata) ? metadata : {};
   return {
-    resourceKey:
-      typeof record.resourceKey === "string" ? record.resourceKey : undefined,
+    scopeKey:
+      typeof record.scopeKey === "string" ? record.scopeKey : undefined,
     workspaceId:
       typeof record.workspaceId === "string" ? record.workspaceId : undefined,
     statusReason:

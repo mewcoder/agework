@@ -60,7 +60,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
   };
   const workspaceRuntimeService = {
     markStopped: vi.fn().mockResolvedValue(undefined),
-    markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
+    markStoppedByScopeKey: vi.fn().mockResolvedValue(undefined),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
@@ -121,7 +121,7 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
 function makeRuntimeTarget(
   overrides: Partial<RuntimeTarget> = {}
 ): RuntimeTarget {
-  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeTarget;
+  return { ...makePlacement(), scopeKey: "ws-1", ...overrides } as RuntimeTarget;
 }
 
 function startProvider(
@@ -132,7 +132,7 @@ function startProvider(
   return provider.startWorkerExecution({
     runtimeTarget: {
       ...placement,
-      resourceKey:
+      scopeKey:
         (placement as { sandbox: { isolationScope: string } }).sandbox.isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
@@ -188,13 +188,13 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       expect.objectContaining({
         placement: expect.objectContaining({
           isolationScope: "workspace",
-          resourceKey: "ws-1",
+          scopeKey: "ws-1",
         }),
         env: expect.objectContaining({
           AGEWORK_INTERNAL_RUNTIME_TYPE: "sandbox",
           AGEWORK_INTERNAL_SANDBOX_ENGINE: "docker",
           AGEWORK_INTERNAL_ISOLATION_SCOPE: "workspace",
-          AGEWORK_INTERNAL_RUNTIME_RESOURCE_KEY: "ws-1",
+          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
           AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME: "agework-worker-ws-1",
         }),
       })
@@ -506,7 +506,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
     provider.shutdownRuntimeInstance("user-1");
 
     expect(engine.stop).toHaveBeenCalled();
-    expect(workspaceRuntimeService.markStoppedByResourceKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
       "sandbox",
       "user",
       "user-1"
@@ -562,7 +562,7 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     provider.cleanup("run-1");
     await vi.advanceTimersByTimeAsync(5_500);
 
-    expect(workspaceRuntimeService.markStoppedByResourceKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"

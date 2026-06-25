@@ -9,7 +9,7 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "../resources/runtime-instance-metadata";
-import { runtimeResourceKeyForOwner } from "../resources/runtime-resource";
+import { runtimeScopeKeyForOwner } from "../resources/runtime-resource";
 
 @Controller("admin/runtime")
 @Roles("admin")
@@ -52,7 +52,7 @@ export class AdminRuntimeController {
     const [items, total] = await Promise.all([
       this.prisma.runtimeInstance.findMany({
         where,
-        include: { workspaceRuntimeResources: true },
+        include: { workspaceRuntimeInstances: true },
         orderBy: { updatedAt: "desc" },
         take,
         skip: (pageNum - 1) * take,
@@ -74,10 +74,10 @@ export class AdminRuntimeController {
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(`Runtime resource ${id} not found or not running`);
     }
-    const resourceKey = this.getResourceKey(resource);
+    const scopeKey = this.getScopeKey(resource);
     this.runtimeService.shutdownRuntimeInstance(
       resource.runtimeType,
-      resourceKey
+      scopeKey
     );
     await this.prisma.runtimeInstance.update({
       where: { id },
@@ -87,7 +87,7 @@ export class AdminRuntimeController {
           stoppedInstanceMetadata({
             runtimeType: resource.runtimeType,
             isolationScope: resource.isolationScope,
-            resourceKey,
+            scopeKey,
             reason: "manual_stop",
           })
         ),
@@ -108,16 +108,16 @@ export class AdminRuntimeController {
     metadata: unknown;
     createdAt: Date | string;
     updatedAt: Date | string;
-    workspaceRuntimeResources?: Array<{
+    workspaceRuntimeInstances?: Array<{
       id: string;
       workspaceId: string;
       createdAt: Date | string;
       updatedAt: Date | string;
     }>;
   }) {
-    const resourceKey = runtimeResourceKeyForOwner(resource);
+    const scopeKey = runtimeScopeKeyForOwner(resource);
     const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
-    const workspaceRuntimeResources = resource.workspaceRuntimeResources?.map((binding) => ({
+    const workspaceRuntimeInstances = resource.workspaceRuntimeInstances?.map((binding) => ({
       id: binding.id,
       workspaceId: binding.workspaceId,
       createdAt: this.toIsoString(binding.createdAt),
@@ -130,22 +130,22 @@ export class AdminRuntimeController {
       isolationScope: resource.isolationScope,
       ownerUserId: resource.ownerUserId,
       ownerWorkspaceId: resource.ownerWorkspaceId,
-      resourceKey,
+      scopeKey,
       runtimeInstanceId: resource.runtimeInstanceId,
       status: resource.status,
       isReusable: resource.status === "running",
-      workspaceCount: workspaceRuntimeResources?.length ?? 0,
+      workspaceCount: workspaceRuntimeInstances?.length ?? 0,
       expiresAt: resource.expiresAt ? this.toIsoString(resource.expiresAt) : null,
       metadata: resource.metadata,
       diagnostics: {
         ...diagnostics,
-        resourceKey: diagnostics.resourceKey ?? resourceKey,
+        scopeKey: diagnostics.scopeKey ?? scopeKey,
         runtimeInstanceId:
           diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
       },
       createdAt: this.toIsoString(resource.createdAt),
       updatedAt: this.toIsoString(resource.updatedAt),
-      workspaceRuntimeResources,
+      workspaceRuntimeInstances,
     };
   }
 
@@ -153,7 +153,7 @@ export class AdminRuntimeController {
     return value instanceof Date ? value.toISOString() : value;
   }
 
-  private getResourceKey(resource: {
+  private getScopeKey(resource: {
     isolationScope: string;
     ownerUserId: string;
     ownerWorkspaceId: string | null;

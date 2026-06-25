@@ -43,7 +43,7 @@ describe("RunWorkerExecutionService", () => {
     const runConfig = { runId: "run-1" } as RunConfig;
     const runtimeTarget = {
       runtimeType: "local",
-      resourceKey: "ws-1",
+      scopeKey: "ws-1",
       workspaceId: "ws-1",
     } as RuntimeTarget;
     const onReady = vi.fn();

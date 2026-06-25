@@ -40,7 +40,7 @@ export function isSandboxPlacement(
 
 /**
  * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
- * 路径映射与容器复用键 resourceKey，直接返回一个 RuntimeTarget 对象。纯计算，不启动
+ * 路径映射与容器复用键 scopeKey，直接返回一个 RuntimeTarget 对象。纯计算，不启动
  * 也不 attach worker。
  */
 export function resolveRuntimeTarget(
@@ -63,7 +63,7 @@ export function resolveRuntimeTarget(
   const runtimeType = input.runtimeType ?? defaults.runtimeType;
 
   // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
-  // resourceKey 无复用语义，用 workspaceId 兜底。
+  // scopeKey 无复用语义，用 workspaceId 兜底。
   if (runtimeType === "local") {
     const local: LocalRuntimePlacement = {
       runtimeType: "local",
@@ -72,7 +72,7 @@ export function resolveRuntimeTarget(
       hostPath: workspaceRootPath,
       runtimePath: workspaceRootPath,
     };
-    return { ...local, resourceKey: workspaceId };
+    return { ...local, scopeKey: workspaceId };
   }
 
   const isolationScope = input.isolationScope ?? defaults.isolationScope;
@@ -85,7 +85,7 @@ export function resolveRuntimeTarget(
   let hostPath: string;
   let runtimePath: string;
   let mountTarget: string;
-  let resourceKey: string;
+  let scopeKey: string;
 
   if (isolationScope === "user") {
     const rel = relative(userWorkspaceRootPath, workspaceRootPath);
@@ -98,12 +98,12 @@ export function resolveRuntimeTarget(
     hostPath = userWorkspaceRootPath;
     runtimePath = [CONTAINER_WORKSPACES_ROOT, ...segments].join("/");
     mountTarget = CONTAINER_WORKSPACES_ROOT;
-    resourceKey = userId;
+    scopeKey = userId;
   } else {
     mountTarget = `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
     hostPath = workspaceRootPath;
     runtimePath = mountTarget;
-    resourceKey = workspaceId;
+    scopeKey = workspaceId;
   }
 
   const placement: SandboxRuntimePlacement = {
@@ -114,7 +114,7 @@ export function resolveRuntimeTarget(
     runtimePath,
     sandbox: { isolationScope, mountTarget, sandboxEngineType: sandboxEngine },
   };
-  return { ...placement, resourceKey };
+  return { ...placement, scopeKey };
 }
 
 /** workspace 目录是否落在用户根目录内（同目录或子目录）。 */
@@ -129,7 +129,7 @@ function isInsideUserRoot(relativePath: string): boolean {
  * runtime resource key 的核心规则:隔离粒度决定容器按谁复用——
  * user→用户,workspace→工作区。这是唯一的判定处,下面两个 wrapper 只负责适配各自入参。
  */
-export function runtimeResourceKey(
+export function runtimeScopeKey(
   isolationScope: string,
   userId: string,
   workspaceId: string
@@ -140,7 +140,7 @@ export function runtimeResourceKey(
 }
 
 /** 从持久化的 RuntimeTarget owner 记录算 resource key（容器存活台账侧用）。 */
-export function runtimeResourceKeyForOwner(input: {
+export function runtimeScopeKeyForOwner(input: {
   isolationScope: string;
   ownerUserId: string;
   ownerWorkspaceId: string | null;
@@ -148,7 +148,7 @@ export function runtimeResourceKeyForOwner(input: {
   if (input.isolationScope === "workspace" && !input.ownerWorkspaceId) {
     throw new Error("Runtime resource ownerWorkspaceId is required");
   }
-  return runtimeResourceKey(
+  return runtimeScopeKey(
     input.isolationScope,
     input.ownerUserId,
     input.ownerWorkspaceId ?? ""

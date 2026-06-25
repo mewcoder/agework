@@ -49,7 +49,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            resourceKey: "ws-1",
+            scopeKey: "ws-1",
             statusReason: "owner_released",
             stoppedAt: expect.any(String),
           }),
@@ -118,7 +118,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            resourceKey: "user-1",
+            scopeKey: "user-1",
             statusReason: "owner_released",
           }),
         },
@@ -128,7 +128,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            resourceKey: "ws-2",
+            scopeKey: "ws-2",
             statusReason: "owner_released",
           }),
         },

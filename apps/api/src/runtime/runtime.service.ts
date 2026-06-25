@@ -34,19 +34,19 @@ export class RuntimeService {
   }
 
   /**
-   * 按 runtime resource key 喂容器级 watchdog。worker 只知道 resourceKey、不知道
+   * 按 runtime resource key 喂容器级 watchdog。worker 只知道 scopeKey、不知道
    * 是哪个 provider 在持有它，因此广播给所有 provider；未持有该 key 的 provider 自然 no-op。
    */
-  heartbeatRuntimeInstance(resourceKey: string): void {
+  heartbeatRuntimeInstance(scopeKey: string): void {
     for (const provider of this.providerRegistry.all()) {
-      provider.heartbeatRuntimeInstance?.(resourceKey);
+      provider.heartbeatRuntimeInstance?.(scopeKey);
     }
   }
 
   /** 停止并删除指定 runtime resource 对应的持久容器/沙箱。 */
-  shutdownRuntimeInstance(runtimeType: string, resourceKey: string): void {
+  shutdownRuntimeInstance(runtimeType: string, scopeKey: string): void {
     this.providerRegistry
       .resolve(runtimeType)
-      .shutdownRuntimeInstance?.(resourceKey);
+      .shutdownRuntimeInstance?.(scopeKey);
   }
 }

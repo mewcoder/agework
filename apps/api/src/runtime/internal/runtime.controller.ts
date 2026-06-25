@@ -41,18 +41,18 @@ export class RuntimeRuntimeController {
     const parsed = afterSeq ? parseInt(afterSeq, 10) : 0;
     const seq = Number.isFinite(parsed) ? parsed : 0;
     const wait = parseControlWaitMs(waitMs);
-    const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeInstanceId);
-    const controls = resourceKey
+    const scopeKey =
+      this.runtimeAccess.getScopeKeyForRuntimeInstance(runtimeInstanceId);
+    const controls = scopeKey
       ? wait > 0
-        ? await this.controlQueue.waitForWorkspace(resourceKey, seq, wait)
-        : this.controlQueue.pollByWorkspace(resourceKey, seq)
+        ? await this.controlQueue.waitForWorkspace(scopeKey, seq, wait)
+        : this.controlQueue.pollByWorkspace(scopeKey, seq)
       : [];
     if (controls.length > 0) {
       this.logger.debug(
         `runtime controls fetched ${safeLogJson({
           runtimeInstanceId,
-          resourceKey,
+          scopeKey,
           afterSeq: seq,
           count: controls.length,
           controls: controls.map((control) => ({
@@ -68,20 +68,20 @@ export class RuntimeRuntimeController {
 
   /**
    * POST /internal/runtimes/:runtimeInstanceId/heartbeat
-   * 持久容器 worker 定期上报心跳，通过 RuntimeTarget.id 反查 resourceKey
+   * 持久容器 worker 定期上报心跳，通过 RuntimeTarget.id 反查 scopeKey
    * 后分发到对应 provider。
    */
   @Post(":runtimeInstanceId/heartbeat")
   async heartbeat(
     @Param("runtimeInstanceId") runtimeInstanceId: string
   ): Promise<{ ok: boolean }> {
-    const resourceKey =
-      this.runtimeAccess.getResourceKeyForRuntimeInstance(runtimeInstanceId);
-    if (resourceKey) {
+    const scopeKey =
+      this.runtimeAccess.getScopeKeyForRuntimeInstance(runtimeInstanceId);
+    if (scopeKey) {
       this.logger.debug(
-        `runtime heartbeat ${safeLogJson({ runtimeInstanceId, resourceKey })}`
+        `runtime heartbeat ${safeLogJson({ runtimeInstanceId, scopeKey })}`
       );
-      this.runtimeService.heartbeatRuntimeInstance(resourceKey);
+      this.runtimeService.heartbeatRuntimeInstance(scopeKey);
     } else {
       this.logger.warn(
         `runtime heartbeat without resource ${safeLogJson({ runtimeInstanceId })}`

@@ -9,7 +9,7 @@ export class RuntimeInternalAccessService {
   private readonly workspaceKeys = new Map<string, string>();
   /** RuntimeTarget.id → accessKey */
   private readonly runtimeInstanceKeys = new Map<string, string>();
-  /** RuntimeTarget.id → resourceKey (用于 heartbeat 时查找 provider 内部 key) */
+  /** RuntimeTarget.id → scopeKey (用于 heartbeat 时查找 provider 内部 key) */
   private readonly runtimeInstanceScopeKeys = new Map<string, string>();
   /** RuntimeTarget.id → runtimeType */
   private readonly runtimeInstanceRuntimeTypes = new Map<string, string>();
@@ -63,22 +63,22 @@ export class RuntimeInternalAccessService {
 
   /**
    * 为 RuntimeTarget 签发内部访问 key。
-   * 复用 resourceKey 对应的 workspaceKey，使同一个 key 可同时用于
+   * 复用 scopeKey 对应的 workspaceKey，使同一个 key 可同时用于
    * /internal/workspaces/:workspaceId 和 /internal/runtimes/:runtimeInstanceId。
    */
   issueRuntimeInstanceKey(
     runtimeInstanceId: string,
-    resourceKey: string,
+    scopeKey: string,
     runtimeType: string
   ): string {
-    const existingKey = this.workspaceKeys.get(resourceKey);
+    const existingKey = this.workspaceKeys.get(scopeKey);
     if (existingKey) {
       this.runtimeInstanceKeys.set(runtimeInstanceId, existingKey);
     } else {
       const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
       this.runtimeInstanceKeys.set(runtimeInstanceId, accessKey);
     }
-    this.runtimeInstanceScopeKeys.set(runtimeInstanceId, resourceKey);
+    this.runtimeInstanceScopeKeys.set(runtimeInstanceId, scopeKey);
     this.runtimeInstanceRuntimeTypes.set(runtimeInstanceId, runtimeType);
     return this.runtimeInstanceKeys.get(runtimeInstanceId)!;
   }
@@ -87,8 +87,8 @@ export class RuntimeInternalAccessService {
     return this.constantTimeEqual(this.runtimeInstanceKeys.get(runtimeInstanceId), accessKey);
   }
 
-  /** 获取 RuntimeTarget.id 对应的 resourceKey（用于 heartbeat 等）。 */
-  getResourceKeyForRuntimeInstance(runtimeInstanceId: string): string | undefined {
+  /** 获取 RuntimeTarget.id 对应的 scopeKey（用于 heartbeat 等）。 */
+  getScopeKeyForRuntimeInstance(runtimeInstanceId: string): string | undefined {
     return this.runtimeInstanceScopeKeys.get(runtimeInstanceId);
   }
 

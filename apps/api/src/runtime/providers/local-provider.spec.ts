@@ -52,7 +52,7 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
 function makeRuntimeTarget(
   overrides: Partial<RuntimeTarget> = {}
 ): RuntimeTarget {
-  return { ...makePlacement(), resourceKey: "ws-1", ...overrides } as RuntimeTarget;
+  return { ...makePlacement(), scopeKey: "ws-1", ...overrides } as RuntimeTarget;
 }
 
 describe("LocalRuntimeProvider", () => {

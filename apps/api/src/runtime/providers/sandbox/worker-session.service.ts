@@ -35,11 +35,11 @@ export class SandboxWorkerSessionService {
       context.runConfig.conversationId
     );
 
-    if (!this.controlSeqs.has(context.resourceKey)) {
-      this.controlSeqs.set(context.resourceKey, 0);
+    if (!this.controlSeqs.has(context.scopeKey)) {
+      this.controlSeqs.set(context.scopeKey, 0);
     }
 
-    this.sendControl(context.resourceKey, context.runId, {
+    this.sendControl(context.scopeKey, context.runId, {
       type: "user_message",
       commandId: generateId(),
       runId: context.runId,
@@ -75,8 +75,8 @@ export class SandboxWorkerSessionService {
     this.runtimeAccess.revokeAccess(runId);
   }
 
-  cleanupWorkspace(resourceKey: string): void {
-    this.controlQueue.cleanupWorkspace(resourceKey);
-    this.controlSeqs.delete(resourceKey);
+  cleanupWorkspace(scopeKey: string): void {
+    this.controlQueue.cleanupWorkspace(scopeKey);
+    this.controlSeqs.delete(scopeKey);
   }
 }
