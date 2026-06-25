@@ -673,11 +673,92 @@ resource 和 session,它来写 scopeState,session 不碰）。session 的方法�
 
 **验证**:
 
-- 搬完后依赖方向必须仍是 `run → workers ← runtime`，workers 不反向依赖 run 或 runtime。
+- 搬完后依赖方向必须仍是 `run → worker-host ← runtime`，worker-host 不反向依赖 run 或 runtime。
 - `runtime/internal/` 目录清空删除。
 - 两个 module 文件（`runtime.module.ts` / `runs.module.ts`）的 provider/export 跟着调整，
   新建 `worker-host.module.ts`。
 - typecheck + 全量单测通过；重点验 sandbox 复用 / cancel-before-ready / 心跳 / per-run 清理路径。
+
+### Phase 8: `RuntimeResource` 命名拆分（Target / Instance）
+
+状态:计划已定，待执行。与 Phase 7 分开做，避免一次堆太多。
+
+**动机**:`RuntimeResource` 一个名字指两个不同的东西，都不贴切:
+
+- **协议类型** `RuntimeResource`（`transport.ts`）= `RuntimePlacement & { resourceKey }`。
+  它是 run 算出来的目标环境（放哪、用哪个复用桶），**不是资源实体**（没容器 id、没状态）。
+  叫 Resource 名不副实，该叫 **Target**。
+- **Prisma 表** `RuntimeResource` = 一个活着的容器实例（有 status / runtimeResourceId /
+  metadata）。这才是"资源"，但和协议类型重名。该叫 **Instance**。
+
+拆开后命名体系自洽:
+```text
+RuntimePlacement  = 放置方案（规格）
+RuntimeTarget     = 放置方案 + 复用键（目标）   ← 原 RuntimeResource 协议类型
+RuntimeInstance   = 一个活着的容器（实例）      ← 原 RuntimeResource DB 表
+```
+
+**改（语义 A「实例」—— DB 表及其周边）**:
+
+- `model RuntimeResource` → `model RuntimeInstance`；`prisma.runtimeResource.*` → `prisma.runtimeInstance.*`。
+- `model WorkspaceRuntimeResource` → `model WorkspaceRuntimeInstance`；访问点同步。
+- `WorkspaceRuntimeResourceRepository` → `WorkspaceRuntimeInstanceRepository`；文件名同步。
+- `RuntimeResourceLifecycleUseCase` / `RuntimeResourceLifecycleListener` → `RuntimeInstanceLifecycle...`。
+- `RuntimeResourceMetadata` / `runtimeResourceDiagnostics` / `RuntimeResourceDiagnosticMetadata` →
+  `RuntimeInstanceMetadata` / `runtimeInstanceDiagnostics` / ...。
+- `issueRuntimeResourceKey` / `verifyRuntimeResourceKey` / `getResourceKeyForRuntimeResource` /
+  `getRuntimeTypeForRuntimeResource`（access.service 里围绕容器实例鉴权的方法）→
+  `...RuntimeInstanceKey` / `...`。
+- `heartbeatRuntimeResource` / `shutdownRuntimeResource`（RuntimeService + provider 契约）→
+  `heartbeatRuntimeInstance` / `shutdownRuntimeInstance`。
+- `SandboxRuntimeResourceService` → `SandboxRuntimeInstanceService`；文件名
+  `runtime-resource.service.ts` → `runtime-instance.service.ts`。
+- `attachOrStartRuntimeResource` / `attachPendingRuntimeResource` / `attachReadyRuntimeResource` /
+  `startRuntimeResourceForScope` / `cleanupStaleRuntimeResources` / `deleteManyRuntimeResource` /
+  `findRuntimeResource` / `isExpectedRuntimeResource` / `isRuntimeResourceBoundToWorkspace` /
+  `revokeRuntimeResource` / `hasRuntimeResourceKey` / `runtimeResourceKeyCount` /
+  `runtimeResourceKeyFingerprint` / `runtimeResourceKeyMatches` / `runtimeResourceKeys` /
+  `runtimeResourceRuntimeTypes` / `runtimeResourceScopeKeys` /
+  `RuntimeResourceStatus` / `RuntimeResourceResponse` / `RuntimeResourceListResponse` /
+  `RuntimeResourceDiagnosticsResponse` / `AdminRunRuntimeResourceResponse` /
+  `RuntimeResourceIdDto` / `RuntimeResourceIdRequest` / `toRuntimeResourceResponse` /
+  `onRuntimeResourceStarted` / `onRuntimeResourceStartFailed` / `SandboxRuntimeResourceAttachment` /
+  `SandboxRuntimeResourceCallbacks` / `runtimeResourceCallbacks` / `runtimeResources`（变量）→
+  把其中 `RuntimeResource` 部分替换为 `RuntimeInstance`。
+
+**改（语义 B「目标」—— 协议类型及其周边）**:
+
+- 协议类型 `RuntimeResource` → `RuntimeTarget`（`transport.ts`）。
+- `resolveRuntimeResource`（RuntimeService 方法 + 纯函数）→ `resolveRuntimeTarget`。
+- `ResolveRuntimeResourceInput` / `RuntimeResourceDefaults` → `ResolveRuntimeTargetInput` /
+  `RuntimeTargetDefaults`。
+- `runtimeResource`（变量/参数名，指协议目标值的）→ `runtimeTarget`。
+- `WorkerExecutionStartInput.runtimeResource` 字段 → `runtimeTarget`。
+- `provider-contracts.ts` 注释里的 `RuntimeResource` → `RuntimeTarget`。
+
+**不改（留）**:
+
+- `runtimeResourceId`（字段）—— 它是容器的真实 id，跨进程协议字段（worker↔api 传，
+  env var `AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID` 等）。blast radius 大，且名字不算错
+  （实例也是一种 resource）。仅在新类型里用 instance，老字段留。
+- `runtimeResourceKey` / `runtimeResourceKeyForOwner`（算复用桶 key 的函数）——
+  它既不是实例也不是目标，是"按什么粒度复用容器"的桶标签（user→userId / workspace→workspaceId）。
+  改它得另起名（如 `runtimeScopeKey`），是正交的另一个命名问题，不混进本轮。
+- `RuntimeResourceHandle` —— 早已删除，不存在。
+
+**执行顺序**（分两个 commit，各自验证）:
+
+1. **DB 表 + 实例语义**:`model RuntimeResource` → `RuntimeInstance`，连带
+   `WorkspaceRuntimeResource` → `WorkspaceRuntimeInstance`，及所有"实例"语义的类/方法。
+   `pnpm --filter api exec prisma db push` 重新生成。typecheck + 全量单测。
+2. **协议类型 + 目词语义**:`RuntimeResource` → `RuntimeTarget`，连带 `resolveRuntimeResource` →
+   `resolveRuntimeTarget` 及变量/字段名。shared + api typecheck + 全量单测。
+
+**验证**:
+
+- 命名体系自洽:Placement（规格）→ Target（目标）→ Instance（实例）三层各司其名。
+- `runtimeResourceId` / `runtimeResourceKey` 这两个留的字段/函数，确认仍能正确工作、无歧义。
+- 重点验:sandbox 容器复用、绑定表读写、admin runtime 列表、access key 签发/校验、心跳/shutdown 派发。
 
 ## 10. 风险与护栏
 
