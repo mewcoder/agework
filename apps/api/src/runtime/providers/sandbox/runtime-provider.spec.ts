@@ -63,7 +63,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
-      workspaceRuntime: { id: "wr-1" },
+      workspaceRuntimeResource: { id: "wr-1" },
     }),
     findActiveByWorkspace: vi.fn().mockResolvedValue(null),
     isRuntimeResourceBoundToWorkspace: vi.fn().mockResolvedValue(false),

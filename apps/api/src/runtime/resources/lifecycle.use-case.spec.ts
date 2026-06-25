@@ -30,7 +30,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       };
       const service = new RuntimeResourceLifecycleUseCase(
         {
-          workspaceRuntime: { findUnique, deleteMany },
+          workspaceRuntimeResource: { findUnique, deleteMany },
           runtimeResource: { update },
         } as never,
         registry as RuntimeProviderRegistry
@@ -73,7 +73,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
       const service = new RuntimeResourceLifecycleUseCase(
-        { workspaceRuntime: { findUnique, deleteMany } } as never,
+        { workspaceRuntimeResource: { findUnique, deleteMany } } as never,
         registry as RuntimeProviderRegistry
       );
 

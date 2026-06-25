@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 // core
-import { WorkspaceRuntimeRepository } from "./resources/workspace-runtime.repository";
+import { WorkspaceRuntimeResourceRepository } from "./resources/workspace-runtime-resource.repository";
 import { RuntimeResourceLifecycleUseCase } from "./resources/lifecycle.use-case";
 import { RuntimeResourceLifecycleListener } from "./resources/lifecycle.listener";
 
@@ -49,7 +49,7 @@ import { ConfigService } from "../config/config.service";
   ],
   providers: [
     // core
-    WorkspaceRuntimeRepository,
+    WorkspaceRuntimeResourceRepository,
     RuntimeResourceLifecycleUseCase,
     RuntimeResourceLifecycleListener,
     // providers
@@ -84,7 +84,7 @@ import { ConfigService } from "../config/config.service";
     RuntimeService,
   ],
   exports: [
-    WorkspaceRuntimeRepository,
+    WorkspaceRuntimeResourceRepository,
     RuntimeService,
     RuntimeProviderRegistry,
     RuntimeResourceLifecycleUseCase,

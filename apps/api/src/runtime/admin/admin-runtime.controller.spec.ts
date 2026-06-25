@@ -51,7 +51,7 @@ describe("AdminRuntimeController", () => {
         },
         createdAt: new Date("2026-06-25T00:00:00.000Z"),
         updatedAt: new Date("2026-06-25T00:01:00.000Z"),
-        workspaceRuntimes: [
+        workspaceRuntimeResources: [
           {
             id: "wr-1",
             workspaceId: "ws-1",
@@ -76,7 +76,7 @@ describe("AdminRuntimeController", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { status: "running" },
-        include: { workspaceRuntimes: true },
+        include: { workspaceRuntimeResources: true },
       })
     );
     expect(result.list[0]).toMatchObject({

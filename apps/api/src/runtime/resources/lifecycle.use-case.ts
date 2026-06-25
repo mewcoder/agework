@@ -23,7 +23,7 @@ export class RuntimeResourceLifecycleUseCase {
 
   /** 关闭专属于该 workspace 的 runtime 资源（user 隔离下的共享资源不受影响）。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
-    const binding = await this.prisma.workspaceRuntime.findUnique({
+    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -36,7 +36,7 @@ export class RuntimeResourceLifecycleUseCase {
         await this.shutdownResource(resource);
       }
     }
-    await this.prisma.workspaceRuntime.deleteMany({ where: { workspaceId } });
+    await this.prisma.workspaceRuntimeResource.deleteMany({ where: { workspaceId } });
   }
 
   /** 关闭该用户名下所有 runtime 资源（user 级共享资源 + 该用户所有 workspace 级资源）。 */

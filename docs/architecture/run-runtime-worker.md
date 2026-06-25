@@ -256,7 +256,7 @@ apps/api/src/runtime/providers/sandbox/runtime-resource.service.ts
   sandbox runtime resource state
   engine create/resume/stop
   heartbeat/idle/orphan recovery
-  diagnostics and WorkspaceRuntime binding
+  diagnostics and WorkspaceRuntimeResource binding
 
 apps/api/src/runtime/providers/sandbox/worker-session.service.ts
   per-run config/session/control queue
@@ -364,7 +364,7 @@ local 模式:
 one run ~= one child process ~= one worker ~= one worker execution
 ```
 
-local 不写 `RuntimeResource` / `WorkspaceRuntime` 表——没有持久容器要登记,
+local 不写 `RuntimeResource` / `WorkspaceRuntimeResource` 表——没有持久容器要登记,
 `runtimeResourceId` 即 `pid:startToken`,只记内存,run 结束进程即销毁。
 
 sandbox persistent 模式:
@@ -375,7 +375,7 @@ one runtime resource/container
     -> many run sessions over time
 ```
 
-sandbox 才写 `RuntimeResource` 表(容器存活台账)与 `WorkspaceRuntime` 表
+sandbox 才写 `RuntimeResource` 表(容器存活台账)与 `WorkspaceRuntimeResource` 表
 (workspace↔容器绑定,一对多)。
 
 因此代码和文档里不要写死 "one run = one worker process"。稳定抽象应是:
@@ -492,7 +492,7 @@ SandboxRuntimeProvider.startWorkerExecution()
 职责拆分:
 
 - `SandboxRuntimeResourceService`:scope state、pending sandbox、engine create/resume/stop、
-  heartbeat/idle、WorkspaceRuntime/RuntimeResource diagnostics、access key lifecycle。
+  heartbeat/idle、WorkspaceRuntimeResource/RuntimeResource diagnostics、access key lifecycle。
 - `SandboxWorkerSessionService`:run config、per-run access、control queue、cancel-before-ready、
   per-run cleanup。
 - `SandboxRuntimeProvider`:只保留 public facade、callback bridge 和 orchestration。

@@ -10,7 +10,7 @@ import { isSandboxPlacement } from "../../resources/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
 import { RuntimeInternalAccessService } from "../../internal/access.service";
-import { WorkspaceRuntimeRepository } from "../../resources/workspace-runtime.repository";
+import { WorkspaceRuntimeResourceRepository } from "../../resources/workspace-runtime-resource.repository";
 import { swallow } from "../../../common/swallow";
 import {
   HeartbeatWatchdog,
@@ -76,7 +76,7 @@ export class SandboxRuntimeResourceService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeRepository,
+    private readonly workspaceRuntimeService: WorkspaceRuntimeResourceRepository,
     private readonly runtimeAccess: RuntimeInternalAccessService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {

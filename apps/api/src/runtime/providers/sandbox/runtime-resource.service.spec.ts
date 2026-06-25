@@ -63,7 +63,7 @@ function makeService(engine = makeEngine()) {
   const workspaceRuntimeService = {
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
-      workspaceRuntime: { id: "wr-1" },
+      workspaceRuntimeResource: { id: "wr-1" },
     }),
     markStoppedByResourceKey: vi.fn().mockResolvedValue(undefined),
     isRuntimeResourceBoundToWorkspace: vi.fn().mockResolvedValue(false),

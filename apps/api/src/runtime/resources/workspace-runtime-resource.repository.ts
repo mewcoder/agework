@@ -48,11 +48,11 @@ function ownerWhereByResourceKey(
  * WorkspaceRuntime 表达业务绑定，RuntimeResource 表达容器/沙箱资源生命周期。
  */
 @Injectable()
-export class WorkspaceRuntimeRepository {
+export class WorkspaceRuntimeResourceRepository {
   constructor(private prisma: PrismaService) {}
 
   async findActiveByWorkspace(workspaceId: string) {
-    const binding = await this.prisma.workspaceRuntime.findUnique({
+    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -94,7 +94,7 @@ export class WorkspaceRuntimeRepository {
               ...data,
             },
           });
-      const workspaceRuntime = await tx.workspaceRuntime.upsert({
+      const workspaceRuntimeResource = await tx.workspaceRuntimeResource.upsert({
         where: { workspaceId: placement.workspaceId },
         create: {
           id: generateId(),
@@ -105,7 +105,7 @@ export class WorkspaceRuntimeRepository {
           resourceId: resource.id,
         },
       });
-      return { resource, workspaceRuntime };
+      return { resource, workspaceRuntimeResource };
     });
   }
 
@@ -228,7 +228,7 @@ export class WorkspaceRuntimeRepository {
     workspaceId: string,
     runtimeResourceId: string
   ) {
-    const binding = await this.prisma.workspaceRuntime.findUnique({
+    const binding = await this.prisma.workspaceRuntimeResource.findUnique({
       where: { workspaceId },
       include: { resource: true },
     });
@@ -239,7 +239,7 @@ export class WorkspaceRuntimeRepository {
   }
 
   async deleteWorkspaceBinding(workspaceId: string) {
-    await this.prisma.workspaceRuntime.deleteMany({
+    await this.prisma.workspaceRuntimeResource.deleteMany({
       where: { workspaceId },
     });
   }

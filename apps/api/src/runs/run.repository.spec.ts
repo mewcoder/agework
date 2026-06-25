@@ -195,7 +195,7 @@ describe("RunRepository", () => {
       expiresAt: null,
       createdAt: now,
       updatedAt: now,
-      workspaceRuntimes: [
+      workspaceRuntimeResources: [
         {
           id: "binding-1",
           workspaceId: "workspace-1",

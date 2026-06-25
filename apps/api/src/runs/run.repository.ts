@@ -220,7 +220,7 @@ export class RunRepository {
             expiresAt: true,
             createdAt: true,
             updatedAt: true,
-            workspaceRuntimes: {
+            workspaceRuntimeResources: {
               select: {
                 id: true,
                 workspaceId: true,

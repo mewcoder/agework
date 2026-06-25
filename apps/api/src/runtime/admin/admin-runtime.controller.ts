@@ -52,7 +52,7 @@ export class AdminRuntimeController {
     const [items, total] = await Promise.all([
       this.prisma.runtimeResource.findMany({
         where,
-        include: { workspaceRuntimes: true },
+        include: { workspaceRuntimeResources: true },
         orderBy: { updatedAt: "desc" },
         take,
         skip: (pageNum - 1) * take,
@@ -108,7 +108,7 @@ export class AdminRuntimeController {
     metadata: unknown;
     createdAt: Date | string;
     updatedAt: Date | string;
-    workspaceRuntimes?: Array<{
+    workspaceRuntimeResources?: Array<{
       id: string;
       workspaceId: string;
       createdAt: Date | string;
@@ -117,7 +117,7 @@ export class AdminRuntimeController {
   }) {
     const resourceKey = runtimeResourceKeyForOwner(resource);
     const diagnostics = runtimeResourceDiagnostics(resource.metadata);
-    const workspaceRuntimes = resource.workspaceRuntimes?.map((binding) => ({
+    const workspaceRuntimeResources = resource.workspaceRuntimeResources?.map((binding) => ({
       id: binding.id,
       workspaceId: binding.workspaceId,
       createdAt: this.toIsoString(binding.createdAt),
@@ -134,7 +134,7 @@ export class AdminRuntimeController {
       runtimeResourceId: resource.runtimeResourceId,
       status: resource.status,
       isReusable: resource.status === "running",
-      workspaceCount: workspaceRuntimes?.length ?? 0,
+      workspaceCount: workspaceRuntimeResources?.length ?? 0,
       expiresAt: resource.expiresAt ? this.toIsoString(resource.expiresAt) : null,
       metadata: resource.metadata,
       diagnostics: {
@@ -145,7 +145,7 @@ export class AdminRuntimeController {
       },
       createdAt: this.toIsoString(resource.createdAt),
       updatedAt: this.toIsoString(resource.updatedAt),
-      workspaceRuntimes,
+      workspaceRuntimeResources,
     };
   }
 
