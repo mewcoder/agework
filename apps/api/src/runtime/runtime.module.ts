@@ -2,7 +2,6 @@ import { Module } from "@nestjs/common";
 
 // core
 import { WorkspaceRuntimeRepository } from "./resources/workspace-runtime.repository";
-import { RuntimePlacementPolicy } from "./resources/placement.policy";
 import { RuntimeResourceLifecycleUseCase } from "./resources/lifecycle.use-case";
 import { RuntimeResourceLifecycleListener } from "./resources/lifecycle.listener";
 
@@ -51,7 +50,6 @@ import { ConfigService } from "../config/config.service";
   providers: [
     // core
     WorkspaceRuntimeRepository,
-    RuntimePlacementPolicy,
     RuntimeResourceLifecycleUseCase,
     RuntimeResourceLifecycleListener,
     // providers
@@ -89,7 +87,6 @@ import { ConfigService } from "../config/config.service";
     WorkspaceRuntimeRepository,
     RuntimeService,
     RuntimeProviderRegistry,
-    RuntimePlacementPolicy,
     RuntimeResourceLifecycleUseCase,
     // 供 RunsModule 的 run-internal controller 与 receiver 注入使用
     RuntimeControlQueue,
