@@ -19,11 +19,6 @@ export type GroupableMessagePart =
   | ToolCallPart
   | { type: string; [key: string]: unknown }; // catch-all for source/file/image/data etc.
 
-export type ToolCallBatch = {
-  toolName: string;
-  parts: ToolCallPart[];
-};
-
 export function getProcessTitleTextParts(parts: readonly GroupableMessagePart[]) {
   const processTitleTextParts = new WeakSet<GroupableMessagePart>();
   const pendingTextParts: GroupableMessagePart[] = [];
@@ -49,37 +44,6 @@ export function getProcessTitleTextParts(parts: readonly GroupableMessagePart[])
 
 export function isToolCallPart(p: GroupableMessagePart): p is ToolCallPart {
   return p.type === "tool-call";
-}
-
-export function groupConsecutiveSameTool(
-  parts: readonly GroupableMessagePart[],
-  indices: readonly number[],
-): ToolCallBatch[] {
-  const batches: ToolCallBatch[] = [];
-
-  for (const idx of indices) {
-    const part = parts[idx];
-    if (!part || !isToolCallPart(part)) continue;
-    const last = batches[batches.length - 1];
-    if (last?.toolName === part.toolName) {
-      last.parts.push(part);
-    } else {
-      batches.push({ toolName: part.toolName, parts: [part] });
-    }
-  }
-
-  return batches;
-}
-
-export function aggregateToolStatus(parts: ToolCallPart[]): ToolCallMessagePartStatus | undefined {
-  let result: ToolCallMessagePartStatus | undefined;
-  for (const p of parts) {
-    const s = p.status;
-    if (!s) continue;
-    if (s.type === "running") return s;
-    if (!result || result.type === "complete") result = s;
-  }
-  return result;
 }
 
 /** 是否有可展示内容（参数 / 结果 / 错误文本）。没有内容时工具卡片不允许展开。 */

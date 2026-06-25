@@ -14,10 +14,8 @@ import {
   type GroupableMessagePart,
   type ToolCallPart,
   getProcessTitleTextParts,
-  groupConsecutiveSameTool,
   isToolCallPart,
 } from "@/components/assistant-ui/thread-utils";
-import { ToolBatch } from "./tool-batch";
 import { ToolGroup, ProcessBlock } from "./process-block";
 import { MessageError } from "./message-error";
 import { AssistantActionBar, RunDuration } from "./action-bar";
@@ -129,33 +127,47 @@ export const AssistantMessage = memo(function AssistantMessage() {
                   </ProcessBlock>
                 );
               case "group-reasoning":
+                // 思考默认折叠，前缀点（跟工具统一）。运行中点脉动、完成静态。
+                // my-0/py-0 覆盖 ReasoningRoot 默认 my-2，与工具卡片在 ProcessBlock 内对齐。
                 return (
-                  <ReasoningText className="aui-process-markdown max-h-none overflow-visible ps-0 pt-0 pb-0 font-normal">
-                    {children}
-                  </ReasoningText>
+                  <Reasoning.Root defaultOpen={false} variant="ghost" className="my-0 py-0">
+                    <Reasoning.Trigger active={showAsActive} />
+                    <Reasoning.Content>
+                      <ReasoningText className="aui-process-markdown max-h-none overflow-visible ps-0 pt-0 pb-0 font-normal">
+                        {children}
+                      </ReasoningText>
+                    </Reasoning.Content>
+                  </Reasoning.Root>
                 );
               case "group-tool": {
-                const batches = groupConsecutiveSameTool(messageParts, part.indices);
+                // 平铺渲染：每个工具调用独立一张卡片，各显各自的摘要。
+                // 不做同名聚合——同一条 message 里的多个工具（含并行调用）
+                // 意图各异，合并成 × N 会吞掉各自的描述。与 Claude Code 行为一致。
                 return (
                   <ToolGroup>
-                    {batches.flatMap((batch, i) => {
-                      if (batch.toolName === "AskUserQuestion" || batch.toolName === "AskUserPermission") {
-                        return batch.parts.map((toolPart, j) => {
-                          // running 的 AskUserQuestion 交互卡片由 composer 上方的
-                          // PendingQuestionPanel 接管，正文里只显示折叠简化态。
-                          const status = toolPart.status as { type?: string } | undefined;
-                          if (status?.type === "running") {
-                            return <AskUserQuestionCompact key={`${i}-${j}`} part={toolPart} />;
-                          }
-                          return <AskUserQuestionUI key={`${i}-${j}`} part={toolPart} />;
-                        });
+                    {part.indices.map((idx, i) => {
+                      const toolPart = messageParts[idx];
+                      if (!toolPart || !isToolCallPart(toolPart)) return null;
+
+                      if (
+                        toolPart.toolName === "AskUserQuestion" ||
+                        toolPart.toolName === "AskUserPermission"
+                      ) {
+                        // running 的 AskUserQuestion 交互卡片由 composer 上方的
+                        // PendingQuestionPanel 接管，正文里只显示折叠简化态。
+                        const status = toolPart.status as { type?: string } | undefined;
+                        if (status?.type === "running") {
+                          return <AskUserQuestionCompact key={i} part={toolPart} />;
+                        }
+                        return <AskUserQuestionUI key={i} part={toolPart} />;
                       }
 
-                      return batch.parts.length === 1 ? [
-                        <ToolFallbackFC key={i} {...batch.parts[0]} />
-                      ] : [
-                        <ToolBatch key={i} batch={batch} />
-                      ];
+                      if (toolPart.toolUI) {
+                        const ToolUI = toolPart.toolUI;
+                        return <ToolUI key={i} {...toolPart} />;
+                      }
+
+                      return <ToolFallbackFC key={i} {...toolPart} />;
                     })}
                   </ToolGroup>
                 );

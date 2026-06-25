@@ -47,12 +47,12 @@ export function ProcessBlock({
     >
       <CollapsibleTrigger
         title={title}
-        className="group/trigger flex w-full items-center gap-2 py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="group/trigger flex w-full items-center gap-2 py-1 text-[15px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className="shrink-0">
+        <span className="shrink-0 font-medium">
           {title}
         </span>
-        <ChevronDownIcon className="size-3.5 shrink-0 transition-transform duration-200 group-data-closed/trigger:-rotate-90 group-data-open/trigger:rotate-0" />
+        <ChevronDownIcon className="size-3.5 shrink-0 transition-transform duration-200 -rotate-90 group-data-[panel-open]/trigger:rotate-0" />
         <div className="h-px min-w-8 flex-1 bg-border/60" />
       </CollapsibleTrigger>
       <CollapsibleContent

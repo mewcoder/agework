@@ -1,13 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import {
-  AlertCircleIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  LoaderIcon,
-  XCircleIcon,
-} from "lucide-react";
+import { ChevronDownIcon } from "lucide-react";
 import {
   type ToolCallMessagePartStatus,
   type ToolCallMessagePartComponent,
@@ -20,6 +14,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useCollapsibleOpen } from "@/hooks/use-collapsible-open";
 import { hasToolContent } from "@/components/assistant-ui/thread-utils";
+import { getToolSummary } from "@/components/assistant-ui/tool-summary";
+import { StatusDot, type DotStatus } from "@/components/assistant-ui/status-dot";
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -71,13 +67,6 @@ function ToolFallbackRoot({
 
 type ToolStatus = ToolCallMessagePartStatus["type"];
 
-const statusIconMap: Record<ToolStatus, React.ElementType> = {
-  running: LoaderIcon,
-  complete: CheckIcon,
-  incomplete: XCircleIcon,
-  "requires-action": AlertCircleIcon,
-};
-
 const statusLabelMap: Record<ToolStatus, string> = {
   running: "运行中",
   complete: "已完成",
@@ -85,29 +74,25 @@ const statusLabelMap: Record<ToolStatus, string> = {
   "requires-action": "等待确认",
 };
 
-const statusToneMap: Record<ToolStatus, string> = {
-  running: "text-primary",
-  complete: "text-emerald-600 dark:text-emerald-400",
-  incomplete: "text-destructive",
-  "requires-action": "text-amber-600 dark:text-amber-400",
-};
-
 function ToolFallbackTrigger({
   toolName,
+  summary,
   status,
   className,
   disabled,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
+  /** 收起态标题的一行摘要（如命令、文件名、搜索词）。无则只显 toolName。 */
+  summary?: string;
   status?: ToolCallMessagePartStatus;
 }) {
   const statusType = status?.type ?? "complete";
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
 
-  const Icon = statusIconMap[statusType];
   const statusLabel = isCancelled ? "已取消" : statusLabelMap[statusType];
+  const dotStatus: DotStatus = isCancelled ? "cancelled" : statusType;
 
   return (
     <CollapsibleTrigger
@@ -115,50 +100,39 @@ function ToolFallbackTrigger({
       aria-label={`${toolName}，${statusLabel}`}
       disabled={disabled}
       className={cn(
-        "aui-tool-fallback-trigger group/trigger flex min-h-7 w-full items-center gap-1.5 rounded-md py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted/25 hover:text-foreground",
-        "disabled:cursor-default disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        "aui-tool-fallback-trigger group/trigger flex min-h-7 w-full items-center gap-1.5 rounded-md py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground",
+        "disabled:cursor-default disabled:hover:text-muted-foreground",
         className,
       )}
       {...props}
     >
-      <span
-        className={cn(
-          "flex shrink-0 items-center justify-center",
-          isCancelled
-            ? "text-muted-foreground"
-            : statusToneMap[statusType],
-        )}
-      >
-        <Icon
-          data-slot="tool-fallback-trigger-icon"
-          className={cn(
-            "aui-tool-fallback-trigger-icon size-3",
-            statusType === "running" && "animate-spin",
-          )}
-        />
-      </span>
+      <StatusDot status={dotStatus} />
       <span
         data-slot="tool-fallback-trigger-label"
         className={cn(
-          "aui-tool-fallback-trigger-label-wrapper flex min-w-0 grow items-center gap-1.5 text-start",
+          "aui-tool-fallback-trigger-label-wrapper flex min-w-0 items-center gap-1.5 text-start",
           isCancelled && "text-muted-foreground line-through",
         )}
       >
-        <span className="truncate font-medium text-foreground/80">
+        <span className="shrink-0 font-medium text-foreground/70 transition-colors group-hover/trigger:text-foreground">
           {toolName}
         </span>
+        {!disabled && (
+          <ChevronDownIcon
+            data-slot="tool-fallback-trigger-chevron"
+            className={cn(
+              "aui-tool-fallback-trigger-chevron size-3 shrink-0 text-muted-foreground",
+              "transition-transform duration-(--animation-duration) ease-out",
+              "-rotate-90 group-data-[panel-open]/trigger:rotate-0",
+            )}
+          />
+        )}
+        {summary && (
+          <span className="max-w-[40ch] truncate text-muted-foreground">
+            {summary}
+          </span>
+        )}
       </span>
-      {!disabled && (
-        <ChevronDownIcon
-          data-slot="tool-fallback-trigger-chevron"
-          className={cn(
-            "aui-tool-fallback-trigger-chevron size-3.5 shrink-0",
-            "transition-transform duration-(--animation-duration) ease-out",
-            "group-data-closed/trigger:-rotate-90",
-            "group-data-open/trigger:rotate-0",
-          )}
-        />
-      )}
     </CollapsibleTrigger>
   );
 }
@@ -184,7 +158,7 @@ function ToolFallbackContent({
       )}
       {...props}
     >
-      <div className="flex flex-col gap-2 rounded-md bg-muted/40 px-2.5 py-2 text-muted-foreground">
+      <div className="flex flex-col gap-2 rounded-md bg-muted-foreground/[0.05] px-2.5 py-2 text-muted-foreground">
         {children}
       </div>
     </CollapsibleContent>
@@ -288,6 +262,7 @@ function ToolFallbackError({
 
 const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   toolName,
+  args,
   argsText,
   result,
   status,
@@ -295,6 +270,10 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const locked = !hasToolContent({ argsText, result, status });
+  const summary = getToolSummary(
+    toolName,
+    args as Record<string, unknown> | undefined,
+  );
 
   return (
     <ToolFallbackRoot
@@ -305,7 +284,12 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
         isCancelled && "opacity-70",
       )}
     >
-      <ToolFallbackTrigger toolName={toolName} status={status} disabled={locked} />
+      <ToolFallbackTrigger
+        toolName={toolName}
+        summary={summary}
+        status={status}
+        disabled={locked}
+      />
       <ToolFallbackContent>
         <ToolFallbackError status={status} />
         <ToolFallbackArgs
