@@ -1,33 +1,33 @@
 import { Module } from "@nestjs/common";
 
 // core
-import { WorkspaceRuntimeRepository } from "./core/runtime-resources/workspace-runtime.repository";
-import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
-import { RuntimeResourceLifecycleUseCase } from "./core/runtime-resources/runtime-resource-lifecycle.use-case";
-import { RuntimeResourceLifecycleListener } from "./core/runtime-resources/runtime-resource-lifecycle.listener";
+import { WorkspaceRuntimeRepository } from "./resources/workspace-runtime.repository";
+import { RuntimePlacementPolicy } from "./resources/placement.policy";
+import { RuntimeResourceLifecycleUseCase } from "./resources/lifecycle.use-case";
+import { RuntimeResourceLifecycleListener } from "./resources/lifecycle.listener";
 
 // providers
-import { RuntimeConfigStore } from "./internal/runtime-config-store";
-import { LocalRuntimeProvider } from "./providers/local-runtime-provider";
-import { DockerSandboxEngine } from "./providers/sandbox-engine/docker-sandbox-engine";
-import { OpenSandboxEngine } from "./providers/sandbox-engine/opensandbox-sandbox-engine";
-import { SandboxRuntimeProvider } from "./providers/sandbox-runtime-provider";
-import { SandboxRuntimeResourceService } from "./providers/sandbox-runtime-resource.service";
-import { SandboxWorkerSessionService } from "./providers/sandbox-worker-session.service";
-import { OpenSandboxClient } from "./providers/opensandbox-client";
-import { OPENSANDBOX_CLIENT } from "./providers/opensandbox-client.token";
-import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
-import { RUNTIME_PROVIDERS } from "./providers/runtime-provider.token";
-import { SANDBOX_ENGINES } from "./providers/sandbox-engine";
-import type { RuntimeProvider } from "./providers/runtime-provider-contracts";
-import type { SandboxEngine } from "./providers/sandbox-engine";
+import { RuntimeConfigStore } from "./internal/config-store";
+import { LocalRuntimeProvider } from "./providers/local-provider";
+import { DockerSandboxEngine } from "./providers/sandbox/engine/docker-engine";
+import { OpenSandboxEngine } from "./providers/sandbox/engine/opensandbox-engine";
+import { SandboxRuntimeProvider } from "./providers/sandbox/runtime-provider";
+import { SandboxRuntimeResourceService } from "./providers/sandbox/runtime-resource.service";
+import { SandboxWorkerSessionService } from "./providers/sandbox/worker-session.service";
+import { OpenSandboxClient } from "./providers/sandbox/opensandbox-client";
+import { OPENSANDBOX_CLIENT } from "./providers/sandbox/opensandbox-client.token";
+import { RuntimeProviderRegistry } from "./providers/provider-registry";
+import { RUNTIME_PROVIDERS } from "./providers/provider.token";
+import { SANDBOX_ENGINES } from "./providers/sandbox/engine";
+import type { RuntimeProvider } from "./providers/provider-contracts";
+import type { SandboxEngine } from "./providers/sandbox/engine";
 
 // internal
-import { RuntimeWorkspaceController } from "./internal/runtime-workspace.controller";
-import { RuntimeRuntimeController } from "./internal/runtime-runtime.controller";
-import { RuntimeInternalAccessService } from "./internal/runtime-internal-access.service";
-import { RuntimeInternalAuthGuard } from "./internal/runtime-internal-auth.guard";
-import { RuntimeControlQueue } from "./internal/runtime-control-queue";
+import { RuntimeWorkspaceController } from "./internal/workspace.controller";
+import { RuntimeRuntimeController } from "./internal/runtime.controller";
+import { RuntimeInternalAccessService } from "./internal/access.service";
+import { RuntimeInternalAuthGuard } from "./internal/auth.guard";
+import { RuntimeControlQueue } from "./internal/control-queue";
 
 import { RuntimeService } from "./runtime.service";
 

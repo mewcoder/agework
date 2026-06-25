@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import type { ControlPayload } from "@agework/shared/protocol";
-import { RuntimeProviderRegistry } from "../../runtime/providers/runtime-provider-registry";
+import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
 import type {
   RunWorkerExecutionStartInput,
   WorkerExecutionHandle,
@@ -12,7 +12,7 @@ import type {
  *
  * worker 的物理启动（local fork / sandbox 容器会话）仍在 runtime provider 内实现，
  * 这里只按 runtimeType 解析 provider 并驱动其 WorkerExecutionProvider 契约——
- * 即「Run 驱动执行」，区别于「Runtime 准备环境」(RuntimeService.provision)。
+ * 即「Run 驱动执行」，区别于「Runtime 准备环境」(RuntimeService.resolveRuntimeResource)。
  */
 @Injectable()
 export class RunWorkerExecutionService {

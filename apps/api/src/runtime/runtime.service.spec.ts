@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
-import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
-import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
+import { RuntimePlacementPolicy } from "./resources/placement.policy";
+import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import type {
   IsolationScope,
   RuntimePlacement,

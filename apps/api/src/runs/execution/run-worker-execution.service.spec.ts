@@ -6,7 +6,7 @@ import type {
   ResolvedRuntimeResource,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
-import { RuntimeProviderRegistry } from "../../runtime/providers/runtime-provider-registry";
+import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
 import { RunWorkerExecutionService } from "./run-worker-execution.service";
 
 function makeProvider() {

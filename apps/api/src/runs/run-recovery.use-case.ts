@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "./run.repository";
-import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
+import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { ConversationService } from "../conversations/conversation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { swallow } from "../common/swallow";
@@ -8,7 +8,7 @@ import {
   runtimeResourceKeyForOwner,
   runtimeResourceMetadataJson,
   stoppedResourceMetadata,
-} from "../runtime/core/runtime-resources/runtime-resource-diagnostics";
+} from "../runtime/resources/diagnostics";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，

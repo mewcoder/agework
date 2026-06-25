@@ -1,8 +1,8 @@
 import { Injectable } from "@nestjs/common";
 import type { ResolvedRuntimeResource } from "@agework/shared/protocol";
-import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
-import { resolvedRuntimeResourceFromPlacement } from "./core/runtime-resources/runtime-resource-handle";
-import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
+import { RuntimePlacementPolicy } from "./resources/placement.policy";
+import { resolvedRuntimeResourceFromPlacement } from "./resources/resolved-runtime-resource";
+import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
 type ResolvePlacementInput = Parameters<
   RuntimePlacementPolicy["resolveForRun"]

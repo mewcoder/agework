@@ -20,8 +20,8 @@ import { RunInternalController } from "./run-internal.controller";
 
 // deps（向下依赖 runtime，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
-import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-registry";
-import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
+import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
+import { RuntimeControlQueue } from "../runtime/internal/control-queue";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
 

@@ -17,12 +17,12 @@ import type {
 } from "@agework/shared/protocol";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { RuntimeInternalAuthGuard } from "../runtime/internal/runtime-internal-auth.guard";
+import { RuntimeInternalAuthGuard } from "../runtime/internal/auth.guard";
 import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
 import { RunActiveStore } from "./execution/run-active.store";
-import { RuntimeConfigStore } from "../runtime/internal/runtime-config-store";
+import { RuntimeConfigStore } from "../runtime/internal/config-store";
 import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
-import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
+import { RuntimeControlQueue } from "../runtime/internal/control-queue";
 import { safeLogJson, summarizeEnvelopePayload } from "../common/logging";
 
 const TERMINAL_RUN_STATUSES: RunStatus[] = ["finished", "error", "cancelled"];
