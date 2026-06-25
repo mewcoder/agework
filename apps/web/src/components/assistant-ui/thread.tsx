@@ -695,7 +695,7 @@ export function Thread() {
           <PendingQuestionPanel />
           {isEmpty ? (
             <div className="relative flex w-full flex-col items-center">
-              <div className="absolute bottom-full mb-2 w-full">
+              <div className="absolute bottom-full mb-6 w-full">
                 <ThreadWelcome />
               </div>
               <Composer onTextareaResize={jumpToBottom} />

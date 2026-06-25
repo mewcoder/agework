@@ -18,7 +18,7 @@ import {
   ComposerAttachments,
 } from "@/components/assistant-ui/attachment";
 import { AgentPermissionMenu } from "@/components/assistant-ui/agent-permission-menu";
-import { AgentSettingsMenu } from "@/components/assistant-ui/agent-settings-menu";
+import { AgentSettingsMenu, AgentSwitcher } from "@/components/assistant-ui/agent-settings-menu";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { WorkspaceSelector } from "@/components/workspace-selector";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -466,6 +466,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
       onSubmit={handleSubmit}
       className="aui-composer-root relative flex w-full flex-col"
     >
+      <AgentSwitcher />
       <div
         className={cn(
           "aui-composer-frame rounded-(--composer-radius)",

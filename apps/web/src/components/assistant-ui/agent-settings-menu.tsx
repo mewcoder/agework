@@ -23,6 +23,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import { AGENT_LABELS } from "@agework/shared";
 
@@ -95,81 +96,88 @@ function isSystemModelProvider(
 function AgentSelector() {
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
   const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
-  const selectAgentType = useSelectionStore((s) => s.selectAgentType);
   const { data: agentOptions } = useAgentOptions();
-  const canSwitchAgent = selectedConversationId === undefined;
+  // 新对话时 agent 切换交给 composer 上方的 AgentSwitcher；这里只在已有对话
+  // 显示当前 agent 的小图标提示（agent 随首条消息落库后不可更改）。
+  if (selectedConversationId === undefined) return null;
+
   const agents = agentOptions?.agents ?? [];
   const selectedAgentLabel =
     agents.find((agent) => agent.id === selectedAgentType)?.label ??
     AGENT_LABELS[selectedAgentType];
 
-  if (!canSwitchAgent) {
-    return (
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <button
-              type="button"
-              className={cn(agentTriggerClassName, "cursor-default hover:bg-transparent")}
-              aria-label={`当前 Agent：${selectedAgentLabel}`}
-              aria-disabled
-              title={`当前 Agent：${selectedAgentLabel}`}
-            >
-              <AgentIcon agent={selectedAgentType} size={15} />
-            </button>
-          }
-        />
-        <TooltipContent side="top" align="end" sideOffset={6}>
-          {selectedAgentLabel}
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
-
   return (
-    <DropdownMenu modal={false}>
-      <DropdownMenuTrigger
+    <Tooltip>
+      <TooltipTrigger
         render={
           <button
             type="button"
-            className={agentTriggerClassName}
-            aria-label="选择 Agent"
-            title={`选择 Agent：${selectedAgentLabel}`}
-            >
-              <AgentIcon agent={selectedAgentType} size={15} />
-              <ChevronDownIcon className={menuChevronClassName} />
-            </button>
-          }
-        />
-      <DropdownMenuContent
-        side="top"
-        align="end"
-        sideOffset={8}
-        className="w-44 rounded-xl p-2 text-xs"
+            className={cn(agentTriggerClassName, "cursor-default hover:bg-transparent")}
+            aria-label={`当前 Agent：${selectedAgentLabel}`}
+            aria-disabled
+            title={`当前 Agent：${selectedAgentLabel}`}
+          >
+            <AgentIcon agent={selectedAgentType} size={15} />
+          </button>
+        }
+      />
+      <TooltipContent side="top" align="end" sideOffset={6}>
+        {selectedAgentLabel}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// 聊天框上方的 agent 切换按钮组：仅新对话显示，已有对话返回 null。
+export function AgentSwitcher() {
+  const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
+  const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
+  const selectAgentType = useSelectionStore((s) => s.selectAgentType);
+  const { data: agentOptions } = useAgentOptions();
+  if (selectedConversationId !== undefined) return null;
+
+  const agents = agentOptions?.agents ?? [];
+  if (agents.length === 0) return null;
+
+  const selectedIndex = Math.max(
+    0,
+    agents.findIndex((agent) => agent.id === selectedAgentType),
+  );
+
+  return (
+    <div className="mb-2 flex justify-center">
+      <ToggleGroup
+        variant="default"
+        size="sm"
+        value={selectedAgentType ? [selectedAgentType] : []}
+        onValueChange={(value) => {
+          const next = value[0];
+          if (next) selectAgentType(next as AgentType);
+        }}
+        aria-label="选择 Agent"
+        className="relative !grid !gap-0 !rounded-full bg-muted"
+        style={{ gridTemplateColumns: `repeat(${agents.length}, 1fr)` }}
       >
-        <DropdownMenuRadioGroup
-          value={selectedAgentType}
-          onValueChange={(value) => selectAgentType(value as AgentType)}
-        >
-          <DropdownMenuLabel className={menuSectionLabelClassName}>
-            Agent
-          </DropdownMenuLabel>
-          {agents.map((agent) => (
-            <DropdownMenuRadioItem
-              key={agent.id}
-              value={agent.id}
-              className={selectedMenuRadioClassName}
-            >
-              <span className="flex items-center gap-1.5">
-                <AgentIcon agent={agent.id} size={14} />
-                {agent.label}
-              </span>
-              <SelectedMenuCheck />
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-background ring-1 ring-border transition-transform duration-200 ease-out"
+          style={{
+            width: `${100 / agents.length}%`,
+            transform: `translateX(${selectedIndex * 100}%)`,
+          }}
+        />
+        {agents.map((agent) => (
+          <ToggleGroupItem
+            key={agent.id}
+            value={agent.id}
+            className="relative z-10 cursor-pointer gap-1.5 !rounded-full !border-0 !bg-transparent px-3 !text-muted-foreground transition-colors hover:!bg-transparent hover:!text-foreground data-pressed:!text-foreground data-pressed:!font-medium aria-pressed:!text-foreground aria-pressed:!font-medium"
+          >
+            <AgentIcon agent={agent.id} size={14} />
+            <span>{agent.label ?? AGENT_LABELS[agent.id]}</span>
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+    </div>
   );
 }
 
