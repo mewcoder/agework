@@ -3,14 +3,21 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import type {
-  RuntimeProvider,
-  RuntimeHandle,
   RunConfig,
   RuntimePlacement,
+  RuntimeResourceHandle,
+  WorkerExecutionHandle,
   ControlPayload,
   Envelope,
-  RunEventReceiver,
 } from "@agework/shared/protocol";
+import { runtimeResourceHandleFromPlacement } from "../core/runtime-resources/runtime-resource-handle";
+import type { RunEventReceiver } from "../run-event-receiver";
+import type {
+  ProviderWorkerExecutionStartInput,
+  RuntimeProvider,
+  RuntimeResourceProvider,
+  WorkerExecutionProvider,
+} from "./runtime-provider-contracts";
 import {
   HeartbeatWatchdog,
   nextControlEnvelope,
@@ -20,7 +27,7 @@ import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
 type LocalRunState = {
-  handle: RuntimeHandle;
+  handle: WorkerExecutionHandle;
   child: ChildProcess;
 };
 
@@ -35,7 +42,9 @@ const WORKER_MAIN = require.resolve("@agework/worker");
 const TSX_CLI = require.resolve("tsx/cli");
 
 @Injectable()
-export class LocalRuntimeProvider implements RuntimeProvider {
+export class LocalRuntimeProvider
+  implements RuntimeProvider, RuntimeResourceProvider, WorkerExecutionProvider
+{
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly states = new Map<string, LocalRunState>();
@@ -47,7 +56,19 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     this.receiver = receiver;
   }
 
-  start(runConfig: RunConfig, _placement: RuntimePlacement): RuntimeHandle {
+  provision(placement: RuntimePlacement): RuntimeResourceHandle {
+    return runtimeResourceHandleFromPlacement(placement);
+  }
+
+  startWorkerExecution(
+    input: ProviderWorkerExecutionStartInput
+  ): WorkerExecutionHandle {
+    const { runConfig, runtimeResource } = input;
+    if (runtimeResource.runtimeType !== this.type) {
+      throw new Error(
+        `LocalRuntimeProvider cannot start worker for runtime type: ${runtimeResource.runtimeType}`
+      );
+    }
     const startToken = randomUUID();
     const { runId } = runConfig;
 
@@ -72,9 +93,9 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       })}`
     );
 
-    const handle: RuntimeHandle = {
+    const handle: WorkerExecutionHandle = {
       runId,
-      runtimeType: "local",
+      runtimeType: runtimeResource.runtimeType,
       runtimeResourceId: `${child.pid}:${startToken}`,
       conversationId: runConfig.conversationId,
     };
@@ -145,7 +166,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     return handle;
   }
 
-  sendControl(handle: RuntimeHandle, control: ControlPayload): void {
+  sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void {
     const state = this.states.get(handle.runId);
     if (!state) {
       this.logger.warn(
@@ -182,11 +203,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     state.child.send(envelope);
   }
 
-  cancel(handle: RuntimeHandle): void {
+  cancel(handle: WorkerExecutionHandle): void {
     this.sendControl(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
   }
 
-  getHandle(runId: string): RuntimeHandle | undefined {
+  getHandle(runId: string): WorkerExecutionHandle | undefined {
     return this.states.get(runId)?.handle;
   }
 

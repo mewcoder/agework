@@ -12,6 +12,7 @@ import { RunRecoveryUseCase } from "./run-recovery.use-case";
 import { RunService } from "./run.service";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { RunEventReceiverImpl } from "./execution/run-event-receiver";
+import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -44,6 +45,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
     RunExecutionStatusHandler,
     RunService,
     RunConfigAssembler,
+    RunWorkerExecutionService,
     RunEventReceiverImpl,
   ],
   exports: [RunService, RunRepository, RunConfigAssembler],

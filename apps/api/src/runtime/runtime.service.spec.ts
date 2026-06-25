@@ -2,29 +2,32 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
 import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
 import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
-import type { RuntimeHandle, RuntimePlacement } from "@agework/shared/protocol";
+import type {
+  IsolationScope,
+  RuntimePlacement,
+} from "@agework/shared/protocol";
 
 function makeProvider() {
   return {
     type: "local",
-    start: vi.fn(),
-    sendControl: vi.fn(),
-    cancel: vi.fn(),
-    getHandle: vi.fn(),
-    heartbeat: vi.fn(),
-    cleanup: vi.fn(),
-    recoverOrphan: vi.fn(),
+    startWorkerExecution: vi.fn(),
+    heartbeatRuntimeResource: vi.fn(),
+    shutdownRuntimeResource: vi.fn(),
   };
 }
 
-const placement = (runtimeType: string): RuntimePlacement =>
-  ({ runtimeType, runtimePath: "/ws" }) as RuntimePlacement;
-
-const handle = (runId: string, runtimeType: string): RuntimeHandle => ({
-  runId,
+const placement = (
+  runtimeType: string,
+  overrides: Partial<RuntimePlacement> = {}
+): RuntimePlacement => ({
   runtimeType,
-  runtimeResourceId: "rr-1",
-  conversationId: "c-1",
+  isolationScope: "workspace" as IsolationScope,
+  userId: "user-1",
+  workspaceId: "ws-1",
+  hostPath: "/ws",
+  runtimePath: "/ws",
+  mountTarget: "/ws",
+  ...overrides,
 });
 
 describe("RuntimeService", () => {
@@ -38,7 +41,10 @@ describe("RuntimeService", () => {
     placementPolicy = {
       resolveForRun: vi.fn().mockReturnValue(placement("local")),
     };
-    providerRegistry = { resolve: vi.fn().mockReturnValue(provider) };
+    providerRegistry = {
+      resolve: vi.fn().mockReturnValue(provider),
+      all: vi.fn().mockReturnValue([provider]),
+    };
     service = new RuntimeService(
       placementPolicy as RuntimePlacementPolicy,
       providerRegistry as RuntimeProviderRegistry
@@ -56,54 +62,104 @@ describe("RuntimeService", () => {
     expect(placementPolicy.resolveForRun).toHaveBeenCalledWith(input);
   });
 
-  it("startWorker resolves the provider by placement.runtimeType and calls start", () => {
-    provider.start.mockReturnValue(handle("run-1", "local"));
-    const cfg = { runId: "run-1" } as never;
-    const p = placement("local");
-    const onReady = vi.fn();
+  it("provision returns a runtime resource handle without starting a worker", async () => {
+    const p = placement("sandbox", {
+      isolationScope: "workspace",
+      workspaceId: "ws-1",
+    });
 
-    const result = service.startWorker(cfg, p, onReady);
+    const result = await service.provision(p);
+
+    expect(result).toEqual({
+      runtimeType: "sandbox",
+      resourceKey: "ws-1",
+      workspaceId: "ws-1",
+      isolationScope: "workspace",
+      placement: p,
+    });
+    expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
+    expect(provider.startWorkerExecution).not.toHaveBeenCalled();
+  });
+
+  it("provision delegates to provider-side provision when available", async () => {
+    const p = placement("local");
+    const expected = {
+      runtimeType: "local",
+      resourceKey: "ws-1",
+      workspaceId: "ws-1",
+      isolationScope: "workspace",
+      placement: p,
+    };
+    const provision = vi.fn().mockReturnValue(expected);
+    Object.assign(provider, {
+      provision,
+    });
+
+    await expect(service.provision(p)).resolves.toBe(expected);
 
     expect(providerRegistry.resolve).toHaveBeenCalledWith("local");
-    expect(provider.start).toHaveBeenCalledWith(cfg, p, onReady);
-    expect(result.runId).toBe("run-1");
+    expect(provision).toHaveBeenCalledWith(p);
+    expect(provider.startWorkerExecution).not.toHaveBeenCalled();
   });
 
-  it("sendControl / cancel dispatch by handle.runtimeType", () => {
-    const h = handle("run-1", "local");
-    const control = { type: "cancel" } as never;
+  it("provision uses userId as resourceKey for user isolation", async () => {
+    const p = placement("sandbox", {
+      isolationScope: "user",
+      userId: "user-1",
+      workspaceId: "ws-2",
+    });
 
-    service.sendControl(h, control);
-    expect(provider.sendControl).toHaveBeenCalledWith(h, control);
-
-    service.cancel(h);
-    expect(provider.cancel).toHaveBeenCalledWith(h);
+    await expect(service.provision(p)).resolves.toMatchObject({
+      resourceKey: "user-1",
+      workspaceId: "ws-2",
+      isolationScope: "user",
+    });
   });
 
-  it("heartbeat / cleanup dispatch by the runId registered at startWorker", () => {
-    provider.start.mockReturnValue(handle("run-1", "local"));
-    service.startWorker({ runId: "run-1" } as never, placement("local"));
+  it("provision fails fast for an unknown isolation scope", async () => {
+    const p = placement("sandbox", {
+      isolationScope: "unknown" as IsolationScope,
+    });
 
-    service.heartbeat("run-1");
-    expect(provider.heartbeat).toHaveBeenCalledWith("run-1");
-
-    service.cleanup("run-1");
-    expect(provider.cleanup).toHaveBeenCalledWith("run-1");
+    await expect(service.provision(p)).rejects.toThrow(
+      "Unknown runtime isolation scope: unknown"
+    );
   });
 
-  it("heartbeat / cleanup are no-ops for an unknown runId", () => {
-    service.heartbeat("ghost");
-    service.cleanup("ghost");
-    expect(provider.heartbeat).not.toHaveBeenCalled();
-    expect(provider.cleanup).not.toHaveBeenCalled();
+  it("provision fails fast when required placement fields are missing", async () => {
+    await expect(
+      service.provision(placement("", { runtimeType: "" }))
+    ).rejects.toThrow("Runtime placement runtimeType is required");
+
+    await expect(
+      service.provision(
+        placement("sandbox", {
+          isolationScope: "user",
+          userId: "",
+        })
+      )
+    ).rejects.toThrow("Runtime placement userId is required");
+
+    await expect(
+      service.provision(
+        placement("sandbox", {
+          workspaceId: "",
+        })
+      )
+    ).rejects.toThrow("Runtime placement workspaceId is required");
   });
 
-  it("cleanup unregisters the handle so later heartbeat no longer dispatches", () => {
-    provider.start.mockReturnValue(handle("run-1", "local"));
-    service.startWorker({ runId: "run-1" } as never, placement("local"));
-    service.cleanup("run-1");
+  it("heartbeatRuntimeResource broadcasts to all providers by resource key", () => {
+    service.heartbeatRuntimeResource("ws-1");
 
-    service.heartbeat("run-1");
-    expect(provider.heartbeat).not.toHaveBeenCalled();
+    expect(providerRegistry.all).toHaveBeenCalled();
+    expect(provider.heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("shutdownRuntimeResource dispatches to the resolved provider by type", () => {
+    service.shutdownRuntimeResource("sandbox", "ws-1");
+
+    expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
+    expect(provider.shutdownRuntimeResource).toHaveBeenCalledWith("ws-1");
   });
 });

@@ -4,7 +4,7 @@ import { RunInternalController } from "./run-internal.controller";
 import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeConfigStore } from "../runtime/internal/runtime-config-store";
-import { RuntimeService } from "../runtime/runtime.service";
+import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
 import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
 
 const activeHandle = {
@@ -18,7 +18,7 @@ const activeHandle = {
 
 function makeController(opts: {
   handle: unknown;
-  runtimeService: Partial<RuntimeService>;
+  runWorkerExecution: Partial<RunWorkerExecutionService>;
 }) {
   const runEventProcessor: Partial<RunEnvelopeProcessor> = {
     publish: vi.fn().mockResolvedValue(undefined),
@@ -30,7 +30,7 @@ function makeController(opts: {
     runEventProcessor as RunEnvelopeProcessor,
     {} as RuntimeConfigStore,
     runRegistry as RunActiveStore,
-    opts.runtimeService as RuntimeService,
+    opts.runWorkerExecution as RunWorkerExecutionService,
     {} as RuntimeControlQueue
   );
 }
@@ -43,11 +43,13 @@ describe("RunInternalController", () => {
   });
 
   describe("postEvent()", () => {
-    it("cleans up via RuntimeService on terminal status", async () => {
-      const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
+    it("cleans up via RunWorkerExecutionService on terminal status", async () => {
+      const runWorkerExecution: Partial<RunWorkerExecutionService> = {
+        cleanup: vi.fn(),
+      };
       const controller = makeController({
         handle: activeHandle,
-        runtimeService,
+        runWorkerExecution,
       });
 
       await controller.postEvent("run-1", {
@@ -58,14 +60,16 @@ describe("RunInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeService.cleanup).toHaveBeenCalledWith("run-1");
+      expect(runWorkerExecution.cleanup).toHaveBeenCalledWith("run-1");
     });
 
     it("does not call cleanup for non-terminal run.status", async () => {
-      const runtimeService: Partial<RuntimeService> = { cleanup: vi.fn() };
+      const runWorkerExecution: Partial<RunWorkerExecutionService> = {
+        cleanup: vi.fn(),
+      };
       const controller = makeController({
         handle: activeHandle,
-        runtimeService,
+        runWorkerExecution,
       });
 
       await controller.postEvent("run-1", {
@@ -76,14 +80,16 @@ describe("RunInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeService.cleanup).not.toHaveBeenCalled();
+      expect(runWorkerExecution.cleanup).not.toHaveBeenCalled();
     });
 
-    it("feeds the heartbeat watchdog via RuntimeService on heartbeat events", async () => {
-      const runtimeService: Partial<RuntimeService> = { heartbeat: vi.fn() };
+    it("feeds the heartbeat watchdog via RunWorkerExecutionService on heartbeat events", async () => {
+      const runWorkerExecution: Partial<RunWorkerExecutionService> = {
+        heartbeat: vi.fn(),
+      };
       const controller = makeController({
         handle: activeHandle,
-        runtimeService,
+        runWorkerExecution,
       });
 
       await controller.postEvent("run-1", {
@@ -94,12 +100,17 @@ describe("RunInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeService.heartbeat).toHaveBeenCalledWith("run-1");
+      expect(runWorkerExecution.heartbeat).toHaveBeenCalledWith("run-1");
     });
 
     it("does not feed heartbeat when no run handle is registered", async () => {
-      const runtimeService: Partial<RuntimeService> = { heartbeat: vi.fn() };
-      const controller = makeController({ handle: undefined, runtimeService });
+      const runWorkerExecution: Partial<RunWorkerExecutionService> = {
+        heartbeat: vi.fn(),
+      };
+      const controller = makeController({
+        handle: undefined,
+        runWorkerExecution,
+      });
 
       await controller.postEvent("run-1", {
         runId: "run-1",
@@ -109,7 +120,7 @@ describe("RunInternalController", () => {
         ts: new Date().toISOString(),
       } as never);
 
-      expect(runtimeService.heartbeat).not.toHaveBeenCalled();
+      expect(runWorkerExecution.heartbeat).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,6 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../../prisma/prisma.service";
 import { RuntimeProviderRegistry } from "../../providers/runtime-provider-registry";
+import {
+  runtimeResourceKeyForOwner,
+  runtimeResourceMetadataJson,
+  stoppedResourceMetadata,
+} from "./runtime-resource-diagnostics";
 
 /**
  * Runtime 资源生命周期清理：
@@ -51,15 +56,28 @@ export class RuntimeResourceLifecycleUseCase {
     ownerUserId: string;
     ownerWorkspaceId: string | null;
   }): Promise<void> {
-    const resourceKey =
-      resource.isolationScope === "user"
-        ? resource.ownerUserId
-        : resource.ownerWorkspaceId;
-    if (!resourceKey) return;
     try {
-      this.runtimeProviderRegistry
-        .resolve(resource.runtimeType)
-        .shutdownRuntimeResource?.(resourceKey);
+      const resourceKey = runtimeResourceKeyForOwner(resource);
+      const provider = this.runtimeProviderRegistry.resolve(
+        resource.runtimeType
+      );
+      await Promise.resolve(
+        provider.shutdownRuntimeResource?.(resourceKey)
+      );
+      await this.prisma.runtimeResource.update({
+        where: { id: resource.id },
+        data: {
+          status: "stopped",
+          metadata: runtimeResourceMetadataJson(
+            stoppedResourceMetadata({
+              runtimeType: resource.runtimeType,
+              isolationScope: resource.isolationScope,
+              resourceKey,
+              reason: "owner_released",
+            })
+          ),
+        },
+      });
     } catch (err) {
       this.logger.warn(
         `Failed to shut down runtime resource ${resource.id}: ${err instanceof Error ? err.message : String(err)}`

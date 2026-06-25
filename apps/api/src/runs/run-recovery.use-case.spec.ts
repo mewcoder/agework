@@ -9,8 +9,12 @@ function makePrisma() {
     runtimeResource: {
       findUnique: vi.fn().mockResolvedValue(null),
       findMany: vi.fn().mockResolvedValue([]),
+      update: vi.fn().mockResolvedValue({}),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+    },
+    user: {
+      findFirst: vi.fn().mockResolvedValue({ id: "user-1" }),
     },
   };
 }
@@ -109,12 +113,16 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         id: "rr-1",
         runtimeType: "sandbox",
         isolationScope: "workspace",
+        ownerUserId: "user-1",
+        ownerWorkspaceId: "ws-1",
         runtimeResourceId: "container-ws1",
       },
       {
         id: "rr-2",
         runtimeType: "sandbox",
         isolationScope: "workspace",
+        ownerUserId: "user-1",
+        ownerWorkspaceId: "ws-2",
         runtimeResourceId: "container-ws2",
       },
     ]);
@@ -131,9 +139,27 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
     expect(mockProviderRegistry.resolve).toHaveBeenCalledWith("sandbox");
     expect(recoverOrphan).toHaveBeenCalledWith("container-ws1");
     expect(recoverOrphan).toHaveBeenCalledWith("container-ws2");
-    expect(prisma.runtimeResource.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["rr-1", "rr-2"] } },
-      data: { status: "stopped" },
+    expect(prisma.runtimeResource.update).toHaveBeenCalledWith({
+      where: { id: "rr-1" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          resourceKey: "ws-1",
+          statusReason: "orphan_recovered",
+          stoppedAt: expect.any(String),
+        }),
+      },
+    });
+    expect(prisma.runtimeResource.update).toHaveBeenCalledWith({
+      where: { id: "rr-2" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          resourceKey: "ws-2",
+          statusReason: "orphan_recovered",
+          stoppedAt: expect.any(String),
+        }),
+      },
     });
   });
 
@@ -152,6 +178,8 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         id: "rr-1",
         runtimeType: "sandbox",
         isolationScope: "user",
+        ownerUserId: "user-1",
+        ownerWorkspaceId: null,
         runtimeResourceId: "container-user1",
       },
     ]);
@@ -166,6 +194,6 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
     await service.recoverOrphanRuns();
 
     expect(recoverOrphan).not.toHaveBeenCalled();
-    expect(prisma.runtimeResource.updateMany).not.toHaveBeenCalled();
+    expect(prisma.runtimeResource.update).not.toHaveBeenCalled();
   });
 });

@@ -21,7 +21,7 @@ import { RuntimeInternalAuthGuard } from "../runtime/internal/runtime-internal-a
 import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeConfigStore } from "../runtime/internal/runtime-config-store";
-import { RuntimeService } from "../runtime/runtime.service";
+import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
 import { RuntimeControlQueue } from "../runtime/internal/runtime-control-queue";
 import { safeLogJson, summarizeEnvelopePayload } from "../common/logging";
 
@@ -43,7 +43,7 @@ export class RunInternalController {
     private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runRegistry: RunActiveStore,
-    private readonly runtimeService: RuntimeService,
+    private readonly runWorkerExecution: RunWorkerExecutionService,
     private readonly controlQueue: RuntimeControlQueue
   ) {}
 
@@ -55,7 +55,7 @@ export class RunInternalController {
   async getRunConfig(
     @Param("runId") runId: string
   ): Promise<{ config: RunConfig }> {
-    // RunConfig 在 provider.start() 时暂存到 RuntimeConfigStore 内存 registry
+    // Sandbox worker 通过 HTTP 启动时，从 RuntimeConfigStore 拉取 RunConfig。
     const config = this.runConfigStore.get(runId);
     if (!config) {
       this.logger.warn(`Run config not found runId=${runId}`);
@@ -104,7 +104,7 @@ export class RunInternalController {
     // worker 心跳上报：喂给对应 provider 的心跳 watchdog（HTTP transport 场景下
     // 这是唯一的喂狗入口，IPC transport 由 child.on("message") 直接喂狗）。
     if (envelope.type === "heartbeat" && handle) {
-      this.runtimeService.heartbeat(runId);
+      this.runWorkerExecution.heartbeat(runId);
     }
 
     // worker 上报终态后清理 provider 内部状态（心跳定时器等），
@@ -112,7 +112,7 @@ export class RunInternalController {
     if (envelope.type === "run.status") {
       const { status } = envelope.payload as RunStatusPayload;
       if (TERMINAL_RUN_STATUSES.includes(status) && handle) {
-        this.runtimeService.cleanup(runId);
+        this.runWorkerExecution.cleanup(runId);
       }
     }
 

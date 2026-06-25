@@ -88,7 +88,15 @@ describe("WorkspaceRuntimeRepository", () => {
         runtimeResourceId: "container-abc",
         status: "running",
         expiresAt: null,
-        metadata: { foo: "bar" },
+        metadata: expect.objectContaining({
+          foo: "bar",
+          resourceKey: "u1",
+          workspaceId: "w1",
+          statusReason: "running",
+          runtimeResourceId: "container-abc",
+          lastSeenAt: expect.any(String),
+          lastStartedAt: expect.any(String),
+        }),
       },
     });
     expect(upsert).toHaveBeenCalledWith({
@@ -138,7 +146,14 @@ describe("WorkspaceRuntimeRepository", () => {
         runtimeResourceId: "container-next",
         status: "running",
         expiresAt: null,
-        metadata: {},
+        metadata: expect.objectContaining({
+          resourceKey: "w1",
+          workspaceId: "w1",
+          statusReason: "running",
+          runtimeResourceId: "container-next",
+          lastSeenAt: expect.any(String),
+          lastStartedAt: expect.any(String),
+        }),
       },
     });
   });
@@ -158,7 +173,17 @@ describe("WorkspaceRuntimeRepository", () => {
         ownerUserId: "u1",
         ownerWorkspaceId: null,
       },
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          resourceKey: "u1",
+          runtimeType: "sandbox",
+          isolationScope: "user",
+          statusReason: "stopped",
+          lastSeenAt: expect.any(String),
+          stoppedAt: expect.any(String),
+        }),
+      },
     });
   });
 
@@ -177,7 +202,82 @@ describe("WorkspaceRuntimeRepository", () => {
         ownerUserId: "u1",
         ownerWorkspaceId: null,
       },
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          resourceKey: "u1",
+          runtimeType: "sandbox",
+          isolationScope: "user",
+          statusReason: "stopped",
+          lastSeenAt: expect.any(String),
+          stoppedAt: expect.any(String),
+        }),
+      },
+    });
+  });
+
+  it("marks a runtime resource missing by resource key", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new WorkspaceRuntimeRepository({
+      runtimeResource: { updateMany },
+    } as never);
+
+    await service.markMissingByResourceKey(
+      "sandbox",
+      "workspace",
+      "w1",
+      "heartbeat_lost"
+    );
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        ownerWorkspaceId: "w1",
+      },
+      data: {
+        status: "missing",
+        metadata: expect.objectContaining({
+          resourceKey: "w1",
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          statusReason: "heartbeat_lost",
+          lastSeenAt: expect.any(String),
+        }),
+      },
+    });
+  });
+
+  it("marks a runtime resource error by resource key", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new WorkspaceRuntimeRepository({
+      runtimeResource: { updateMany },
+    } as never);
+
+    await service.markErrorByResourceKey(
+      "sandbox",
+      "workspace",
+      "w1",
+      "engine failed"
+    );
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        ownerWorkspaceId: "w1",
+      },
+      data: {
+        status: "error",
+        metadata: expect.objectContaining({
+          resourceKey: "w1",
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          statusReason: "error",
+          errorMessage: "engine failed",
+          lastSeenAt: expect.any(String),
+        }),
+      },
     });
   });
 

@@ -12,12 +12,14 @@ import { LocalRuntimeProvider } from "./providers/local-runtime-provider";
 import { DockerSandboxEngine } from "./providers/sandbox-engine/docker-sandbox-engine";
 import { OpenSandboxEngine } from "./providers/sandbox-engine/opensandbox-sandbox-engine";
 import { SandboxRuntimeProvider } from "./providers/sandbox-runtime-provider";
+import { SandboxRuntimeResourceService } from "./providers/sandbox-runtime-resource.service";
+import { SandboxWorkerSessionService } from "./providers/sandbox-worker-session.service";
 import { OpenSandboxClient } from "./providers/opensandbox-client";
 import { OPENSANDBOX_CLIENT } from "./providers/opensandbox-client.token";
 import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
 import { RUNTIME_PROVIDERS } from "./providers/runtime-provider.token";
 import { SANDBOX_ENGINES } from "./providers/sandbox-engine";
-import type { RuntimeProvider } from "@agework/shared/protocol";
+import type { RuntimeProvider } from "./providers/runtime-provider-contracts";
 import type { SandboxEngine } from "./providers/sandbox-engine";
 
 // internal
@@ -68,6 +70,8 @@ import { ConfigService } from "../config/config.service";
       useFactory: (...engines: SandboxEngine[]) => engines,
       inject: [DockerSandboxEngine, OpenSandboxEngine],
     },
+    SandboxRuntimeResourceService,
+    SandboxWorkerSessionService,
     SandboxRuntimeProvider,
     {
       provide: RUNTIME_PROVIDERS,

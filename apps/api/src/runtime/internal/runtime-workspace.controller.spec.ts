@@ -1,7 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { RuntimeWorkspaceController } from "./runtime-workspace.controller";
 import { RuntimeControlQueue } from "./runtime-control-queue";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
+
+function makeRuntimeService(): RuntimeService {
+  return {
+    heartbeatRuntimeResource: vi.fn(),
+  } as unknown as RuntimeService;
+}
 
 describe("RuntimeWorkspaceController", () => {
   describe("pollWorkspaceControls()", () => {
@@ -11,17 +17,10 @@ describe("RuntimeWorkspaceController", () => {
           { seq: 1, runId: "run-1", payload: { type: "cancel" } },
         ]),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn(),
-      };
 
       const controller = new RuntimeWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
+        makeRuntimeService()
       );
 
       const result = await controller.pollWorkspaceControls("ws-1", "3");
@@ -36,17 +35,10 @@ describe("RuntimeWorkspaceController", () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
         pollByWorkspace: vi.fn().mockReturnValue([]),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn(),
-      };
 
       const controller = new RuntimeWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
+        makeRuntimeService()
       );
 
       await controller.pollWorkspaceControls("ws-1");
@@ -60,17 +52,10 @@ describe("RuntimeWorkspaceController", () => {
           { seq: 2, runId: "run-2", payload: { type: "user_message" } },
         ]),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn(),
-      };
 
       const controller = new RuntimeWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
+        makeRuntimeService()
       );
 
       const result = await controller.pollWorkspaceControls("ws-1", "1", "25000");
@@ -81,74 +66,18 @@ describe("RuntimeWorkspaceController", () => {
   });
 
   describe("heartbeat()", () => {
-    it("dispatches sandbox heartbeat directly by resource key", async () => {
-      const heartbeatWorkspace = vi.fn();
+    it("broadcasts the heartbeat by resource key", () => {
       const controlQueue = {} as RuntimeControlQueue;
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn().mockResolvedValue({
-          resource: { runtimeType: "sandbox" },
-        }),
-      };
+      const runtimeService = makeRuntimeService();
 
       const controller = new RuntimeWorkspaceController(
         controlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
+        runtimeService
       );
 
-      const result = await controller.heartbeat("ws-1");
+      const result = controller.heartbeat("ws-1");
 
-      expect(workspaceRuntimeService.findActiveByWorkspace).toHaveBeenCalledWith("ws-1");
-      expect(runtimeProviderRegistry.resolve).toHaveBeenCalledWith("sandbox");
-      expect(heartbeatWorkspace).toHaveBeenCalledWith("ws-1");
-      expect(result).toEqual({ ok: true });
-    });
-
-    it("still dispatches sandbox heartbeat when binding is not visible", async () => {
-      const heartbeatWorkspace = vi.fn();
-      const controlQueue = {} as RuntimeControlQueue;
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn().mockResolvedValue(null),
-      };
-
-      const controller = new RuntimeWorkspaceController(
-        controlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
-      );
-
-      const result = await controller.heartbeat("ws-1");
-
-      expect(runtimeProviderRegistry.resolve).toHaveBeenCalledWith("sandbox");
-      expect(heartbeatWorkspace).toHaveBeenCalledWith("ws-1");
-      expect(result).toEqual({ ok: true });
-    });
-
-    it("does not fail heartbeat when binding lookup fails", async () => {
-      const heartbeatWorkspace = vi.fn();
-      const controlQueue = {} as RuntimeControlQueue;
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace }),
-      } as unknown as RuntimeProviderRegistry;
-      const workspaceRuntimeService = {
-        findActiveByWorkspace: vi.fn().mockRejectedValue(new Error("db busy")),
-      };
-
-      const controller = new RuntimeWorkspaceController(
-        controlQueue,
-        runtimeProviderRegistry,
-        workspaceRuntimeService as never
-      );
-
-      const result = await controller.heartbeat("ws-1");
-
-      expect(heartbeatWorkspace).toHaveBeenCalledWith("ws-1");
+      expect(runtimeService.heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
       expect(result).toEqual({ ok: true });
     });
   });

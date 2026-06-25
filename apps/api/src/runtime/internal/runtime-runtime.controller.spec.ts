@@ -2,7 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { RuntimeRuntimeController } from "./runtime-runtime.controller";
 import { RuntimeControlQueue } from "./runtime-control-queue";
 import { RuntimeInternalAccessService } from "./runtime-internal-access.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
+
+function makeRuntimeService(): RuntimeService {
+  return {
+    heartbeatRuntimeResource: vi.fn(),
+  } as unknown as RuntimeService;
+}
 
 describe("RuntimeRuntimeController", () => {
   describe("pollRuntimeControls()", () => {
@@ -12,15 +18,11 @@ describe("RuntimeRuntimeController", () => {
       };
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue("ws-1"),
-        getRuntimeTypeForRuntimeResource: vi.fn().mockReturnValue("sandbox"),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
       const controller = new RuntimeRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        makeRuntimeService()
       );
 
       const result = await controller.pollRuntimeControls("rr-1", "3");
@@ -37,15 +39,11 @@ describe("RuntimeRuntimeController", () => {
       };
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue("ws-1"),
-        getRuntimeTypeForRuntimeResource: vi.fn().mockReturnValue("sandbox"),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
       const controller = new RuntimeRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        makeRuntimeService()
       );
 
       await controller.pollRuntimeControls("rr-1");
@@ -60,13 +58,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue("ws-1"),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
       const controller = new RuntimeRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        makeRuntimeService()
       );
 
       await controller.pollRuntimeControls("rr-1", "not-a-number");
@@ -81,13 +76,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue("ws-1"),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
       const controller = new RuntimeRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        makeRuntimeService()
       );
 
       const result = await controller.pollRuntimeControls("rr-1", "1", "25000");
@@ -103,13 +95,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue(undefined),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatWorkspace: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
       const controller = new RuntimeRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        makeRuntimeService()
       );
 
       const result = await controller.pollRuntimeControls("rr-unknown", "0");
@@ -121,27 +110,21 @@ describe("RuntimeRuntimeController", () => {
 
   describe("heartbeat()", () => {
     it("dispatches heartbeat via resourceKey lookup", async () => {
-      const heartbeatRuntimeResource = vi.fn();
       const controlQueue = {} as RuntimeControlQueue;
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue("ws-1"),
-        getRuntimeTypeForRuntimeResource: vi.fn().mockReturnValue("sandbox"),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatRuntimeResource }),
-      } as unknown as RuntimeProviderRegistry;
+      const runtimeService = makeRuntimeService();
       const controller = new RuntimeRuntimeController(
         controlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        runtimeService
       );
 
       const result = await controller.heartbeat("rr-1");
 
       expect(runtimeAccess.getResourceKeyForRuntimeResource).toHaveBeenCalledWith("rr-1");
-      expect(runtimeAccess.getRuntimeTypeForRuntimeResource).toHaveBeenCalledWith("rr-1");
-      expect(runtimeProviderRegistry.resolve).toHaveBeenCalledWith("sandbox");
-      expect(heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
+      expect(runtimeService.heartbeatRuntimeResource).toHaveBeenCalledWith("ws-1");
       expect(result).toEqual({ ok: true });
     });
 
@@ -149,21 +132,18 @@ describe("RuntimeRuntimeController", () => {
       const controlQueue = {} as RuntimeControlQueue;
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getResourceKeyForRuntimeResource: vi.fn().mockReturnValue(undefined),
-        getRuntimeTypeForRuntimeResource: vi.fn().mockReturnValue(undefined),
       };
-      const runtimeProviderRegistry = {
-        resolve: vi.fn().mockReturnValue({ heartbeatRuntimeResource: vi.fn() }),
-      } as unknown as RuntimeProviderRegistry;
+      const runtimeService = makeRuntimeService();
       const controller = new RuntimeRuntimeController(
         controlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        runtimeProviderRegistry
+        runtimeService
       );
 
       const result = await controller.heartbeat("rr-unknown");
 
       expect(runtimeAccess.getResourceKeyForRuntimeResource).toHaveBeenCalledWith("rr-unknown");
-      expect(runtimeProviderRegistry.resolve).not.toHaveBeenCalled();
+      expect(runtimeService.heartbeatRuntimeResource).not.toHaveBeenCalled();
       expect(result).toEqual({ ok: true });
     });
   });

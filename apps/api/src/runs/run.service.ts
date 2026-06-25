@@ -7,11 +7,12 @@ import {
 } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
-import type { RunConfig, RuntimeHandle } from "@agework/shared/protocol";
+import type { RunConfig, WorkerExecutionHandle } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
+import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import {
@@ -44,6 +45,7 @@ export class RunService {
     private readonly runRepository: RunRepository,
     private readonly runRegistry: RunActiveStore,
     private readonly runtimeService: RuntimeService,
+    private readonly runWorkerExecution: RunWorkerExecutionService,
     private readonly conversationService: ConversationService,
     private readonly runEventRecorder: RunEventRecorder,
     private readonly runConfigAssembler: RunConfigAssembler,
@@ -96,6 +98,7 @@ export class RunService {
       isolationScope,
       sandboxEngine: workspace.sandboxEngine ?? undefined,
     });
+    const runtimeResource = await this.runtimeService.provision(placement);
     const runtimeType = placement.runtimeType;
 
     // 2. 组装 RunConfig（agent provider 由 agent 层提供，路径/trace 由 placement 决定）
@@ -300,8 +303,8 @@ export class RunService {
       return;
     }
 
-    // Start worker via RuntimeService facade
-    let runtimeHandle: RuntimeHandle;
+    // Start worker through the Run-layer execution boundary.
+    let runtimeHandle: WorkerExecutionHandle;
     try {
       this.runEventRecorder
         .append(
@@ -316,10 +319,10 @@ export class RunService {
         .catch(
           swallow(this.logger, `record runtime starting for run ${runId}`)
         );
-      runtimeHandle = this.runtimeService.startWorker(
+      runtimeHandle = this.runWorkerExecution.start({
         runConfig,
-        placement,
-        (runtimeResourceId) => {
+        runtimeResource,
+        onRuntimeResourceIdReady: (runtimeResourceId) => {
           this.runRepository
             .updateRuntimeHandle(runId, runtimeType, runtimeResourceId)
             .catch(
@@ -339,8 +342,8 @@ export class RunService {
             .catch(
               swallow(this.logger, `record runtime ready for run ${runId}`)
             );
-        }
-      );
+        },
+      });
     } catch (err) {
       this.logger.error(
         `start worker failed ${safeLogJson({
@@ -451,7 +454,7 @@ export class RunService {
         `No active run for conversation: ${conversationId}`
       );
     }
-    this.runtimeService.sendControl(handle.runtimeHandle, {
+    this.runWorkerExecution.sendControl(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
@@ -618,7 +621,7 @@ export class RunService {
           )
         );
     }
-    this.runtimeService.cancel(handle.runtimeHandle);
+    this.runWorkerExecution.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       if (handle.res && !handle.res.writableEnded) {

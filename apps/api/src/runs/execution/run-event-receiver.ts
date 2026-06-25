@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import type { Envelope, RunEventReceiver } from "@agework/shared/protocol";
+import type { Envelope } from "@agework/shared/protocol";
+import type { RunEventReceiver } from "../../runtime/run-event-receiver";
 import { RunEnvelopeProcessor } from "./run-envelope.processor";
 import { RunEventRecorder } from "../events/run-event-recorder";
 import { RunEventFacts } from "../events/run-event-facts";

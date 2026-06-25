@@ -4,6 +4,11 @@ import { RuntimeProviderRegistry } from "../runtime/providers/runtime-provider-r
 import { ConversationService } from "../conversations/conversation.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { swallow } from "../common/swallow";
+import {
+  runtimeResourceKeyForOwner,
+  runtimeResourceMetadataJson,
+  stoppedResourceMetadata,
+} from "../runtime/core/runtime-resources/runtime-resource-diagnostics";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
@@ -125,7 +130,6 @@ export class RunRecoveryUseCase {
         `Found ${runningResources.length} orphan runtime resource(s) — stopping them`
       );
 
-      const stoppedIds: string[] = [];
       for (const resource of runningResources) {
         if (resource.isolationScope === "user") {
           const owner = await this.prisma.user.findFirst({
@@ -153,13 +157,20 @@ export class RunRecoveryUseCase {
               `recover orphan runtime resource ${resource.runtimeResourceId}`
             )
           );
-        stoppedIds.push(resource.id);
-      }
-
-      if (stoppedIds.length > 0) {
-        await this.prisma.runtimeResource.updateMany({
-          where: { id: { in: stoppedIds } },
-          data: { status: "stopped" },
+        const resourceKey = runtimeResourceKeyForOwner(resource);
+        await this.prisma.runtimeResource.update({
+          where: { id: resource.id },
+          data: {
+            status: "stopped",
+            metadata: runtimeResourceMetadataJson(
+              stoppedResourceMetadata({
+                runtimeType: resource.runtimeType,
+                isolationScope: resource.isolationScope,
+                resourceKey,
+                reason: "orphan_recovered",
+              })
+            ),
+          },
         });
       }
     } catch (err) {

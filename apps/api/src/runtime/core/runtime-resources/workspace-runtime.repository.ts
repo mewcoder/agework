@@ -2,6 +2,12 @@ import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { RuntimePlacement } from "@agework/shared/protocol";
 import { PrismaService } from "../../../prisma/prisma.service";
+import {
+  runtimeResourceMetadataJson,
+  runningResourceMetadata,
+  statusResourceMetadata,
+  stoppedResourceMetadata,
+} from "./runtime-resource-diagnostics";
 
 function ownerWhere(placement: RuntimePlacement) {
   return {
@@ -64,7 +70,14 @@ export class WorkspaceRuntimeRepository {
         runtimeResourceId,
         status: "running",
         expiresAt: null,
-        metadata: metadata ?? {},
+        metadata: runtimeResourceMetadataJson(
+          runningResourceMetadata({
+            placement,
+            runtimeResourceId,
+            existing: existing?.metadata,
+            metadata,
+          })
+        ),
       };
       const resource = existing
         ? await tx.runtimeResource.update({
@@ -96,7 +109,20 @@ export class WorkspaceRuntimeRepository {
   async markStopped(placement: RuntimePlacement) {
     await this.prisma.runtimeResource.updateMany({
       where: ownerWhere(placement),
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        metadata: runtimeResourceMetadataJson(
+          stoppedResourceMetadata({
+            runtimeType: placement.runtimeType,
+            isolationScope: placement.isolationScope,
+            resourceKey:
+              placement.isolationScope === "user"
+                ? placement.userId
+                : placement.workspaceId,
+            reason: "stopped",
+          })
+        ),
+      },
     });
   }
 
@@ -111,7 +137,70 @@ export class WorkspaceRuntimeRepository {
         isolationScope,
         resourceKey
       ),
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        metadata: runtimeResourceMetadataJson(
+          stoppedResourceMetadata({
+            runtimeType,
+            isolationScope,
+            resourceKey,
+            reason: "stopped",
+          })
+        ),
+      },
+    });
+  }
+
+  async markMissingByResourceKey(
+    runtimeType: string,
+    isolationScope: string,
+    resourceKey: string,
+    reason = "missing"
+  ) {
+    await this.prisma.runtimeResource.updateMany({
+      where: ownerWhereByResourceKey(
+        runtimeType,
+        isolationScope,
+        resourceKey
+      ),
+      data: {
+        status: "missing",
+        metadata: runtimeResourceMetadataJson(
+          statusResourceMetadata({
+            runtimeType,
+            isolationScope,
+            resourceKey,
+            reason,
+          })
+        ),
+      },
+    });
+  }
+
+  async markErrorByResourceKey(
+    runtimeType: string,
+    isolationScope: string,
+    resourceKey: string,
+    errorMessage: string
+  ) {
+    await this.prisma.runtimeResource.updateMany({
+      where: ownerWhereByResourceKey(
+        runtimeType,
+        isolationScope,
+        resourceKey
+      ),
+      data: {
+        status: "error",
+        metadata: runtimeResourceMetadataJson(
+          statusResourceMetadata({
+            runtimeType,
+            isolationScope,
+            resourceKey,
+            reason: "error",
+            errorMessage,
+          })
+        ),
+      },
     });
   }
 

@@ -54,7 +54,7 @@ export class RunRepository {
     });
   }
 
-  /** provider.start() 成功后持久化运行句柄，供孤儿恢复时定位 provider 与底层进程/容器。 */
+  /** 持久化运行句柄，供孤儿恢复时定位 runtime provider 与底层进程/容器。 */
   async updateRuntimeHandle(
     runId: string,
     runtimeType: string,

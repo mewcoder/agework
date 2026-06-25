@@ -1,9 +1,6 @@
 import { Logger } from "@nestjs/common";
-import type {
-  ControlPayload,
-  Envelope,
-  RunEventReceiver,
-} from "@agework/shared/protocol";
+import type { ControlPayload, Envelope } from "@agework/shared/protocol";
+import type { RunEventReceiver } from "../run-event-receiver";
 import { resolveApiBasePath } from "../../common/path.util";
 import { swallow } from "../../common/swallow";
 import { EnvKey } from "../../config/env-key";

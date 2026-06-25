@@ -2,8 +2,14 @@ import { Body, Controller, Get, Post, Query, NotFoundException } from "@nestjs/c
 import { Roles } from "../../auth/roles.decorator";
 import { ConfigService } from "../../config/config.service";
 import { PrismaService } from "../../prisma/prisma.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
 import { RuntimeResourceIdDto } from "./dto/runtime-resource-id.dto";
+import {
+  runtimeResourceDiagnostics,
+  runtimeResourceKeyForOwner,
+  runtimeResourceMetadataJson,
+  stoppedResourceMetadata,
+} from "../core/runtime-resources/runtime-resource-diagnostics";
 
 @Controller("admin/runtime")
 @Roles("admin")
@@ -11,7 +17,7 @@ export class AdminRuntimeController {
   constructor(
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
+    private readonly runtimeService: RuntimeService,
   ) {}
 
   @Get("policy")
@@ -53,7 +59,12 @@ export class AdminRuntimeController {
       }),
       this.prisma.runtimeResource.count({ where }),
     ]);
-    return { list: items, total, pageNo: pageNum, pageSize: take };
+    return {
+      list: items.map((item) => this.toRuntimeResourceResponse(item)),
+      total,
+      pageNo: pageNum,
+      pageSize: take,
+    };
   }
 
   @Post("resources/stop")
@@ -64,14 +75,82 @@ export class AdminRuntimeController {
       throw new NotFoundException(`Runtime resource ${id} not found or not running`);
     }
     const resourceKey = this.getResourceKey(resource);
-    this.runtimeProviderRegistry
-      .resolve(resource.runtimeType)
-      .shutdownRuntimeResource?.(resourceKey);
+    this.runtimeService.shutdownRuntimeResource(
+      resource.runtimeType,
+      resourceKey
+    );
     await this.prisma.runtimeResource.update({
       where: { id },
-      data: { status: "stopped" },
+      data: {
+        status: "stopped",
+        metadata: runtimeResourceMetadataJson(
+          stoppedResourceMetadata({
+            runtimeType: resource.runtimeType,
+            isolationScope: resource.isolationScope,
+            resourceKey,
+            reason: "manual_stop",
+          })
+        ),
+      },
     });
     return { ok: true };
+  }
+
+  private toRuntimeResourceResponse(resource: {
+    id: string;
+    runtimeType: string;
+    isolationScope: string;
+    ownerUserId: string;
+    ownerWorkspaceId: string | null;
+    runtimeResourceId: string;
+    status: string;
+    expiresAt: Date | string | null;
+    metadata: unknown;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+    workspaceRuntimes?: Array<{
+      id: string;
+      workspaceId: string;
+      createdAt: Date | string;
+      updatedAt: Date | string;
+    }>;
+  }) {
+    const resourceKey = runtimeResourceKeyForOwner(resource);
+    const diagnostics = runtimeResourceDiagnostics(resource.metadata);
+    const workspaceRuntimes = resource.workspaceRuntimes?.map((binding) => ({
+      id: binding.id,
+      workspaceId: binding.workspaceId,
+      createdAt: this.toIsoString(binding.createdAt),
+      updatedAt: this.toIsoString(binding.updatedAt),
+    }));
+
+    return {
+      id: resource.id,
+      runtimeType: resource.runtimeType,
+      isolationScope: resource.isolationScope,
+      ownerUserId: resource.ownerUserId,
+      ownerWorkspaceId: resource.ownerWorkspaceId,
+      resourceKey,
+      runtimeResourceId: resource.runtimeResourceId,
+      status: resource.status,
+      isReusable: resource.status === "running",
+      workspaceCount: workspaceRuntimes?.length ?? 0,
+      expiresAt: resource.expiresAt ? this.toIsoString(resource.expiresAt) : null,
+      metadata: resource.metadata,
+      diagnostics: {
+        ...diagnostics,
+        resourceKey: diagnostics.resourceKey ?? resourceKey,
+        runtimeResourceId:
+          diagnostics.runtimeResourceId ?? resource.runtimeResourceId,
+      },
+      createdAt: this.toIsoString(resource.createdAt),
+      updatedAt: this.toIsoString(resource.updatedAt),
+      workspaceRuntimes,
+    };
+  }
+
+  private toIsoString(value: Date | string): string {
+    return value instanceof Date ? value.toISOString() : value;
   }
 
   private getResourceKey(resource: {

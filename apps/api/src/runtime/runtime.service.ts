@@ -1,29 +1,30 @@
 import { Injectable } from "@nestjs/common";
 import type {
-  ControlPayload,
-  RunConfig,
-  RuntimeHandle,
   RuntimePlacement,
+  RuntimeResourceHandle,
 } from "@agework/shared/protocol";
 import { RuntimePlacementPolicy } from "./core/runtime-resources/runtime-placement.policy";
+import { runtimeResourceHandleFromPlacement } from "./core/runtime-resources/runtime-resource-handle";
 import { RuntimeProviderRegistry } from "./providers/runtime-provider-registry";
+import type { RuntimeResourceProvider } from "./providers/runtime-provider-contracts";
 
 type ResolvePlacementInput = Parameters<
   RuntimePlacementPolicy["resolveForRun"]
 >[0];
 
+function hasRuntimeResourceProvision(
+  provider: unknown
+): provider is RuntimeResourceProvider {
+  return typeof (provider as { provision?: unknown }).provision === "function";
+}
+
 /**
- * Runtime 层对上层（run 层）的唯一门面：placement 解析 + per-run worker 环境
- * 的启动/控制/取消/心跳/清理。内部把现有 RuntimePlacementPolicy /
- * RuntimeProviderRegistry 包一层，并按 runId 记一张 handle 表，使 heartbeat /
- * cleanup 只凭 runId 即可派发到对应 provider（上层无需持有 RuntimeHandle）。
- *
- * 本步（Step C）只建门面，调用方暂不切；RunRunner / 内部 controller 仍走旧路径。
+ * Runtime 层对上层的门面：只负责运行环境——解析 placement、provision/复用 runtime
+ * resource、管理 resource 生命周期（心跳 / shutdown）。它不拥有「执行」：worker 的启动与
+ * per-run control 由 Run 层的 RunWorkerExecutionService 驱动 provider 完成。
  */
 @Injectable()
 export class RuntimeService {
-  private readonly handles = new Map<string, RuntimeHandle>();
-
   constructor(
     private readonly placementPolicy: RuntimePlacementPolicy,
     private readonly providerRegistry: RuntimeProviderRegistry
@@ -33,41 +34,33 @@ export class RuntimeService {
     return this.placementPolicy.resolveForRun(input);
   }
 
-  startWorker(
-    runConfig: RunConfig,
-    placement: RuntimePlacement,
-    onRuntimeResourceIdReady?: (runtimeResourceId: string) => void
-  ): RuntimeHandle {
-    const handle = this.providerRegistry
-      .resolve(placement.runtimeType)
-      .start(runConfig, placement, onRuntimeResourceIdReady);
-    this.handles.set(handle.runId, handle);
-    return handle;
+  /**
+   * Call provider-side provision when implemented; otherwise
+   * derive the target runtime resource identity without starting or attaching a
+   * worker.
+   */
+  async provision(placement: RuntimePlacement): Promise<RuntimeResourceHandle> {
+    const provider = this.providerRegistry.resolve(placement.runtimeType);
+    if (hasRuntimeResourceProvision(provider)) {
+      return provider.provision(placement);
+    }
+    return runtimeResourceHandleFromPlacement(placement);
   }
 
-  sendControl(handle: RuntimeHandle, control: ControlPayload): void {
+  /**
+   * 按 runtime resource key 喂容器级 watchdog。worker 只知道 resourceKey、不知道
+   * 是哪个 provider 在持有它，因此广播给所有 provider；未持有该 key 的 provider 自然 no-op。
+   */
+  heartbeatRuntimeResource(resourceKey: string): void {
+    for (const provider of this.providerRegistry.all()) {
+      provider.heartbeatRuntimeResource?.(resourceKey);
+    }
+  }
+
+  /** 停止并删除指定 runtime resource 对应的持久容器/沙箱。 */
+  shutdownRuntimeResource(runtimeType: string, resourceKey: string): void {
     this.providerRegistry
-      .resolve(handle.runtimeType)
-      .sendControl(handle, control);
-  }
-
-  cancel(handle: RuntimeHandle): void {
-    this.providerRegistry.resolve(handle.runtimeType).cancel(handle);
-  }
-
-  heartbeat(runId: string): void {
-    this.providerForRun(runId)?.heartbeat(runId);
-  }
-
-  cleanup(runId: string): void {
-    this.providerForRun(runId)?.cleanup(runId);
-    this.handles.delete(runId);
-  }
-
-  private providerForRun(runId: string) {
-    const handle = this.handles.get(runId);
-    return handle
-      ? this.providerRegistry.resolve(handle.runtimeType)
-      : undefined;
+      .resolve(runtimeType)
+      .shutdownRuntimeResource?.(resourceKey);
   }
 }

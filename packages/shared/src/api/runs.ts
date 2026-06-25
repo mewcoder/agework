@@ -119,16 +119,39 @@ export type AdminRunEventListResponse =
 
 export type RuntimeResourceIdRequest = { id: string };
 
+export type RuntimeResourceStatus =
+  | "starting"
+  | "running"
+  | "stopped"
+  | "missing"
+  | "error"
+  | "stale";
+
+export type RuntimeResourceDiagnosticsResponse = {
+  resourceKey?: string;
+  workspaceId?: string;
+  statusReason?: string;
+  lastSeenAt?: string;
+  lastStartedAt?: string;
+  stoppedAt?: string;
+  errorMessage?: string;
+  runtimeResourceId?: string;
+};
+
 export type RuntimeResourceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
   ownerUserId: string;
   ownerWorkspaceId: string | null;
+  resourceKey: string;
   runtimeResourceId: string;
-  status: string;
+  status: RuntimeResourceStatus;
+  isReusable: boolean;
+  workspaceCount: number;
   expiresAt: string | null;
   metadata: unknown;
+  diagnostics: RuntimeResourceDiagnosticsResponse;
   createdAt: string;
   updatedAt: string;
   workspaceRuntimes?: Array<{

@@ -4,15 +4,20 @@ import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
+import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
+import type {
+  RuntimePlacement,
+  RuntimeResourceHandle,
+} from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
 
-function makePlacement(runtimeType: string) {
+function makePlacement(runtimeType: string): RuntimePlacement {
   const runtimePath = runtimeType === "local" ? "/tmp/ws" : "/workspace";
   return {
     runtimeType,
@@ -22,6 +27,21 @@ function makePlacement(runtimeType: string) {
     hostPath: "/tmp/ws",
     runtimePath,
     mountTarget: runtimePath,
+  };
+}
+
+function makeRuntimeResource(
+  placement = makePlacement("local")
+): RuntimeResourceHandle {
+  return {
+    runtimeType: placement.runtimeType,
+    resourceKey:
+      placement.isolationScope === "user"
+        ? placement.userId
+        : placement.workspaceId,
+    workspaceId: placement.workspaceId,
+    isolationScope: placement.isolationScope,
+    placement,
   };
 }
 
@@ -52,6 +72,7 @@ describe("RunService", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockRunActiveStore: Partial<RunActiveStore>;
   let mockRuntimeService: Partial<RuntimeService>;
+  let mockRunWorkerExecution: Partial<RunWorkerExecutionService>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunEventRecorder: Partial<RunEventRecorder>;
   let mockRunConfigAssembler: Partial<RunConfigAssembler>;
@@ -106,14 +127,18 @@ describe("RunService", () => {
     };
     mockRuntimeService = {
       resolvePlacement: vi.fn().mockReturnValue(makePlacement("local")),
-      startWorker: vi.fn().mockReturnValue({
+      provision: vi.fn().mockImplementation((placement) =>
+        Promise.resolve(makeRuntimeResource(placement))
+      ),
+    };
+    mockRunWorkerExecution = {
+      start: vi.fn().mockReturnValue({
         runId: "run-1",
         runtimeType: "local",
         runtimeResourceId: "1:token",
       }),
       sendControl: vi.fn(),
       cancel: vi.fn(),
-      heartbeat: vi.fn(),
       cleanup: vi.fn(),
     };
     mockConversationService = {
@@ -159,6 +184,7 @@ describe("RunService", () => {
       mockRunRepository as RunRepository,
       mockRunActiveStore as RunActiveStore,
       mockRuntimeService as RuntimeService,
+      mockRunWorkerExecution as RunWorkerExecutionService,
       mockConversationService as ConversationService,
       mockRunEventRecorder as RunEventRecorder,
       mockRunConfigAssembler as RunConfigAssembler,
@@ -176,6 +202,9 @@ describe("RunService", () => {
       expect(mockRuntimeService.resolvePlacement).toHaveBeenCalledWith(
         expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
       );
+      expect(mockRuntimeService.provision).toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeType: "local" })
+      );
       expect(mockRunConfigAssembler.assemble).toHaveBeenCalled();
       expect(mockRunRepository.create).toHaveBeenCalledWith({
         id: "run-1",
@@ -183,7 +212,15 @@ describe("RunService", () => {
         agentType: "claude",
         runtimeType: "local",
       });
-      expect(mockRuntimeService.startWorker).toHaveBeenCalled();
+      expect(mockRunWorkerExecution.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({ runId: "run-1" }),
+          runtimeResource: expect.objectContaining({
+            runtimeType: "local",
+            resourceKey: "ws-1",
+          }),
+        })
+      );
       expect(mockRunActiveStore.register).toHaveBeenCalledWith(
         "run-1",
         expect.objectContaining({
@@ -275,7 +312,7 @@ describe("RunService", () => {
 
       await service.start(makeStartInput({ res }));
 
-      expect(mockRuntimeService.startWorker).toHaveBeenCalled();
+      expect(mockRunWorkerExecution.start).toHaveBeenCalled();
       expect(mockRunActiveStore.register).toHaveBeenCalled();
       expect(mockRunRepository.markError).not.toHaveBeenCalled();
       expect(res.write).not.toHaveBeenCalled();
@@ -286,16 +323,16 @@ describe("RunService", () => {
       mockRuntimeService.resolvePlacement = vi
         .fn()
         .mockReturnValue(makePlacement("docker"));
-      mockRuntimeService.startWorker = vi
+      mockRunWorkerExecution.start = vi
         .fn()
-        .mockImplementation((_runConfig, _placement, onReady) => {
+        .mockImplementation(({ onRuntimeResourceIdReady }) => {
           const handle = {
             runId: "run-1",
             runtimeType: "docker",
             runtimeResourceId: "",
             conversationId: "conversation-1",
           };
-          queueMicrotask(() => onReady?.("container-abc"));
+          queueMicrotask(() => onRuntimeResourceIdReady?.("container-abc"));
           return handle;
         });
       mockWorkspaceFindFirst.mockResolvedValue(
@@ -313,7 +350,7 @@ describe("RunService", () => {
     });
 
     it("rolls back on worker start failure", async () => {
-      mockRuntimeService.startWorker = vi.fn().mockImplementation(() => {
+      mockRunWorkerExecution.start = vi.fn().mockImplementation(() => {
         throw new Error("spawn failed");
       });
       const res = makeRes();
@@ -342,6 +379,32 @@ describe("RunService", () => {
       await expect(
         service.resolveApproval("conversation-1", {})
       ).rejects.toThrow();
+    });
+
+    it("should send approval control through worker execution when an active handle exists", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1" });
+      const handle = {
+        runtimeHandle: {
+          runId: "run-1",
+          runtimeType: "local",
+          runtimeResourceId: "1:token",
+          conversationId: "conversation-1",
+        },
+      };
+      mockRunActiveStore.get = vi.fn().mockReturnValue(handle);
+
+      await service.resolveApproval("conversation-1", { decision: "yes" });
+
+      expect(mockRunWorkerExecution.sendControl).toHaveBeenCalledWith(
+        handle.runtimeHandle,
+        expect.objectContaining({
+          type: "approval_resolved",
+          conversationId: "conversation-1",
+          answers: { decision: "yes" },
+        })
+      );
     });
   });
 
@@ -376,7 +439,7 @@ describe("RunService", () => {
       const hadHandle = await service.stop("conversation-1");
 
       expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
-      expect(mockRuntimeService.cancel).toHaveBeenCalledWith(
+      expect(mockRunWorkerExecution.cancel).toHaveBeenCalledWith(
         handle.runtimeHandle
       );
       expect(hadHandle).toBe(true);

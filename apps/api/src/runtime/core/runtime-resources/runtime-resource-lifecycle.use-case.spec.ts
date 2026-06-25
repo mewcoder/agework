@@ -24,11 +24,15 @@ describe("RuntimeResourceLifecycleUseCase", () => {
         resource: makeResource(),
       });
       const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+      const update = vi.fn().mockResolvedValue({});
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
       const service = new RuntimeResourceLifecycleUseCase(
-        { workspaceRuntime: { findUnique, deleteMany } } as never,
+        {
+          workspaceRuntime: { findUnique, deleteMany },
+          runtimeResource: { update },
+        } as never,
         registry as RuntimeProviderRegistry
       );
 
@@ -40,6 +44,17 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       });
       expect(registry.resolve).toHaveBeenCalledWith("sandbox");
       expect(shutdownRuntimeResource).toHaveBeenCalledWith("ws-1");
+      expect(update).toHaveBeenCalledWith({
+        where: { id: "rr-1" },
+        data: {
+          status: "stopped",
+          metadata: expect.objectContaining({
+            resourceKey: "ws-1",
+            statusReason: "owner_released",
+            stoppedAt: expect.any(String),
+          }),
+        },
+      });
       expect(deleteMany).toHaveBeenCalledWith({ where: { workspaceId: "ws-1" } });
     });
 
@@ -81,11 +96,12 @@ describe("RuntimeResourceLifecycleUseCase", () => {
         }),
         makeResource({ id: "rr-ws", ownerWorkspaceId: "ws-2" }),
       ]);
+      const update = vi.fn().mockResolvedValue({});
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
       };
       const service = new RuntimeResourceLifecycleUseCase(
-        { runtimeResource: { findMany } } as never,
+        { runtimeResource: { findMany, update } } as never,
         registry as RuntimeProviderRegistry
       );
 
@@ -97,6 +113,26 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       expect(shutdownRuntimeResource).toHaveBeenCalledWith("user-1");
       expect(shutdownRuntimeResource).toHaveBeenCalledWith("ws-2");
       expect(shutdownRuntimeResource).toHaveBeenCalledTimes(2);
+      expect(update).toHaveBeenCalledWith({
+        where: { id: "rr-user" },
+        data: {
+          status: "stopped",
+          metadata: expect.objectContaining({
+            resourceKey: "user-1",
+            statusReason: "owner_released",
+          }),
+        },
+      });
+      expect(update).toHaveBeenCalledWith({
+        where: { id: "rr-ws" },
+        data: {
+          status: "stopped",
+          metadata: expect.objectContaining({
+            resourceKey: "ws-2",
+            statusReason: "owner_released",
+          }),
+        },
+      });
     });
   });
 
@@ -115,7 +151,7 @@ describe("RuntimeResourceLifecycleUseCase", () => {
       resolve: vi.fn().mockReturnValue({ shutdownRuntimeResource }),
     };
     const service = new RuntimeResourceLifecycleUseCase(
-      { runtimeResource: { findMany } } as never,
+      { runtimeResource: { findMany, update: vi.fn() } } as never,
       registry as RuntimeProviderRegistry
     );
 

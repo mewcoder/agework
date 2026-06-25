@@ -1,10 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import type { Response } from "express";
-import type { AgentEventTraceConfig, RuntimeHandle } from "@agework/shared/protocol";
+import type {
+  AgentEventTraceConfig,
+  WorkerExecutionHandle,
+} from "@agework/shared/protocol";
 import type { IncompleteMessageReason, RunMessageAggregator } from "./run-message.aggregator";
 
 export type RunHandle = {
-  runtimeHandle: RuntimeHandle;
+  runtimeHandle: WorkerExecutionHandle;
   res: Response | null;
   aggregator: RunMessageAggregator;
   conversationId: string;

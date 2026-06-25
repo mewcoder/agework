@@ -172,68 +172,35 @@ export type RuntimePlacement = {
   sandboxEngineType?: "docker" | "opensandbox";
 };
 
-// ── RuntimeProvider / RuntimeHandle ──────────────────────────────────────────
-// API 控制面侧的 provider 抽象。LocalProcessProvider（fork）与
-// DockerProvider（docker run）都实现此接口，对 AgentController 透明。
+// ── WorkerExecutionHandle / RuntimeResourceHandle ───────────────────────────
+// worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
+// worker execution are split at the service boundary: RuntimeService.provision()
+// returns RuntimeResourceHandle, while startWorkerExecution() starts/attaches
+// a per-run worker session.
+//
+// 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
+// 不是跨进程线缆协议，定义在 apps/api/src/runtime 下，不在此处。
 
-/** Provider 返回的运行句柄。不含实现细节（child process / container），
- *  那些由 provider 在内部维护。`runtimeResourceId` 必须可持久化到 Run 表。 */
-export interface RuntimeHandle {
+/** 一次 run 的 worker/session 执行句柄。 */
+export interface WorkerExecutionHandle {
   runId: string;
   runtimeType: string;
   runtimeResourceId: string;
   conversationId: string;
 }
 
-/**
- * run 事件的接收端（receiver）：runtime provider 产出 worker 事件，由 run 层提供实现来消费。
- * provider 只依赖此接口、不直接依赖 run 层实现，从而保持 runtime → run 零依赖。
- */
-export interface RunEventReceiver {
-  /** 转发 worker 上行事件。 */
-  publish(envelope: Envelope<unknown>): Promise<void>;
-  /** run 是否已处于终态或正在收尾（避免覆盖 finished/cancelled）。 */
-  isTerminalOrFinalizing(runId: string): boolean;
-  /** 强制将 run 置为 error 终态（worker 异常退出 / 心跳超时）。 */
-  forceErrorStatus(runId: string, error: string): Promise<void>;
-  /** 强制将 run 置为 cancelled 终态。 */
-  forceCancelledStatus(runId: string): Promise<void>;
-  /** 记录一次「控制指令已下发」run 事件。 */
-  recordControlSent(input: {
-    runId: string;
-    commandId: string;
-    controlType: string;
-  }): Promise<void>;
+/** Runtime resource 句柄：只描述运行环境资源，不承载 run/worker session 语义。 */
+export interface RuntimeResourceHandle {
+  runtimeType: string;
+  resourceKey: string;
+  workspaceId: string;
+  isolationScope: IsolationScope;
+  runtimeResourceId?: string;
+  placement: RuntimePlacement;
 }
 
-/** API 控制面侧的 provider 接口。 */
-export interface RuntimeProvider {
-  readonly type: string;
-  /** 注入 run 事件 receiver；由 run 层在启动时一次性 set 进每个 provider。 */
-  setRunEventReceiver(receiver: RunEventReceiver): void;
-  /**
-   * 启动 worker。`runtimeResourceId` 可能在返回时尚未就绪（如 DockerProvider 的容器 ID
-   * 是异步获取的）；此时返回的 handle.runtimeResourceId 为空字符串，
-   * 待就绪后通过 onRuntimeResourceIdReady 通知调用方持久化。
-   */
-  start(
-    runConfig: RunConfig,
-    placement: RuntimePlacement,
-    onRuntimeResourceIdReady?: (runtimeResourceId: string) => void
-  ): RuntimeHandle;
-  sendControl(handle: RuntimeHandle, control: ControlPayload): void;
-  cancel(handle: RuntimeHandle): void;
-  getHandle(runId: string): RuntimeHandle | undefined;
-  /** 收到 worker 心跳时调用，重置该 run 的心跳 watchdog 计时。 */
-  heartbeat(runId: string): void;
-  /** Run 终态后清理 provider 内部状态（心跳定时器等）。幂等。 */
-  cleanup(runId: string): void;
-  /** 服务重启后，根据持久化的 runtimeResourceId 终止孤儿 run 对应的进程/容器。幂等。 */
-  recoverOrphan(runtimeResourceId: string): Promise<void>;
-  /** 收到 worker 心跳时喂 workspace/容器级 watchdog。 */
-  heartbeatWorkspace?(workspaceId: string): void;
-  /** 收到 worker 心跳时按 runtime resource key 喂容器级 watchdog。 */
-  heartbeatRuntimeResource?(resourceKey: string): void;
-  /** 停止并删除指定 runtime resource key 对应的持久容器/沙箱。 */
-  shutdownRuntimeResource?(resourceKey: string): void;
-}
+export type WorkerExecutionStartInput = {
+  runtimeResource: RuntimeResourceHandle;
+  runConfig: RunConfig;
+  onRuntimeResourceIdReady?: (runtimeResourceId: string) => void;
+};

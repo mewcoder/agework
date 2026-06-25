@@ -5,7 +5,7 @@ import { RawResponse } from "../../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
 import { RuntimeControlQueue } from "./runtime-control-queue";
 import { RuntimeInternalAccessService } from "./runtime-internal-access.service";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
+import { RuntimeService } from "../runtime.service";
 import { safeLogJson } from "../../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
@@ -25,7 +25,7 @@ export class RuntimeRuntimeController {
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
     private readonly runtimeAccess: RuntimeInternalAccessService,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /**
@@ -77,15 +77,11 @@ export class RuntimeRuntimeController {
   ): Promise<{ ok: boolean }> {
     const resourceKey =
       this.runtimeAccess.getResourceKeyForRuntimeResource(runtimeResourceId);
-    const runtimeType =
-      this.runtimeAccess.getRuntimeTypeForRuntimeResource(runtimeResourceId);
-    if (resourceKey && runtimeType) {
+    if (resourceKey) {
       this.logger.debug(
-        `runtime heartbeat ${safeLogJson({ runtimeResourceId, resourceKey, runtimeType })}`
+        `runtime heartbeat ${safeLogJson({ runtimeResourceId, resourceKey })}`
       );
-      this.runtimeProviderRegistry
-        .resolve(runtimeType)
-        .heartbeatRuntimeResource?.(resourceKey);
+      this.runtimeService.heartbeatRuntimeResource(resourceKey);
     } else {
       this.logger.warn(
         `runtime heartbeat without resource ${safeLogJson({ runtimeResourceId })}`

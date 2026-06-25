@@ -34,9 +34,9 @@ export type {
   UpstreamMessage,
   Unsubscribe,
   RuntimeTransport,
-  RuntimeHandle,
-  RuntimeProvider,
-  RunEventReceiver,
+  RuntimeResourceHandle,
+  WorkerExecutionHandle,
+  WorkerExecutionStartInput,
   IsolationScope,
   RuntimePlacement,
 } from "./transport";

@@ -4,9 +4,8 @@ import { Public } from "../../auth/public.decorator";
 import { RawResponse } from "../../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./runtime-internal-auth.guard";
 import { RuntimeControlQueue } from "./runtime-control-queue";
-import { RuntimeProviderRegistry } from "../providers/runtime-provider-registry";
-import { WorkspaceRuntimeRepository } from "../core/runtime-resources/workspace-runtime.repository";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { RuntimeService } from "../runtime.service";
+import { safeLogJson } from "../../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
 
@@ -24,8 +23,7 @@ export class RuntimeWorkspaceController {
 
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeRepository
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /**
@@ -66,34 +64,14 @@ export class RuntimeWorkspaceController {
   /**
    * POST /internal/workspaces/:workspaceId/heartbeat
    * Docker 持久容器 worker 定期上报心跳；这里的 workspaceId 实际是 resourceKey。
-   * 先刷新 sandbox provider 的内存 watchdog，避免 DB binding 短暂不可见导致误判超时。
+   * 广播给所有 provider 喂 watchdog，不依赖 DB binding 是否可见。
    */
   @Post(":workspaceId/heartbeat")
-  async heartbeat(
+  heartbeat(
     @Param("workspaceId") workspaceId: string
-  ): Promise<{ ok: boolean }> {
+  ): { ok: boolean } {
     this.logger.debug(`Workspace heartbeat workspaceId=${workspaceId}`);
-    this.runtimeProviderRegistry
-      .resolve("sandbox")
-      .heartbeatWorkspace?.(workspaceId);
-
-    try {
-      const binding =
-        await this.workspaceRuntimeService.findActiveByWorkspace(workspaceId);
-      if (binding && binding.resource.runtimeType !== "sandbox") {
-        this.runtimeProviderRegistry
-          .resolve(binding.resource.runtimeType)
-          .heartbeatWorkspace?.(workspaceId);
-      }
-    } catch (err) {
-      this.logger.warn(
-        `workspace heartbeat binding lookup failed ${safeLogJson({
-          workspaceId,
-          ...errorLogFields(err),
-        })}`
-      );
-    }
-
+    this.runtimeService.heartbeatRuntimeResource(workspaceId);
     return { ok: true };
   }
 }
