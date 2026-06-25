@@ -100,6 +100,8 @@ export class RunService {
     });
     const runtimeResource = await this.runtimeService.provision(placement);
     const runtimeType = placement.runtimeType;
+    const sandbox =
+      placement.runtimeType === "sandbox" ? placement.sandbox : undefined;
 
     // 2. 组装 RunConfig（agent provider 由 agent 层提供，路径/trace 由 placement 决定）
     let runConfig: RunConfig;
@@ -239,7 +241,7 @@ export class RunService {
         workspaceId: placement.workspaceId,
         agentType,
         runtimeType,
-        isolationScope: placement.isolationScope,
+        isolationScope: sandbox?.isolationScope,
       })}`
     );
 
@@ -259,7 +261,7 @@ export class RunService {
             workspaceId: placement.workspaceId,
             agentType,
             runtimeType,
-            isolationScope: placement.isolationScope,
+            isolationScope: sandbox?.isolationScope,
           })
         )
         .catch(swallow(this.logger, `record run created for run ${runId}`));
@@ -312,8 +314,8 @@ export class RunService {
             runId,
             status: "starting",
             runtimeType,
-            isolationScope: placement.isolationScope,
-            sandboxEngineType: placement.sandboxEngineType,
+            isolationScope: sandbox?.isolationScope,
+            sandboxEngineType: sandbox?.sandboxEngineType,
           })
         )
         .catch(

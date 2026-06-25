@@ -65,12 +65,10 @@ export class RuntimePlacementPolicy {
     if (runtimeType === "local") {
       return {
         runtimeType,
-        isolationScope,
         userId,
         workspaceId,
         hostPath: workspaceRootPath,
         runtimePath: workspaceRootPath,
-        mountTarget,
       };
     }
 
@@ -79,25 +77,29 @@ export class RuntimePlacementPolicy {
       const runtimePath = [CONTAINER_WORKSPACES_ROOT, ...relativeSegments].join("/");
       return {
         runtimeType,
-        isolationScope,
         userId,
         workspaceId,
         hostPath: userWorkspaceRootPath,
         runtimePath,
-        mountTarget,
-        sandboxEngineType,
+        sandbox: {
+          isolationScope,
+          mountTarget,
+          sandboxEngineType: sandboxEngineType!,
+        },
       };
     }
 
     return {
       runtimeType,
-      isolationScope,
       userId,
       workspaceId,
       hostPath: workspaceRootPath,
       runtimePath: mountTarget,
-      mountTarget,
-      sandboxEngineType,
+      sandbox: {
+        isolationScope,
+        mountTarget,
+        sandboxEngineType: sandboxEngineType!,
+      },
     };
   }
 }

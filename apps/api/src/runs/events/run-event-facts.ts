@@ -25,6 +25,11 @@ export const RunEventFacts = {
     workspaceId?: string;
     agentType: string;
     runtimeType: string;
+    /**
+     * 隔离粒度，仅 sandbox run 有值（user/workspace）。
+     * local run 无容器隔离语义，此字段为 undefined——不要按 isolationScope 过滤/分组
+     * RunEvent；admin 列表/详情里的 isolationScope 维度走 RuntimeResource DB 列，不依赖此处。
+     */
     isolationScope?: string;
   }): RecordRunEventInput {
     return {
@@ -76,7 +81,9 @@ export const RunEventFacts = {
     status: string;
     runtimeType?: string;
     runtimeResourceId?: string;
+    /** 见 runCreated.isolationScope：local run 为 undefined。 */
     isolationScope?: string;
+    /** 沙箱引擎类型，仅 sandbox run 有值；local run 为 undefined。 */
     sandboxEngineType?: string;
     error?: string;
   }): RecordRunEventInput {

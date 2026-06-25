@@ -154,23 +154,44 @@ export interface RuntimeTransport {
 export type IsolationScope = "user" | "workspace";
 
 /**
- * 一次 run 的 runtime 放置信息：使用哪种 provider、隔离粒度，
- * 以及 host/容器侧的 workspace 路径。
- *
- * `mountTarget` 是隔离粒度的派生值，由放置服务一次性算好。
+ * 沙箱专属放置信息：隔离粒度、容器内挂载目标、沙箱引擎类型。
+ * 仅 runtimeType="sandbox" 时存在；local 模式无容器隔离语义，不带此对象。
  */
-export type RuntimePlacement = {
-  runtimeType: string;
+export type SandboxPlacementInfo = {
   isolationScope: IsolationScope;
+  /** 容器/沙箱内 hostPath 的挂载目标路径（如 `/workspace` 或 `/workspaces`）。 */
+  mountTarget: string;
+  sandboxEngineType: "docker" | "opensandbox";
+};
+
+/**
+ * 一次 run 的 runtime 放置信息：使用哪种 provider、host/容器侧的 workspace 路径。
+ *
+ * 判别联合，discriminant 为 `runtimeType`：sandbox 分支带 `sandbox` 对象（隔离粒度、
+ * 挂载目标、引擎类型），local 分支不带。`runtimePath` 跨 local/sandbox 都有意义
+ * （worker 在执行环境内看到的 workspace 路径），留顶层。
+ *
+ * sandbox-only 的函数/方法可直接以 `SandboxRuntimePlacement` 为入参——类型上 `sandbox` 必填，
+ * 无需运行时守卫；`if (placement.runtimeType === "sandbox")` 后 TS 也会自动 narrow。
+ */
+export type LocalRuntimePlacement = {
+  runtimeType: "local";
   userId: string;
   workspaceId: string;
   hostPath: string;
   runtimePath: string;
-  /** 容器/沙箱内 hostPath 的挂载目标路径（如 `/workspace` 或 `/workspaces`）。 */
-  mountTarget: string;
-  /** sandbox engine 类型，仅 runtimeType="sandbox" 时有值。 */
-  sandboxEngineType?: "docker" | "opensandbox";
 };
+
+export type SandboxRuntimePlacement = {
+  runtimeType: "sandbox";
+  userId: string;
+  workspaceId: string;
+  hostPath: string;
+  runtimePath: string;
+  sandbox: SandboxPlacementInfo;
+};
+
+export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
 
 // ── WorkerExecutionHandle / RuntimeResourceHandle ───────────────────────────
 // worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
@@ -194,7 +215,6 @@ export interface RuntimeResourceHandle {
   runtimeType: string;
   resourceKey: string;
   workspaceId: string;
-  isolationScope: IsolationScope;
   runtimeResourceId?: string;
   placement: RuntimePlacement;
 }

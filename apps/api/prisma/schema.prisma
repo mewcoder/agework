@@ -188,6 +188,10 @@ model RunEvent {
   @@index([type, createdAt])
 }
 
+/// 持久沙箱资源（容器/沙箱会话）存活台账。实际只有 runtimeType="sandbox" 写入：
+/// local 模式 one run = one 子进程，runtimeResourceId 即 `pid:startToken`，只记内存、
+/// 不持久化（进程随 API 重启即销毁，pid 会被 OS 回收复用，入库只会留下过期脏数据）。
+/// 留名 RuntimeResource 是历史命名，语义上等价 SandboxResource（见 Phase 6 改名计划）。
 model RuntimeResource {
   id                String             @id
   runtimeType       String
@@ -208,6 +212,17 @@ model RuntimeResource {
   @@index([ownerWorkspaceId])
 }
 
+/// workspace ↔ 沙箱资源绑定关系表（一对多：user 隔离下多个 workspace 共用一个容器）。
+/// 同样只有 sandbox 写入；local 无持久容器，不建绑定。语义上等价 SandboxWorkspaceBinding。
+///
+/// 为什么需要独立成表（而非合并进 RuntimeResource 或 Workspace）：
+///   1. findActiveByWorkspace —— 沙箱复用入口：按 workspaceId 反查"当前绑着的 running 容器"，
+///      workspaceId @unique 保证一个 workspace 同时只绑一个活容器（复用语义基石）。
+///   2. isRuntimeResourceBoundToWorkspace —— 安全校验：worker 上报心跳/事件时验证容器确实
+///      属于该 workspace，防伪造/串扰。
+///   3. 反向查询 —— admin 面板要展示"一个容器绑了哪些 workspace"（workspaceRuntimes 关联 +
+///      @@index([resourceId])）；合并进 Workspace 会丢失此反向查询能力，只能全表扫。
+/// 一对多关系规范化，不宜塞 JSON 数组进 RuntimeResource（丢失查询能力与唯一约束）。
 model WorkspaceRuntime {
   id          String          @id
   workspaceId String          @unique

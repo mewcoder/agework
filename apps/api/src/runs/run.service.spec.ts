@@ -17,16 +17,24 @@ import type {
 } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
 
-function makePlacement(runtimeType: string): RuntimePlacement {
-  const runtimePath = runtimeType === "local" ? "/tmp/ws" : "/workspace";
-  return {
-    runtimeType,
-    isolationScope: "workspace" as const,
+function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
+  const common = {
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/tmp/ws",
-    runtimePath,
-    mountTarget: runtimePath,
+  };
+  if (runtimeType === "local") {
+    return { ...common, runtimeType: "local", runtimePath: "/tmp/ws" };
+  }
+  return {
+    ...common,
+    runtimeType: "sandbox",
+    runtimePath: "/workspace",
+    sandbox: {
+      isolationScope: "workspace",
+      mountTarget: "/workspace",
+      sandboxEngineType: "docker",
+    },
   };
 }
 
@@ -36,11 +44,11 @@ function makeRuntimeResource(
   return {
     runtimeType: placement.runtimeType,
     resourceKey:
-      placement.isolationScope === "user"
+      placement.runtimeType === "sandbox" &&
+      placement.sandbox.isolationScope === "user"
         ? placement.userId
         : placement.workspaceId,
     workspaceId: placement.workspaceId,
-    isolationScope: placement.isolationScope,
     placement,
   };
 }
@@ -319,16 +327,16 @@ describe("RunService", () => {
     });
 
     it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
-      // placement.runtimeType=docker（sandbox engine 解析结果），用于 body 内的 runtimeType
+      // placement.runtimeType=sandbox，runtimeResourceId 由 sandbox provider 异步解析
       mockRuntimeService.resolvePlacement = vi
         .fn()
-        .mockReturnValue(makePlacement("docker"));
+        .mockReturnValue(makePlacement("sandbox"));
       mockRunWorkerExecution.start = vi
         .fn()
         .mockImplementation(({ onRuntimeResourceIdReady }) => {
           const handle = {
             runId: "run-1",
-            runtimeType: "docker",
+            runtimeType: "sandbox",
             runtimeResourceId: "",
             conversationId: "conversation-1",
           };
@@ -344,7 +352,7 @@ describe("RunService", () => {
 
       expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
         "run-1",
-        "docker",
+        "sandbox",
         "container-abc"
       );
     });

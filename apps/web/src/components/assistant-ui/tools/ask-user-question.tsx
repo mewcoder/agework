@@ -441,6 +441,21 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
     );
   }
 
+  // running 但 questions 还没到（TOOL_CALL_START 已到、TOOL_CALL_ARGS 未到，
+  // argsText 为空解析不出 questions）。显示轻量占位卡片，避免正文已显示
+  // "等待回答"而 composer 上方还空着的割裂感。必须排在 AskUserPermission 分支
+  // 之前——否则 PermissionPromptUI 拿到 questions[0]===undefined，读 .options 会崩。
+  if (isInteractive && questions.length === 0) {
+    return (
+      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
+        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
+          <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          <span>加载中…</span>
+        </div>
+      </div>
+    );
+  }
+
   // 权限审批场景（后端 buildToolPermissionQuestion 注入，toolName 固定是
   // "AskUserPermission"）走专门的 Allow/Deny UI，不套用普通问答的 RadioGroup +
   // 其他 + 确认。
@@ -467,20 +482,6 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
           <SubmittedView questions={questions} answers={visibleSubmittedAnswers} />
         </ToolFallback.Content>
       </ToolFallback.Root>
-    );
-  }
-
-  // running 但 questions 还没到（TOOL_CALL_START 已到、TOOL_CALL_ARGS 未到，
-  // argsText 为空解析不出 questions）。显示轻量占位卡片，避免正文已显示
-  // "等待回答"而 composer 上方还空着的割裂感。
-  if (isInteractive && questions.length === 0) {
-    return (
-      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
-        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
-          <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          <span>加载中…</span>
-        </div>
-      </div>
     );
   }
 

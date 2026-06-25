@@ -1,10 +1,11 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
   IsolationScope,
-  RuntimePlacement,
   RuntimeResourceHandle,
+  SandboxRuntimePlacement,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
+import { isSandboxPlacement } from "../core/runtime-resources/runtime-resource-handle";
 import { ConfigService } from "../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../config/defaults";
 import { RuntimeInternalAccessService } from "../internal/runtime-internal-access.service";
@@ -42,7 +43,7 @@ export type SandboxScopeState = {
 export type SandboxWorkerExecutionContext = {
   runConfig: ProviderWorkerExecutionStartInput["runConfig"];
   runtimeResource: RuntimeResourceHandle;
-  placement: RuntimePlacement & { sandboxEngineType?: SandboxEngineType };
+  placement: SandboxRuntimePlacement;
   runId: string;
   workspaceId: string;
   resourceKey: string;
@@ -87,11 +88,14 @@ export class SandboxRuntimeResourceService {
   resolveWorkerExecutionContext(
     input: ProviderWorkerExecutionStartInput
   ): SandboxWorkerExecutionContext {
-    const placement = input.runtimeResource.placement as RuntimePlacement & {
-      sandboxEngineType?: SandboxEngineType;
-    };
+    const placement = input.runtimeResource.placement;
+    if (!isSandboxPlacement(placement)) {
+      throw new Error(
+        `SandboxRuntimeResourceService requires sandbox placement, got runtimeType=${placement.runtimeType}`
+      );
+    }
     const engineType =
-      placement.sandboxEngineType ?? this.configService.getSandboxEngine();
+      placement.sandbox.sandboxEngineType ?? this.configService.getSandboxEngine();
     return {
       runConfig: input.runConfig,
       runtimeResource: input.runtimeResource,
@@ -99,7 +103,7 @@ export class SandboxRuntimeResourceService {
       runId: input.runConfig.runId,
       workspaceId: input.runConfig.workspaceId,
       resourceKey: input.runtimeResource.resourceKey,
-      isolationScope: placement.isolationScope,
+      isolationScope: placement.sandbox.isolationScope,
       engineType,
       engine: this.resolveEngine(engineType),
     };
@@ -348,7 +352,7 @@ export class SandboxRuntimeResourceService {
       resourceKey: context.resourceKey,
       workspaceId: context.workspaceId,
       workspaceHostPath: context.placement.hostPath,
-      workspaceMountPath: context.placement.mountTarget,
+      workspaceMountPath: context.placement.sandbox.mountTarget,
     };
 
     return {
@@ -576,7 +580,7 @@ export class SandboxRuntimeResourceService {
   }
 
   private recordWorkspaceRuntime(
-    placement: RuntimePlacement,
+    placement: SandboxRuntimePlacement,
     resourceKey: string,
     runtimeResourceId: string
   ): Promise<void> {

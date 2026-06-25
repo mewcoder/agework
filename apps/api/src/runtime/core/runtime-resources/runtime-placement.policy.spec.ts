@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { RuntimePlacementPolicy } from "./runtime-placement.policy";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../../config/defaults";
@@ -29,11 +30,11 @@ describe("RuntimePlacementPolicy", () => {
       });
 
       expect(placement.runtimeType).toBe("sandbox");
-      expect(placement.sandboxEngineType).toBe("docker");
-      expect(placement.isolationScope).toBe("user");
+      expect((placement as SandboxRuntimePlacement).sandbox.sandboxEngineType).toBe("docker");
+      expect((placement as SandboxRuntimePlacement).sandbox.isolationScope).toBe("user");
       expect(placement.hostPath).toBe("/data/users/user-1");
       expect(placement.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
-      expect(placement.mountTarget).toBe(CONTAINER_WORKSPACES_ROOT);
+      expect((placement as SandboxRuntimePlacement).sandbox.mountTarget).toBe(CONTAINER_WORKSPACES_ROOT);
     });
 
     it("resolves different runtimePaths for different workspaces of the same user", () => {
@@ -71,10 +72,10 @@ describe("RuntimePlacementPolicy", () => {
         userWorkspaceRootPath: "/data/users/user-1",
       });
 
-      expect(placement.isolationScope).toBe("workspace");
+      expect((placement as SandboxRuntimePlacement).sandbox.isolationScope).toBe("workspace");
       expect(placement.hostPath).toBe("/data/users/user-1/ws-1");
       expect(placement.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
-      expect(placement.mountTarget).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
+      expect((placement as SandboxRuntimePlacement).sandbox.mountTarget).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
     });
   });
 
@@ -105,7 +106,7 @@ describe("RuntimePlacementPolicy", () => {
       }
     });
 
-    it("still records isolationScope for placement bookkeeping", () => {
+    it("does not carry sandbox info (local has no container isolation)", () => {
       mockConfigService.getDefaultIsolationScope = vi
         .fn()
         .mockReturnValue("user");
@@ -117,7 +118,7 @@ describe("RuntimePlacementPolicy", () => {
         userWorkspaceRootPath: "/data/users/user-1",
       });
 
-      expect(placement.isolationScope).toBe("user");
+      expect((placement as any).sandbox).toBeUndefined();
     });
   });
 
@@ -152,7 +153,7 @@ describe("RuntimePlacementPolicy", () => {
       isolationScope: "workspace",
     });
 
-    expect(placement.isolationScope).toBe("workspace");
+    expect((placement as SandboxRuntimePlacement).sandbox.isolationScope).toBe("workspace");
     expect(placement.hostPath).toBe("/data/users/user-1/ws-1");
   });
 

@@ -39,4 +39,7 @@ export type {
   WorkerExecutionStartInput,
   IsolationScope,
   RuntimePlacement,
+  LocalRuntimePlacement,
+  SandboxRuntimePlacement,
+  SandboxPlacementInfo,
 } from "./transport";

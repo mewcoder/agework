@@ -41,6 +41,13 @@ const WORKER_MAIN = require.resolve("@agework/worker");
 // file that has imports (https://github.com/privatenumber/tsx, tsx 4.22.4).
 const TSX_CLI = require.resolve("tsx/cli");
 
+/**
+ * Local runtime provider：one run = one child process，无容器、无跨 run 复用。
+ *
+ * 因此 local 不写 RuntimeResource / WorkspaceRuntime 表——没有持久容器要登记，
+ * runtimeResourceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
+ * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
+ */
 @Injectable()
 export class LocalRuntimeProvider
   implements RuntimeProvider, RuntimeResourceProvider, WorkerExecutionProvider

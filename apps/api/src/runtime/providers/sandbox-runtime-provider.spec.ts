@@ -105,13 +105,15 @@ const baseRun = {
 function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement {
   return {
     runtimeType: "sandbox",
-    isolationScope: "workspace" as IsolationScope,
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/tmp/workspace",
     runtimePath: "/workspace",
-    mountTarget: "/workspace",
-    sandboxEngineType: "docker",
+    sandbox: {
+      isolationScope: "workspace" as IsolationScope,
+      mountTarget: "/workspace",
+      sandboxEngineType: "docker",
+    },
     ...overrides,
   };
 }
@@ -124,7 +126,6 @@ function makeRuntimeResource(
     runtimeType: "sandbox",
     resourceKey: "ws-1",
     workspaceId: "ws-1",
-    isolationScope: "workspace",
     placement,
     ...overrides,
   };
@@ -157,7 +158,6 @@ describe("SandboxRuntimeProvider — provider contracts", () => {
       runtimeType: "sandbox",
       resourceKey: "ws-1",
       workspaceId: "ws-1",
-      isolationScope: "workspace",
       placement,
     });
     expect(engine.getOrCreate).not.toHaveBeenCalled();
@@ -433,11 +433,14 @@ describe("SandboxRuntimeProvider — user scope", () => {
   afterEach(() => { vi.useRealTimers(); });
 
   const userPlacement = makePlacement({
-    isolationScope: "user",
     userId: "user-1",
     hostPath: "/tmp/workspace",
     runtimePath: "/workspaces",
-    mountTarget: "/workspaces",
+    sandbox: {
+      isolationScope: "user",
+      mountTarget: "/workspaces",
+      sandboxEngineType: "docker",
+    },
   });
 
   it("same user, different workspaces → reuses the same sandbox", async () => {

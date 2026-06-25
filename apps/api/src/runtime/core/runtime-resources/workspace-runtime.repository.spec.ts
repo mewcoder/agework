@@ -2,20 +2,25 @@ vi.mock("../../prisma/prisma.service", () => ({
   PrismaService: class PrismaService {},
 }));
 
-import type { RuntimePlacement } from "@agework/shared/protocol";
+import type { SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { WorkspaceRuntimeRepository } from "./workspace-runtime.repository";
 
-function placement(overrides: Partial<RuntimePlacement> = {}): RuntimePlacement {
+function placement(
+  overrides: Partial<SandboxRuntimePlacement> = {}
+): SandboxRuntimePlacement {
   return {
     runtimeType: "sandbox",
-    isolationScope: "user",
     userId: "u1",
     workspaceId: "w1",
     hostPath: "/host",
     runtimePath: "/workspaces/w1",
-    mountTarget: "/workspaces",
+    sandbox: {
+      isolationScope: "user",
+      mountTarget: "/workspaces",
+      sandboxEngineType: "docker",
+    },
     ...overrides,
-  };
+  } as SandboxRuntimePlacement;
 }
 
 describe("WorkspaceRuntimeRepository", () => {
@@ -125,9 +130,12 @@ describe("WorkspaceRuntimeRepository", () => {
 
     await service.upsertRunning(
       placement({
-        isolationScope: "workspace",
         runtimePath: "/workspace",
-        mountTarget: "/workspace",
+        sandbox: {
+          isolationScope: "workspace",
+          mountTarget: "/workspace",
+          sandboxEngineType: "docker",
+        },
       }),
       "container-next"
     );

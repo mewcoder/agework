@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { RunConfig, RuntimePlacement } from "@agework/shared/protocol";
+import type { RunConfig, SandboxRuntimePlacement } from "@agework/shared/protocol";
 import type { SandboxEngine, SandboxRuntime } from "./sandbox-engine";
 import { SandboxRuntimeResourceService } from "./sandbox-runtime-resource.service";
 
@@ -23,18 +23,22 @@ function makeEngine(): SandboxEngine {
   };
 }
 
-function makePlacement(overrides: Partial<RuntimePlacement> = {}): RuntimePlacement {
+function makePlacement(
+  overrides: Partial<SandboxRuntimePlacement> = {}
+): SandboxRuntimePlacement {
   return {
     runtimeType: "sandbox",
-    isolationScope: "workspace",
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/host/ws-1",
     runtimePath: "/workspace",
-    mountTarget: "/workspace",
-    sandboxEngineType: "docker",
+    sandbox: {
+      isolationScope: "workspace",
+      mountTarget: "/workspace",
+      sandboxEngineType: "docker",
+    },
     ...overrides,
-  };
+  } as SandboxRuntimePlacement;
 }
 
 function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
@@ -84,11 +88,10 @@ function makeStartInput(placement = makePlacement()) {
     runtimeResource: {
       runtimeType: "sandbox",
       resourceKey:
-        placement.isolationScope === "user"
+        placement.sandbox?.isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
       workspaceId: placement.workspaceId,
-      isolationScope: placement.isolationScope,
       placement,
     },
   };

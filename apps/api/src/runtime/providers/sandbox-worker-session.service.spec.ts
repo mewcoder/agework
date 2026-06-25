@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RunConfig, RuntimePlacement } from "@agework/shared/protocol";
+import type { RunConfig, SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { SandboxWorkerSessionService } from "./sandbox-worker-session.service";
 import type {
   SandboxScopeState,
@@ -17,21 +17,22 @@ function makeContext(
   } as RunConfig;
   const placement = {
     runtimeType: "sandbox",
-    isolationScope: "workspace",
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/host/ws-1",
     runtimePath: "/workspace",
-    mountTarget: "/workspace",
-    sandboxEngineType: "docker",
-  } as RuntimePlacement;
+    sandbox: {
+      isolationScope: "workspace",
+      mountTarget: "/workspace",
+      sandboxEngineType: "docker",
+    },
+  } as SandboxRuntimePlacement;
   return {
     runConfig,
     runtimeResource: {
       runtimeType: "sandbox",
       resourceKey: "ws-1",
       workspaceId: "ws-1",
-      isolationScope: "workspace",
       placement,
     },
     placement,

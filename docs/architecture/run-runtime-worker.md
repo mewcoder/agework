@@ -288,11 +288,40 @@ type RuntimeResourceHandle = {
   runtimeType: string;
   resourceKey: string;
   workspaceId: string;
-  isolationScope: IsolationScope;
   runtimeResourceId?: string;
   placement: RuntimePlacement;
 };
 ```
+
+`isolationScope` 不再出现在 handle 顶层——它是沙箱专属语义,归在
+`placement.sandbox.isolationScope`;local 模式 `placement.sandbox` 为 undefined。
+（前端 admin run detail 看到的 `runtimeResource.isolationScope` 来自 DB
+`RuntimeResource` 表的同名列,与本进程内 handle 无关。）
+
+### 4.1a RuntimePlacement 与 SandboxPlacementInfo
+
+`RuntimePlacement` 是 run 的环境放置快照(纯计算,`resolvePlacement` 产出)。
+沙箱专属字段收进可选 `sandbox` 对象,local 不带:
+
+```ts
+type SandboxPlacementInfo = {
+  isolationScope: "user" | "workspace";   // 容器复用粒度
+  mountTarget: string;                      // 容器内挂载根
+  sandboxEngineType: "docker" | "opensandbox";
+};
+
+type RuntimePlacement = {
+  runtimeType: "local" | "sandbox";
+  userId: string;
+  workspaceId: string;
+  hostPath: string;        // 宿主机要挂进去的目录
+  runtimePath: string;     // 该 workspace 在执行环境内的路径(local=hostPath)
+  sandbox?: SandboxPlacementInfo;   // 仅 sandbox 模式
+};
+```
+
+`runtimePath` 跨 local/sandbox 都有意义(worker 要知道 workspace 路径),留顶层。
+`isolationScope`/`mountTarget`/`sandboxEngineType` 是沙箱物理参数,只有 sandbox 带。
 
 ### 4.2 WorkerExecutionHandle
 
@@ -329,11 +358,28 @@ WorkerExecutionHandle = session
 
 ## 5. Local 与 Sandbox 的物理差异
 
+runtime 顶层分 local / sandbox 两种 runtimeType;sandbox 内部由两个正交轴
+（`isolationScope` 容器复用粒度 × `sandboxEngineType` 引擎类型）进一步区分:
+
+| runtimeType | isolationScope | sandboxEngineType | 含义 |
+|---|---|---|---|
+| local | (无 sandbox) | — | 本机 fork 子进程,one run = one process |
+| sandbox | user | docker | 该用户共用一个 docker 容器 |
+| sandbox | user | opensandbox | 该用户共用一个 OpenSandbox 会话 |
+| sandbox | workspace | docker | 每个 workspace 一个 docker 容器 |
+| sandbox | workspace | opensandbox | 每个 workspace 一个 OpenSandbox 会话 |
+
+`isolationScope` 决定 resourceKey(user→userId / workspace→workspaceId),
+即"这个 run 能复用谁的容器";`sandboxEngineType` 决定用哪种沙箱技术实现。
+
 local 模式:
 
 ```text
 one run ~= one child process ~= one worker ~= one worker execution
 ```
+
+local 不写 `RuntimeResource` / `WorkspaceRuntime` 表——没有持久容器要登记,
+`runtimeResourceId` 即 `pid:startToken`,只记内存,run 结束进程即销毁。
 
 sandbox persistent 模式:
 
@@ -342,6 +388,9 @@ one runtime resource/container
   -> one worker host/process inside the container
     -> many run sessions over time
 ```
+
+sandbox 才写 `RuntimeResource` 表(容器存活台账)与 `WorkspaceRuntime` 表
+(workspace↔容器绑定,一对多)。
 
 因此代码和文档里不要写死 "one run = one worker process"。稳定抽象应是:
 

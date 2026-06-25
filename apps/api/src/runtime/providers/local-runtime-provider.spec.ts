@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type {
+  LocalRuntimePlacement,
   RunConfig,
-  RuntimePlacement,
   RuntimeResourceHandle,
 } from "@agework/shared/protocol";
 import { LocalRuntimeProvider } from "./local-runtime-provider";
@@ -27,18 +27,16 @@ vi.mock("node:child_process", () => ({
 }));
 
 function makePlacement(
-  overrides: Partial<RuntimePlacement> = {}
-): RuntimePlacement {
+  overrides: Partial<LocalRuntimePlacement> = {}
+): LocalRuntimePlacement {
   return {
     runtimeType: "local",
-    isolationScope: "workspace",
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/tmp/ws",
     runtimePath: "/tmp/ws",
-    mountTarget: "/tmp/ws",
     ...overrides,
-  };
+  } as LocalRuntimePlacement;
 }
 
 function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
@@ -59,7 +57,6 @@ function makeRuntimeResource(
     runtimeType: "local",
     resourceKey: "ws-1",
     workspaceId: "ws-1",
-    isolationScope: "workspace",
     placement,
     ...overrides,
   };
@@ -107,7 +104,6 @@ describe("LocalRuntimeProvider", () => {
       runtimeType: "local",
       resourceKey: "ws-1",
       workspaceId: "ws-1",
-      isolationScope: "workspace",
       placement,
     });
     expect(childProcessMock.fork).not.toHaveBeenCalled();

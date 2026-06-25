@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
-import type { RuntimePlacement } from "@agework/shared/protocol";
+import type { SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { PrismaService } from "../../../prisma/prisma.service";
 import {
   runtimeResourceMetadataJson,
@@ -9,13 +9,14 @@ import {
   stoppedResourceMetadata,
 } from "./runtime-resource-diagnostics";
 
-function ownerWhere(placement: RuntimePlacement) {
+function ownerWhere(placement: SandboxRuntimePlacement) {
+  const isolationScope = placement.sandbox.isolationScope;
   return {
     runtimeType: placement.runtimeType,
-    isolationScope: placement.isolationScope,
+    isolationScope,
     ownerUserId: placement.userId,
     ownerWorkspaceId:
-      placement.isolationScope === "workspace" ? placement.workspaceId : null,
+      isolationScope === "workspace" ? placement.workspaceId : null,
   };
 }
 
@@ -59,7 +60,7 @@ export class WorkspaceRuntimeRepository {
   }
 
   async upsertRunning(
-    placement: RuntimePlacement,
+    placement: SandboxRuntimePlacement,
     runtimeResourceId: string,
     metadata?: object
   ) {
@@ -106,7 +107,8 @@ export class WorkspaceRuntimeRepository {
     });
   }
 
-  async markStopped(placement: RuntimePlacement) {
+  async markStopped(placement: SandboxRuntimePlacement) {
+    const isolationScope = placement.sandbox.isolationScope;
     await this.prisma.runtimeResource.updateMany({
       where: ownerWhere(placement),
       data: {
@@ -114,9 +116,9 @@ export class WorkspaceRuntimeRepository {
         metadata: runtimeResourceMetadataJson(
           stoppedResourceMetadata({
             runtimeType: placement.runtimeType,
-            isolationScope: placement.isolationScope,
+            isolationScope,
             resourceKey:
-              placement.isolationScope === "user"
+              isolationScope === "user"
                 ? placement.userId
                 : placement.workspaceId,
             reason: "stopped",

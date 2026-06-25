@@ -19,16 +19,25 @@ function makeProvider() {
 const placement = (
   runtimeType: string,
   overrides: Partial<RuntimePlacement> = {}
-): RuntimePlacement => ({
-  runtimeType,
-  isolationScope: "workspace" as IsolationScope,
-  userId: "user-1",
-  workspaceId: "ws-1",
-  hostPath: "/ws",
-  runtimePath: "/ws",
-  mountTarget: "/ws",
-  ...overrides,
-});
+): RuntimePlacement => {
+  const sandbox =
+    runtimeType === "sandbox"
+      ? {
+          isolationScope: "workspace" as IsolationScope,
+          mountTarget: "/ws",
+          sandboxEngineType: "docker" as const,
+        }
+      : undefined;
+  return {
+    runtimeType: runtimeType as RuntimePlacement["runtimeType"],
+    userId: "user-1",
+    workspaceId: "ws-1",
+    hostPath: "/ws",
+    runtimePath: "/ws",
+    ...(sandbox ? { sandbox } : {}),
+    ...overrides,
+  } as RuntimePlacement;
+};
 
 describe("RuntimeService", () => {
   let placementPolicy: Partial<RuntimePlacementPolicy>;
@@ -64,7 +73,6 @@ describe("RuntimeService", () => {
 
   it("provision returns a runtime resource handle without starting a worker", async () => {
     const p = placement("sandbox", {
-      isolationScope: "workspace",
       workspaceId: "ws-1",
     });
 
@@ -74,7 +82,6 @@ describe("RuntimeService", () => {
       runtimeType: "sandbox",
       resourceKey: "ws-1",
       workspaceId: "ws-1",
-      isolationScope: "workspace",
       placement: p,
     });
     expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
@@ -87,7 +94,6 @@ describe("RuntimeService", () => {
       runtimeType: "local",
       resourceKey: "ws-1",
       workspaceId: "ws-1",
-      isolationScope: "workspace",
       placement: p,
     };
     const provision = vi.fn().mockReturnValue(expected);
@@ -104,7 +110,11 @@ describe("RuntimeService", () => {
 
   it("provision uses userId as resourceKey for user isolation", async () => {
     const p = placement("sandbox", {
-      isolationScope: "user",
+      sandbox: {
+        isolationScope: "user",
+        mountTarget: "/ws",
+        sandboxEngineType: "docker",
+      },
       userId: "user-1",
       workspaceId: "ws-2",
     });
@@ -112,13 +122,16 @@ describe("RuntimeService", () => {
     await expect(service.provision(p)).resolves.toMatchObject({
       resourceKey: "user-1",
       workspaceId: "ws-2",
-      isolationScope: "user",
     });
   });
 
   it("provision fails fast for an unknown isolation scope", async () => {
     const p = placement("sandbox", {
-      isolationScope: "unknown" as IsolationScope,
+      sandbox: {
+        isolationScope: "unknown" as IsolationScope,
+        mountTarget: "/ws",
+        sandboxEngineType: "docker",
+      },
     });
 
     await expect(service.provision(p)).rejects.toThrow(
@@ -128,13 +141,17 @@ describe("RuntimeService", () => {
 
   it("provision fails fast when required placement fields are missing", async () => {
     await expect(
-      service.provision(placement("", { runtimeType: "" }))
+      service.provision(placement(""))
     ).rejects.toThrow("Runtime placement runtimeType is required");
 
     await expect(
       service.provision(
         placement("sandbox", {
-          isolationScope: "user",
+          sandbox: {
+            isolationScope: "user",
+            mountTarget: "/ws",
+            sandboxEngineType: "docker",
+          },
           userId: "",
         })
       )
