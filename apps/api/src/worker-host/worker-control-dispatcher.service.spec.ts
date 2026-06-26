@@ -1,54 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RunConfig, SandboxRuntimePlacement } from "@agework/shared/protocol";
-import { SandboxWorkerSessionService } from "./worker-session.service";
-import type {
-  SandboxScopeState,
-  SandboxWorkerExecutionContext,
-} from "./runtime-instance.service";
+import type { RunConfig } from "@agework/shared/protocol";
+import { WorkerControlDispatcher } from "./worker-control-dispatcher.service";
 
-function makeContext(
-  overrides: Partial<SandboxWorkerExecutionContext> = {}
-): SandboxWorkerExecutionContext {
-  const runConfig = {
+function makeRunConfig(): RunConfig {
+  return {
     runId: "run-1",
     conversationId: "conversation-1",
     workspaceId: "ws-1",
     input: { prompt: "hello" },
   } as RunConfig;
-  const placement = {
-    runtimeType: "sandbox",
-    userId: "user-1",
-    workspaceId: "ws-1",
-    hostPath: "/host/ws-1",
-    runtimePath: "/workspace",
-    sandbox: {
-      isolationScope: "workspace",
-      mountTarget: "/workspace",
-      sandboxEngineType: "docker",
-    },
-  } as SandboxRuntimePlacement;
-  return {
-    runConfig,
-    runtimeTarget: { ...placement, scopeKey: "ws-1" },
-    placement,
-    runId: "run-1",
-    workspaceId: "ws-1",
-    scopeKey: "ws-1",
-    isolationScope: "workspace",
-    engineType: "docker",
-    engine: {} as never,
-    ...overrides,
-  };
-}
-
-function makeScopeState(): SandboxScopeState {
-  return {
-    runtimeInstanceId: "",
-    accessKey: "workspace-key",
-    activeRuns: new Map(),
-    isolationScope: "workspace",
-    engineType: "docker",
-  };
 }
 
 function makeService() {
@@ -62,7 +22,7 @@ function makeService() {
     cleanup: vi.fn(),
     cleanupWorkspace: vi.fn(),
   };
-  const service = new SandboxWorkerSessionService(
+  const service = new WorkerControlDispatcher(
     configStore as never,
     access as never,
     controlQueue as never
@@ -70,29 +30,28 @@ function makeService() {
   return { service, configStore, access, controlQueue };
 }
 
-describe("SandboxWorkerSessionService", () => {
+describe("WorkerControlDispatcher", () => {
   it("registers run config without touching control queue", () => {
     const { service, configStore, controlQueue } = makeService();
-    const context = makeContext();
+    const runConfig = makeRunConfig();
 
-    service.registerRunConfig(context);
+    service.registerRunConfig("run-1", runConfig);
 
-    expect(configStore.register).toHaveBeenCalledWith(
-      "run-1",
-      context.runConfig
-    );
+    expect(configStore.register).toHaveBeenCalledWith("run-1", runConfig);
     expect(controlQueue.pushForWorkspace).not.toHaveBeenCalled();
   });
 
   it("registers run session and enqueues the first user_message control", () => {
     const { service, access, controlQueue } = makeService();
-    const context = makeContext();
-    const scopeState = makeScopeState();
 
-    service.registerRunSession(context, scopeState);
+    service.registerRunSession({
+      runId: "run-1",
+      scopeKey: "ws-1",
+      accessKey: "workspace-key",
+      runConfig: makeRunConfig(),
+    });
 
     expect(access.registerRun).toHaveBeenCalledWith("run-1", "workspace-key");
-    expect(scopeState.activeRuns.get("run-1")).toBe("conversation-1");
     expect(controlQueue.pushForWorkspace).toHaveBeenCalledWith(
       "ws-1",
       expect.objectContaining({
@@ -107,12 +66,15 @@ describe("SandboxWorkerSessionService", () => {
     );
   });
 
-  it("increments control sequence per resource key", () => {
+  it("increments control sequence per scope key", () => {
     const { service, controlQueue } = makeService();
-    const context = makeContext();
-    const scopeState = makeScopeState();
 
-    service.registerRunSession(context, scopeState);
+    service.registerRunSession({
+      runId: "run-1",
+      scopeKey: "ws-1",
+      accessKey: "workspace-key",
+      runConfig: makeRunConfig(),
+    });
     service.sendControl("ws-1", "run-1", {
       type: "cancel",
       commandId: "command-2",

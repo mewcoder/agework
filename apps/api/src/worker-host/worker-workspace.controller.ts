@@ -1,11 +1,11 @@
 import { Controller, Get, Post, Param, Query, UseGuards, Logger } from "@nestjs/common";
 import type { Envelope } from "@agework/shared/protocol";
-import { Public } from "../../auth/public.decorator";
-import { RawResponse } from "../../common/decorators/raw-response.decorator";
+import { Public } from "../auth/public.decorator";
+import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./auth.guard";
 import { RuntimeControlQueue } from "./control-queue";
-import { RuntimeService } from "../runtime.service";
-import { safeLogJson } from "../../common/logging";
+import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
+import { safeLogJson } from "../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
 
@@ -18,12 +18,12 @@ const MAX_CONTROL_WAIT_MS = 30_000;
 @RawResponse()
 @Controller("internal/workspaces")
 @UseGuards(RuntimeInternalAuthGuard)
-export class RuntimeWorkspaceController {
-  private readonly logger = new Logger(RuntimeWorkspaceController.name);
+export class WorkerWorkspaceController {
+  private readonly logger = new Logger(WorkerWorkspaceController.name);
 
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
-    private readonly runtimeService: RuntimeService
+    private readonly heartbeatRegistry: RuntimeHeartbeatRegistry
   ) {}
 
   /**
@@ -71,7 +71,7 @@ export class RuntimeWorkspaceController {
     @Param("workspaceId") workspaceId: string
   ): { ok: boolean } {
     this.logger.debug(`Workspace heartbeat workspaceId=${workspaceId}`);
-    this.runtimeService.heartbeatRuntimeInstance(workspaceId);
+    this.heartbeatRegistry.heartbeatRuntimeInstance(workspaceId);
     return { ok: true };
   }
 }

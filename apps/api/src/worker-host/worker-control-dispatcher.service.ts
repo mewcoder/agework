@@ -1,17 +1,18 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
-import type { ControlPayload } from "@agework/shared/protocol";
-import { RuntimeConfigStore } from "../../internal/config-store";
-import { RuntimeInternalAccessService } from "../../internal/access.service";
-import { RuntimeControlQueue } from "../../internal/control-queue";
-import { nextControlEnvelope } from "../provider-utils";
-import type {
-  SandboxScopeState,
-  SandboxWorkerExecutionContext,
-} from "./runtime-instance.service";
+import type { ControlPayload, RunConfig } from "@agework/shared/protocol";
+import { RuntimeConfigStore } from "./config-store";
+import { RuntimeInternalAccessService } from "./access.service";
+import { RuntimeControlQueue } from "./control-queue";
+import { nextControlEnvelope } from "./control-envelope";
 
+/**
+ * worker 控制下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
+ * 维护 control seq 计数器，并把控制指令塞入 control queue。不持有 runtime 实例状态，
+ * 所有入参均为原始值，便于在 worker-host 层独立存在。
+ */
 @Injectable()
-export class SandboxWorkerSessionService {
+export class WorkerControlDispatcher {
   private readonly controlSeqs = new Map<string, number>();
   private readonly cancelledStartingRuns = new Set<string>();
 
@@ -21,29 +22,27 @@ export class SandboxWorkerSessionService {
     private readonly controlQueue: RuntimeControlQueue
   ) {}
 
-  registerRunConfig(context: SandboxWorkerExecutionContext): void {
-    this.runConfigStore.register(context.runId, context.runConfig);
+  registerRunConfig(runId: string, runConfig: RunConfig): void {
+    this.runConfigStore.register(runId, runConfig);
   }
 
-  registerRunSession(
-    context: SandboxWorkerExecutionContext,
-    scopeState: SandboxScopeState
-  ): void {
-    this.runtimeAccess.registerRun(context.runId, scopeState.accessKey);
-    scopeState.activeRuns.set(
-      context.runId,
-      context.runConfig.conversationId
-    );
+  registerRunSession(params: {
+    runId: string;
+    scopeKey: string;
+    accessKey: string;
+    runConfig: RunConfig;
+  }): void {
+    this.runtimeAccess.registerRun(params.runId, params.accessKey);
 
-    if (!this.controlSeqs.has(context.scopeKey)) {
-      this.controlSeqs.set(context.scopeKey, 0);
+    if (!this.controlSeqs.has(params.scopeKey)) {
+      this.controlSeqs.set(params.scopeKey, 0);
     }
 
-    this.sendControl(context.scopeKey, context.runId, {
+    this.sendControl(params.scopeKey, params.runId, {
       type: "user_message",
       commandId: generateId(),
-      runId: context.runId,
-      input: context.runConfig.input,
+      runId: params.runId,
+      input: params.runConfig.input,
     });
   }
 

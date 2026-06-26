@@ -250,7 +250,8 @@ apps/api/src/runtime/providers/local-provider.ts
 
 apps/api/src/runtime/providers/sandbox/runtime-provider.ts
   public facade for sandbox RuntimeProvider
-  delegates resource lifecycle and session lifecycle to services
+  delegates resource lifecycle to runtime-instance.service
+  delegates control dispatch to worker-host WorkerControlDispatcher
 
 apps/api/src/runtime/providers/sandbox/runtime-resource.service.ts
   sandbox runtime resource state
@@ -258,10 +259,12 @@ apps/api/src/runtime/providers/sandbox/runtime-resource.service.ts
   heartbeat/idle/orphan recovery
   diagnostics and WorkspaceRuntimeResource binding
 
-apps/api/src/runtime/providers/sandbox/worker-session.service.ts
-  per-run config/session/control queue
-  cancel-before-ready tracking
-  per-run cleanup
+apps/api/src/worker-host/
+  worker 通信层（与 run / runtime 平级，零反向依赖）
+  config-store / control-queue / access.service / auth.guard
+  worker-runtime.controller / worker-workspace.controller（worker HTTP 端点）
+  worker-control-dispatcher.service（per-run config/control queue、cancel-before-ready、cleanup）
+  control-sent-recorder（run 注入）/ runtime-heartbeat.registry（runtime 注入）
 
 packages/shared/src/protocol/transport.ts
   RuntimeResource
@@ -616,6 +619,38 @@ RunWorkerExecutionService
 - 把 access key fingerprint、spec/version、lastSeenAt 等字段从 metadata 提升出来。
 
 ### Phase 7: 拆出 `worker-host` 模块（worker 通信独立成层）
+
+状态:已完成。typecheck + 全量单测（411）通过;worker-host 对 run / runtime 零依赖已校验。
+
+落地结果:
+
+- 新建 `apps/api/src/worker-host/` 模块（与 run / runtime 平级）。原 `runtime/internal/`
+  下 6 个文件全部搬入:`config-store` / `control-queue` / `access.service` / `auth.guard` /
+  `runtime.controller`（→ `worker-runtime.controller`,类名 `WorkerRuntimeController`）/
+  `workspace.controller`（→ `worker-workspace.controller`,类名 `WorkerWorkspaceController`）。
+  `runtime/internal/` 目录已清空删除。
+- `SandboxWorkerSessionService` 解耦后改名 `WorkerControlDispatcher` 搬入 worker-host:方法签名
+  改收原始值（`registerRunConfig(runId, runConfig)` / `registerRunSession({ runId, scopeKey,
+  accessKey, runConfig })`),不再接收 `SandboxScopeState` / `SandboxWorkerExecutionContext`;
+  `scopeState.activeRuns.set` 这一步挪到 `SandboxRuntimeProvider.startWorkerExecution` 编排里。
+- 为保持 worker-host 不反向依赖 run / runtime,引入两个端口(由被通知方在启动时注入实现):
+  - `ControlSentRecorder`(worker-host 定义,run 的 `RunEventReceiverImpl` 实现):control-queue
+    入队时记 trace。`RuntimeControlQueue.setRunEventReceiver` → `setControlSentRecorder`,
+    在 `RunsModule.onModuleInit` 注入。
+  - `RuntimeInstanceHeartbeatSink` + `RuntimeHeartbeatRegistry`(worker-host 定义,runtime 的
+    `RuntimeService` 实现):两个 worker 控制器经它转发 runtime 实例心跳,在
+    `RuntimeModule.onModuleInit` 注入,worker 控制器不再注入 `RuntimeService`。
+- `nextControlEnvelope` 从 `runtime/providers/provider-utils` 移入 `worker-host/control-envelope`;
+  `local-provider`(runtime)改从 worker-host 引入,方向仍是 runtime → worker-host。
+- `run-internal.controller`(`@Controller("internal/runs")`)按计划留在 run 层,仅把 import 来源
+  从 `runtime/internal/` 改成 `worker-host/`。
+- 模块接线:新建 `worker-host.module.ts`(leaf module,无下游依赖);`runtime.module` 与
+  `runs.module` 各自 `imports: [WorkerHostModule]` 并删去原 internal provider/export/controller。
+- worker HTTP 端点路径不变(`internal/runs` / `internal/runtimes` / `internal/workspaces`)。
+
+----
+
+原始计划(保留备查):
 
 状态:计划已定,待执行。与"后期统一整理 internal"合并做。
 

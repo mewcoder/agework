@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Envelope, ControlPayload } from "@agework/shared/protocol";
-import type { RunEventReceiver } from "../providers/run-event-receiver";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import type { ControlSentRecorder } from "./control-sent-recorder";
+import { errorLogFields, safeLogJson } from "../common/logging";
 
 type WorkspaceWaiter = {
   afterSeq: number;
@@ -24,10 +24,10 @@ export class RuntimeControlQueue {
     Envelope<ControlPayload>[]
   >();
   private readonly workspaceWaiters = new Map<string, WorkspaceWaiter[]>();
-  private receiver!: RunEventReceiver;
+  private recorder!: ControlSentRecorder;
 
-  setRunEventReceiver(receiver: RunEventReceiver): void {
-    this.receiver = receiver;
+  setControlSentRecorder(recorder: ControlSentRecorder): void {
+    this.recorder = recorder;
   }
 
   push(runId: string, envelope: Envelope<ControlPayload>): void {
@@ -152,7 +152,7 @@ export class RuntimeControlQueue {
   ): void {
     if (!runId) return;
     const control = envelope.payload;
-    this.receiver
+    this.recorder
       .recordControlSent({
         runId,
         commandId: control.commandId,

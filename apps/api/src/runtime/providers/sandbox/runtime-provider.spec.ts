@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRuntimeProvider } from "./runtime-provider";
 import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
-import { SandboxWorkerSessionService } from "./worker-session.service";
+import { WorkerControlDispatcher } from "../../../worker-host/worker-control-dispatcher.service";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
   IsolationScope,
@@ -75,7 +75,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     access as never,
     [engine]
   );
-  const workerSessions = new SandboxWorkerSessionService(
+  const workerSessions = new WorkerControlDispatcher(
     configStore as never,
     access as never,
     controlQueue as never

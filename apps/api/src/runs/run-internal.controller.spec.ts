@@ -3,9 +3,9 @@ import { IS_PUBLIC_KEY } from "../auth/public.decorator";
 import { RunInternalController } from "./run-internal.controller";
 import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
 import { RunActiveStore } from "./execution/run-active.store";
-import { RuntimeConfigStore } from "../runtime/internal/config-store";
+import { RuntimeConfigStore } from "../worker-host/config-store";
 import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
-import { RuntimeControlQueue } from "../runtime/internal/control-queue";
+import { RuntimeControlQueue } from "../worker-host/control-queue";
 
 const activeHandle = {
   runtimeHandle: {

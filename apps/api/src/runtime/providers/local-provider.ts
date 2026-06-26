@@ -13,9 +13,9 @@ import type { RunEventReceiver } from "./run-event-receiver";
 import type { RuntimeProvider } from "./provider-contracts";
 import {
   HeartbeatWatchdog,
-  nextControlEnvelope,
   publishWorkerErrorStatus,
 } from "./provider-utils";
+import { nextControlEnvelope } from "../../worker-host/control-envelope";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */

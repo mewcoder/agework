@@ -7,7 +7,7 @@ describe("RuntimeControlQueue", () => {
 
   beforeEach(() => {
     queue = new RuntimeControlQueue();
-    queue.setRunEventReceiver({
+    queue.setControlSentRecorder({
       recordControlSent: vi.fn().mockResolvedValue(undefined),
     } as never);
   });

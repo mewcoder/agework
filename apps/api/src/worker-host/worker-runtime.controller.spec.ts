@@ -1,16 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { RuntimeRuntimeController } from "./runtime.controller";
+import { WorkerRuntimeController } from "./worker-runtime.controller";
 import { RuntimeControlQueue } from "./control-queue";
 import { RuntimeInternalAccessService } from "./access.service";
-import { RuntimeService } from "../runtime.service";
+import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
 
-function makeRuntimeService(): RuntimeService {
+function makeHeartbeatRegistry(): RuntimeHeartbeatRegistry {
   return {
     heartbeatRuntimeInstance: vi.fn(),
-  } as unknown as RuntimeService;
+  } as unknown as RuntimeHeartbeatRegistry;
 }
 
-describe("RuntimeRuntimeController", () => {
+describe("WorkerRuntimeController", () => {
   describe("pollRuntimeControls()", () => {
     it("resolves scopeKey from runtimeInstanceId and polls the workspace queue", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
@@ -19,10 +19,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
-      const controller = new RuntimeRuntimeController(
+      const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       const result = await controller.pollRuntimeControls("rr-1", "3");
@@ -40,10 +40,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
-      const controller = new RuntimeRuntimeController(
+      const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       await controller.pollRuntimeControls("rr-1");
@@ -58,10 +58,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
-      const controller = new RuntimeRuntimeController(
+      const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       await controller.pollRuntimeControls("rr-1", "not-a-number");
@@ -76,10 +76,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
-      const controller = new RuntimeRuntimeController(
+      const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       const result = await controller.pollRuntimeControls("rr-1", "1", "25000");
@@ -95,10 +95,10 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue(undefined),
       };
-      const controller = new RuntimeRuntimeController(
+      const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
         runtimeAccess as RuntimeInternalAccessService,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       const result = await controller.pollRuntimeControls("rr-unknown", "0");
@@ -114,8 +114,8 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
-      const runtimeService = makeRuntimeService();
-      const controller = new RuntimeRuntimeController(
+      const runtimeService = makeHeartbeatRegistry();
+      const controller = new WorkerRuntimeController(
         controlQueue,
         runtimeAccess as RuntimeInternalAccessService,
         runtimeService
@@ -133,8 +133,8 @@ describe("RuntimeRuntimeController", () => {
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue(undefined),
       };
-      const runtimeService = makeRuntimeService();
-      const controller = new RuntimeRuntimeController(
+      const runtimeService = makeHeartbeatRegistry();
+      const controller = new WorkerRuntimeController(
         controlQueue,
         runtimeAccess as RuntimeInternalAccessService,
         runtimeService

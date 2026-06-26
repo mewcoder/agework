@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { RuntimeInternalAccessService } from "./access.service";
-import { extractBearerToken } from "../../auth/extract-bearer-token";
+import { extractBearerToken } from "../auth/extract-bearer-token";
 
 type RequestWithRunId = {
   headers: Record<string, string | string[] | undefined>;

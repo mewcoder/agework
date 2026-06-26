@@ -15,7 +15,7 @@ import {
   type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
 } from "./runtime-instance.service";
-import { SandboxWorkerSessionService } from "./worker-session.service";
+import { WorkerControlDispatcher } from "../../../worker-host/worker-control-dispatcher.service";
 
 @Injectable()
 export class SandboxRuntimeProvider implements RuntimeProvider {
@@ -25,7 +25,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
   constructor(
     private readonly runtimeInstances: SandboxRuntimeInstanceService,
-    private readonly workerSessions: SandboxWorkerSessionService
+    private readonly workerSessions: WorkerControlDispatcher
   ) {}
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
@@ -44,12 +44,20 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     const context =
       this.runtimeInstances.resolveWorkerExecutionContext(input);
     this.logWorkerExecutionStart(context);
-    this.workerSessions.registerRunConfig(context);
+    this.workerSessions.registerRunConfig(context.runId, context.runConfig);
 
     const handle = this.runtimeInstances.createRunHandle(context);
     const scopeState = this.runtimeInstances.ensureScopeState(context);
 
-    this.workerSessions.registerRunSession(context, scopeState);
+    // provider 同时持有 resource 与 session，故由它写 scopeState 的 activeRuns，
+    // dispatcher 不再触碰 sandbox 容器状态。
+    scopeState.activeRuns.set(context.runId, context.runConfig.conversationId);
+    this.workerSessions.registerRunSession({
+      runId: context.runId,
+      scopeKey: context.scopeKey,
+      accessKey: scopeState.accessKey,
+      runConfig: context.runConfig,
+    });
     this.runtimeInstances.attachOrStartRuntimeInstance(
       {
         context,

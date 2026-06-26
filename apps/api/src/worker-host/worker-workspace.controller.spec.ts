@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from "vitest";
-import { RuntimeWorkspaceController } from "./workspace.controller";
+import { WorkerWorkspaceController } from "./worker-workspace.controller";
 import { RuntimeControlQueue } from "./control-queue";
-import { RuntimeService } from "../runtime.service";
+import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
 
-function makeRuntimeService(): RuntimeService {
+function makeHeartbeatRegistry(): RuntimeHeartbeatRegistry {
   return {
     heartbeatRuntimeInstance: vi.fn(),
-  } as unknown as RuntimeService;
+  } as unknown as RuntimeHeartbeatRegistry;
 }
 
-describe("RuntimeWorkspaceController", () => {
+describe("WorkerWorkspaceController", () => {
   describe("pollWorkspaceControls()", () => {
     it("polls the control queue by workspaceId and afterSeq", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
@@ -18,9 +18,9 @@ describe("RuntimeWorkspaceController", () => {
         ]),
       };
 
-      const controller = new RuntimeWorkspaceController(
+      const controller = new WorkerWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       const result = await controller.pollWorkspaceControls("ws-1", "3");
@@ -36,9 +36,9 @@ describe("RuntimeWorkspaceController", () => {
         pollByWorkspace: vi.fn().mockReturnValue([]),
       };
 
-      const controller = new RuntimeWorkspaceController(
+      const controller = new WorkerWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       await controller.pollWorkspaceControls("ws-1");
@@ -53,9 +53,9 @@ describe("RuntimeWorkspaceController", () => {
         ]),
       };
 
-      const controller = new RuntimeWorkspaceController(
+      const controller = new WorkerWorkspaceController(
         controlQueue as RuntimeControlQueue,
-        makeRuntimeService()
+        makeHeartbeatRegistry()
       );
 
       const result = await controller.pollWorkspaceControls("ws-1", "1", "25000");
@@ -68,9 +68,9 @@ describe("RuntimeWorkspaceController", () => {
   describe("heartbeat()", () => {
     it("broadcasts the heartbeat by resource key", () => {
       const controlQueue = {} as RuntimeControlQueue;
-      const runtimeService = makeRuntimeService();
+      const runtimeService = makeHeartbeatRegistry();
 
-      const controller = new RuntimeWorkspaceController(
+      const controller = new WorkerWorkspaceController(
         controlQueue,
         runtimeService
       );

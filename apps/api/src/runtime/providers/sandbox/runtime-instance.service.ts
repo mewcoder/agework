@@ -9,7 +9,7 @@ import type {
 import { isSandboxPlacement } from "../../resources/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
-import { RuntimeInternalAccessService } from "../../internal/access.service";
+import { RuntimeInternalAccessService } from "../../../worker-host/access.service";
 import { WorkspaceRuntimeInstanceRepository } from "../../resources/workspace-runtime-instance.repository";
 import { swallow } from "../../../common/swallow";
 import {

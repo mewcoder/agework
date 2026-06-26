@@ -18,10 +18,11 @@ import { RunWorkerExecutionService } from "./execution/run-worker-execution.serv
 import { AdminRunController } from "./admin/admin-run.controller";
 import { RunInternalController } from "./run-internal.controller";
 
-// deps（向下依赖 runtime，以及 conversation / model-provider 领域）
+// deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
-import { RuntimeControlQueue } from "../runtime/internal/control-queue";
+import { WorkerHostModule } from "../worker-host/worker-host.module";
+import { RuntimeControlQueue } from "../worker-host/control-queue";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
 
@@ -31,7 +32,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
  * runtime 侧的 provider 与 control queue，以及恢复孤儿 run。
  */
 @Module({
-  imports: [RuntimeModule, ConversationModule, ModelProviderModule],
+  imports: [RuntimeModule, WorkerHostModule, ConversationModule, ModelProviderModule],
   controllers: [AdminRunController, RunInternalController],
   providers: [
     RunRepository,
@@ -62,7 +63,7 @@ export class RunsModule implements OnModuleInit {
     // 把事件 receiver 注入 runtime 侧的 provider 与 control queue
     // （它们只认 RunEventReceiver 接口，不直接依赖 run 实现）
     this.providerRegistry.setRunEventReceiver(this.runEventReceiver);
-    this.controlQueue.setRunEventReceiver(this.runEventReceiver);
+    this.controlQueue.setControlSentRecorder(this.runEventReceiver);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

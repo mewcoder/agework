@@ -1,31 +1,31 @@
 import { Controller, Get, Post, Param, Query, UseGuards, Logger } from "@nestjs/common";
 import type { Envelope } from "@agework/shared/protocol";
-import { Public } from "../../auth/public.decorator";
-import { RawResponse } from "../../common/decorators/raw-response.decorator";
+import { Public } from "../auth/public.decorator";
+import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { RuntimeInternalAuthGuard } from "./auth.guard";
 import { RuntimeControlQueue } from "./control-queue";
 import { RuntimeInternalAccessService } from "./access.service";
-import { RuntimeService } from "../runtime.service";
-import { safeLogJson } from "../../common/logging";
+import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
+import { safeLogJson } from "../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
 
 /**
  * Internal runtime resource API — 仅供持久容器内的 worker 调用。
- * 与 RuntimeWorkspaceController 类似，但以 runtimeInstanceId 为分区键，
+ * 与 WorkerWorkspaceController 类似，但以 runtimeInstanceId 为分区键，
  * 使得 user scope 下同一容器可服务多个 workspace 的请求。
  */
 @Public()
 @RawResponse()
 @Controller("internal/runtimes")
 @UseGuards(RuntimeInternalAuthGuard)
-export class RuntimeRuntimeController {
-  private readonly logger = new Logger(RuntimeRuntimeController.name);
+export class WorkerRuntimeController {
+  private readonly logger = new Logger(WorkerRuntimeController.name);
 
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
     private readonly runtimeAccess: RuntimeInternalAccessService,
-    private readonly runtimeService: RuntimeService
+    private readonly heartbeatRegistry: RuntimeHeartbeatRegistry
   ) {}
 
   /**
@@ -81,7 +81,7 @@ export class RuntimeRuntimeController {
       this.logger.debug(
         `runtime heartbeat ${safeLogJson({ runtimeInstanceId, scopeKey })}`
       );
-      this.runtimeService.heartbeatRuntimeInstance(scopeKey);
+      this.heartbeatRegistry.heartbeatRuntimeInstance(scopeKey);
     } else {
       this.logger.warn(
         `runtime heartbeat without resource ${safeLogJson({ runtimeInstanceId })}`
