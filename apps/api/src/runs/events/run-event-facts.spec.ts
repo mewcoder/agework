@@ -119,12 +119,12 @@ describe("RunEventFacts", () => {
     });
   });
 
-  describe("controlSent", () => {
+  describe("commandSent", () => {
     it("builds a control.sent event", () => {
-      const event = RunEventFacts.controlSent({
+      const event = RunEventFacts.commandSent({
         runId: "run-1",
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
       });
       expect(event.type).toBe("control.sent");
       expect(event.summary).toBe("cancel sent");

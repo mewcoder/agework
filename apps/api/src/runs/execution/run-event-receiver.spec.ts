@@ -49,12 +49,12 @@ describe("RunEventReceiverImpl", () => {
     expect(processor.forceCancelledStatus).toHaveBeenCalledWith("run-1");
   });
 
-  it("recordControlSent() records via recorder", async () => {
+  it("recordCommandSent() records via recorder", async () => {
     const { receiver, recorder } = makeReceiver();
-    await receiver.recordControlSent({
+    await receiver.recordCommandSent({
       runId: "run-1",
       commandId: "cmd-1",
-      controlType: "cancel",
+      commandType: "cancel",
     });
     expect(recorder.append).toHaveBeenCalledWith(
       expect.objectContaining({ type: "control.sent" })

@@ -196,8 +196,7 @@ model RuntimeInstance {
   id                String             @id
   runtimeType       String
   isolationScope    String
-  ownerUserId       String
-  ownerWorkspaceId  String?
+  ownerId           String
   runtimeInstanceId String
   status            String             @default("running")
   expiresAt         DateTime?
@@ -208,8 +207,7 @@ model RuntimeInstance {
 
   @@unique([runtimeType, runtimeInstanceId])
   @@index([runtimeType, isolationScope, status])
-  @@index([ownerUserId])
-  @@index([ownerWorkspaceId])
+  @@index([ownerId])
 }
 
 /// workspace ↔ 沙箱资源绑定关系表（一对多：user 隔离下多个 workspace 共用一个容器）。

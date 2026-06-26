@@ -7,8 +7,7 @@ function makeResource(overrides: Record<string, unknown> = {}) {
     id: "rr-1",
     runtimeType: "sandbox",
     isolationScope: "workspace",
-    ownerUserId: "user-1",
-    ownerWorkspaceId: "ws-1",
+    ownerId: "ws-1",
     status: "running",
     ...overrides,
   };
@@ -49,7 +48,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            scopeKey: "ws-1",
+            ownerId: "ws-1",
             statusReason: "owner_released",
             stoppedAt: expect.any(String),
           }),
@@ -67,7 +66,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         workspaceId: "ws-1",
         resource: makeResource({
           isolationScope: "user",
-          ownerWorkspaceId: null,
+          ownerId: "user-1",
         }),
       });
       const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -89,30 +88,42 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
   });
 
   describe("shutdownForUser", () => {
-    it("shuts down all runtime resources owned by the user", async () => {
+    it("shuts down all runtime resources owned by the user (user-scope + workspace-scope)", async () => {
       const shutdownRuntimeInstance = vi.fn();
-      const findMany = vi.fn().mockResolvedValue([
+      const workspaceFindMany = vi.fn().mockResolvedValue([
+        { id: "ws-2" },
+      ]);
+      const runtimeFindMany = vi.fn().mockResolvedValue([
         makeResource({
           id: "rr-user",
           isolationScope: "user",
-          ownerUserId: "user-1",
-          ownerWorkspaceId: null,
+          ownerId: "user-1",
         }),
-        makeResource({ id: "rr-ws", ownerWorkspaceId: "ws-2" }),
+        makeResource({ id: "rr-ws", ownerId: "ws-2" }),
       ]);
       const update = vi.fn().mockResolvedValue({});
       const registry: Partial<RuntimeProviderRegistry> = {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
       };
       const service = new RuntimeInstanceLifecycleUseCase(
-        { runtimeInstance: { findMany, update } } as never,
+        {
+          workspace: { findMany: workspaceFindMany },
+          runtimeInstance: { findMany: runtimeFindMany, update },
+        } as never,
         registry as RuntimeProviderRegistry
       );
 
       await service.shutdownForUser("user-1");
 
-      expect(findMany).toHaveBeenCalledWith({
-        where: { ownerUserId: "user-1", status: "running" },
+      expect(workspaceFindMany).toHaveBeenCalledWith({
+        where: { userId: "user-1", deletedAt: null },
+        select: { id: true },
+      });
+      expect(runtimeFindMany).toHaveBeenCalledWith({
+        where: {
+          ownerId: { in: ["user-1", "ws-2"] },
+          status: "running",
+        },
       });
       expect(shutdownRuntimeInstance).toHaveBeenCalledWith("user-1");
       expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-2");
@@ -122,7 +133,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            scopeKey: "user-1",
+            ownerId: "user-1",
             statusReason: "owner_released",
           }),
         },
@@ -132,7 +143,7 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         data: {
           status: "stopped",
           metadata: expect.objectContaining({
-            scopeKey: "ws-2",
+            ownerId: "ws-2",
             statusReason: "owner_released",
           }),
         },
@@ -141,11 +152,12 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
   });
 
   it("logs a warning and continues when a provider throws", async () => {
+    const workspaceFindMany = vi.fn().mockResolvedValue([]);
     const findMany = vi
       .fn()
       .mockResolvedValue([
-        makeResource({ id: "rr-1", ownerWorkspaceId: "ws-1" }),
-        makeResource({ id: "rr-2", ownerWorkspaceId: "ws-2" }),
+        makeResource({ id: "rr-1", ownerId: "ws-1" }),
+        makeResource({ id: "rr-2", ownerId: "ws-2" }),
       ]);
     const shutdownRuntimeInstance = vi
       .fn()
@@ -157,7 +169,10 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
       resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
     };
     const service = new RuntimeInstanceLifecycleUseCase(
-      { runtimeInstance: { findMany, update: vi.fn() } } as never,
+      {
+        workspace: { findMany: workspaceFindMany },
+        runtimeInstance: { findMany, update: vi.fn() },
+      } as never,
       registry as RuntimeProviderRegistry
     );
 

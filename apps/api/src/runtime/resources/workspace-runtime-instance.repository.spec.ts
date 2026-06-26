@@ -80,8 +80,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       where: {
         runtimeType: "sandbox",
         isolationScope: "user",
-        ownerUserId: "u1",
-        ownerWorkspaceId: null,
+        ownerId: "u1",
       },
     });
     expect(create).toHaveBeenCalledWith({
@@ -89,14 +88,13 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
         id: expect.any(String),
         runtimeType: "sandbox",
         isolationScope: "user",
-        ownerUserId: "u1",
-        ownerWorkspaceId: null,
+        ownerId: "u1",
         runtimeInstanceId: "container-abc",
         status: "running",
         expiresAt: null,
         metadata: expect.objectContaining({
           foo: "bar",
-          scopeKey: "u1",
+          ownerId: "u1",
           workspaceId: "w1",
           statusReason: "running",
           runtimeInstanceId: "container-abc",
@@ -146,8 +144,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       where: {
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerUserId: "u1",
-        ownerWorkspaceId: "w1",
+        ownerId: "w1",
       },
     });
     expect(update).toHaveBeenCalledWith({
@@ -157,7 +154,7 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
         status: "running",
         expiresAt: null,
         metadata: expect.objectContaining({
-          scopeKey: "w1",
+          ownerId: "w1",
           workspaceId: "w1",
           statusReason: "running",
           runtimeInstanceId: "container-next",
@@ -168,25 +165,24 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     });
   });
 
-  it("marks a resource stopped from a placement", async () => {
+  it("marks a user runtime resource stopped by owner", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = new WorkspaceRuntimeInstanceRepository({
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markStopped(placement());
+    await service.markStoppedByOwner("sandbox", "user", "u1");
 
     expect(updateMany).toHaveBeenCalledWith({
       where: {
         runtimeType: "sandbox",
         isolationScope: "user",
-        ownerUserId: "u1",
-        ownerWorkspaceId: null,
+        ownerId: "u1",
       },
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          scopeKey: "u1",
+          ownerId: "u1",
           runtimeType: "sandbox",
           isolationScope: "user",
           statusReason: "stopped",
@@ -197,42 +193,13 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     });
   });
 
-  it("marks a user runtime resource stopped by resource key", async () => {
+  it("marks a runtime resource missing by owner", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = new WorkspaceRuntimeInstanceRepository({
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markStoppedByScopeKey("sandbox", "user", "u1");
-
-    expect(updateMany).toHaveBeenCalledWith({
-      where: {
-        runtimeType: "sandbox",
-        isolationScope: "user",
-        ownerUserId: "u1",
-        ownerWorkspaceId: null,
-      },
-      data: {
-        status: "stopped",
-        metadata: expect.objectContaining({
-          scopeKey: "u1",
-          runtimeType: "sandbox",
-          isolationScope: "user",
-          statusReason: "stopped",
-          lastSeenAt: expect.any(String),
-          stoppedAt: expect.any(String),
-        }),
-      },
-    });
-  });
-
-  it("marks a runtime resource missing by resource key", async () => {
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new WorkspaceRuntimeInstanceRepository({
-      runtimeInstance: { updateMany },
-    } as never);
-
-    await service.markMissingByScopeKey(
+    await service.markMissingByOwner(
       "sandbox",
       "workspace",
       "w1",
@@ -243,12 +210,12 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       where: {
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerWorkspaceId: "w1",
+        ownerId: "w1",
       },
       data: {
         status: "missing",
         metadata: expect.objectContaining({
-          scopeKey: "w1",
+          ownerId: "w1",
           runtimeType: "sandbox",
           isolationScope: "workspace",
           statusReason: "heartbeat_lost",
@@ -258,13 +225,13 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     });
   });
 
-  it("marks a runtime resource error by resource key", async () => {
+  it("marks a runtime resource error by owner", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = new WorkspaceRuntimeInstanceRepository({
       runtimeInstance: { updateMany },
     } as never);
 
-    await service.markErrorByScopeKey(
+    await service.markErrorByOwner(
       "sandbox",
       "workspace",
       "w1",
@@ -275,12 +242,12 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
       where: {
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerWorkspaceId: "w1",
+        ownerId: "w1",
       },
       data: {
         status: "error",
         metadata: expect.objectContaining({
-          scopeKey: "w1",
+          ownerId: "w1",
           runtimeType: "sandbox",
           isolationScope: "workspace",
           statusReason: "error",

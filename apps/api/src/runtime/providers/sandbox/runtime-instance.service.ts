@@ -28,7 +28,7 @@ import { SANDBOX_ENGINES } from "./engine";
 import { errorLogFields, safeLogJson } from "../../../common/logging";
 import { safePathPart } from "../../../common/safe-path";
 
-export type SandboxScopeState = {
+export type SandboxOwnerState = {
   runtimeInstanceId: string;
   /** 上次 idle/心跳超时释放时的容器 ID，供下次 start() resume；resume 成功或全新创建后清空。 */
   lastStoppedRuntimeInstanceId?: string;
@@ -44,7 +44,7 @@ export type SandboxWorkerExecutionContext = {
   placement: SandboxRuntimePlacement;
   runId: string;
   workspaceId: string;
-  scopeKey: string;
+  ownerId: string;
   isolationScope: IsolationScope;
   engineType: SandboxEngineType;
   engine: SandboxEngine;
@@ -52,7 +52,7 @@ export type SandboxWorkerExecutionContext = {
 
 export type SandboxRuntimeInstanceAttachment = {
   context: SandboxWorkerExecutionContext;
-  scopeState: SandboxScopeState;
+  ownerState: SandboxOwnerState;
   handle: WorkerExecutionHandle;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };
@@ -61,14 +61,14 @@ export type SandboxRuntimeInstanceCallbacks = {
   consumeCancelledStartingRun(runId: string): boolean;
   forceCancelled(runId: string): void;
   publishWorkerError(runId: string, error: string): void;
-  cleanupWorkspace(scopeKey: string): void;
+  cleanupByOwnerId(ownerId: string): void;
 };
 
 @Injectable()
 export class SandboxRuntimeInstanceService {
   private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
-  private readonly scopeStates = new Map<string, SandboxScopeState>();
+  private readonly ownerStates = new Map<string, SandboxOwnerState>();
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
   private readonly heartbeats = new HeartbeatWatchdog();
   private readonly idleWatchdog = new IdleWatchdog();
@@ -100,7 +100,7 @@ export class SandboxRuntimeInstanceService {
       placement,
       runId: input.runConfig.runId,
       workspaceId: input.runConfig.workspaceId,
-      scopeKey: input.runtimeTarget.scopeKey,
+      ownerId: input.runtimeTarget.ownerId,
       isolationScope: placement.sandbox.isolationScope,
       engineType,
       engine: this.resolveEngine(engineType),
@@ -116,75 +116,75 @@ export class SandboxRuntimeInstanceService {
     };
   }
 
-  ensureScopeState(
+  ensureOwnerState(
     context: SandboxWorkerExecutionContext
-  ): SandboxScopeState {
-    let scopeState = this.scopeStates.get(context.scopeKey);
-    if (!scopeState) {
-      const accessKey = this.runtimeAccess.issueWorkspaceKey(
-        context.scopeKey
+  ): SandboxOwnerState {
+    let ownerState = this.ownerStates.get(context.ownerId);
+    if (!ownerState) {
+      const accessKey = this.runtimeAccess.issueOwnerKey(
+        context.ownerId
       );
-      scopeState = {
+      ownerState = {
         runtimeInstanceId: "",
         accessKey,
         activeRuns: new Map(),
         isolationScope: context.isolationScope,
         engineType: context.engineType,
       };
-      this.scopeStates.set(context.scopeKey, scopeState);
-      this.idleWatchdog.cancel(context.scopeKey);
-      return scopeState;
+      this.ownerStates.set(context.ownerId, ownerState);
+      this.idleWatchdog.cancel(context.ownerId);
+      return ownerState;
     }
 
     if (
-      !scopeState.runtimeInstanceId &&
-      !this.pendingSandboxes.has(context.scopeKey) &&
-      !scopeState.lastStoppedRuntimeInstanceId
+      !ownerState.runtimeInstanceId &&
+      !this.pendingSandboxes.has(context.ownerId) &&
+      !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      scopeState.accessKey = this.runtimeAccess.issueWorkspaceKey(
-        context.scopeKey
+      ownerState.accessKey = this.runtimeAccess.issueOwnerKey(
+        context.ownerId
       );
-      scopeState.engineType = context.engineType;
+      ownerState.engineType = context.engineType;
     }
 
-    this.idleWatchdog.cancel(context.scopeKey);
-    return scopeState;
+    this.idleWatchdog.cancel(context.ownerId);
+    return ownerState;
   }
 
   attachOrStartRuntimeInstance(
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, scopeState } = attachment;
-    if (scopeState.runtimeInstanceId) {
+    const { context, ownerState } = attachment;
+    if (ownerState.runtimeInstanceId) {
       this.attachReadyRuntimeInstance(attachment);
       return;
     }
 
-    const existingPending = this.pendingSandboxes.get(context.scopeKey);
+    const existingPending = this.pendingSandboxes.get(context.ownerId);
     if (existingPending) {
       this.attachPendingRuntimeInstance(attachment, existingPending, callbacks);
       return;
     }
 
-    this.startRuntimeInstanceForScope(attachment, callbacks);
+    this.startRuntimeInstanceForOwner(attachment, callbacks);
   }
 
-  findScopeKeyByRun(runId: string): string | undefined {
-    for (const [scopeKey, state] of this.scopeStates) {
-      if (state.activeRuns.has(runId)) return scopeKey;
+  findOwnerIdByRun(runId: string): string | undefined {
+    for (const [ownerId, state] of this.ownerStates) {
+      if (state.activeRuns.has(runId)) return ownerId;
     }
     return undefined;
   }
 
-  getScopeState(scopeKey: string): SandboxScopeState | undefined {
-    return this.scopeStates.get(scopeKey);
+  getOwnerState(ownerId: string): SandboxOwnerState | undefined {
+    return this.ownerStates.get(ownerId);
   }
 
   getHandle(runId: string): WorkerExecutionHandle | undefined {
-    const scopeKey = this.findScopeKeyByRun(runId);
-    if (!scopeKey) return undefined;
-    const state = this.scopeStates.get(scopeKey);
+    const ownerId = this.findOwnerIdByRun(runId);
+    if (!ownerId) return undefined;
+    const state = this.ownerStates.get(ownerId);
     if (!state) return undefined;
     return {
       runId,
@@ -195,60 +195,60 @@ export class SandboxRuntimeInstanceService {
   }
 
   heartbeatRun(runId: string): void {
-    const scopeKey = this.findScopeKeyByRun(runId);
-    if (!scopeKey) return;
-    this.heartbeats.beat(scopeKey);
+    const ownerId = this.findOwnerIdByRun(runId);
+    if (!ownerId) return;
+    this.heartbeats.beat(ownerId);
   }
 
-  heartbeatRuntimeInstance(scopeKey: string): void {
-    this.heartbeats.beat(scopeKey);
+  heartbeatRuntimeInstance(ownerId: string): void {
+    this.heartbeats.beat(ownerId);
   }
 
   cleanupRun(runId: string): void {
-    const scopeKey = this.findScopeKeyByRun(runId);
-    if (!scopeKey) return;
+    const ownerId = this.findOwnerIdByRun(runId);
+    if (!ownerId) return;
 
-    this.scopeStates.get(scopeKey)?.activeRuns.delete(runId);
-    const state = this.scopeStates.get(scopeKey);
+    this.ownerStates.get(ownerId)?.activeRuns.delete(runId);
+    const state = this.ownerStates.get(ownerId);
     if (state && state.activeRuns.size === 0 && state.runtimeInstanceId) {
       const idleTimeoutMs = this.configService.getIdleTimeoutSeconds() * 1000;
-      this.idleWatchdog.start(scopeKey, idleTimeoutMs, () =>
-        this.handleIdle(scopeKey)
+      this.idleWatchdog.start(ownerId, idleTimeoutMs, () =>
+        this.handleIdle(ownerId)
       );
     }
   }
 
   shutdownRuntimeInstance(
-    scopeKey: string,
-    callbacks: Pick<SandboxRuntimeInstanceCallbacks, "cleanupWorkspace">
+    ownerId: string,
+    callbacks: Pick<SandboxRuntimeInstanceCallbacks, "cleanupByOwnerId">
   ): void {
-    const state = this.scopeStates.get(scopeKey);
-    this.heartbeats.stop(scopeKey);
-    this.idleWatchdog.cancel(scopeKey);
+    const state = this.ownerStates.get(ownerId);
+    this.heartbeats.stop(ownerId);
+    this.idleWatchdog.cancel(ownerId);
     if (state?.runtimeInstanceId) {
       const engine = this.engines.get(state.engineType);
       engine?.stop(state.runtimeInstanceId).catch(
-        swallow(this.logger, `stop sandbox for runtime resource ${scopeKey}`)
+        swallow(this.logger, `stop sandbox for runtime owner ${ownerId}`)
       );
     }
     if (state) {
       this.workspaceRuntimeService
-        .markStoppedByScopeKey(
+        .markStoppedByOwner(
           "sandbox",
           state.isolationScope,
-          scopeKey
+          ownerId
         )
         .catch(
           swallow(
             this.logger,
-            `mark runtime resource stopped for key ${scopeKey}`
+            `mark runtime resource stopped for owner ${ownerId}`
           )
         );
     }
-    this.runtimeAccess.revokeWorkspace(scopeKey);
-    callbacks.cleanupWorkspace(scopeKey);
-    this.scopeStates.delete(scopeKey);
-    this.pendingSandboxes.delete(scopeKey);
+    this.runtimeAccess.revokeOwner(ownerId);
+    callbacks.cleanupByOwnerId(ownerId);
+    this.ownerStates.delete(ownerId);
+    this.pendingSandboxes.delete(ownerId);
   }
 
   async recoverOrphan(runtimeInstanceId: string): Promise<void> {
@@ -262,12 +262,12 @@ export class SandboxRuntimeInstanceService {
   private attachReadyRuntimeInstance(
     attachment: SandboxRuntimeInstanceAttachment
   ): void {
-    const { context, scopeState, handle } = attachment;
-    handle.runtimeInstanceId = scopeState.runtimeInstanceId;
+    const { context, ownerState, handle } = attachment;
+    handle.runtimeInstanceId = ownerState.runtimeInstanceId;
     void this.recordWorkspaceRuntime(
       context.placement,
-      context.scopeKey,
-      scopeState.runtimeInstanceId
+      context.ownerId,
+      ownerState.runtimeInstanceId
     );
   }
 
@@ -280,15 +280,15 @@ export class SandboxRuntimeInstanceService {
     void runtimePromise
       .then((runtime) => {
         if (callbacks.consumeCancelledStartingRun(context.runId)) {
-          this.scopeStates
-            .get(context.scopeKey)
+          this.ownerStates
+            .get(context.ownerId)
             ?.activeRuns.delete(context.runId);
           callbacks.forceCancelled(context.runId);
           return;
         }
         void this.recordWorkspaceRuntime(
           context.placement,
-          context.scopeKey,
+          context.ownerId,
           runtime.runtimeInstanceId
         );
         handle.runtimeInstanceId = runtime.runtimeInstanceId;
@@ -302,7 +302,7 @@ export class SandboxRuntimeInstanceService {
         this.logger.warn(
           `pending sandbox failed ${safeLogJson({
             runId: context.runId,
-            scopeKey: context.scopeKey,
+            ownerId: context.ownerId,
             engineType: context.engineType,
             ...errorLogFields(err),
           })}`
@@ -310,17 +310,17 @@ export class SandboxRuntimeInstanceService {
       });
   }
 
-  private startRuntimeInstanceForScope(
+  private startRuntimeInstanceForOwner(
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, scopeState } = attachment;
+    const { context, ownerState } = attachment;
     const engineInput = this.buildSandboxStartInput(
       context,
-      scopeState.accessKey
+      ownerState.accessKey
     );
-    const resumeRuntimeInstanceId = scopeState.lastStoppedRuntimeInstanceId;
-    scopeState.lastStoppedRuntimeInstanceId = undefined;
+    const resumeRuntimeInstanceId = ownerState.lastStoppedRuntimeInstanceId;
+    ownerState.lastStoppedRuntimeInstanceId = undefined;
 
     const runtimePromise = this.createSandbox(
       context,
@@ -328,7 +328,7 @@ export class SandboxRuntimeInstanceService {
       engineInput,
       resumeRuntimeInstanceId
     );
-    this.pendingSandboxes.set(context.scopeKey, runtimePromise);
+    this.pendingSandboxes.set(context.ownerId, runtimePromise);
 
     void runtimePromise
       .then((runtime) =>
@@ -346,7 +346,7 @@ export class SandboxRuntimeInstanceService {
     const apiBase = resolveDockerApiBase();
     const sandboxPlacement: SandboxPlacement = {
       isolationScope: context.isolationScope,
-      scopeKey: context.scopeKey,
+      ownerId: context.ownerId,
       workspaceId: context.workspaceId,
       workspaceHostPath: context.placement.hostPath,
       workspaceMountPath: context.placement.sandbox.mountTarget,
@@ -361,21 +361,20 @@ export class SandboxRuntimeInstanceService {
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBase,
         AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_WORKER_WORKSPACE_ID: context.scopeKey,
+        AGEWORK_WORKER_OWNER_ID: context.ownerId,
         AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
         AGEWORK_WORKER_SANDBOX_ENGINE: context.engineType,
         AGEWORK_WORKER_ISOLATION_SCOPE: context.isolationScope,
-        AGEWORK_WORKER_RUNTIME_SCOPE_KEY: context.scopeKey,
         AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(
-          context.scopeKey
+          context.ownerId
         )}`,
         AGEWORK_WORKER_LOG_DIR: CONTAINER_RUNTIME_LOG_DIR,
         AGEWORK_WORKER_LOG_FILE: `${CONTAINER_RUNTIME_LOG_DIR}/${safePathPart(
-          context.scopeKey
+          context.ownerId
         )}.runtime.worker.log`,
       },
       metadata: {
-        "agework.io/runtime-scope-key": context.scopeKey,
+        "agework.io/runtime-owner-id": context.ownerId,
         "agework.io/isolation-scope": context.isolationScope,
       },
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
@@ -395,14 +394,14 @@ export class SandboxRuntimeInstanceService {
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, handle, onRuntimeInstanceIdReady } = attachment;
-    this.pendingSandboxes.delete(context.scopeKey);
-    const state = this.scopeStates.get(context.scopeKey);
+    this.pendingSandboxes.delete(context.ownerId);
+    const state = this.ownerStates.get(context.ownerId);
     if (!state) return;
 
     state.runtimeInstanceId = runtime.runtimeInstanceId;
     this.logger.log(
       `sandbox created ${safeLogJson({
-        scopeKey: context.scopeKey,
+        ownerId: context.ownerId,
         engine: runtime.engineType,
         resourceId: runtime.runtimeInstanceId.slice(0, 12),
         activeRuns: state.activeRuns.size,
@@ -411,7 +410,7 @@ export class SandboxRuntimeInstanceService {
 
     void this.recordWorkspaceRuntime(
       context.placement,
-      context.scopeKey,
+      context.ownerId,
       runtime.runtimeInstanceId
     );
 
@@ -423,7 +422,7 @@ export class SandboxRuntimeInstanceService {
     }
 
     this.startRuntimeHeartbeat(
-      context.scopeKey,
+      context.ownerId,
       context.runId,
       runtime,
       callbacks
@@ -435,11 +434,11 @@ export class SandboxRuntimeInstanceService {
     err: unknown,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    this.pendingSandboxes.delete(context.scopeKey);
+    this.pendingSandboxes.delete(context.ownerId);
     this.logger.error(
       `sandbox create failed ${safeLogJson({
         runId: context.runId,
-        scopeKey: context.scopeKey,
+        ownerId: context.ownerId,
         engineType: context.engineType,
         ...errorLogFields(err),
       })}`
@@ -449,18 +448,18 @@ export class SandboxRuntimeInstanceService {
       `sandbox create failed: ${String(err)}`
     );
 
-    const state = this.scopeStates.get(context.scopeKey);
+    const state = this.ownerStates.get(context.ownerId);
     if (state) {
       this.forceCancelledStartingRuns(state, callbacks);
     }
 
-    this.scopeStates.delete(context.scopeKey);
-    callbacks.cleanupWorkspace(context.scopeKey);
-    this.runtimeAccess.revokeWorkspace(context.scopeKey);
+    this.ownerStates.delete(context.ownerId);
+    callbacks.cleanupByOwnerId(context.ownerId);
+    this.runtimeAccess.revokeOwner(context.ownerId);
   }
 
   private forceCancelledStartingRuns(
-    state: SandboxScopeState,
+    state: SandboxOwnerState,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     for (const runId of state.activeRuns.keys()) {
@@ -472,27 +471,27 @@ export class SandboxRuntimeInstanceService {
   }
 
   private startRuntimeHeartbeat(
-    scopeKey: string,
+    ownerId: string,
     fallbackRunId: string,
     runtime: SandboxRuntime,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    this.heartbeats.start(scopeKey, () => {
-      const state = this.scopeStates.get(scopeKey);
+    this.heartbeats.start(ownerId, () => {
+      const state = this.ownerStates.get(ownerId);
       const targetRunIds = state?.activeRuns.size
         ? [...state.activeRuns.keys()]
         : [fallbackRunId];
       this.logger.error(
         `sandbox heartbeat timeout ${safeLogJson({
-          scopeKey,
+          ownerId,
           engineType: runtime.engineType,
           activeRuns: targetRunIds.length,
         })}`
       );
       // 心跳超时只代表失联，不代表容器/资源已损坏：不主动 stop/删除容器，
-      // 只是放弃对它的引用，让下次该 scope 的请求重新创建。
+      // 只是放弃对它的引用，让下次该 owner 的请求重新创建。
       if (state) {
-        this.releaseScopeRuntime(scopeKey, state);
+        this.releaseOwnerRuntime(ownerId, state);
       }
       for (const runId of targetRunIds) {
         callbacks.publishWorkerError(runId, "worker heartbeat timeout");
@@ -528,14 +527,14 @@ export class SandboxRuntimeInstanceService {
     return runtime;
   }
 
-  private handleIdle(scopeKey: string): void {
-    const state = this.scopeStates.get(scopeKey);
+  private handleIdle(ownerId: string): void {
+    const state = this.ownerStates.get(ownerId);
     if (!state || !state.runtimeInstanceId) return;
     if (state.activeRuns.size > 0) return;
 
     this.logger.log(
       `sandbox idle timeout ${safeLogJson({
-        scopeKey,
+        ownerId,
         resourceId: state.runtimeInstanceId.slice(0, 12),
         engineType: state.engineType,
       })}`
@@ -543,54 +542,54 @@ export class SandboxRuntimeInstanceService {
 
     const engine = this.engines.get(state.engineType);
     engine?.stop(state.runtimeInstanceId).catch(
-      swallow(this.logger, `stop idle sandbox for runtime resource ${scopeKey}`)
+      swallow(this.logger, `stop idle sandbox for runtime owner ${ownerId}`)
     );
 
-    this.releaseScopeRuntime(scopeKey, state);
+    this.releaseOwnerRuntime(ownerId, state);
   }
 
   /**
-   * 放弃对某个 runtime resource 当前容器/沙箱的引用：停止心跳与空闲计时、清空
+   * 放弃对某个 runtime owner 当前容器/沙箱的引用：停止心跳与空闲计时、清空
    * activeRuns 与 runtimeInstanceId（转存为 lastStoppedRuntimeInstanceId 供下次 resume），
    * 并将 RuntimeTarget 标记为 stopped。access key 保留，供 resume 复用。
    * 不负责真正停止/删除容器——是否需要 engine.stop() 由调用方决定。
    */
-  private releaseScopeRuntime(
-    scopeKey: string,
-    state: SandboxScopeState
+  private releaseOwnerRuntime(
+    ownerId: string,
+    state: SandboxOwnerState
   ): void {
-    this.heartbeats.stop(scopeKey);
-    this.idleWatchdog.cancel(scopeKey);
+    this.heartbeats.stop(ownerId);
+    this.idleWatchdog.cancel(ownerId);
     state.activeRuns.clear();
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
     state.runtimeInstanceId = "";
 
     this.workspaceRuntimeService
-      .markStoppedByScopeKey(
+      .markStoppedByOwner(
         "sandbox",
         state.isolationScope,
-        scopeKey
+        ownerId
       )
       .catch(
         swallow(
           this.logger,
-          `mark runtime resource stopped for key ${scopeKey}`
+          `mark runtime resource stopped for owner ${ownerId}`
         )
       );
   }
 
   private recordWorkspaceRuntime(
     placement: SandboxRuntimePlacement,
-    scopeKey: string,
+    ownerId: string,
     runtimeInstanceId: string
   ): Promise<void> {
     return this.workspaceRuntimeService
-      .upsertRunning(placement, scopeKey, runtimeInstanceId)
+      .upsertRunning(placement, ownerId, runtimeInstanceId)
       .then(() => undefined)
       .catch(
         swallow(
           this.logger,
-          `upsert workspace runtime for resource key ${scopeKey}`
+          `upsert workspace runtime for owner ${ownerId}`
         )
       );
   }
@@ -609,8 +608,7 @@ export class SandboxRuntimeInstanceService {
   ): void {
     this.runtimeAccess.issueRuntimeInstanceKey(
       runtimeInstanceId,
-      context.scopeKey,
-      context.runtimeTarget.runtimeType
+      context.ownerId
     );
   }
 }

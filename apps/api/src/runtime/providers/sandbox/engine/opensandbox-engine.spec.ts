@@ -27,7 +27,7 @@ function makePlacement(
 ): SandboxPlacement {
   return {
     isolationScope: "workspace",
-    scopeKey: "ws-1",
+    ownerId: "ws-1",
     workspaceId: "ws-1",
     workspaceHostPath: "/tmp/workspace",
     workspaceMountPath: "/workspace",
@@ -101,10 +101,10 @@ describe("OpenSandboxEngine", () => {
       makeInput({
         env: {
           AGEWORK_WORKER_CHANNEL: "http",
-          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         },
         metadata: {
-          "agework.io/workspace-id": "ws-1",
+          "agework.io/runtime-owner-id": "ws-1",
         },
       })
     );
@@ -113,10 +113,10 @@ describe("OpenSandboxEngine", () => {
       expect.objectContaining({
         env: expect.objectContaining({
           AGEWORK_WORKER_CHANNEL: "http",
-          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         }),
         metadata: expect.objectContaining({
-          "agework.io/workspace-id": "ws-1",
+          "agework.io/runtime-owner-id": "ws-1",
         }),
       })
     );
@@ -168,7 +168,7 @@ describe("OpenSandboxEngine", () => {
 
     const input = makeInput({
       env: {
-        AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
+        AGEWORK_WORKER_OWNER_ID: "ws-1",
       },
     });
     const runtime = await engine.getOrCreate(input);
@@ -181,13 +181,13 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         }),
       })
     );
   });
 
-  it("startWorker passes sandbox id as runtime resource id", async () => {
+  it("startWorker passes ownerId as owner id env", async () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
@@ -202,7 +202,7 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_WORKER_RUNTIME_INSTANCE_ID: "sandbox-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         }),
       })
     );

@@ -7,7 +7,7 @@ import type { WorkerAccessService } from "./access.service";
 function makeGuard(access?: Partial<WorkerAccessService>) {
   const runtimeAccess = {
     verifyAccessKey: vi.fn().mockReturnValue(false),
-    verifyWorkspaceKey: vi.fn().mockReturnValue(false),
+    verifyOwnerKey: vi.fn().mockReturnValue(false),
     verifyRuntimeInstanceKey: vi.fn().mockReturnValue(false),
     diagnostics: vi.fn().mockReturnValue({}),
     ...access,
@@ -25,7 +25,7 @@ function makeContext(params: Record<string, string>, authHeader?: string) {
     headers: authHeader ? { authorization: authHeader } : {},
     params,
     runId: undefined as string | undefined,
-    workspaceId: undefined as string | undefined,
+    ownerId: undefined as string | undefined,
     runtimeInstanceId: undefined as string | undefined,
   };
   return {
@@ -66,23 +66,23 @@ describe("WorkerAuthGuard", () => {
     expect(request.runId).toBe("run-1");
   });
 
-  it("verifies workspace key when workspaceId is in params", async () => {
+  it("verifies owner key when ownerId is in params", async () => {
     const { guard, runtimeAccess } = makeGuard({
-      verifyWorkspaceKey: vi.fn().mockReturnValue(true),
+      verifyOwnerKey: vi.fn().mockReturnValue(true),
     });
     const { context, request } = makeContext(
-      { workspaceId: "ws-1" },
-      "Bearer ws-key"
+      { ownerId: "owner-1" },
+      "Bearer owner-key"
     );
 
     const result = await guard.canActivate(context);
 
     expect(result).toBe(true);
-    expect(runtimeAccess.verifyWorkspaceKey).toHaveBeenCalledWith(
-      "ws-1",
-      "ws-key"
+    expect(runtimeAccess.verifyOwnerKey).toHaveBeenCalledWith(
+      "owner-1",
+      "owner-key"
     );
-    expect(request.workspaceId).toBe("ws-1");
+    expect(request.ownerId).toBe("owner-1");
   });
 
   it("verifies runtime instance key when runtimeInstanceId is in params", async () => {

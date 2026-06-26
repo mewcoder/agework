@@ -42,84 +42,68 @@ describe("WorkerAccessService", () => {
     expect(service.verifyAccessKey("run-123", second)).toBe(true);
   });
 
-  it("verifies a run using its workspace key after registerRun", () => {
-    const key = service.issueWorkspaceKey("ws-1");
+  it("verifies a run using its owner key after registerRun", () => {
+    const key = service.issueOwnerKey("owner-1");
     service.registerRun("run-1", key);
 
     expect(service.verifyAccessKey("run-1", key)).toBe(true);
     expect(service.verifyAccessKey("run-1", "wrong")).toBe(false);
   });
 
-  it("verifies the workspace controls key", () => {
-    const key = service.issueWorkspaceKey("ws-1");
+  it("verifies the owner key", () => {
+    const key = service.issueOwnerKey("owner-1");
 
-    expect(service.verifyWorkspaceKey("ws-1", key)).toBe(true);
-    expect(service.verifyWorkspaceKey("ws-1", "wrong")).toBe(false);
+    expect(service.verifyOwnerKey("owner-1", key)).toBe(true);
+    expect(service.verifyOwnerKey("owner-1", "wrong")).toBe(false);
   });
 
-  it("revokeWorkspace invalidates the key and bound runs", () => {
-    const key = service.issueWorkspaceKey("ws-1");
+  it("revokeOwner invalidates the key and bound runs", () => {
+    const key = service.issueOwnerKey("owner-1");
     service.registerRun("run-1", key);
-    service.revokeWorkspace("ws-1");
+    service.revokeOwner("owner-1");
 
-    expect(service.verifyWorkspaceKey("ws-1", key)).toBe(false);
+    expect(service.verifyOwnerKey("owner-1", key)).toBe(false);
     expect(service.verifyAccessKey("run-1", key)).toBe(false);
   });
 
-  describe("runtime resource keys", () => {
-    it("issues and verifies a runtime resource key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
+  describe("runtime instance keys", () => {
+    it("issues and verifies a runtime instance key", () => {
+      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
 
       expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(true);
     });
 
-    it("reuses workspace key when scopeKey already has one", () => {
-      const workspaceKey = service.issueWorkspaceKey("ws-1");
+    it("reuses owner key when owner already has one", () => {
+      const ownerKey = service.issueOwnerKey("owner-1");
       const resourceAccessKey = service.issueRuntimeInstanceKey(
         "rr-1",
-        "ws-1",
-        "sandbox"
+        "owner-1"
       );
 
       // Same key works for both endpoints
-      expect(resourceAccessKey).toBe(workspaceKey);
-      expect(service.verifyWorkspaceKey("ws-1", resourceAccessKey)).toBe(true);
-      expect(service.verifyRuntimeInstanceKey("rr-1", workspaceKey)).toBe(true);
+      expect(resourceAccessKey).toBe(ownerKey);
+      expect(service.verifyOwnerKey("owner-1", resourceAccessKey)).toBe(true);
+      expect(service.verifyRuntimeInstanceKey("rr-1", ownerKey)).toBe(true);
     });
 
-    it("issues a new key when scopeKey has no workspace key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
+    it("issues a new key when owner has no owner key", () => {
+      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
 
       expect(key).toBeTruthy();
       expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(true);
     });
 
-    it("rejects an incorrect runtime resource key", () => {
-      service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
+    it("rejects an incorrect runtime instance key", () => {
+      service.issueRuntimeInstanceKey("rr-1", "owner-1");
 
       expect(service.verifyRuntimeInstanceKey("rr-1", "wrong")).toBe(false);
     });
 
-    it("returns scopeKey for runtime resource", () => {
-      service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
-
-      expect(service.getScopeKeyForRuntimeInstance("rr-1")).toBe("ws-1");
-      expect(service.getRuntimeTypeForRuntimeInstance("rr-1")).toBe("sandbox");
-    });
-
-    it("returns undefined for unknown runtime resource scopeKey", () => {
-      expect(
-        service.getScopeKeyForRuntimeInstance("nonexistent")
-      ).toBeUndefined();
-    });
-
-    it("revokes a runtime resource key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
+    it("revokes a runtime instance key", () => {
+      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
       service.revokeRuntimeInstance("rr-1");
 
       expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(false);
-      expect(service.getScopeKeyForRuntimeInstance("rr-1")).toBeUndefined();
-      expect(service.getRuntimeTypeForRuntimeInstance("rr-1")).toBeUndefined();
     });
   });
 });

@@ -3,23 +3,23 @@ import { generateId } from "@agework/shared";
 import type { ControlPayload, RunConfig } from "@agework/shared/protocol";
 import { RuntimeConfigStore } from "./config-store";
 import { WorkerAccessService } from "./access.service";
-import { RuntimeControlQueue } from "./control-queue";
-import { nextControlEnvelope } from "./control-envelope";
+import { RuntimeCommandQueue } from "./command-queue";
+import { nextCommandEnvelope } from "./command-envelope";
 
 /**
- * worker 控制下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
- * 维护 control seq 计数器，并把控制指令塞入 control queue。不持有 runtime 实例状态，
+ * worker command 下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
+ * 维护 command seq 计数器，并把命令塞入 command queue。不持有 runtime 实例状态，
  * 所有入参均为原始值，便于在 worker-host 层独立存在。
  */
 @Injectable()
-export class WorkerControlDispatcher {
-  private readonly controlSeqs = new Map<string, number>();
+export class WorkerCommandDispatcher {
+  private readonly commandSeqs = new Map<string, number>();
   private readonly cancelledStartingRuns = new Set<string>();
 
   constructor(
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runtimeAccess: WorkerAccessService,
-    private readonly controlQueue: RuntimeControlQueue
+    private readonly commandQueue: RuntimeCommandQueue
   ) {}
 
   registerRunConfig(runId: string, runConfig: RunConfig): void {
@@ -28,17 +28,17 @@ export class WorkerControlDispatcher {
 
   registerRunSession(params: {
     runId: string;
-    scopeKey: string;
+    ownerId: string;
     accessKey: string;
     runConfig: RunConfig;
   }): void {
     this.runtimeAccess.registerRun(params.runId, params.accessKey);
 
-    if (!this.controlSeqs.has(params.scopeKey)) {
-      this.controlSeqs.set(params.scopeKey, 0);
+    if (!this.commandSeqs.has(params.ownerId)) {
+      this.commandSeqs.set(params.ownerId, 0);
     }
 
-    this.sendControl(params.scopeKey, params.runId, {
+    this.sendCommand(params.ownerId, params.runId, {
       type: "user_message",
       commandId: generateId(),
       runId: params.runId,
@@ -46,18 +46,18 @@ export class WorkerControlDispatcher {
     });
   }
 
-  sendControl(
-    scopeKey: string,
+  sendCommand(
+    ownerId: string,
     runId: string,
     control: ControlPayload
   ): void {
-    const envelope = nextControlEnvelope(
-      this.controlSeqs,
-      scopeKey,
+    const envelope = nextCommandEnvelope(
+      this.commandSeqs,
+      ownerId,
       runId,
       control
     );
-    this.controlQueue.pushForWorkspace(scopeKey, envelope);
+    this.commandQueue.pushByOwnerId(ownerId, envelope);
   }
 
   markCancelledBeforeReady(runId: string): void {
@@ -73,8 +73,8 @@ export class WorkerControlDispatcher {
     this.runtimeAccess.revokeAccess(runId);
   }
 
-  cleanupWorkspace(scopeKey: string): void {
-    this.controlQueue.cleanupWorkspace(scopeKey);
-    this.controlSeqs.delete(scopeKey);
+  cleanupByOwnerId(ownerId: string): void {
+    this.commandQueue.cleanupByOwnerId(ownerId);
+    this.commandSeqs.delete(ownerId);
   }
 }

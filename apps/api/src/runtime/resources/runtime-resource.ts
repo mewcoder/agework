@@ -40,7 +40,7 @@ export function isSandboxPlacement(
 
 /**
  * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
- * 路径映射与容器复用键 scopeKey，直接返回一个 RuntimeTarget 对象。纯计算，不启动
+ * 路径映射与容器归属 ownerId，直接返回一个 RuntimeTarget 对象。纯计算，不启动
  * 也不 attach worker。
  */
 export function resolveRuntimeTarget(
@@ -63,7 +63,7 @@ export function resolveRuntimeTarget(
   const runtimeType = input.runtimeType ?? defaults.runtimeType;
 
   // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
-  // scopeKey 无复用语义，用 workspaceId 兜底。
+  // ownerId 无复用语义，用 workspaceId 兜底。
   if (runtimeType === "local") {
     const local: LocalRuntimePlacement = {
       runtimeType: "local",
@@ -72,20 +72,22 @@ export function resolveRuntimeTarget(
       hostPath: workspaceRootPath,
       runtimePath: workspaceRootPath,
     };
-    return { ...local, scopeKey: workspaceId };
+    return { ...local, ownerId: workspaceId };
   }
 
   const isolationScope = input.isolationScope ?? defaults.isolationScope;
   const sandboxEngine = input.sandboxEngine ?? defaults.sandboxEngine;
 
-  // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget：
+  // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget / ownerId：
   //   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），
   //                workspace 按相对用户根的子路径定位；要求 workspace 在用户根内。
+  //                ownerId = userId（容器归属 user）。
   //   workspace —— 每个 workspace 独占容器，挂载与运行路径都是 <root>/<workspaceId>。
+  //                ownerId = workspaceId（容器归属 workspace）。
   let hostPath: string;
   let runtimePath: string;
   let mountTarget: string;
-  let scopeKey: string;
+  let ownerId: string;
 
   if (isolationScope === "user") {
     const rel = relative(userWorkspaceRootPath, workspaceRootPath);
@@ -98,12 +100,12 @@ export function resolveRuntimeTarget(
     hostPath = userWorkspaceRootPath;
     runtimePath = [CONTAINER_WORKSPACES_ROOT, ...segments].join("/");
     mountTarget = CONTAINER_WORKSPACES_ROOT;
-    scopeKey = userId;
+    ownerId = userId;
   } else {
     mountTarget = `${CONTAINER_WORKSPACES_ROOT}/${workspaceId}`;
     hostPath = workspaceRootPath;
     runtimePath = mountTarget;
-    scopeKey = workspaceId;
+    ownerId = workspaceId;
   }
 
   const placement: SandboxRuntimePlacement = {
@@ -114,7 +116,7 @@ export function resolveRuntimeTarget(
     runtimePath,
     sandbox: { isolationScope, mountTarget, sandboxEngineType: sandboxEngine },
   };
-  return { ...placement, scopeKey };
+  return { ...placement, ownerId };
 }
 
 /** workspace 目录是否落在用户根目录内（同目录或子目录）。 */
@@ -122,35 +124,5 @@ function isInsideUserRoot(relativePath: string): boolean {
   return (
     relativePath === "" ||
     (!relativePath.startsWith("..") && !isAbsolute(relativePath))
-  );
-}
-
-/**
- * runtime resource key 的核心规则:隔离粒度决定容器按谁复用——
- * user→用户,workspace→工作区。这是唯一的判定处,下面两个 wrapper 只负责适配各自入参。
- */
-export function runtimeScopeKey(
-  isolationScope: string,
-  userId: string,
-  workspaceId: string
-): string {
-  if (isolationScope === "user") return userId;
-  if (isolationScope === "workspace") return workspaceId;
-  throw new Error(`Unknown runtime isolation scope: ${isolationScope}`);
-}
-
-/** 从持久化的 RuntimeTarget owner 记录算 resource key（容器存活台账侧用）。 */
-export function runtimeScopeKeyForOwner(input: {
-  isolationScope: string;
-  ownerUserId: string;
-  ownerWorkspaceId: string | null;
-}): string {
-  if (input.isolationScope === "workspace" && !input.ownerWorkspaceId) {
-    throw new Error("Runtime resource ownerWorkspaceId is required");
-  }
-  return runtimeScopeKey(
-    input.isolationScope,
-    input.ownerUserId,
-    input.ownerWorkspaceId ?? ""
   );
 }

@@ -9,7 +9,6 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "../resources/runtime-instance-metadata";
-import { runtimeScopeKeyForOwner } from "../resources/runtime-resource";
 
 @Controller("admin/runtime")
 @Roles("admin")
@@ -74,10 +73,9 @@ export class AdminRuntimeController {
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(`Runtime resource ${id} not found or not running`);
     }
-    const scopeKey = this.getScopeKey(resource);
     this.runtimeService.shutdownRuntimeInstance(
       resource.runtimeType,
-      scopeKey
+      resource.ownerId
     );
     await this.prisma.runtimeInstance.update({
       where: { id },
@@ -87,7 +85,7 @@ export class AdminRuntimeController {
           stoppedInstanceMetadata({
             runtimeType: resource.runtimeType,
             isolationScope: resource.isolationScope,
-            scopeKey,
+            ownerId: resource.ownerId,
             reason: "manual_stop",
           })
         ),
@@ -100,8 +98,7 @@ export class AdminRuntimeController {
     id: string;
     runtimeType: string;
     isolationScope: string;
-    ownerUserId: string;
-    ownerWorkspaceId: string | null;
+    ownerId: string;
     runtimeInstanceId: string;
     status: string;
     expiresAt: Date | string | null;
@@ -115,7 +112,6 @@ export class AdminRuntimeController {
       updatedAt: Date | string;
     }>;
   }) {
-    const scopeKey = runtimeScopeKeyForOwner(resource);
     const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
     const workspaceRuntimes = resource.workspaceRuntimeInstances?.map((binding) => ({
       id: binding.id,
@@ -128,9 +124,7 @@ export class AdminRuntimeController {
       id: resource.id,
       runtimeType: resource.runtimeType,
       isolationScope: resource.isolationScope,
-      ownerUserId: resource.ownerUserId,
-      ownerWorkspaceId: resource.ownerWorkspaceId,
-      scopeKey,
+      ownerId: resource.ownerId,
       runtimeInstanceId: resource.runtimeInstanceId,
       status: resource.status,
       isReusable: resource.status === "running",
@@ -139,7 +133,7 @@ export class AdminRuntimeController {
       metadata: resource.metadata,
       diagnostics: {
         ...diagnostics,
-        scopeKey: diagnostics.scopeKey ?? scopeKey,
+        ownerId: diagnostics.ownerId ?? resource.ownerId,
         runtimeInstanceId:
           diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
       },
@@ -151,16 +145,5 @@ export class AdminRuntimeController {
 
   private toIsoString(value: Date | string): string {
     return value instanceof Date ? value.toISOString() : value;
-  }
-
-  private getScopeKey(resource: {
-    isolationScope: string;
-    ownerUserId: string;
-    ownerWorkspaceId: string | null;
-  }): string {
-    if (resource.isolationScope === "user") {
-      return resource.ownerUserId;
-    }
-    return resource.ownerWorkspaceId ?? resource.ownerUserId;
   }
 }

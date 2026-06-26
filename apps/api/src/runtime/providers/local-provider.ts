@@ -15,7 +15,7 @@ import {
   HeartbeatWatchdog,
   publishWorkerErrorStatus,
 } from "./provider-utils";
-import { nextControlEnvelope } from "../../worker-host/control-envelope";
+import { nextCommandEnvelope } from "../../worker-host/command-envelope";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -47,7 +47,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly states = new Map<string, LocalRunState>();
   private readonly heartbeats = new HeartbeatWatchdog();
-  private readonly controlSeqs = new Map<string, number>();
+  private readonly commandSeqs = new Map<string, number>();
   private receiver!: RunEventReceiver;
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
@@ -95,7 +95,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     };
 
     this.states.set(runId, { handle, child });
-    this.controlSeqs.set(runId, 0);
+    this.commandSeqs.set(runId, 0);
 
     // Send run config as first message
     const configEnvelope: Envelope<RunConfig> = {
@@ -160,11 +160,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     return handle;
   }
 
-  sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void {
+  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
     const state = this.states.get(handle.runId);
     if (!state) {
       this.logger.warn(
-        `send control dropped ${safeLogJson({
+        `send command dropped ${safeLogJson({
           runId: handle.runId,
           controlType: control.type,
           reason: "no_active_state",
@@ -173,21 +173,21 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       return;
     }
 
-    const envelope = nextControlEnvelope(
-      this.controlSeqs,
+    const envelope = nextCommandEnvelope(
+      this.commandSeqs,
       handle.runId,
       handle.runId,
       control
     );
     this.receiver
-      .recordControlSent({
+      .recordCommandSent({
         runId: handle.runId,
         commandId: control.commandId,
-        controlType: control.type,
+        commandType: control.type,
       })
       .catch((err) => {
         this.logger.warn(
-          `record control sent failed ${safeLogJson({
+          `record command sent failed ${safeLogJson({
             runId: handle.runId,
             controlType: control.type,
             ...errorLogFields(err),
@@ -198,7 +198,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    this.sendControl(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
+    this.sendCommand(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
   }
 
   getHandle(runId: string): WorkerExecutionHandle | undefined {
@@ -213,7 +213,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   cleanup(runId: string): void {
     this.states.delete(runId);
     this.heartbeats.stop(runId);
-    this.controlSeqs.delete(runId);
+    this.commandSeqs.delete(runId);
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */

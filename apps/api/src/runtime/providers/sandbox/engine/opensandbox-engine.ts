@@ -17,7 +17,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     const {
       workspaceHostPath,
       workspaceMountPath,
-      scopeKey,
+      ownerId,
       isolationScope,
     } = placement;
 
@@ -34,7 +34,7 @@ export class OpenSandboxEngine implements SandboxEngine {
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
         AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_WORKER_WORKSPACE_ID: scopeKey,
+        AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
       },
@@ -44,14 +44,14 @@ export class OpenSandboxEngine implements SandboxEngine {
       runtimeLogHostPath: input.runtimeLogHostPath,
       runtimeLogMountPath: input.runtimeLogMountPath,
       metadata: {
-        "agework.io/runtime-scope-key": scopeKey,
+        "agework.io/runtime-owner-id": ownerId,
         "agework.io/isolation-scope": isolationScope,
         ...metadata,
       },
     });
 
     this.logger.log(
-      `Sandbox created: scopeKey=${scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
+      `Sandbox created: ownerId=${ownerId} sandboxId=${sandbox.id.slice(0, 12)}`
     );
 
     this.sandboxes.set(sandbox.id, sandbox);
@@ -91,7 +91,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     const sandbox = await this.client.resumeSandbox(runtimeInstanceId);
     this.sandboxes.set(sandbox.id, sandbox);
     this.logger.log(
-      `Sandbox resumed: scopeKey=${input.placement.scopeKey} sandboxId=${sandbox.id.slice(0, 12)}`
+      `Sandbox resumed: ownerId=${input.placement.ownerId} sandboxId=${sandbox.id.slice(0, 12)}`
     );
     return {
       engineType: "opensandbox",
@@ -126,17 +126,16 @@ export class OpenSandboxEngine implements SandboxEngine {
     input: SandboxStartInput
   ): Promise<void> {
     const { placement, apiBaseUrl, accessKey, env } = input;
-    const { scopeKey, isolationScope, workspaceMountPath } = placement;
+    const { ownerId, isolationScope, workspaceMountPath } = placement;
 
     try {
       const envs: Record<string, string> = {
         AGEWORK_WORKER_CHANNEL: "http",
-        AGEWORK_WORKER_WORKSPACE_ID: scopeKey,
+        AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
         AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
-        AGEWORK_WORKER_RUNTIME_INSTANCE_ID: sandbox.id,
       };
 
       await sandbox.runCommand("node /app/dist/main.js", {

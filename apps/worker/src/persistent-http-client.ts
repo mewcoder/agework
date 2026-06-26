@@ -8,18 +8,16 @@ import { errorDetails, workerLog } from "./worker-log.js";
 
 /**
  * 持久容器 worker 的 HTTP 客户端。
- * controls 轮询是 workspace / runtimeInstance 级
- * （`/worker/workspaces/:workspaceId/controls` 或 `/worker/runtimes/:runtimeInstanceId/controls`），
- * emit/fetchRunConfig 按 runId 参数化。
+ * commands 轮询是 ownerId 级（`/worker/owners/:ownerId/commands`，
+ * ownerId 由 env AGEWORK_WORKER_OWNER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export class PersistentHttpClient {
   private readonly apiBase: string;
-  private readonly workspaceId: string;
-  private readonly runtimeInstanceId: string | undefined;
+  private readonly ownerId: string;
   private readonly accessKey: string;
-  private controlSeq = 0;
+  private commandSeq = 0;
   private emptyPolls = 0;
   private readonly eventSeqs = new Map<string, number>();
   /** 按 runId 串行化 emit，避免并发 fetch 乱序到达导致服务端按 seq 去重时丢弃早序事件。 */
@@ -27,13 +25,11 @@ export class PersistentHttpClient {
 
   constructor() {
     this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
-    this.workspaceId = process.env.AGEWORK_WORKER_WORKSPACE_ID ?? "";
-    this.runtimeInstanceId =
-      process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID || undefined;
+    this.ownerId = process.env.AGEWORK_WORKER_OWNER_ID ?? "";
     this.accessKey = process.env.AGEWORK_WORKER_RUNTIME_ACCESS_KEY ?? "";
 
-    if (!this.workspaceId && !this.runtimeInstanceId) {
-      throw new Error("AGEWORK_WORKER_WORKSPACE_ID or AGEWORK_WORKER_RUNTIME_INSTANCE_ID is required for persistent worker");
+    if (!this.ownerId) {
+      throw new Error("AGEWORK_WORKER_OWNER_ID is required for persistent worker");
     }
     if (!this.accessKey) {
       throw new Error("AGEWORK_WORKER_RUNTIME_ACCESS_KEY is required for persistent worker");
@@ -41,8 +37,7 @@ export class PersistentHttpClient {
 
     workerLog("persistent http client initialized", {
       apiBase: this.apiBase,
-      workspaceId: this.workspaceId,
-      runtimeInstanceId: this.runtimeInstanceId,
+      ownerId: this.ownerId,
       accessKeyPresent: Boolean(this.accessKey),
       logFile:
         process.env.AGEWORK_WORKER_LOG_FILE ??
@@ -54,23 +49,20 @@ export class PersistentHttpClient {
     return { Authorization: `Bearer ${this.accessKey}` };
   }
 
-  async pollControls(waitMs = 0): Promise<Envelope<ControlPayload>[]> {
-    const controlsPath = this.runtimeInstanceId
-      ? `/worker/runtimes/${this.runtimeInstanceId}/controls`
-      : `/worker/workspaces/${this.workspaceId}/controls`;
-    const params = new URLSearchParams({ afterSeq: String(this.controlSeq) });
+  async pollCommands(waitMs = 0): Promise<Envelope<ControlPayload>[]> {
+    const commandsPath = `/worker/owners/${this.ownerId}/commands`;
+    const params = new URLSearchParams({ afterSeq: String(this.commandSeq) });
     if (waitMs > 0) {
       params.set("waitMs", String(waitMs));
     }
-    const url = `${this.apiBase}${controlsPath}?${params.toString()}`;
+    const url = `${this.apiBase}${commandsPath}?${params.toString()}`;
     let res: Response;
     try {
       res = await fetch(url, { headers: this.authHeaders });
     } catch (err) {
-      workerLog("control poll failed", {
-        workspaceId: this.workspaceId,
-        runtimeInstanceId: this.runtimeInstanceId,
-        afterSeq: this.controlSeq,
+      workerLog("command poll failed", {
+        ownerId: this.ownerId,
+        afterSeq: this.commandSeq,
         ...errorDetails(err),
       }, "warn");
       // 网络瞬时故障不崩溃，返回空让调用方重试
@@ -79,62 +71,57 @@ export class PersistentHttpClient {
 
     if (!res.ok) {
       const body = await safeText(res);
-      workerLog("control poll returned non-ok", {
-        workspaceId: this.workspaceId,
-        runtimeInstanceId: this.runtimeInstanceId,
-        afterSeq: this.controlSeq,
+      workerLog("command poll returned non-ok", {
+        ownerId: this.ownerId,
+        afterSeq: this.commandSeq,
         status: res.status,
         body,
       }, res.status === 401 ? "error" : "warn");
       if (res.status === 401) {
         workerLog("runtime access key invalid, exiting", {
-          workspaceId: this.workspaceId,
-          runtimeInstanceId: this.runtimeInstanceId,
+          ownerId: this.ownerId,
         }, "error");
         process.exit(1);
       }
       return [];
     }
 
-    const data = (await res.json()) as { controls: Envelope<ControlPayload>[] };
-    if (data.controls.length > 0) {
+    const data = (await res.json()) as { commands: Envelope<ControlPayload>[] };
+    if (data.commands.length > 0) {
       this.emptyPolls = 0;
-      workerLog("control poll received controls", {
-        workspaceId: this.workspaceId,
-        runtimeInstanceId: this.runtimeInstanceId,
-        afterSeq: this.controlSeq,
-        count: data.controls.length,
-        controls: data.controls.map((control) => ({
-          seq: control.seq,
-          runId: control.runId,
-          type: control.payload.type,
-          commandId: control.payload.commandId,
+      workerLog("command poll received commands", {
+        ownerId: this.ownerId,
+        afterSeq: this.commandSeq,
+        count: data.commands.length,
+        commands: data.commands.map((command) => ({
+          seq: command.seq,
+          runId: command.runId,
+          type: command.payload.type,
+          commandId: command.payload.commandId,
         })),
       }, "debug");
     } else {
       this.emptyPolls += 1;
       if (this.emptyPolls <= 3 || this.emptyPolls % 30 === 0) {
-        workerLog("control poll empty", {
-          workspaceId: this.workspaceId,
-          runtimeInstanceId: this.runtimeInstanceId,
-          afterSeq: this.controlSeq,
+        workerLog("command poll empty", {
+          ownerId: this.ownerId,
+          afterSeq: this.commandSeq,
           emptyPolls: this.emptyPolls,
         }, "debug");
       }
     }
-    for (const control of data.controls) {
-      if (control.seq > this.controlSeq) {
-        this.controlSeq = control.seq;
+    for (const command of data.commands) {
+      if (command.seq > this.commandSeq) {
+        this.commandSeq = command.seq;
       }
     }
-    return data.controls;
+    return data.commands;
   }
 
   async fetchRunConfig(runId: string): Promise<RunConfig> {
     workerLog("fetch run config", {
       runId,
-      workspaceId: this.workspaceId,
-      runtimeInstanceId: this.runtimeInstanceId,
+      ownerId: this.ownerId,
     }, "debug");
     const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
       headers: this.authHeaders,
@@ -143,7 +130,7 @@ export class PersistentHttpClient {
       const body = await safeText(res);
       workerLog("fetch run config returned non-ok", {
         runId,
-        workspaceId: this.workspaceId,
+        ownerId: this.ownerId,
         status: res.status,
         body,
       }, "warn");
@@ -152,7 +139,7 @@ export class PersistentHttpClient {
     const data = (await res.json()) as { config: RunConfig };
     workerLog("fetch run config ok", {
       runId,
-      workspaceId: this.workspaceId,
+      ownerId: this.ownerId,
       conversationId: data.config.conversationId,
       agentType: data.config.agentProviderConfig.agentType,
       runtimePath: data.config.runtimePath,
@@ -251,25 +238,21 @@ export class PersistentHttpClient {
     throw lastError ?? new Error("Event POST failed after retries");
   }
 
-  async emitWorkspaceHeartbeat(): Promise<void> {
-    const heartbeatPath = this.runtimeInstanceId
-      ? `/worker/runtimes/${this.runtimeInstanceId}/heartbeat`
-      : `/worker/workspaces/${this.workspaceId}/heartbeat`;
+  async emitOwnerHeartbeat(): Promise<void> {
+    const heartbeatPath = `/worker/owners/${this.ownerId}/heartbeat`;
     const res = await fetch(`${this.apiBase}${heartbeatPath}`, {
       method: "POST",
       headers: this.authHeaders,
     }).catch((err) => {
-      workerLog("workspace heartbeat failed", {
-        workspaceId: this.workspaceId,
-        runtimeInstanceId: this.runtimeInstanceId,
+      workerLog("owner heartbeat failed", {
+        ownerId: this.ownerId,
         ...errorDetails(err),
       }, "warn");
       return undefined;
     });
     if (res && !res.ok) {
-      workerLog("workspace heartbeat returned non-ok", {
-        workspaceId: this.workspaceId,
-        runtimeInstanceId: this.runtimeInstanceId,
+      workerLog("owner heartbeat returned non-ok", {
+        ownerId: this.ownerId,
         status: res.status,
         body: await safeText(res),
       }, "warn");

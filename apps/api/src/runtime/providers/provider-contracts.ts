@@ -9,7 +9,7 @@ import type { RunEventReceiver } from "./run-event-receiver";
 export interface WorkerExecutionProvider {
   readonly type: string;
   startWorkerExecution(input: WorkerExecutionStartInput): WorkerExecutionHandle;
-  sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void;
+  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void;
   cancel(handle: WorkerExecutionHandle): void;
   cleanup(runId: string): void;
 }
@@ -23,8 +23,8 @@ export interface RuntimeProvider extends WorkerExecutionProvider {
   heartbeat(runId: string): void;
   /** 服务重启后，根据持久化的 runtimeInstanceId 终止孤儿 run 对应的进程/容器。幂等。 */
   recoverOrphan(runtimeInstanceId: string): Promise<void>;
-  /** 收到 worker 心跳时按 runtime resource key 喂容器级 watchdog。 */
-  heartbeatRuntimeInstance?(scopeKey: string): void;
-  /** 停止并删除指定 runtime resource key 对应的持久容器/沙箱。 */
-  shutdownRuntimeInstance?(scopeKey: string): void;
+  /** 收到 worker 心跳时按 ownerId 喂容器级 watchdog。 */
+  heartbeatRuntimeInstance?(ownerId: string): void;
+  /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
+  shutdownRuntimeInstance?(ownerId: string): void;
 }

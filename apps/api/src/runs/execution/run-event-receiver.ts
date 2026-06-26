@@ -32,11 +32,11 @@ export class RunEventReceiverImpl implements RunEventReceiver {
     return this.processor.forceCancelledStatus(runId);
   }
 
-  async recordControlSent(input: {
+  async recordCommandSent(input: {
     runId: string;
     commandId: string;
-    controlType: string;
+    commandType: string;
   }): Promise<void> {
-    await this.recorder.append(RunEventFacts.controlSent(input));
+    await this.recorder.append(RunEventFacts.commandSent(input));
   }
 }

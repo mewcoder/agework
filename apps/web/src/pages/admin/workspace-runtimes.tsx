@@ -87,9 +87,9 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
       cell: ({ row }) => (
         <DataTableText
           className="max-w-[200px]"
-          title={row.original.ownerWorkspaceId ?? row.original.ownerUserId}
+          title={row.original.ownerId}
         >
-          {row.original.ownerWorkspaceId ?? row.original.ownerUserId}
+          {row.original.ownerId}
         </DataTableText>
       ),
     },

@@ -6,13 +6,10 @@ const ACCESS_KEY_BYTES = 32;
 @Injectable()
 export class WorkerAccessService {
   private readonly accessKeys = new Map<string, string>();
-  private readonly workspaceKeys = new Map<string, string>();
-  /** runtimeInstanceId → accessKey */
+  /** ownerId → accessKey（持久容器复用，一个 owner 一个 key） */
+  private readonly ownerKeys = new Map<string, string>();
+  /** runtimeInstanceId → accessKey（持久 worker 调 /worker/runs/:runId 时鉴权用） */
   private readonly runtimeInstanceKeys = new Map<string, string>();
-  /** runtimeInstanceId → scopeKey (用于 heartbeat 时查找 provider 内部 key) */
-  private readonly runtimeInstanceScopeKeys = new Map<string, string>();
-  /** runtimeInstanceId → runtimeType */
-  private readonly runtimeInstanceRuntimeTypes = new Map<string, string>();
 
   /**
    * 为单个 run 签发内部访问 key。
@@ -25,35 +22,35 @@ export class WorkerAccessService {
   }
 
   /**
-   * 为 workspace 签发内部访问 key。
-   * Worker 用同一个 key 访问 per-run 端点和 workspace controls 端点。
+   * 为 runtime owner 签发内部访问 key。
+   * Worker 用同一个 key 访问 per-run 端点和 owner 控制端点（commands/heartbeat）。
    */
-  issueWorkspaceKey(workspaceId: string): string {
+  issueOwnerKey(ownerId: string): string {
     const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
-    this.workspaceKeys.set(workspaceId, accessKey);
+    this.ownerKeys.set(ownerId, accessKey);
     return accessKey;
   }
 
-  /** 把某个 run 绑定到 workspace key，使 per-run 端点用 workspace key 即可通过。 */
-  registerRun(runId: string, workspaceKey: string): void {
-    this.accessKeys.set(runId, workspaceKey);
+  /** 把某个 run 绑定到 owner key，使 per-run 端点用 owner key 即可通过。 */
+  registerRun(runId: string, ownerKey: string): void {
+    this.accessKeys.set(runId, ownerKey);
   }
 
   verifyAccessKey(runId: string, accessKey: string): boolean {
     return this.constantTimeEqual(this.accessKeys.get(runId), accessKey);
   }
 
-  verifyWorkspaceKey(workspaceId: string, accessKey: string): boolean {
-    return this.constantTimeEqual(this.workspaceKeys.get(workspaceId), accessKey);
+  verifyOwnerKey(ownerId: string, accessKey: string): boolean {
+    return this.constantTimeEqual(this.ownerKeys.get(ownerId), accessKey);
   }
 
   revokeAccess(runId: string): void {
     this.accessKeys.delete(runId);
   }
 
-  revokeWorkspace(workspaceId: string): void {
-    const key = this.workspaceKeys.get(workspaceId);
-    this.workspaceKeys.delete(workspaceId);
+  revokeOwner(ownerId: string): void {
+    const key = this.ownerKeys.get(ownerId);
+    this.ownerKeys.delete(ownerId);
     if (key) {
       for (const [runId, k] of this.accessKeys) {
         if (k === key) this.accessKeys.delete(runId);
@@ -63,23 +60,20 @@ export class WorkerAccessService {
 
   /**
    * 为 runtimeInstanceId 签发内部访问 key。
-   * 复用 scopeKey 对应的 workspaceKey，使同一个 key 可同时用于
-   * /worker/workspaces/:workspaceId 和 /worker/runtimes/:runtimeInstanceId。
+   * 复用 ownerId 对应的 ownerKey，使同一个 key 可同时用于
+   * /worker/owners/:ownerId 和 /worker/runs/:runId 端点鉴权。
    */
   issueRuntimeInstanceKey(
     runtimeInstanceId: string,
-    scopeKey: string,
-    runtimeType: string
+    ownerId: string
   ): string {
-    const existingKey = this.workspaceKeys.get(scopeKey);
+    const existingKey = this.ownerKeys.get(ownerId);
     if (existingKey) {
       this.runtimeInstanceKeys.set(runtimeInstanceId, existingKey);
     } else {
       const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
       this.runtimeInstanceKeys.set(runtimeInstanceId, accessKey);
     }
-    this.runtimeInstanceScopeKeys.set(runtimeInstanceId, scopeKey);
-    this.runtimeInstanceRuntimeTypes.set(runtimeInstanceId, runtimeType);
     return this.runtimeInstanceKeys.get(runtimeInstanceId)!;
   }
 
@@ -87,32 +81,21 @@ export class WorkerAccessService {
     return this.constantTimeEqual(this.runtimeInstanceKeys.get(runtimeInstanceId), accessKey);
   }
 
-  /** 获取 runtimeInstanceId 对应的 scopeKey（用于 heartbeat 等）。 */
-  getScopeKeyForRuntimeInstance(runtimeInstanceId: string): string | undefined {
-    return this.runtimeInstanceScopeKeys.get(runtimeInstanceId);
-  }
-
-  getRuntimeTypeForRuntimeInstance(runtimeInstanceId: string): string | undefined {
-    return this.runtimeInstanceRuntimeTypes.get(runtimeInstanceId);
-  }
-
   revokeRuntimeInstance(runtimeInstanceId: string): void {
     this.runtimeInstanceKeys.delete(runtimeInstanceId);
-    this.runtimeInstanceScopeKeys.delete(runtimeInstanceId);
-    this.runtimeInstanceRuntimeTypes.delete(runtimeInstanceId);
   }
 
   diagnostics(params: {
     runId?: string;
-    workspaceId?: string;
+    ownerId?: string;
     runtimeInstanceId?: string;
     accessKey?: string;
   }): Record<string, unknown> {
     const runKey = params.runId
       ? this.accessKeys.get(params.runId)
       : undefined;
-    const workspaceKey = params.workspaceId
-      ? this.workspaceKeys.get(params.workspaceId)
+    const ownerKey = params.ownerId
+      ? this.ownerKeys.get(params.ownerId)
       : undefined;
     const runtimeInstanceKey = params.runtimeInstanceId
       ? this.runtimeInstanceKeys.get(params.runtimeInstanceId)
@@ -120,10 +103,10 @@ export class WorkerAccessService {
 
     return {
       accessKeyCount: this.accessKeys.size,
-      workspaceKeyCount: this.workspaceKeys.size,
+      ownerKeyCount: this.ownerKeys.size,
       runtimeInstanceKeyCount: this.runtimeInstanceKeys.size,
       runId: params.runId,
-      workspaceId: params.workspaceId,
+      ownerId: params.ownerId,
       runtimeInstanceId: params.runtimeInstanceId,
       hasProvidedKey: Boolean(params.accessKey),
       providedKeyFingerprint: fingerprint(params.accessKey),
@@ -131,11 +114,11 @@ export class WorkerAccessService {
       runKeyFingerprint: fingerprint(runKey),
       runKeyMatches:
         Boolean(params.accessKey) && this.constantTimeEqual(runKey, params.accessKey ?? ""),
-      hasWorkspaceKey: Boolean(workspaceKey),
-      workspaceKeyFingerprint: fingerprint(workspaceKey),
-      workspaceKeyMatches:
+      hasOwnerKey: Boolean(ownerKey),
+      ownerKeyFingerprint: fingerprint(ownerKey),
+      ownerKeyMatches:
         Boolean(params.accessKey) &&
-        this.constantTimeEqual(workspaceKey, params.accessKey ?? ""),
+        this.constantTimeEqual(ownerKey, params.accessKey ?? ""),
       hasRuntimeInstanceKey: Boolean(runtimeInstanceKey),
       runtimeInstanceKeyFingerprint: fingerprint(runtimeInstanceKey),
       runtimeInstanceKeyMatches:

@@ -22,14 +22,14 @@ import { WorkerRunController } from "./worker-run.controller";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
-import { RuntimeControlQueue } from "../worker-host/control-queue";
+import { RuntimeCommandQueue } from "../worker-host/command-queue";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合、worker 事件入口。
  * 单向依赖 runtime（run 调用运行环境），并在启动时把 RunEventReceiver 实现注入
- * runtime 侧的 provider 与 control queue，以及恢复孤儿 run。
+ * runtime 侧的 provider 与 command queue，以及恢复孤儿 run。
  */
 @Module({
   imports: [RuntimeModule, WorkerHostModule, ConversationModule, ModelProviderModule],
@@ -55,15 +55,15 @@ export class RunsModule implements OnModuleInit {
   constructor(
     private readonly runRecovery: RunRecoveryUseCase,
     private readonly providerRegistry: RuntimeProviderRegistry,
-    private readonly controlQueue: RuntimeControlQueue,
+    private readonly commandQueue: RuntimeCommandQueue,
     private readonly runEventReceiver: RunEventReceiverImpl
   ) {}
 
   async onModuleInit() {
-    // 把事件 receiver 注入 runtime 侧的 provider 与 control queue
+    // 把事件 receiver 注入 runtime 侧的 provider 与 command queue
     // （它们只认 RunEventReceiver 接口，不直接依赖 run 实现）
     this.providerRegistry.setRunEventReceiver(this.runEventReceiver);
-    this.controlQueue.setControlSentRecorder(this.runEventReceiver);
+    this.commandQueue.setCommandSentRecorder(this.runEventReceiver);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

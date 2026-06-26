@@ -113,16 +113,14 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         id: "rr-1",
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerUserId: "user-1",
-        ownerWorkspaceId: "ws-1",
+        ownerId: "ws-1",
         runtimeInstanceId: "container-ws1",
       },
       {
         id: "rr-2",
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerUserId: "user-1",
-        ownerWorkspaceId: "ws-2",
+        ownerId: "ws-2",
         runtimeInstanceId: "container-ws2",
       },
     ]);
@@ -144,7 +142,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          scopeKey: "ws-1",
+          ownerId: "ws-1",
           statusReason: "orphan_recovered",
           stoppedAt: expect.any(String),
         }),
@@ -155,7 +153,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          scopeKey: "ws-2",
+          ownerId: "ws-2",
           statusReason: "orphan_recovered",
           stoppedAt: expect.any(String),
         }),
@@ -178,8 +176,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
         id: "rr-1",
         runtimeType: "sandbox",
         isolationScope: "user",
-        ownerUserId: "user-1",
-        ownerWorkspaceId: null,
+        ownerId: "user-1",
         runtimeInstanceId: "container-user1",
       },
     ]);

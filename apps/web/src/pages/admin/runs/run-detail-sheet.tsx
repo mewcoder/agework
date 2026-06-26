@@ -226,13 +226,8 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     }
                   />
                   <DetailItem
-                    label="Owner User"
-                    value={run.runtimeInstance.ownerUserId}
-                    mono
-                  />
-                  <DetailItem
-                    label="Owner Workspace"
-                    value={run.runtimeInstance.ownerWorkspaceId}
+                    label="Owner"
+                    value={run.runtimeInstance.ownerId}
                     mono
                   />
                   <DetailItem

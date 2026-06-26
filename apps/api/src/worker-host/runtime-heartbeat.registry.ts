@@ -6,7 +6,7 @@ import { Injectable } from "@nestjs/common";
  * 从而保持 worker-host → runtime 零依赖。
  */
 export interface RuntimeInstanceHeartbeatSink {
-  heartbeatRuntimeInstance(scopeKey: string): void;
+  heartbeatRuntimeInstance(ownerId: string): void;
 }
 
 /**
@@ -21,7 +21,7 @@ export class RuntimeHeartbeatRegistry {
     this.sink = sink;
   }
 
-  heartbeatRuntimeInstance(scopeKey: string): void {
-    this.sink?.heartbeatRuntimeInstance(scopeKey);
+  heartbeatRuntimeInstance(ownerId: string): void {
+    this.sink?.heartbeatRuntimeInstance(ownerId);
   }
 }

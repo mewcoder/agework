@@ -33,13 +33,13 @@ describe("runningInstanceMetadata", () => {
     const now = new Date("2026-01-01T00:00:00Z");
     const result = runningInstanceMetadata({
       placement: { workspaceId: "ws-1" } as never,
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       runtimeInstanceId: "container-1",
       now,
     });
 
     expect(result).toMatchObject({
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       workspaceId: "ws-1",
       statusReason: "running",
       lastSeenAt: "2026-01-01T00:00:00.000Z",
@@ -51,7 +51,7 @@ describe("runningInstanceMetadata", () => {
   it("merges existing metadata", () => {
     const result = runningInstanceMetadata({
       placement: { workspaceId: "ws-1" } as never,
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       runtimeInstanceId: "c-1",
       existing: { customField: "preserved" },
       now: new Date("2026-01-01T00:00:00Z"),
@@ -62,7 +62,7 @@ describe("runningInstanceMetadata", () => {
   it("merges additional metadata over existing", () => {
     const result = runningInstanceMetadata({
       placement: { workspaceId: "ws-1" } as never,
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       runtimeInstanceId: "c-1",
       existing: { key: "old" },
       metadata: { key: "new" },
@@ -78,13 +78,13 @@ describe("stoppedInstanceMetadata", () => {
     const result = stoppedInstanceMetadata({
       runtimeType: "docker",
       isolationScope: "workspace",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       reason: "idle_timeout",
       now,
     });
 
     expect(result).toMatchObject({
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       runtimeType: "docker",
       isolationScope: "workspace",
       statusReason: "idle_timeout",
@@ -96,7 +96,7 @@ describe("stoppedInstanceMetadata", () => {
     const result = stoppedInstanceMetadata({
       runtimeType: "docker",
       isolationScope: "workspace",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       reason: "error",
       errorMessage: "crashed",
       now: new Date(),
@@ -108,7 +108,7 @@ describe("stoppedInstanceMetadata", () => {
     const result = stoppedInstanceMetadata({
       runtimeType: "docker",
       isolationScope: "workspace",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       reason: "stopped",
       now: new Date(),
     });
@@ -121,7 +121,7 @@ describe("statusInstanceMetadata", () => {
     const result = statusInstanceMetadata({
       runtimeType: "docker",
       isolationScope: "workspace",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       reason: "healthy",
       now: new Date("2026-01-01T00:00:00Z"),
     });
@@ -134,7 +134,7 @@ describe("runtimeInstanceDiagnostics", () => {
   it("extracts known fields from metadata", () => {
     expect(
       runtimeInstanceDiagnostics({
-        scopeKey: "ws-1",
+        ownerId: "ws-1",
         workspaceId: "ws-1",
         statusReason: "running",
         lastSeenAt: "2026-01-01",
@@ -144,7 +144,7 @@ describe("runtimeInstanceDiagnostics", () => {
         runtimeInstanceId: "c-1",
       })
     ).toEqual({
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       workspaceId: "ws-1",
       statusReason: "running",
       lastSeenAt: "2026-01-01",
@@ -157,7 +157,7 @@ describe("runtimeInstanceDiagnostics", () => {
 
   it("returns undefined for missing fields", () => {
     expect(runtimeInstanceDiagnostics(null)).toEqual({
-      scopeKey: undefined,
+      ownerId: undefined,
       workspaceId: undefined,
       statusReason: undefined,
       lastSeenAt: undefined,
@@ -170,9 +170,9 @@ describe("runtimeInstanceDiagnostics", () => {
 
   it("returns undefined for non-string fields", () => {
     expect(
-      runtimeInstanceDiagnostics({ scopeKey: 42, lastSeenAt: true })
+      runtimeInstanceDiagnostics({ ownerId: 42, lastSeenAt: true })
     ).toEqual(
-      expect.objectContaining({ scopeKey: undefined, lastSeenAt: undefined })
+      expect.objectContaining({ ownerId: undefined, lastSeenAt: undefined })
     );
   });
 });

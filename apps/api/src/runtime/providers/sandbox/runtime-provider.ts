@@ -15,7 +15,7 @@ import {
   type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
 } from "./runtime-instance.service";
-import { WorkerControlDispatcher } from "../../../worker-host/worker-control-dispatcher.service";
+import { WorkerCommandDispatcher } from "../../../worker-host/worker-command-dispatcher.service";
 
 @Injectable()
 export class SandboxRuntimeProvider implements RuntimeProvider {
@@ -25,7 +25,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
   constructor(
     private readonly runtimeInstances: SandboxRuntimeInstanceService,
-    private readonly workerSessions: WorkerControlDispatcher
+    private readonly workerSessions: WorkerCommandDispatcher
   ) {}
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
@@ -47,21 +47,21 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     this.workerSessions.registerRunConfig(context.runId, context.runConfig);
 
     const handle = this.runtimeInstances.createRunHandle(context);
-    const scopeState = this.runtimeInstances.ensureScopeState(context);
+    const ownerState = this.runtimeInstances.ensureOwnerState(context);
 
-    // provider 同时持有 resource 与 session，故由它写 scopeState 的 activeRuns，
+    // provider 同时持有 resource 与 session，故由它写 ownerState 的 activeRuns，
     // dispatcher 不再触碰 sandbox 容器状态。
-    scopeState.activeRuns.set(context.runId, context.runConfig.conversationId);
+    ownerState.activeRuns.set(context.runId, context.runConfig.conversationId);
     this.workerSessions.registerRunSession({
       runId: context.runId,
-      scopeKey: context.scopeKey,
-      accessKey: scopeState.accessKey,
+      ownerId: context.ownerId,
+      accessKey: ownerState.accessKey,
       runConfig: context.runConfig,
     });
     this.runtimeInstances.attachOrStartRuntimeInstance(
       {
         context,
-        scopeState,
+        ownerState,
         handle,
         onRuntimeInstanceIdReady: input.onRuntimeInstanceIdReady,
       },
@@ -71,37 +71,37 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     return handle;
   }
 
-  sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void {
-    const scopeKey = this.runtimeInstances.findScopeKeyByRun(handle.runId);
-    if (!scopeKey) {
+  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
+    const ownerId = this.runtimeInstances.findOwnerIdByRun(handle.runId);
+    if (!ownerId) {
       this.logger.warn(
-        `sandbox send control dropped ${safeLogJson({
+        `sandbox send command dropped ${safeLogJson({
           runId: handle.runId,
           controlType: control.type,
-          reason: "no_scope",
+          reason: "no_owner",
         })}`
       );
       return;
     }
-    this.workerSessions.sendControl(scopeKey, handle.runId, control);
+    this.workerSessions.sendCommand(ownerId, handle.runId, control);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    const scopeKey = this.runtimeInstances.findScopeKeyByRun(handle.runId);
-    const scopeState = scopeKey
-      ? this.runtimeInstances.getScopeState(scopeKey)
+    const ownerId = this.runtimeInstances.findOwnerIdByRun(handle.runId);
+    const ownerState = ownerId
+      ? this.runtimeInstances.getOwnerState(ownerId)
       : undefined;
-    if (!scopeState?.runtimeInstanceId) {
+    if (!ownerState?.runtimeInstanceId) {
       this.workerSessions.markCancelledBeforeReady(handle.runId);
       this.logger.debug(
         `sandbox cancel queued before ready ${safeLogJson({
           runId: handle.runId,
-          scopeKey,
+          ownerId,
         })}`
       );
       return;
     }
-    this.sendControl(handle, {
+    this.sendCommand(handle, {
       type: "cancel",
       commandId: generateId(),
       runId: handle.runId,
@@ -117,13 +117,13 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     this.runtimeInstances.heartbeatRun(runId);
   }
 
-  heartbeatRuntimeInstance(scopeKey: string): void {
-    this.runtimeInstances.heartbeatRuntimeInstance(scopeKey);
+  heartbeatRuntimeInstance(ownerId: string): void {
+    this.runtimeInstances.heartbeatRuntimeInstance(ownerId);
   }
 
-  shutdownRuntimeInstance(scopeKey: string): void {
-    this.runtimeInstances.shutdownRuntimeInstance(scopeKey, {
-      cleanupWorkspace: (key) => this.workerSessions.cleanupWorkspace(key),
+  shutdownRuntimeInstance(ownerId: string): void {
+    this.runtimeInstances.shutdownRuntimeInstance(ownerId, {
+      cleanupByOwnerId: (key) => this.workerSessions.cleanupByOwnerId(key),
     });
   }
 
@@ -144,7 +144,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
         runId: context.runId,
         conversationId: context.runConfig.conversationId,
         workspaceId: context.workspaceId,
-        scopeKey: context.scopeKey,
+        ownerId: context.ownerId,
         isolationScope: context.isolationScope,
         engineType: context.engineType,
       })}`
@@ -158,8 +158,8 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
       forceCancelled: (runId) => this.forceCancelled(runId),
       publishWorkerError: (runId, error) =>
         publishWorkerErrorStatus(this.receiver, runId, error),
-      cleanupWorkspace: (scopeKey) =>
-        this.workerSessions.cleanupWorkspace(scopeKey),
+      cleanupByOwnerId: (ownerId) =>
+        this.workerSessions.cleanupByOwnerId(ownerId),
     };
   }
 

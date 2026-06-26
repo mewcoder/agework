@@ -35,19 +35,18 @@ function makeController(
 }
 
 describe("AdminRuntimeController", () => {
-  it("lists runtime resources with derived ownership and diagnostics", async () => {
+  it("lists runtime resources with owner and diagnostics", async () => {
     const findMany = vi.fn().mockResolvedValue([
       {
         id: "rr-1",
         runtimeType: "sandbox",
         isolationScope: "workspace",
-        ownerUserId: "user-1",
-        ownerWorkspaceId: "ws-1",
+        ownerId: "ws-1",
         runtimeInstanceId: "container-abc",
         status: "running",
         expiresAt: null,
         metadata: {
-          scopeKey: "ws-1",
+          ownerId: "ws-1",
           statusReason: "running",
           lastSeenAt: "2026-06-25T00:00:00.000Z",
         },
@@ -83,7 +82,7 @@ describe("AdminRuntimeController", () => {
     );
     expect(result.list[0]).toMatchObject({
       id: "rr-1",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       workspaceCount: 1,
       workspaceRuntimes: [
         expect.objectContaining({
@@ -93,7 +92,7 @@ describe("AdminRuntimeController", () => {
       ],
       isReusable: true,
       diagnostics: {
-        scopeKey: "ws-1",
+        ownerId: "ws-1",
         statusReason: "running",
         lastSeenAt: "2026-06-25T00:00:00.000Z",
         runtimeInstanceId: "container-abc",
@@ -110,8 +109,7 @@ describe("AdminRuntimeController", () => {
       id: "rr-1",
       runtimeType: "sandbox",
       isolationScope: "workspace",
-      ownerUserId: "user-1",
-      ownerWorkspaceId: "ws-1",
+      ownerId: "ws-1",
       status: "running",
     });
     const update = vi.fn().mockResolvedValue({});
@@ -137,7 +135,7 @@ describe("AdminRuntimeController", () => {
       data: {
         status: "stopped",
         metadata: expect.objectContaining({
-          scopeKey: "ws-1",
+          ownerId: "ws-1",
           statusReason: "manual_stop",
           stoppedAt: expect.any(String),
         }),

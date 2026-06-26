@@ -14,7 +14,7 @@ function makePlacement(
 ): SandboxPlacement {
   return {
     isolationScope: "workspace",
-    scopeKey: "ws-1",
+    ownerId: "ws-1",
     workspaceId: "ws-1",
     workspaceHostPath: "/tmp/workspace",
     workspaceMountPath: "/workspace",
@@ -80,7 +80,7 @@ describe("DockerSandboxEngine", () => {
     await engine.getOrCreate(
       makeInput({
         metadata: {
-          "agework.io/runtime-scope-key": "ws-1",
+          "agework.io/runtime-owner-id": "ws-1",
           "agework.io/isolation-scope": "workspace",
         },
       })
@@ -91,7 +91,7 @@ describe("DockerSandboxEngine", () => {
     );
     const runArgs = runCall![1] as string[];
     expect(runArgs).toContain("--label");
-    expect(runArgs).toContain("agework.io/runtime-scope-key=ws-1");
+    expect(runArgs).toContain("agework.io/runtime-owner-id=ws-1");
     expect(runArgs).toContain("agework.io/isolation-scope=workspace");
   });
 
@@ -106,7 +106,7 @@ describe("DockerSandboxEngine", () => {
         env: {
           AGEWORK_WORKER_CHANNEL: "http",
           AGEWORK_WORKER_RUNTIME_ACCESS_KEY: "test-key",
-          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         },
       })
     );
@@ -116,7 +116,7 @@ describe("DockerSandboxEngine", () => {
     );
     const runArgs = runCall![1] as string[];
     expect(runArgs).toContain("AGEWORK_WORKER_CHANNEL=http");
-    expect(runArgs).toContain("AGEWORK_WORKER_WORKSPACE_ID=ws-1");
+    expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
   });
 
   it("getOrCreate mounts runtime log directory when provided", async () => {

@@ -5,7 +5,6 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "./runtime-instance-metadata";
-import { runtimeScopeKeyForOwner } from "./runtime-resource";
 
 /**
  * Runtime 资源生命周期清理：
@@ -31,7 +30,7 @@ export class RuntimeInstanceLifecycleUseCase {
       const resource = binding.resource;
       if (
         resource.isolationScope === "workspace" &&
-        resource.ownerWorkspaceId === workspaceId
+        resource.ownerId === workspaceId
       ) {
         await this.shutdownResource(resource);
       }
@@ -39,10 +38,17 @@ export class RuntimeInstanceLifecycleUseCase {
     await this.prisma.workspaceRuntimeInstance.deleteMany({ where: { workspaceId } });
   }
 
-  /** 关闭该用户名下所有 runtime 资源（user 级共享资源 + 该用户所有 workspace 级资源）。 */
+  /** 关闭该用户名下所有 runtime 资源（user 级共享资源 + 该用户所有 workspace 级资源）。
+   *  user 隔离下 ownerId = userId；workspace 隔离下 ownerId = workspaceId（也归该 user），
+   *  通过 ownerId IN (userId, 该 user 的 workspace ids) 匹配。 */
   async shutdownForUser(userId: string): Promise<void> {
+    const workspaces = await this.prisma.workspace.findMany({
+      where: { userId, deletedAt: null },
+      select: { id: true },
+    });
+    const ownerIds = [userId, ...workspaces.map((w) => w.id)];
     const resources = await this.prisma.runtimeInstance.findMany({
-      where: { ownerUserId: userId, status: "running" },
+      where: { ownerId: { in: ownerIds }, status: "running" },
     });
     for (const resource of resources) {
       await this.shutdownResource(resource);
@@ -53,16 +59,14 @@ export class RuntimeInstanceLifecycleUseCase {
     id: string;
     runtimeType: string;
     isolationScope: string;
-    ownerUserId: string;
-    ownerWorkspaceId: string | null;
+    ownerId: string;
   }): Promise<void> {
     try {
-      const scopeKey = runtimeScopeKeyForOwner(resource);
       const provider = this.runtimeProviderRegistry.resolve(
         resource.runtimeType
       );
       await Promise.resolve(
-        provider.shutdownRuntimeInstance?.(scopeKey)
+        provider.shutdownRuntimeInstance?.(resource.ownerId)
       );
       await this.prisma.runtimeInstance.update({
         where: { id: resource.id },
@@ -72,7 +76,7 @@ export class RuntimeInstanceLifecycleUseCase {
             stoppedInstanceMetadata({
               runtimeType: resource.runtimeType,
               isolationScope: resource.isolationScope,
-              scopeKey,
+              ownerId: resource.ownerId,
               reason: "owner_released",
             })
           ),

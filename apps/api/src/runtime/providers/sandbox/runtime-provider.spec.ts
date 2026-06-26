@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRuntimeProvider } from "./runtime-provider";
 import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
-import { WorkerControlDispatcher } from "../../../worker-host/worker-control-dispatcher.service";
+import { WorkerCommandDispatcher } from "../../../worker-host/worker-command-dispatcher.service";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
   IsolationScope,
@@ -42,15 +42,15 @@ function makeProvider(engineOverride?: SandboxEngine) {
   };
   const configStore = { register: vi.fn(), unregister: vi.fn() };
   const access = {
-    issueWorkspaceKey: vi.fn().mockReturnValue("ws-key"),
+    issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
     issueRuntimeInstanceKey: vi.fn().mockReturnValue("resource-key"),
     registerRun: vi.fn(),
-    revokeWorkspace: vi.fn(),
+    revokeOwner: vi.fn(),
     revokeAccess: vi.fn(),
   };
-  const controlQueue = {
-    pushForWorkspace: vi.fn(),
-    cleanupWorkspace: vi.fn(),
+  const commandQueue = {
+    pushByOwnerId: vi.fn(),
+    cleanupByOwnerId: vi.fn(),
     cleanup: vi.fn(),
   };
   const config = {
@@ -59,8 +59,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-logs/runtime"),
   };
   const workspaceRuntimeService = {
-    markStopped: vi.fn().mockResolvedValue(undefined),
-    markStoppedByScopeKey: vi.fn().mockResolvedValue(undefined),
+    markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
@@ -75,10 +74,10 @@ function makeProvider(engineOverride?: SandboxEngine) {
     access as never,
     [engine]
   );
-  const workerSessions = new WorkerControlDispatcher(
+  const workerSessions = new WorkerCommandDispatcher(
     configStore as never,
     access as never,
-    controlQueue as never
+    commandQueue as never
   );
   const provider = new SandboxRuntimeProvider(runtimeInstances, workerSessions);
   provider.setRunEventReceiver(eventProcessor as never);
@@ -87,7 +86,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     provider,
     engine,
     access,
-    controlQueue,
+    commandQueue,
     configStore,
     eventProcessor,
     config,
@@ -131,7 +130,7 @@ function makeRuntimeTarget(
 ): RuntimeTarget {
   return {
     ...makePlacement(),
-    scopeKey: "ws-1",
+    ownerId: "ws-1",
     ...overrides,
   } as RuntimeTarget;
 }
@@ -144,7 +143,7 @@ function startProvider(
   return provider.startWorkerExecution({
     runtimeTarget: {
       ...placement,
-      scopeKey:
+      ownerId:
         (placement as { sandbox: { isolationScope: string } }).sandbox
           .isolationScope === "user"
           ? placement.userId
@@ -209,13 +208,13 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       expect.objectContaining({
         placement: expect.objectContaining({
           isolationScope: "workspace",
-          scopeKey: "ws-1",
+          ownerId: "ws-1",
         }),
         env: expect.objectContaining({
           AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
           AGEWORK_WORKER_SANDBOX_ENGINE: "docker",
           AGEWORK_WORKER_ISOLATION_SCOPE: "workspace",
-          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
           AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: "agework-worker-ws-1",
         }),
       })
@@ -245,7 +244,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
   });
 
   it("registers RunConfig and pushes user_message control", async () => {
-    const { provider, configStore, controlQueue } = makeProvider();
+    const { provider, configStore, commandQueue } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
@@ -253,7 +252,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       "run-1",
       expect.anything()
     );
-    expect(controlQueue.pushForWorkspace).toHaveBeenCalledWith(
+    expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
       "ws-1",
       expect.objectContaining({
         runId: "run-1",
@@ -266,7 +265,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
   });
 
   it("reuses the existing sandbox for a second run (no second getOrCreate)", async () => {
-    const { provider, engine, controlQueue } = makeProvider();
+    const { provider, engine, commandQueue } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
@@ -278,7 +277,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
-    expect(controlQueue.pushForWorkspace).toHaveBeenCalledTimes(2);
+    expect(commandQueue.pushByOwnerId).toHaveBeenCalledTimes(2);
   });
 
   it("reports error when engine.getOrCreate fails", async () => {
@@ -307,12 +306,12 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
   });
 
   it("cancel sends a cancel control via control queue", async () => {
-    const { provider, controlQueue } = makeProvider();
+    const { provider, commandQueue } = makeProvider();
     const handle = startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
     provider.cancel(handle);
-    expect(controlQueue.pushForWorkspace).toHaveBeenCalledWith(
+    expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
       "ws-1",
       expect.objectContaining({
         payload: expect.objectContaining({
@@ -366,7 +365,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
     provider.shutdownRuntimeInstance("ws-1");
     expect(engine.stop).toHaveBeenCalled();
-    expect(access.revokeWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
   });
 
   it("heartbeat feeds the heartbeat watchdog", async () => {
@@ -391,7 +390,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       "run-1",
       "worker heartbeat timeout"
     );
-    expect(access.revokeWorkspace).not.toHaveBeenCalled();
+    expect(access.revokeOwner).not.toHaveBeenCalled();
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
@@ -438,8 +437,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     );
     expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
       "docker-resource-1",
-      "ws-1",
-      "sandbox"
+      "ws-1"
     );
   });
 });
@@ -466,7 +464,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
   });
 
   it("same user, different workspaces → reuses the same sandbox", async () => {
-    const { provider, engine, controlQueue } = makeProvider();
+    const { provider, engine, commandQueue } = makeProvider();
 
     startProvider(
       provider,
@@ -488,7 +486,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
-    expect(controlQueue.pushForWorkspace).toHaveBeenCalledTimes(2);
+    expect(commandQueue.pushByOwnerId).toHaveBeenCalledTimes(2);
   });
 
   it("different users → no reuse, separate sandboxes", async () => {
@@ -544,7 +542,7 @@ describe("SandboxRuntimeProvider — user scope", () => {
     provider.shutdownRuntimeInstance("user-1");
 
     expect(engine.stop).toHaveBeenCalled();
-    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "user",
       "user-1"
@@ -607,12 +605,12 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     provider.cleanup("run-1");
     await vi.advanceTimersByTimeAsync(5_500);
 
-    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"
     );
-    expect(access.revokeWorkspace).not.toHaveBeenCalled();
+    expect(access.revokeOwner).not.toHaveBeenCalled();
   });
 
   it("next run after idle stop resumes the previous container", async () => {

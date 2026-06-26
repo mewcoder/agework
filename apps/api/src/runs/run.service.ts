@@ -457,7 +457,7 @@ export class RunService {
         `No active run for conversation: ${conversationId}`
       );
     }
-    this.runWorkerExecution.sendControl(handle.runtimeHandle, {
+    this.runWorkerExecution.sendCommand(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,

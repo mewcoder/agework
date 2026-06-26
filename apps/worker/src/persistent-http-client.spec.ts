@@ -5,8 +5,8 @@ import { PersistentHttpClient } from "./persistent-http-client";
 describe("PersistentHttpClient", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
-    vi.stubEnv("AGEWORK_WORKER_WORKSPACE_ID", "ws-1");
-    vi.stubEnv("AGEWORK_WORKER_RUNTIME_ACCESS_KEY", "ws-key");
+    vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
+    vi.stubEnv("AGEWORK_WORKER_RUNTIME_ACCESS_KEY", "owner-key");
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -14,25 +14,25 @@ describe("PersistentHttpClient", () => {
     vi.unstubAllEnvs();
   });
 
-  it("polls the workspace controls endpoint with afterSeq", async () => {
+  it("polls the workspace commands endpoint with afterSeq", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ controls: [{ seq: 3, payload: { type: "user_message", runId: "run-1" } }] }),
+      json: async () => ({ commands: [{ seq: 3, payload: { type: "user_message", runId: "run-1" } }] }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
 
-    const controls = await client.pollControls();
+    const commands = await client.pollCommands();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/workspaces/ws-1/controls?afterSeq=0",
-      expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
+      "http://api/worker/owners/ws-1/commands?afterSeq=0",
+      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
     );
-    expect(controls[0].payload).toMatchObject({ type: "user_message", runId: "run-1" });
+    expect(commands[0].payload).toMatchObject({ type: "user_message", runId: "run-1" });
     // 下一次 poll 用更新后的 afterSeq
-    await client.pollControls();
+    await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/workspaces/ws-1/controls?afterSeq=3",
+      "http://api/worker/owners/ws-1/commands?afterSeq=3",
       expect.anything()
     );
   });
@@ -40,7 +40,7 @@ describe("PersistentHttpClient", () => {
   it("fetches run config by runId", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ config: { runId: "run-1", conversationId: "conversation-1" } }),
+      json: async () => ({ config: { runId: "run-1", conversationId: "conversation-1", agentProviderConfig: { agentType: "claude", source: "custom" } } }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
@@ -49,24 +49,24 @@ describe("PersistentHttpClient", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api/worker/runs/run-1",
-      expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
+      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
     );
     expect(config).toMatchObject({ runId: "run-1" });
   });
 
-  it("adds waitMs when long-polling controls", async () => {
+  it("adds waitMs when long-polling commands", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ controls: [] }),
+      json: async () => ({ commands: [] }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
 
-    await client.pollControls(25_000);
+    await client.pollCommands(25_000);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/workspaces/ws-1/controls?afterSeq=0&waitMs=25000",
-      expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
+      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000",
+      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
     );
   });
 
@@ -176,16 +176,16 @@ describe("PersistentHttpClient", () => {
     vi.useRealTimers();
   });
 
-  it("emits a workspace heartbeat", async () => {
+  it("emits an owner heartbeat", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
 
-    await client.emitWorkspaceHeartbeat();
+    await client.emitOwnerHeartbeat();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/workspaces/ws-1/heartbeat",
-      expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer ws-key" } })
+      "http://api/worker/owners/ws-1/heartbeat",
+      expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer owner-key" } })
     );
   });
 
@@ -208,78 +208,4 @@ describe("PersistentHttpClient", () => {
     await client.emit("run-1", msg); // seq 重新从 1 开始
     expect(seqInLastCall()).toBe("1");
   });
-
-  describe("with AGEWORK_WORKER_RUNTIME_INSTANCE_ID", () => {
-    beforeEach(() => {
-      vi.stubEnv("AGEWORK_WORKER_RUNTIME_INSTANCE_ID", "rr-42");
-    });
-
-    it("polls the runtime controls endpoint", async () => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ controls: [{ seq: 5, payload: { type: "user_message", runId: "run-2" } }] }),
-      });
-      vi.stubGlobal("fetch", fetchMock);
-      const client = new PersistentHttpClient();
-
-      const controls = await client.pollControls();
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/worker/runtimes/rr-42/controls?afterSeq=0",
-        expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
-      );
-      expect(controls[0].payload).toMatchObject({ type: "user_message", runId: "run-2" });
-      // Next poll uses updated afterSeq
-      await client.pollControls();
-      expect(fetchMock).toHaveBeenLastCalledWith(
-        "http://api/worker/runtimes/rr-42/controls?afterSeq=5",
-        expect.anything()
-      );
-    });
-
-    it("POSTs heartbeat to the runtime endpoint", async () => {
-      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-      vi.stubGlobal("fetch", fetchMock);
-      const client = new PersistentHttpClient();
-
-      await client.emitWorkspaceHeartbeat();
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/worker/runtimes/rr-42/heartbeat",
-        expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer ws-key" } })
-      );
-    });
-  });
-
-  describe("without AGEWORK_WORKER_RUNTIME_INSTANCE_ID", () => {
-    it("uses workspace endpoint for pollControls", async () => {
-      const fetchMock = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ controls: [] }),
-      });
-      vi.stubGlobal("fetch", fetchMock);
-      const client = new PersistentHttpClient();
-
-      await client.pollControls();
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/worker/workspaces/ws-1/controls?afterSeq=0",
-        expect.anything()
-      );
-    });
-
-    it("uses workspace endpoint for heartbeat", async () => {
-      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-      vi.stubGlobal("fetch", fetchMock);
-      const client = new PersistentHttpClient();
-
-      await client.emitWorkspaceHeartbeat();
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/worker/workspaces/ws-1/heartbeat",
-        expect.objectContaining({ method: "POST" })
-      );
-    });
-  });
-
 });

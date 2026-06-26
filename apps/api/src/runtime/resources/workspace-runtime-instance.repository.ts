@@ -9,38 +9,12 @@ import {
   stoppedInstanceMetadata,
 } from "./runtime-instance-metadata";
 
-function ownerWhere(placement: SandboxRuntimePlacement) {
-  const isolationScope = placement.sandbox.isolationScope;
-  return {
-    runtimeType: placement.runtimeType,
-    isolationScope,
-    ownerUserId: placement.userId,
-    ownerWorkspaceId:
-      isolationScope === "workspace" ? placement.workspaceId : null,
-  };
-}
-
-function ownerWhereByScopeKey(
+function ownerWhere(
   runtimeType: string,
   isolationScope: string,
-  scopeKey: string
+  ownerId: string
 ) {
-  if (isolationScope === "user") {
-    return {
-      runtimeType,
-      isolationScope,
-      ownerUserId: scopeKey,
-      ownerWorkspaceId: null,
-    };
-  }
-  if (isolationScope !== "workspace") {
-    throw new Error(`Unknown isolationScope: ${isolationScope}`);
-  }
-  return {
-    runtimeType,
-    isolationScope,
-    ownerWorkspaceId: scopeKey,
-  };
+  return { runtimeType, isolationScope, ownerId };
 }
 
 /**
@@ -61,11 +35,15 @@ export class WorkspaceRuntimeInstanceRepository {
 
   async upsertRunning(
     placement: SandboxRuntimePlacement,
-    scopeKey: string,
+    ownerId: string,
     runtimeInstanceId: string,
     metadata?: object
   ) {
-    const where = ownerWhere(placement);
+    const where = ownerWhere(
+      placement.runtimeType,
+      placement.sandbox.isolationScope,
+      ownerId
+    );
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.runtimeInstance.findFirst({ where });
       const data = {
@@ -75,7 +53,7 @@ export class WorkspaceRuntimeInstanceRepository {
         metadata: runtimeInstanceMetadataJson(
           runningInstanceMetadata({
             placement,
-            scopeKey,
+            ownerId,
             runtimeInstanceId,
             existing: existing?.metadata,
             metadata,
@@ -109,45 +87,20 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  async markStopped(placement: SandboxRuntimePlacement) {
-    const isolationScope = placement.sandbox.isolationScope;
-    await this.prisma.runtimeInstance.updateMany({
-      where: ownerWhere(placement),
-      data: {
-        status: "stopped",
-        metadata: runtimeInstanceMetadataJson(
-          stoppedInstanceMetadata({
-            runtimeType: placement.runtimeType,
-            isolationScope,
-            scopeKey:
-              isolationScope === "user"
-                ? placement.userId
-                : placement.workspaceId,
-            reason: "stopped",
-          })
-        ),
-      },
-    });
-  }
-
-  async markStoppedByScopeKey(
+  async markStoppedByOwner(
     runtimeType: string,
     isolationScope: string,
-    scopeKey: string
+    ownerId: string
   ) {
     await this.prisma.runtimeInstance.updateMany({
-      where: ownerWhereByScopeKey(
-        runtimeType,
-        isolationScope,
-        scopeKey
-      ),
+      where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "stopped",
         metadata: runtimeInstanceMetadataJson(
           stoppedInstanceMetadata({
             runtimeType,
             isolationScope,
-            scopeKey,
+            ownerId,
             reason: "stopped",
           })
         ),
@@ -155,25 +108,21 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  async markMissingByScopeKey(
+  async markMissingByOwner(
     runtimeType: string,
     isolationScope: string,
-    scopeKey: string,
+    ownerId: string,
     reason = "missing"
   ) {
     await this.prisma.runtimeInstance.updateMany({
-      where: ownerWhereByScopeKey(
-        runtimeType,
-        isolationScope,
-        scopeKey
-      ),
+      where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "missing",
         metadata: runtimeInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType,
             isolationScope,
-            scopeKey,
+            ownerId,
             reason,
           })
         ),
@@ -181,25 +130,21 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  async markErrorByScopeKey(
+  async markErrorByOwner(
     runtimeType: string,
     isolationScope: string,
-    scopeKey: string,
+    ownerId: string,
     errorMessage: string
   ) {
     await this.prisma.runtimeInstance.updateMany({
-      where: ownerWhereByScopeKey(
-        runtimeType,
-        isolationScope,
-        scopeKey
-      ),
+      where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "error",
         metadata: runtimeInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType,
             isolationScope,
-            scopeKey,
+            ownerId,
             reason: "error",
             errorMessage,
           })

@@ -68,13 +68,13 @@ function makeService(engine = makeEngine()) {
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
-    markStoppedByScopeKey: vi.fn().mockResolvedValue(undefined),
+    markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const access = {
-    issueWorkspaceKey: vi.fn().mockReturnValue("workspace-key"),
+    issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
     issueRuntimeInstanceKey: vi.fn(),
-    revokeWorkspace: vi.fn(),
+    revokeOwner: vi.fn(),
   };
   const service = new SandboxRuntimeInstanceService(
     config as never,
@@ -90,7 +90,7 @@ function makeStartInput(placement = makePlacement()) {
     runConfig: makeRunConfig({ workspaceId: placement.workspaceId }),
     runtimeTarget: {
       ...placement,
-      scopeKey:
+      ownerId:
         placement.sandbox?.isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
@@ -103,7 +103,7 @@ function makeCallbacks() {
     consumeCancelledStartingRun: vi.fn().mockReturnValue(false),
     forceCancelled: vi.fn(),
     publishWorkerError: vi.fn(),
-    cleanupWorkspace: vi.fn(),
+    cleanupByOwnerId: vi.fn(),
   };
 }
 
@@ -122,38 +122,38 @@ describe("SandboxRuntimeInstanceService", () => {
     vi.useRealTimers();
   });
 
-  it("resolves context and creates initial scope state", () => {
+  it("resolves context and creates initial owner state", () => {
     const { service, access } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
 
-    const scopeState = service.ensureScopeState(context);
+    const ownerState = service.ensureOwnerState(context);
 
     expect(context).toMatchObject({
       runId: "run-1",
       workspaceId: "ws-1",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
       isolationScope: "workspace",
       engineType: "docker",
     });
-    expect(scopeState).toMatchObject({
+    expect(ownerState).toMatchObject({
       runtimeInstanceId: "",
-      accessKey: "workspace-key",
+      accessKey: "owner-key",
       isolationScope: "workspace",
       engineType: "docker",
     });
-    expect(access.issueWorkspaceKey).toHaveBeenCalledWith("ws-1");
+    expect(access.issueOwnerKey).toHaveBeenCalledWith("ws-1");
   });
 
   it("starts a runtime resource and records WorkspaceRuntime when ready", async () => {
     const { service, engine, workspaceRuntimeService, access } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const scopeState = service.ensureScopeState(context);
-    scopeState.activeRuns.set("run-1", "conversation-1");
+    const ownerState = service.ensureOwnerState(context);
+    ownerState.activeRuns.set("run-1", "conversation-1");
     const handle = service.createRunHandle(context);
     const onReady = vi.fn();
 
     service.attachOrStartRuntimeInstance(
-      { context, scopeState, handle, onRuntimeInstanceIdReady: onReady },
+      { context, ownerState, handle, onRuntimeInstanceIdReady: onReady },
       makeCallbacks()
     );
     await flushPromises();
@@ -161,12 +161,12 @@ describe("SandboxRuntimeInstanceService", () => {
     expect(engine.getOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         placement: expect.objectContaining({
-          scopeKey: "ws-1",
+          ownerId: "ws-1",
           workspaceId: "ws-1",
         }),
         env: expect.objectContaining({
           AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
-          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
+          AGEWORK_WORKER_OWNER_ID: "ws-1",
         }),
       })
     );
@@ -180,8 +180,7 @@ describe("SandboxRuntimeInstanceService", () => {
     );
     expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
       "docker-resource-1",
-      "ws-1",
-      "sandbox"
+      "ws-1"
     );
     expect(
       vi.mocked(access.issueRuntimeInstanceKey).mock.invocationCallOrder[0]
@@ -199,13 +198,13 @@ describe("SandboxRuntimeInstanceService", () => {
     );
     const { service } = makeService(engine);
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const scopeState = service.ensureScopeState(context);
-    scopeState.activeRuns.set("run-1", "conversation-1");
+    const ownerState = service.ensureOwnerState(context);
+    ownerState.activeRuns.set("run-1", "conversation-1");
     const callbacks = makeCallbacks();
     callbacks.consumeCancelledStartingRun.mockReturnValueOnce(true);
 
     service.attachOrStartRuntimeInstance(
-      { context, scopeState, handle: service.createRunHandle(context) },
+      { context, ownerState, handle: service.createRunHandle(context) },
       callbacks
     );
     resolveGetOrCreate!({
@@ -215,17 +214,17 @@ describe("SandboxRuntimeInstanceService", () => {
     });
     await flushPromises();
 
-    expect(scopeState.activeRuns.has("run-1")).toBe(false);
+    expect(ownerState.activeRuns.has("run-1")).toBe(false);
     expect(callbacks.forceCancelled).toHaveBeenCalledWith("run-1");
   });
 
   it("stops and marks a runtime resource after idle cleanup timeout", async () => {
     const { service, engine, workspaceRuntimeService } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const scopeState = service.ensureScopeState(context);
-    scopeState.activeRuns.set("run-1", "conversation-1");
+    const ownerState = service.ensureOwnerState(context);
+    ownerState.activeRuns.set("run-1", "conversation-1");
     service.attachOrStartRuntimeInstance(
-      { context, scopeState, handle: service.createRunHandle(context) },
+      { context, ownerState, handle: service.createRunHandle(context) },
       makeCallbacks()
     );
     await flushPromises();
@@ -234,7 +233,7 @@ describe("SandboxRuntimeInstanceService", () => {
     await vi.advanceTimersByTimeAsync(5_500);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
-    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
+    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"
@@ -244,21 +243,21 @@ describe("SandboxRuntimeInstanceService", () => {
   it("shutdownRuntimeInstance stops active resource and cleans workspace state", async () => {
     const { service, engine, access, workspaceRuntimeService } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const scopeState = service.ensureScopeState(context);
-    scopeState.activeRuns.set("run-1", "conversation-1");
+    const ownerState = service.ensureOwnerState(context);
+    ownerState.activeRuns.set("run-1", "conversation-1");
     service.attachOrStartRuntimeInstance(
-      { context, scopeState, handle: service.createRunHandle(context) },
+      { context, ownerState, handle: service.createRunHandle(context) },
       makeCallbacks()
     );
     await flushPromises();
-    const callbacks = { cleanupWorkspace: vi.fn() };
+    const callbacks = { cleanupByOwnerId: vi.fn() };
 
     service.shutdownRuntimeInstance("ws-1", callbacks);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
-    expect(access.revokeWorkspace).toHaveBeenCalledWith("ws-1");
-    expect(callbacks.cleanupWorkspace).toHaveBeenCalledWith("ws-1");
-    expect(workspaceRuntimeService.markStoppedByScopeKey).toHaveBeenCalledWith(
+    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
+    expect(callbacks.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
+    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"

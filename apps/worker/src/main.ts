@@ -49,8 +49,7 @@ function createChannel(): RuntimeChannel {
 async function main() {
   if (
     process.env.AGEWORK_WORKER_CHANNEL === "http" &&
-    (process.env.AGEWORK_WORKER_WORKSPACE_ID ||
-      process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID)
+    process.env.AGEWORK_WORKER_OWNER_ID
   ) {
     return runPersistent();
   }
@@ -254,8 +253,7 @@ async function runPersistent() {
     });
   });
   workerLog("persistent worker started", {
-    workspaceId: process.env.AGEWORK_WORKER_WORKSPACE_ID,
-    runtimeInstanceId: process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID,
+    ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
     runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
   });
 
@@ -296,7 +294,7 @@ async function runPersistent() {
   );
 
   const heartbeatTimer = setInterval(() => {
-    void client.emitWorkspaceHeartbeat();
+    void client.emitOwnerHeartbeat();
   }, HEARTBEAT_INTERVAL_MS);
 
   const processedCommands = new Set<string>();
@@ -318,10 +316,10 @@ async function runPersistent() {
 
   for (;;) {
     if (shuttingDown) break;
-    const controls = await client.pollControls(CONTROL_LONG_POLL_MS);
+    const controls = await client.pollCommands(CONTROL_LONG_POLL_MS);
     if (shuttingDown) break;
     // 每 100 轮清理一次已处理命令集合，防止长期运行时内存泄漏
-    // （pollControls 基于 afterSeq 去重，processedCommands 仅作防御性检查）
+    // （pollCommands 基于 afterSeq 去重，processedCommands 仅作防御性检查）
     if (++pollIterations >= 100) {
       processedCommands.clear();
       pollIterations = 0;

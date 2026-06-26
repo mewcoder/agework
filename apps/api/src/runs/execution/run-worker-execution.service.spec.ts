@@ -13,7 +13,7 @@ function makeProvider() {
   return {
     type: "local",
     startWorkerExecution: vi.fn(),
-    sendControl: vi.fn(),
+    sendCommand: vi.fn(),
     cancel: vi.fn(),
     heartbeat: vi.fn(),
     cleanup: vi.fn(),
@@ -43,8 +43,11 @@ describe("RunWorkerExecutionService", () => {
     const runConfig = { runId: "run-1" } as RunConfig;
     const runtimeTarget = {
       runtimeType: "local",
-      scopeKey: "ws-1",
+      ownerId: "ws-1",
+      userId: "user-1",
       workspaceId: "ws-1",
+      hostPath: "/tmp/ws",
+      runtimePath: "/tmp/ws",
     } as RuntimeTarget;
     const onReady = vi.fn();
 
@@ -63,7 +66,7 @@ describe("RunWorkerExecutionService", () => {
     expect(result).toBe(handle);
   });
 
-  it("dispatches control and cancel by handle.runtimeType", () => {
+  it("dispatches command and cancel by handle.runtimeType", () => {
     const provider = makeProvider();
     const registry = makeRegistry(provider);
     const service = new RunWorkerExecutionService(registry);
@@ -74,11 +77,11 @@ describe("RunWorkerExecutionService", () => {
       answers: {},
     } as ControlPayload;
 
-    service.sendControl(handle, control);
+    service.sendCommand(handle, control);
     service.cancel(handle);
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
-    expect(provider.sendControl).toHaveBeenCalledWith(handle, control);
+    expect(provider.sendCommand).toHaveBeenCalledWith(handle, control);
     expect(provider.cancel).toHaveBeenCalledWith(handle);
   });
 

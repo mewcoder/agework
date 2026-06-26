@@ -8,7 +8,7 @@ import type {
 
 /**
  * Run 层拥有的 worker execution 边界：把 RuntimeTarget + RunConfig 组装成一次
- * worker 执行，并维护 runId → handle 的派发表，下发 control / cancel / cleanup。
+ * worker 执行，并维护 runId → handle 的派发表，下发 command / cancel / cleanup。
  *
  * worker 的物理启动（local fork / sandbox 容器会话）仍在 runtime provider 内实现，
  * 这里只按 runtimeType 解析 provider 并驱动其 WorkerExecutionProvider 契约——
@@ -29,8 +29,8 @@ export class RunWorkerExecutionService {
     return handle;
   }
 
-  sendControl(handle: WorkerExecutionHandle, control: ControlPayload): void {
-    this.providerRegistry.resolve(handle.runtimeType).sendControl(handle, control);
+  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
+    this.providerRegistry.resolve(handle.runtimeType).sendCommand(handle, control);
   }
 
   cancel(handle: WorkerExecutionHandle): void {

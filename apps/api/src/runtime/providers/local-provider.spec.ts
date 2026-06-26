@@ -54,7 +54,7 @@ function makeRuntimeTarget(
 ): RuntimeTarget {
   return {
     ...makePlacement(),
-    scopeKey: "ws-1",
+    ownerId: "ws-1",
     ...overrides,
   } as RuntimeTarget;
 }
@@ -76,7 +76,7 @@ describe("LocalRuntimeProvider", () => {
       isTerminalOrFinalizing: vi.fn().mockReturnValue(false),
       forceErrorStatus: vi.fn().mockResolvedValue(undefined),
       forceCancelledStatus: vi.fn().mockResolvedValue(undefined),
-      recordControlSent: vi.fn().mockResolvedValue(undefined),
+      recordCommandSent: vi.fn().mockResolvedValue(undefined),
     });
   });
 

@@ -38,7 +38,7 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
 function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
   return {
     ...placement,
-    scopeKey:
+    ownerId:
       placement.runtimeType === "sandbox" &&
       placement.sandbox.isolationScope === "user"
         ? placement.userId
@@ -137,7 +137,7 @@ describe("RunService", () => {
         runtimeType: "local",
         runtimeInstanceId: "1:token",
       }),
-      sendControl: vi.fn(),
+      sendCommand: vi.fn(),
       cancel: vi.fn(),
       cleanup: vi.fn(),
     };
@@ -214,7 +214,7 @@ describe("RunService", () => {
           runConfig: expect.objectContaining({ runId: "run-1" }),
           runtimeTarget: expect.objectContaining({
             runtimeType: "local",
-            scopeKey: "ws-1",
+            ownerId: "ws-1",
           }),
         })
       );
@@ -394,7 +394,7 @@ describe("RunService", () => {
 
       await service.resolveApproval("conversation-1", { decision: "yes" });
 
-      expect(mockRunWorkerExecution.sendControl).toHaveBeenCalledWith(
+      expect(mockRunWorkerExecution.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
         expect.objectContaining({
           type: "approval_resolved",

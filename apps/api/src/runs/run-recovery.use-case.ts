@@ -8,7 +8,6 @@ import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
 } from "../runtime/resources/runtime-instance-metadata";
-import { runtimeScopeKeyForOwner } from "../runtime/resources/runtime-resource";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
@@ -133,16 +132,16 @@ export class RunRecoveryUseCase {
       for (const resource of runningResources) {
         if (resource.isolationScope === "user") {
           const owner = await this.prisma.user.findFirst({
-            where: { id: resource.ownerUserId, deletedAt: null },
+            where: { id: resource.ownerId, deletedAt: null },
           });
           if (owner) {
             this.logger.log(
-              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeInstanceId} (user ${resource.ownerUserId} still exists)`
+              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeInstanceId} (user ${resource.ownerId} still exists)`
             );
             continue;
           }
           this.logger.log(
-            `User ${resource.ownerUserId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeInstanceId}`
+            `User ${resource.ownerId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeInstanceId}`
           );
         }
 
@@ -157,7 +156,6 @@ export class RunRecoveryUseCase {
               `recover orphan runtime resource ${resource.runtimeInstanceId}`
             )
           );
-        const scopeKey = runtimeScopeKeyForOwner(resource);
         await this.prisma.runtimeInstance.update({
           where: { id: resource.id },
           data: {
@@ -166,7 +164,7 @@ export class RunRecoveryUseCase {
               stoppedInstanceMetadata({
                 runtimeType: resource.runtimeType,
                 isolationScope: resource.isolationScope,
-                scopeKey,
+                ownerId: resource.ownerId,
                 reason: "orphan_recovered",
               })
             ),

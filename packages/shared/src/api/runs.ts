@@ -41,8 +41,7 @@ export type AdminRunRuntimeInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
-  ownerUserId: string;
-  ownerWorkspaceId: string | null;
+  ownerId: string;
   runtimeInstanceId: string;
   status: string;
   expiresAt: string | null;
@@ -128,7 +127,7 @@ export type RuntimeInstanceStatus =
   | "stale";
 
 export type RuntimeInstanceDiagnosticsResponse = {
-  scopeKey?: string;
+  ownerId?: string;
   workspaceId?: string;
   statusReason?: string;
   lastSeenAt?: string;
@@ -142,9 +141,7 @@ export type RuntimeInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
-  ownerUserId: string;
-  ownerWorkspaceId: string | null;
-  scopeKey: string;
+  ownerId: string;
   runtimeInstanceId: string;
   status: RuntimeInstanceStatus;
   isReusable: boolean;

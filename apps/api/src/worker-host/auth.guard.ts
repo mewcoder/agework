@@ -12,13 +12,13 @@ type RequestWithRunId = {
   headers: Record<string, string | string[] | undefined>;
   params: Record<string, string>;
   runId?: string;
-  workspaceId?: string;
+  ownerId?: string;
   runtimeInstanceId?: string;
 };
 
 /**
  * 校验 worker 的 run-scoped worker access key。
- * 仅用于 /worker/runs/* 端点，与用户 JWT auth 分离。
+ * 仅用于 /worker/runs/* 与 /worker/owners/* 端点，与用户 JWT auth 分离。
  */
 @Injectable()
 export class WorkerAuthGuard implements CanActivate {
@@ -38,13 +38,13 @@ export class WorkerAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing runtime access key");
     }
 
-    const { runId, workspaceId, runtimeInstanceId } = request.params;
+    const { runId, ownerId, runtimeInstanceId } = request.params;
     if (runId && this.runtimeAccess.verifyAccessKey(runId, accessKey)) {
       request.runId = runId;
       return true;
     }
-    if (workspaceId && this.runtimeAccess.verifyWorkspaceKey(workspaceId, accessKey)) {
-      request.workspaceId = workspaceId;
+    if (ownerId && this.runtimeAccess.verifyOwnerKey(ownerId, accessKey)) {
+      request.ownerId = ownerId;
       return true;
     }
     if (
@@ -57,7 +57,7 @@ export class WorkerAuthGuard implements CanActivate {
 
     this.logger.warn(
       `Invalid runtime access key diagnostics=${JSON.stringify(
-        this.runtimeAccess.diagnostics({ runId, workspaceId, runtimeInstanceId, accessKey })
+        this.runtimeAccess.diagnostics({ runId, ownerId, runtimeInstanceId, accessKey })
       )}`
     );
     throw new UnauthorizedException("Invalid runtime access key");

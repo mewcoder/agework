@@ -133,10 +133,10 @@ export const RunEventFacts = {
     };
   },
 
-  controlSent(input: {
+  commandSent(input: {
     runId: string;
     commandId: string;
-    controlType: string;
+    commandType: string;
   }): RecordRunEventInput {
     return {
       runId: input.runId,
@@ -147,10 +147,10 @@ export const RunEventFacts = {
       targetId: input.commandId,
       chainId: input.commandId,
       refs: { commandId: input.commandId },
-      summary: `${input.controlType} sent`,
+      summary: `${input.commandType} sent`,
       data: compactData({
         component: "api",
-        commandType: input.controlType,
+        commandType: input.commandType,
       }),
     };
   },

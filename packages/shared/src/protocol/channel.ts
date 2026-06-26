@@ -210,10 +210,16 @@ export interface WorkerExecutionHandle {
 }
 
 /**
- * 一次 run 的目标运行环境：放置方案 + 算出的 scopeKey（容器复用粒度键）。
- * 它就是 placement 加一个 key，不再额外套层。
+ * 一次 run 的目标运行环境：放置方案 + ownerId（容器归属者 ID）。
+ *
+ * ownerId 是这个持久容器归属的 owner 的 ID：
+ *   - user 隔离 → userId
+ *   - workspace 隔离 → workspaceId
+ * 一个 ownerId 对应一个可复用的容器实例（同一 owner 的多个 run 共用一个容器）。
+ * 它承担容器命名、控制队列分区、access key 索引、心跳反查 provider 等职责，
+ * 必须在 runtimeInstanceId 生成之前就稳定可用。
  */
-export type RuntimeTarget = RuntimePlacement & { scopeKey: string };
+export type RuntimeTarget = RuntimePlacement & { ownerId: string };
 
 export type WorkerExecutionStartInput = {
   runtimeTarget: RuntimeTarget;

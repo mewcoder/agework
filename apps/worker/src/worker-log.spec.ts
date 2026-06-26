@@ -49,7 +49,7 @@ describe("workerLog", () => {
     vi.stubEnv("AGEWORK_WORKER_LOG_FILE", runtimeFilePath);
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    setWorkerLogContext({ runtimeScopeKey: "ws-1" });
+    setWorkerLogContext({ runtimeOwnerId: "ws-1" });
     registerWorkerRunLog({
       runId: "run-1",
       conversationId: "conversation-1",
@@ -63,7 +63,7 @@ describe("workerLog", () => {
     const conversationContent = readFileSync(conversationFilePath, "utf8");
     expect(runtimeContent).toContain("run message");
     expect(runtimeContent).toContain("runtime message");
-    expect(runtimeContent).toContain('"runtimeScopeKey":"ws-1"');
+    expect(runtimeContent).toContain('"runtimeOwnerId":"ws-1"');
     expect(conversationContent).toContain("run message");
     expect(conversationContent).not.toContain("runtime message");
     expect(consoleLog).toHaveBeenCalledTimes(2);

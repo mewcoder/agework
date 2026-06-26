@@ -16,10 +16,10 @@ export interface RunEventReceiver {
   forceErrorStatus(runId: string, error: string): Promise<void>;
   /** 强制将 run 置为 cancelled 终态。 */
   forceCancelledStatus(runId: string): Promise<void>;
-  /** 记录一次「控制指令已下发」run 事件。 */
-  recordControlSent(input: {
+  /** 记录一次「命令已下发」run 事件。 */
+  recordCommandSent(input: {
     runId: string;
     commandId: string;
-    controlType: string;
+    commandType: string;
   }): Promise<void>;
 }
