@@ -1,6 +1,6 @@
 import type {
   RunConfig,
-  ControlPayload,
+  CommandPayload,
   Envelope,
   UpstreamMessage,
 } from "@agework/shared/protocol";
@@ -49,7 +49,7 @@ export class PersistentHttpClient {
     return { Authorization: `Bearer ${this.accessKey}` };
   }
 
-  async pollCommands(waitMs = 0): Promise<Envelope<ControlPayload>[]> {
+  async pollCommands(waitMs = 0): Promise<Envelope<CommandPayload>[]> {
     const commandsPath = `/worker/owners/${this.ownerId}/commands`;
     const params = new URLSearchParams({ afterSeq: String(this.commandSeq) });
     if (waitMs > 0) {
@@ -86,7 +86,7 @@ export class PersistentHttpClient {
       return [];
     }
 
-    const data = (await res.json()) as { commands: Envelope<ControlPayload>[] };
+    const data = (await res.json()) as { commands: Envelope<CommandPayload>[] };
     if (data.commands.length > 0) {
       this.emptyPolls = 0;
       workerLog("command poll received commands", {

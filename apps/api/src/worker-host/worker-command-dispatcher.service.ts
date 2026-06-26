@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
-import type { ControlPayload, RunConfig } from "@agework/shared/protocol";
+import type { CommandPayload, RunConfig } from "@agework/shared/protocol";
 import { RuntimeConfigStore } from "./config-store";
 import { WorkerAccessService } from "./access.service";
 import { RuntimeCommandQueue } from "./command-queue";
@@ -46,16 +46,12 @@ export class WorkerCommandDispatcher {
     });
   }
 
-  sendCommand(
-    ownerId: string,
-    runId: string,
-    control: ControlPayload
-  ): void {
+  sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
     const envelope = nextCommandEnvelope(
       this.commandSeqs,
       ownerId,
       runId,
-      control
+      command
     );
     this.commandQueue.pushByOwnerId(ownerId, envelope);
   }

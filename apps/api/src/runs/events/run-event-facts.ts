@@ -140,8 +140,8 @@ export const RunEventFacts = {
   }): RecordRunEventInput {
     return {
       runId: input.runId,
-      eventKey: `control:${input.commandId}:control.sent`,
-      type: "control.sent",
+      eventKey: `command:${input.commandId}:command.sent`,
+      type: "command.sent",
       origin: "platform",
       targetType: "command",
       targetId: input.commandId,
@@ -155,44 +155,44 @@ export const RunEventFacts = {
     };
   },
 
-  controlHandled(input: {
+  commandHandled(input: {
     runId: string;
     commandId: string;
-    controlType: string;
+    commandType: string;
     phase: "received" | "handled";
   }): RecordRunEventInput {
     return {
       runId: input.runId,
-      eventKey: `control:${input.commandId}:${input.phase}`,
-      type: "control.handled",
+      eventKey: `command:${input.commandId}:${input.phase}`,
+      type: "command.handled",
       origin: "worker",
       targetType: "command",
       targetId: input.commandId,
       chainId: input.commandId,
       refs: { commandId: input.commandId },
-      summary: `${input.controlType} ${input.phase}`,
-      data: { commandType: input.controlType, phase: input.phase },
+      summary: `${input.commandType} ${input.phase}`,
+      data: { commandType: input.commandType, phase: input.phase },
     };
   },
 
-  controlFailed(input: {
+  commandFailed(input: {
     runId: string;
     commandId: string;
-    controlType: string;
+    commandType: string;
     error?: string;
   }): RecordRunEventInput {
     return {
       runId: input.runId,
-      eventKey: `control:${input.commandId}:failed`,
-      type: "control.failed",
+      eventKey: `command:${input.commandId}:failed`,
+      type: "command.failed",
       origin: "worker",
       targetType: "command",
       targetId: input.commandId,
       chainId: input.commandId,
       refs: { commandId: input.commandId },
-      summary: input.error ?? `${input.controlType} failed`,
+      summary: input.error ?? `${input.commandType} failed`,
       data: compactData({
-        commandType: input.controlType,
+        commandType: input.commandType,
         phase: "failed",
         error: input.error,
       }),

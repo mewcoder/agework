@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { nextCommandEnvelope } from "./command-envelope";
-import type { ControlPayload } from "@agework/shared/protocol";
+import type { CommandPayload } from "@agework/shared/protocol";
 
-const cancelControl: ControlPayload = {
+const cancelCommand: CommandPayload = {
   type: "cancel",
   commandId: "cmd-1",
   runId: "run-1",
@@ -12,12 +12,12 @@ const cancelControl: ControlPayload = {
 describe("nextCommandEnvelope", () => {
   it("creates envelope with seq starting at 1", () => {
     const seqs = new Map<string, number>();
-    const result = nextCommandEnvelope(seqs, "ws-1", "run-1", cancelControl);
+    const result = nextCommandEnvelope(seqs, "ws-1", "run-1", cancelCommand);
 
     expect(result).toMatchObject({
       runId: "run-1",
       seq: 1,
-      type: "control",
+      type: "command",
       payload: { type: "cancel" },
     });
     expect(result.ts).toBeTruthy();
@@ -25,15 +25,15 @@ describe("nextCommandEnvelope", () => {
 
   it("increments seq for the same owner", () => {
     const seqs = new Map<string, number>();
-    nextCommandEnvelope(seqs, "ws-1", "run-1", cancelControl);
-    const second = nextCommandEnvelope(seqs, "ws-1", "run-2", cancelControl);
+    nextCommandEnvelope(seqs, "ws-1", "run-1", cancelCommand);
+    const second = nextCommandEnvelope(seqs, "ws-1", "run-2", cancelCommand);
     expect(second.seq).toBe(2);
   });
 
   it("uses independent seq counters for different owners", () => {
     const seqs = new Map<string, number>();
-    const a = nextCommandEnvelope(seqs, "ws-1", "run-1", cancelControl);
-    const b = nextCommandEnvelope(seqs, "ws-2", "run-2", cancelControl);
+    const a = nextCommandEnvelope(seqs, "ws-1", "run-1", cancelCommand);
+    const b = nextCommandEnvelope(seqs, "ws-2", "run-2", cancelCommand);
     expect(a.seq).toBe(1);
     expect(b.seq).toBe(1);
   });

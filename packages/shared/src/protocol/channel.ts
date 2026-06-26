@@ -90,8 +90,8 @@ export type AgentProviderConfig =
   | SystemAgentProviderConfig
   | CustomAgentProviderConfig;
 
-/** 控制面 → worker 的下行控制消息。 */
-export type ControlPayload =
+/** 控制面 → worker 的下行命令消息。 */
+export type CommandPayload =
   | { type: "cancel"; commandId: string; runId: string; conversationId: string }
   | { type: "interrupt"; commandId: string }
   | {
@@ -110,29 +110,29 @@ export type ControlPayload =
     };
 
 /**
- * worker → 控制面的 control 处理 trace 上报。
- * 用于 control 闭环追踪：收到 control 时上报 received，处理完成/失败上报 handled/failed。
- * commandId 用于和 API 侧 control.enqueued trace 回连。
+ * worker → 控制面的命令处理 trace 上报。
+ * 用于命令闭环追踪：收到命令时上报 received，处理完成/失败上报 handled/failed。
+ * commandId 用于和 API 侧 command.sent trace 回连。
  */
-export type ControlTracePayload = {
+export type CommandTracePayload = {
   /** received / handled / failed */
   phase: "received" | "handled" | "failed";
-  /** 对应下行 control 的 commandId。 */
+  /** 对应下行命令的 commandId。 */
   commandId: string;
-  /** 下行 control 的 type（cancel/interrupt/approval_resolved/user_message）。 */
-  controlType: string;
+  /** 下行命令的 type（cancel/interrupt/approval_resolved/user_message）。 */
+  commandType: string;
   /** 处理失败时的错误信息（仅 phase=failed）。 */
   error?: string;
 };
 
-/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `heartbeat` / `artifact.ref` / `control.trace`）。 */
+/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `heartbeat` / `artifact.ref` / `command.trace`）。 */
 export type UpstreamMessage =
   | Envelope<RunStatusPayload>
   | Envelope<AGUIEvent>
   | Envelope<AgentEventTracePayload>
   | Envelope<HeartbeatPayload>
   | Envelope<ArtifactRefPayload>
-  | Envelope<ControlTracePayload>;
+  | Envelope<CommandTracePayload>;
 
 export type Unsubscribe = () => void;
 
@@ -143,7 +143,7 @@ export type Unsubscribe = () => void;
 export interface RuntimeChannel {
   fetchRunConfig(): Promise<RunConfig>;
   emit(msg: UpstreamMessage): Promise<void>;
-  subscribeControls(cb: (control: Envelope<ControlPayload>) => void): Unsubscribe;
+  subscribeCommands(cb: (command: Envelope<CommandPayload>) => void): Unsubscribe;
   close(): Promise<void>;
 }
 

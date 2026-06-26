@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aguiEventFacts,
-  controlTraceFact,
+  commandTraceFact,
   runStatusFact,
   sdkRawErrorFact,
   shouldLogAgUiEvent,
@@ -78,15 +78,15 @@ describe("run event normalizer", () => {
     });
   });
 
-  it("normalizes control trace events by phase", () => {
+  it("normalizes command trace events by phase", () => {
     expect(
-      controlTraceFact("run-1", {
+      commandTraceFact("run-1", {
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
         phase: "handled",
       })
     ).toMatchObject({
-      type: "control.handled",
+      type: "command.handled",
       targetType: "command",
       targetId: "cmd-1",
       chainId: "cmd-1",
@@ -94,14 +94,14 @@ describe("run event normalizer", () => {
     });
 
     expect(
-      controlTraceFact("run-1", {
+      commandTraceFact("run-1", {
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
         phase: "failed",
         error: "not active",
       })
     ).toMatchObject({
-      type: "control.failed",
+      type: "command.failed",
       summary: "not active",
       data: { commandType: "cancel", phase: "failed", error: "not active" },
     });

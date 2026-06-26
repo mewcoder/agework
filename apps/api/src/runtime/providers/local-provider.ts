@@ -6,7 +6,7 @@ import type {
   RunConfig,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
-  ControlPayload,
+  CommandPayload,
   Envelope,
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "./run-event-receiver";
@@ -160,13 +160,13 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     return handle;
   }
 
-  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
+  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
     const state = this.states.get(handle.runId);
     if (!state) {
       this.logger.warn(
         `send command dropped ${safeLogJson({
           runId: handle.runId,
-          controlType: control.type,
+          commandType: command.type,
           reason: "no_active_state",
         })}`
       );
@@ -177,19 +177,19 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       this.commandSeqs,
       handle.runId,
       handle.runId,
-      control
+      command
     );
     this.receiver
       .recordCommandSent({
         runId: handle.runId,
-        commandId: control.commandId,
-        commandType: control.type,
+        commandId: command.commandId,
+        commandType: command.type,
       })
       .catch((err) => {
         this.logger.warn(
           `record command sent failed ${safeLogJson({
             runId: handle.runId,
-            controlType: control.type,
+            commandType: command.type,
             ...errorLogFields(err),
           })}`
         );

@@ -57,7 +57,7 @@ describe("RunEventReceiverImpl", () => {
       commandType: "cancel",
     });
     expect(recorder.append).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "control.sent" })
+      expect.objectContaining({ type: "command.sent" })
     );
   });
 });

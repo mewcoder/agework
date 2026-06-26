@@ -2,7 +2,7 @@ import type {
   RuntimeChannel,
   RunConfig,
   UpstreamMessage,
-  ControlPayload,
+  CommandPayload,
   Envelope,
   Unsubscribe,
 } from "@agework/shared/protocol";
@@ -69,12 +69,12 @@ export class IpcChannel implements RuntimeChannel {
     });
   }
 
-  subscribeControls(
-    cb: (control: Envelope<ControlPayload>) => void
+  subscribeCommands(
+    cb: (command: Envelope<CommandPayload>) => void
   ): Unsubscribe {
     const handler = (msg: unknown) => {
-      if (isEnvelope(msg) && msg.type === "control") {
-        cb(msg as Envelope<ControlPayload>);
+      if (isEnvelope(msg) && msg.type === "command") {
+        cb(msg as Envelope<CommandPayload>);
       }
     };
     process.on("message", handler);

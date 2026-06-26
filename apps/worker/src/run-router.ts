@@ -81,7 +81,7 @@ export class RunRouter {
     if (!run) return false;
 
     this.cancelled.add(runId);
-    // 以 run 记录的 threadId 为准，避免过期 control 携带的 threadId 误伤新 run。
+    // 以 run 记录的 threadId 为准，避免过期 command 携带的 threadId 误伤新 run。
     await this.adapters.get(run.agentType)?.interrupt(run.aguiThreadId);
     return true;
   }

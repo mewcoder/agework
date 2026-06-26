@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type {
-  ControlPayload,
+  CommandPayload,
   RunConfig,
   RuntimePlacement,
   RuntimeTarget,
@@ -70,18 +70,18 @@ describe("RunWorkerExecutionService", () => {
     const provider = makeProvider();
     const registry = makeRegistry(provider);
     const service = new RunWorkerExecutionService(registry);
-    const control = {
+    const command = {
       type: "approval_resolved",
       commandId: "command-1",
       conversationId: "conversation-1",
       answers: {},
-    } as ControlPayload;
+    } as CommandPayload;
 
-    service.sendCommand(handle, control);
+    service.sendCommand(handle, command);
     service.cancel(handle);
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
-    expect(provider.sendCommand).toHaveBeenCalledWith(handle, control);
+    expect(provider.sendCommand).toHaveBeenCalledWith(handle, command);
     expect(provider.cancel).toHaveBeenCalledWith(handle);
   });
 

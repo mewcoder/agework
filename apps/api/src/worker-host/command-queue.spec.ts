@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { RuntimeCommandQueue } from "./command-queue";
-import type { Envelope, ControlPayload } from "@agework/shared/protocol";
+import type { Envelope, CommandPayload } from "@agework/shared/protocol";
 
 describe("RuntimeCommandQueue", () => {
   let queue: RuntimeCommandQueue;
@@ -22,10 +22,10 @@ describe("RuntimeCommandQueue", () => {
   });
 
   it("should push and poll owner commands", () => {
-    const envelope: Envelope<ControlPayload> = {
+    const envelope: Envelope<CommandPayload> = {
       runId: "run-1",
       seq: 1,
-      type: "control",
+      type: "command",
       payload: {
         type: "cancel",
         commandId: "cmd-1",
@@ -42,10 +42,10 @@ describe("RuntimeCommandQueue", () => {
   });
 
   it("should only return owner commands after given seq", () => {
-    const e1: Envelope<ControlPayload> = {
+    const e1: Envelope<CommandPayload> = {
       runId: "run-1",
       seq: 1,
-      type: "control",
+      type: "command",
       payload: {
         type: "cancel",
         commandId: "cmd-1",
@@ -54,10 +54,10 @@ describe("RuntimeCommandQueue", () => {
       },
       ts: "",
     };
-    const e2: Envelope<ControlPayload> = {
+    const e2: Envelope<CommandPayload> = {
       runId: "run-1",
       seq: 2,
-      type: "control",
+      type: "command",
       payload: {
         type: "cancel",
         commandId: "cmd-2",
@@ -76,10 +76,10 @@ describe("RuntimeCommandQueue", () => {
   });
 
   it("should cleanup an owner's queue", () => {
-    const envelope: Envelope<ControlPayload> = {
+    const envelope: Envelope<CommandPayload> = {
       runId: "run-1",
       seq: 1,
-      type: "control",
+      type: "command",
       payload: {
         type: "cancel",
         commandId: "cmd-1",
@@ -95,10 +95,10 @@ describe("RuntimeCommandQueue", () => {
 
   it("should resolve an owner waiter when a matching command is pushed", async () => {
     const pending = queue.waitForOwnerId("owner-1", 0, 1_000);
-    const envelope: Envelope<ControlPayload> = {
+    const envelope: Envelope<CommandPayload> = {
       runId: "run-1",
       seq: 1,
-      type: "control",
+      type: "command",
       payload: {
         type: "cancel",
         commandId: "cmd-1",

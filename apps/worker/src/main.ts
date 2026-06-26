@@ -8,7 +8,7 @@ import type {
   AgentType,
   AgentTraceEvent,
   AgentTraceSink,
-  ControlPayload,
+  CommandPayload,
   Envelope,
   RunConfig,
   RunStatusPayload,
@@ -33,8 +33,8 @@ import {
 import { resolveAgentCliPaths } from "./agent-cli-paths.js";
 
 const HEARTBEAT_INTERVAL_MS = 5_000;
-const CONTROL_LONG_POLL_MS = 25_000;
-const CONTROL_EMPTY_RETRY_DELAY_MS = 1_000;
+const COMMAND_LONG_POLL_MS = 25_000;
+const COMMAND_EMPTY_RETRY_DELAY_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 8_000;
 
 function createChannel(): RuntimeChannel {
@@ -101,33 +101,33 @@ async function runSingle() {
   let forcedExitRequested = false;
   let finalizePromise: Promise<void> | undefined;
 
-  // Subscribe to control messages
-  transport.subscribeControls((envelope: Envelope<ControlPayload>) => {
-    const control = envelope.payload;
-    if (processedCommands.has(control.commandId)) return;
-    processedCommands.add(control.commandId);
-    workerLog("single worker received control", {
+  // Subscribe to command messages
+  transport.subscribeCommands((envelope: Envelope<CommandPayload>) => {
+    const command = envelope.payload;
+    if (processedCommands.has(command.commandId)) return;
+    processedCommands.add(command.commandId);
+    workerLog("single worker received command", {
       runId,
-      commandId: control.commandId,
-      source: "control",
-      eventType: control.type,
+      commandId: command.commandId,
+      source: "command",
+      eventType: command.type,
     });
-    emitControlTrace(transport, runId, "received", control);
+    emitCommandTrace(transport, runId, "received", command);
 
-    switch (control.type) {
+    switch (command.type) {
       case "cancel":
         stopRequested = true;
         adapter.interrupt();
         cancelQuestion(conversationId);
-        emitControlTrace(transport, runId, "handled", control);
+        emitCommandTrace(transport, runId, "handled", command);
         break;
       case "interrupt":
         adapter.interrupt();
-        emitControlTrace(transport, runId, "handled", control);
+        emitCommandTrace(transport, runId, "handled", command);
         break;
       case "approval_resolved":
-        resolveQuestion(control.conversationId, control.answers);
-        emitControlTrace(transport, runId, "handled", control);
+        resolveQuestion(command.conversationId, command.answers);
+        emitCommandTrace(transport, runId, "handled", command);
         break;
       case "user_message":
         // 仅 persistent 模式处理；single 模式每个 run 独立 worker，无复用
@@ -316,7 +316,7 @@ async function runPersistent() {
 
   for (;;) {
     if (shuttingDown) break;
-    const controls = await client.pollCommands(CONTROL_LONG_POLL_MS);
+    const commands = await client.pollCommands(COMMAND_LONG_POLL_MS);
     if (shuttingDown) break;
     // 每 100 轮清理一次已处理命令集合，防止长期运行时内存泄漏
     // （pollCommands 基于 afterSeq 去重，processedCommands 仅作防御性检查）
@@ -324,33 +324,33 @@ async function runPersistent() {
       processedCommands.clear();
       pollIterations = 0;
     }
-    for (const envelope of controls) {
+    for (const envelope of commands) {
       if (shuttingDown) break;
-      const control = envelope.payload;
-      if (processedCommands.has(control.commandId)) continue;
-      processedCommands.add(control.commandId);
+      const command = envelope.payload;
+      if (processedCommands.has(command.commandId)) continue;
+      processedCommands.add(command.commandId);
 
-      if (control.type === "user_message") {
-        workerLog("processing user_message control", {
-          runId: control.runId,
-          commandId: control.commandId,
+      if (command.type === "user_message") {
+        workerLog("processing user_message command", {
+          runId: command.runId,
+          commandId: command.commandId,
         });
-        emitPersistentControlTrace(client, control.runId, "received", control);
+        emitPersistentCommandTrace(client, command.runId, "received", command);
         let config: RunConfig;
         try {
-          config = await client.fetchRunConfig(control.runId);
+          config = await client.fetchRunConfig(command.runId);
         } catch (err) {
           workerLog("failed to fetch run config", {
-            runId: control.runId,
+            runId: command.runId,
             ...errorDetails(err),
           }, "error");
-          emitPersistentControlTrace(client, control.runId, "failed", control, String(err));
-          client.emit(control.runId, {
-            runId: control.runId, seq: 0, type: "run.status",
+          emitPersistentCommandTrace(client, command.runId, "failed", command, String(err));
+          client.emit(command.runId, {
+            runId: command.runId, seq: 0, type: "run.status",
             payload: { status: "error", error: `Failed to fetch run config: ${String(err)}` },
             ts: new Date().toISOString(),
           }).catch((emitErr) => {
-            workerLog("emit run config failure status failed", { runId: control.runId, ...errorDetails(emitErr) }, "error");
+            workerLog("emit run config failure status failed", { runId: command.runId, ...errorDetails(emitErr) }, "error");
           });
           continue;
         }
@@ -371,7 +371,7 @@ async function runPersistent() {
         const agentType = config.agentProviderConfig.agentType as AgentType;
         if (!adapters.has(agentType)) {
           workerLog("creating adapter", {
-            runId: control.runId,
+            runId: command.runId,
             agentType: config.agentProviderConfig.agentType,
             agentProviderSource: config.agentProviderConfig.source,
             runtimePath: config.runtimePath,
@@ -392,71 +392,71 @@ async function runPersistent() {
           adapters.set(agentType, adapter);
           mux.setAdapter(agentType, adapter);
         }
-        conversationIdToRun.set(config.conversationId, control.runId);
-        runToConversationId.set(control.runId, config.conversationId);
+        conversationIdToRun.set(config.conversationId, command.runId);
+        runToConversationId.set(command.runId, config.conversationId);
         workerLog("starting multiplexed run", {
-          runId: control.runId,
+          runId: command.runId,
           conversationId: config.conversationId,
         });
-        mux.startRun(control.runId, agentType, config.input as { threadId: string } & Record<string, unknown>);
-        emitPersistentControlTrace(client, control.runId, "handled", control);
-      } else if (control.type === "cancel") {
-        workerLog("processing cancel control", {
-          runId: control.runId,
-          conversationId: control.conversationId,
+        mux.startRun(command.runId, agentType, config.input as { threadId: string } & Record<string, unknown>);
+        emitPersistentCommandTrace(client, command.runId, "handled", command);
+      } else if (command.type === "cancel") {
+        workerLog("processing cancel command", {
+          runId: command.runId,
+          conversationId: command.conversationId,
         });
-        emitPersistentControlTrace(client, control.runId, "received", control);
-        if (control.runId && control.conversationId) {
-          const hasActiveRun = mux.has(control.runId);
+        emitPersistentCommandTrace(client, command.runId, "received", command);
+        if (command.runId && command.conversationId) {
+          const hasActiveRun = mux.has(command.runId);
           if (hasActiveRun) {
-            cancelQuestion(control.conversationId);
+            cancelQuestion(command.conversationId);
           }
-          void mux.cancelRun(control.runId, control.conversationId).then((cancelled) => {
-            emitPersistentControlTrace(
+          void mux.cancelRun(command.runId, command.conversationId).then((cancelled) => {
+            emitPersistentCommandTrace(
               client,
-              control.runId,
+              command.runId,
               cancelled ? "handled" : "failed",
-              control,
+              command,
               cancelled ? undefined : "no active run matched"
             );
             if (!cancelled) {
-              workerLog("cancel control did not match an active run", {
-                runId: control.runId,
-                conversationId: control.conversationId,
+              workerLog("cancel command did not match an active run", {
+                runId: command.runId,
+                conversationId: command.conversationId,
               }, "warn");
             }
           }).catch((err) => {
-            emitPersistentControlTrace(client, control.runId, "failed", control, String(err));
-            workerLog("cancel control failed", {
-              runId: control.runId,
-              conversationId: control.conversationId,
+            emitPersistentCommandTrace(client, command.runId, "failed", command, String(err));
+            workerLog("cancel command failed", {
+              runId: command.runId,
+              conversationId: command.conversationId,
               ...errorDetails(err),
             }, "error");
           });
         } else {
-          emitPersistentControlTrace(client, control.runId, "failed", control, "missing runId or conversationId");
-          workerLog("cancel control missing runId or conversationId", {
-            runId: control.runId,
-            conversationId: control.conversationId,
+          emitPersistentCommandTrace(client, command.runId, "failed", command, "missing runId or conversationId");
+          workerLog("cancel command missing runId or conversationId", {
+            runId: command.runId,
+            conversationId: command.conversationId,
           }, "warn");
         }
-      } else if (control.type === "approval_resolved") {
-        workerLog("processing approval_resolved control", {
-          conversationId: control.conversationId,
-          answerKeys: Object.keys(control.answers ?? {}),
+      } else if (command.type === "approval_resolved") {
+        workerLog("processing approval_resolved command", {
+          conversationId: command.conversationId,
+          answerKeys: Object.keys(command.answers ?? {}),
         });
-        const resolvedRunId = conversationIdToRun.get(control.conversationId);
+        const resolvedRunId = conversationIdToRun.get(command.conversationId);
         if (resolvedRunId) {
-          emitPersistentControlTrace(client, resolvedRunId, "received", control);
+          emitPersistentCommandTrace(client, resolvedRunId, "received", command);
         }
-        resolveQuestion(control.conversationId, control.answers);
+        resolveQuestion(command.conversationId, command.answers);
         if (resolvedRunId) {
-          emitPersistentControlTrace(client, resolvedRunId, "handled", control);
+          emitPersistentCommandTrace(client, resolvedRunId, "handled", command);
         }
       }
     }
-    if (controls.length === 0) {
-      await sleep(CONTROL_EMPTY_RETRY_DELAY_MS);
+    if (commands.length === 0) {
+      await sleep(COMMAND_EMPTY_RETRY_DELAY_MS);
     }
   }
 
@@ -563,23 +563,23 @@ function emitStatus(
   });
 }
 
-/** 上报 control 处理 trace（received/handled/failed），与 API 侧 control.sent 通过 commandId 回连。 */
-function emitControlTrace(
+/** 上报命令处理 trace（received/handled/failed），与 API 侧 command.sent 通过 commandId 回连。 */
+function emitCommandTrace(
   transport: RuntimeChannel,
   runId: string,
   phase: "received" | "handled" | "failed",
-  control: ControlPayload,
+  command: CommandPayload,
   error?: string
 ) {
   transport
     .emit({
       runId,
       seq: 0,
-      type: "control.trace",
+      type: "command.trace",
       payload: {
         phase,
-        commandId: control.commandId,
-        controlType: control.type,
+        commandId: command.commandId,
+        commandType: command.type,
         ...(error ? { error } : {}),
       },
       ts: "",
@@ -587,23 +587,23 @@ function emitControlTrace(
     .catch(() => {});
 }
 
-/** persistent worker 版：用 client.emit(runId, msg) 上报 control trace。 */
-function emitPersistentControlTrace(
+/** persistent worker 版：用 client.emit(runId, msg) 上报命令 trace。 */
+function emitPersistentCommandTrace(
   client: PersistentHttpClient,
   runId: string,
   phase: "received" | "handled" | "failed",
-  control: ControlPayload,
+  command: CommandPayload,
   error?: string
 ) {
   void client
     .emit(runId, {
       runId,
       seq: 0,
-      type: "control.trace",
+      type: "command.trace",
       payload: {
         phase,
-        commandId: control.commandId,
-        controlType: control.type,
+        commandId: command.commandId,
+        commandType: command.type,
         ...(error ? { error } : {}),
       },
       ts: "",

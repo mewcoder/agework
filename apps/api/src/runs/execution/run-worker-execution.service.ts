@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { ControlPayload } from "@agework/shared/protocol";
+import type { CommandPayload } from "@agework/shared/protocol";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
 import type {
   RunWorkerExecutionStartInput,
@@ -29,8 +29,8 @@ export class RunWorkerExecutionService {
     return handle;
   }
 
-  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
-    this.providerRegistry.resolve(handle.runtimeType).sendCommand(handle, control);
+  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
+    this.providerRegistry.resolve(handle.runtimeType).sendCommand(handle, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {

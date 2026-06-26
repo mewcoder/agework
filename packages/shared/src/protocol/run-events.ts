@@ -15,9 +15,9 @@ export type CoreRunEventType =
   | "tool.failed"
   | "permission.requested"
   | "permission.resolved"
-  | "control.sent"
-  | "control.handled"
-  | "control.failed"
+  | "command.sent"
+  | "command.handled"
+  | "command.failed"
   | "system.issue";
 
 export type RunEventType = CoreRunEventType | (string & {});

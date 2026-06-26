@@ -120,47 +120,47 @@ describe("RunEventFacts", () => {
   });
 
   describe("commandSent", () => {
-    it("builds a control.sent event", () => {
+    it("builds a command.sent event", () => {
       const event = RunEventFacts.commandSent({
         runId: "run-1",
         commandId: "cmd-1",
         commandType: "cancel",
       });
-      expect(event.type).toBe("control.sent");
+      expect(event.type).toBe("command.sent");
       expect(event.summary).toBe("cancel sent");
     });
   });
 
-  describe("controlHandled", () => {
-    it("builds a control.handled event", () => {
-      const event = RunEventFacts.controlHandled({
+  describe("commandHandled", () => {
+    it("builds a command.handled event", () => {
+      const event = RunEventFacts.commandHandled({
         runId: "run-1",
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
         phase: "handled",
       });
-      expect(event.type).toBe("control.handled");
+      expect(event.type).toBe("command.handled");
       expect(event.origin).toBe("worker");
     });
   });
 
-  describe("controlFailed", () => {
-    it("builds a control.failed event", () => {
-      const event = RunEventFacts.controlFailed({
+  describe("commandFailed", () => {
+    it("builds a command.failed event", () => {
+      const event = RunEventFacts.commandFailed({
         runId: "run-1",
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
         error: "timeout",
       });
-      expect(event.type).toBe("control.failed");
+      expect(event.type).toBe("command.failed");
       expect(event.summary).toBe("timeout");
     });
 
     it("uses default summary when no error", () => {
-      const event = RunEventFacts.controlFailed({
+      const event = RunEventFacts.commandFailed({
         runId: "run-1",
         commandId: "cmd-1",
-        controlType: "cancel",
+        commandType: "cancel",
       });
       expect(event.summary).toBe("cancel failed");
     });

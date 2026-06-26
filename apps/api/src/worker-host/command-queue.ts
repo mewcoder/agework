@@ -1,11 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { Envelope, ControlPayload } from "@agework/shared/protocol";
+import type { Envelope, CommandPayload } from "@agework/shared/protocol";
 import type { CommandSentRecorder } from "./command-sent-recorder";
 import { errorLogFields, safeLogJson } from "../common/logging";
 
 type OwnerWaiter = {
   afterSeq: number;
-  resolve: (commands: Envelope<ControlPayload>[]) => void;
+  resolve: (commands: Envelope<CommandPayload>[]) => void;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -23,7 +23,7 @@ export class RuntimeCommandQueue {
   /** ownerId 级队列——持久容器通过 ownerId 轮询命令。 */
   private readonly ownerQueues = new Map<
     string,
-    Envelope<ControlPayload>[]
+    Envelope<CommandPayload>[]
   >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
   private recorder!: CommandSentRecorder;
@@ -35,7 +35,7 @@ export class RuntimeCommandQueue {
   /** 按 ownerId 推送命令（持久容器场景）。 */
   pushByOwnerId(
     ownerId: string,
-    envelope: Envelope<ControlPayload>
+    envelope: Envelope<CommandPayload>
   ): void {
     let queue = this.ownerQueues.get(ownerId);
     if (!queue) {
@@ -60,7 +60,7 @@ export class RuntimeCommandQueue {
     ownerId: string,
     afterSeq: number,
     timeoutMs: number
-  ): Promise<Envelope<ControlPayload>[]> {
+  ): Promise<Envelope<CommandPayload>[]> {
     const commands = this.pollByOwnerId(ownerId, afterSeq);
     if (commands.length > 0 || timeoutMs <= 0) {
       return Promise.resolve(commands);
@@ -85,9 +85,12 @@ export class RuntimeCommandQueue {
   pollByOwnerId(
     ownerId: string,
     afterSeq: number
-  ): Envelope<ControlPayload>[] {
+  ): Envelope<CommandPayload>[] {
     const queue = this.ownerQueues.get(ownerId);
     if (!queue) return [];
+    // TODO: 当前假设每个 ownerId 只有一个 worker 轮询（单 worker per owner）。
+    // 多 worker 并发轮询同一 ownerId 时，先到的 worker 会截断队列导致后到的 worker 漏消息。
+    // 需要改为「按 (ownerId, consumerId) 切片、轮询时不截断队列」或引入 lease/ack 机制。
     const result = queue.filter((e) => e.seq > afterSeq);
     this.ownerQueues.set(ownerId, result);
     if (result.length > 0) {
@@ -106,7 +109,7 @@ export class RuntimeCommandQueue {
   /** command 入队即记一条 sent trace，commandId 供 worker 上行的 received/handled/failed 回连。 */
   private recordEnqueued(
     runId: string,
-    envelope: Envelope<ControlPayload>
+    envelope: Envelope<CommandPayload>
   ): void {
     if (!runId) return;
     const payload = envelope.payload;

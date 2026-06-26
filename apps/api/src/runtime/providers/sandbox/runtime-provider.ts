@@ -3,7 +3,7 @@ import { generateId } from "@agework/shared";
 import type {
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
-  ControlPayload,
+  CommandPayload,
 } from "@agework/shared/protocol";
 import { swallow } from "../../../common/swallow";
 import { safeLogJson } from "../../../common/logging";
@@ -71,19 +71,19 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     return handle;
   }
 
-  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void {
+  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
     const ownerId = this.runtimeInstances.findOwnerIdByRun(handle.runId);
     if (!ownerId) {
       this.logger.warn(
         `sandbox send command dropped ${safeLogJson({
           runId: handle.runId,
-          controlType: control.type,
+          commandType: command.type,
           reason: "no_owner",
         })}`
       );
       return;
     }
-    this.workerSessions.sendCommand(ownerId, handle.runId, control);
+    this.workerSessions.sendCommand(ownerId, handle.runId, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {

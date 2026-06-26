@@ -1,5 +1,5 @@
 import type {
-  ControlTracePayload,
+  CommandTracePayload,
   RecordRunEventInput,
   RunStatusPayload,
 } from "@agework/shared/protocol";
@@ -147,21 +147,21 @@ export function sdkRawErrorFact(
   });
 }
 
-export function controlTraceFact(
+export function commandTraceFact(
   runId: string,
-  payload: ControlTracePayload
+  payload: CommandTracePayload
 ): RecordRunEventInput {
   return payload.phase === "failed"
-    ? RunEventFacts.controlFailed({
+    ? RunEventFacts.commandFailed({
         runId,
         commandId: payload.commandId,
-        controlType: payload.controlType,
+        commandType: payload.commandType,
         error: payload.error,
       })
-    : RunEventFacts.controlHandled({
+    : RunEventFacts.commandHandled({
         runId,
         commandId: payload.commandId,
-        controlType: payload.controlType,
+        commandType: payload.commandType,
         phase: payload.phase,
       });
 }

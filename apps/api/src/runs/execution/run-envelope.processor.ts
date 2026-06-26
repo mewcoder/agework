@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import type {
   Envelope,
   RunStatusPayload,
-  ControlTracePayload,
+  CommandTracePayload,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
@@ -20,7 +20,7 @@ import { RunEventRecorder } from "../events/run-event-recorder";
 import { decideRunStatusUpdate } from "./run-lifecycle.policy";
 import {
   aguiEventFacts,
-  controlTraceFact,
+  commandTraceFact,
   runStatusFact,
   sdkRawErrorFact,
   shouldLogAgUiEvent,
@@ -124,10 +124,10 @@ export class RunEnvelopeProcessor {
       case "sdk.raw":
         await this.handleSdkRawEvent(runId, envelope.payload);
         break;
-      case "control.trace":
-        this.recordControlTraceEvent(
+      case "command.trace":
+        this.recordCommandTraceEvent(
           runId,
-          envelope.payload as ControlTracePayload
+          envelope.payload as CommandTracePayload
         );
         break;
     }
@@ -410,14 +410,14 @@ export class RunEnvelopeProcessor {
     );
   }
 
-  /** worker 上报的 control 处理 trace（received/handled/failed），与 API 侧 control.sent 通过 commandId 回连。 */
-  private recordControlTraceEvent(
+  /** worker 上报的 command 处理 trace（received/handled/failed），与 API 侧 command.sent 通过 commandId 回连。 */
+  private recordCommandTraceEvent(
     runId: string,
-    payload: ControlTracePayload
+    payload: CommandTracePayload
   ): void {
     this.recordRunEventFact(
-      controlTraceFact(runId, payload),
-      `record control trace for run ${runId}`
+      commandTraceFact(runId, payload),
+      `record command trace for run ${runId}`
     );
   }
 

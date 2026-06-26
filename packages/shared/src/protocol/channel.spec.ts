@@ -2,7 +2,7 @@ import type { Envelope } from "./envelope";
 import type {
   RunConfig,
   RuntimeChannel,
-  ControlPayload,
+  CommandPayload,
   UpstreamMessage,
 } from "./channel";
 
@@ -29,9 +29,9 @@ describe("RuntimeChannel contract", () => {
     expect(config.agentProviderConfig.agentType).toBe("claude");
   });
 
-  it("a RuntimeChannel implementation can fetch config, emit upstream messages and subscribe controls", async () => {
+  it("a RuntimeChannel implementation can fetch config, emit upstream messages and subscribe commands", async () => {
     const sent: UpstreamMessage[] = [];
-    let controlHandler: ((c: Envelope<ControlPayload>) => void) | undefined;
+    let commandHandler: ((c: Envelope<CommandPayload>) => void) | undefined;
 
     const transport: RuntimeChannel = {
       fetchRunConfig: () =>
@@ -48,10 +48,10 @@ describe("RuntimeChannel contract", () => {
         sent.push(msg);
         return Promise.resolve();
       },
-      subscribeControls: (cb) => {
-        controlHandler = cb;
+      subscribeCommands: (cb) => {
+        commandHandler = cb;
         return () => {
-          controlHandler = undefined;
+          commandHandler = undefined;
         };
       },
       close: () => Promise.resolve(),
@@ -69,10 +69,10 @@ describe("RuntimeChannel contract", () => {
     });
     expect(sent).toHaveLength(1);
 
-    const unsubscribe = transport.subscribeControls(() => {});
-    expect(controlHandler).toBeTypeOf("function");
+    const unsubscribe = transport.subscribeCommands(() => {});
+    expect(commandHandler).toBeTypeOf("function");
     unsubscribe();
-    expect(controlHandler).toBeUndefined();
+    expect(commandHandler).toBeUndefined();
 
     await transport.close();
   });

@@ -1,5 +1,5 @@
 import type {
-  ControlPayload,
+  CommandPayload,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
@@ -9,7 +9,7 @@ import type { RunEventReceiver } from "./run-event-receiver";
 export interface WorkerExecutionProvider {
   readonly type: string;
   startWorkerExecution(input: WorkerExecutionStartInput): WorkerExecutionHandle;
-  sendCommand(handle: WorkerExecutionHandle, control: ControlPayload): void;
+  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void;
   cancel(handle: WorkerExecutionHandle): void;
   cleanup(runId: string): void;
 }
