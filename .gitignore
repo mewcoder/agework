@@ -45,3 +45,6 @@ reference-desktop
 
 # git worktrees
 .worktrees
+
+# test coverage
+coverage
