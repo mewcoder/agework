@@ -75,7 +75,11 @@ describe("RuntimeInternalAccessService", () => {
 
     it("reuses workspace key when scopeKey already has one", () => {
       const workspaceKey = service.issueWorkspaceKey("ws-1");
-      const resourceAccessKey = service.issueRuntimeInstanceKey("rr-1", "ws-1", "sandbox");
+      const resourceAccessKey = service.issueRuntimeInstanceKey(
+        "rr-1",
+        "ws-1",
+        "sandbox"
+      );
 
       // Same key works for both endpoints
       expect(resourceAccessKey).toBe(workspaceKey);
@@ -104,7 +108,9 @@ describe("RuntimeInternalAccessService", () => {
     });
 
     it("returns undefined for unknown runtime resource scopeKey", () => {
-      expect(service.getScopeKeyForRuntimeInstance("nonexistent")).toBeUndefined();
+      expect(
+        service.getScopeKeyForRuntimeInstance("nonexistent")
+      ).toBeUndefined();
     });
 
     it("revokes a runtime resource key", () => {

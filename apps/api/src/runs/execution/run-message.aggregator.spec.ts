@@ -5,8 +5,16 @@ describe("RunMessageAggregator", () => {
   it("uses streaming for incomplete snapshots by default", () => {
     const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
-    aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
-    aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_START",
+      messageId: "msg-1",
+      role: "assistant",
+    });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: "msg-1",
+      delta: "hello",
+    });
 
     expect(aggregator.build(false).status).toEqual({
       type: "incomplete",
@@ -17,8 +25,16 @@ describe("RunMessageAggregator", () => {
   it("preserves cancelled for explicit run cancellation", () => {
     const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
-    aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
-    aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_START",
+      messageId: "msg-1",
+      role: "assistant",
+    });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: "msg-1",
+      delta: "hello",
+    });
     aggregator.handle({ type: "RUN_CANCELLED" });
 
     expect(aggregator.build(false).status).toEqual({
@@ -30,8 +46,16 @@ describe("RunMessageAggregator", () => {
   it("can mark a cancelled stream as user-steered", () => {
     const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
-    aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
-    aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_START",
+      messageId: "msg-1",
+      role: "assistant",
+    });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: "msg-1",
+      delta: "hello",
+    });
     aggregator.handle({ type: "RUN_CANCELLED" });
 
     expect(aggregator.build(false, "user_steered").status).toEqual({
@@ -43,8 +67,16 @@ describe("RunMessageAggregator", () => {
   it("reports the server messageId from TEXT_MESSAGE_START", () => {
     const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
-    aggregator.handle({ type: "TEXT_MESSAGE_START", messageId: "msg-1", role: "assistant" });
-    aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", messageId: "msg-1", delta: "hello" });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_START",
+      messageId: "msg-1",
+      role: "assistant",
+    });
+    aggregator.handle({
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: "msg-1",
+      delta: "hello",
+    });
     aggregator.handle({ type: "RUN_FINISHED" });
 
     expect(aggregator.build(true).messageId).toBe("msg-1");
@@ -65,7 +97,11 @@ describe("RunMessageAggregator", () => {
   it("stamps mcp-apps activity snapshots onto resolved tool calls (newly shared with the frontend aggregator)", () => {
     const aggregator = new RunMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
-    aggregator.handle({ type: "TOOL_CALL_START", toolCallId: "tool1", toolCallName: "show_map" });
+    aggregator.handle({
+      type: "TOOL_CALL_START",
+      toolCallId: "tool1",
+      toolCallName: "show_map",
+    });
     aggregator.handle({
       type: "TOOL_CALL_RESULT",
       toolCallId: "tool1",
@@ -80,8 +116,10 @@ describe("RunMessageAggregator", () => {
 
     const snap = aggregator.build(false);
     const toolPart = snap.content.find(
-      (part: any) => part.type === "tool-call",
+      (part: any) => part.type === "tool-call"
     ) as any;
-    expect(toolPart.mcp).toEqual({ app: { resourceUri: "ui://srv/mcp-app.html" } });
+    expect(toolPart.mcp).toEqual({
+      app: { resourceUri: "ui://srv/mcp-app.html" },
+    });
   });
 });

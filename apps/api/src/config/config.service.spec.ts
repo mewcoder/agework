@@ -1,9 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import {
-  DEV_JWT_SECRET,
-  getJwtSecret,
-  ConfigService,
-} from "./config.service";
+import { DEV_JWT_SECRET, getJwtSecret, ConfigService } from "./config.service";
 
 function createService(rows: { key: string; value: string }[]) {
   const findMany = vi.fn().mockResolvedValue(rows);
@@ -63,14 +59,18 @@ describe("getJwtSecret", () => {
     delete process.env.AGEWORK_PRIVATE_JWT_SECRET;
     process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
 
-    expect(() => getJwtSecret()).toThrow("生产环境必须配置安全的 AGEWORK_PRIVATE_JWT_SECRET");
+    expect(() => getJwtSecret()).toThrow(
+      "生产环境必须配置安全的 AGEWORK_PRIVATE_JWT_SECRET"
+    );
   });
 
   it("fails fast in production when AGEWORK_PRIVATE_JWT_SECRET is DEV_JWT_SECRET", () => {
     process.env.NODE_ENV = "production";
     process.env.AGEWORK_PRIVATE_JWT_SECRET = DEV_JWT_SECRET;
 
-    expect(() => getJwtSecret()).toThrow("生产环境必须配置安全的 AGEWORK_PRIVATE_JWT_SECRET");
+    expect(() => getJwtSecret()).toThrow(
+      "生产环境必须配置安全的 AGEWORK_PRIVATE_JWT_SECRET"
+    );
   });
 });
 
@@ -131,10 +131,7 @@ describe("runtime capability config", () => {
     process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = "workspace,user";
     const { service } = createService([]);
 
-    expect(service.getAllowedIsolationScopes()).toEqual([
-      "workspace",
-      "user",
-    ]);
+    expect(service.getAllowedIsolationScopes()).toEqual(["workspace", "user"]);
     expect(service.getDefaultIsolationScope()).toBe("workspace");
     expect(service.isIsolationScopeAllowed("user")).toBe(true);
   });
@@ -214,7 +211,11 @@ describe("ConfigService settings (DB > env > default)", () => {
     await service.onModuleInit();
 
     await expect(
-      service.setSetting("AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS", "abc", "user-1")
+      service.setSetting(
+        "AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS",
+        "abc",
+        "user-1"
+      )
     ).rejects.toThrow("必须是数字");
   });
 
@@ -236,7 +237,9 @@ describe("ConfigService settings (DB > env > default)", () => {
 
   it("listSettings() reports the source of each registry entry", async () => {
     process.env.AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS = "900";
-    const { service } = createService([{ key: "AGEWORK_APP_NAME", value: "MyApp" }]);
+    const { service } = createService([
+      { key: "AGEWORK_APP_NAME", value: "MyApp" },
+    ]);
     await service.onModuleInit();
 
     const list = service.listSettings();

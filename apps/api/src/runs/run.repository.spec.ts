@@ -65,7 +65,10 @@ describe("RunRepository", () => {
     await service.markRunning("run-1");
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "requires_action"] } },
+      where: {
+        id: "run-1",
+        status: { in: ["queued", "preparing", "running", "requires_action"] },
+      },
       data: expect.objectContaining({ status: "running" }),
     });
   });
@@ -77,7 +80,18 @@ describe("RunRepository", () => {
     await service.markFinished("run-1");
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "cancelling", "requires_action"] } },
+      where: {
+        id: "run-1",
+        status: {
+          in: [
+            "queued",
+            "preparing",
+            "running",
+            "cancelling",
+            "requires_action",
+          ],
+        },
+      },
       data: expect.objectContaining({ status: "finished" }),
     });
   });
@@ -89,7 +103,18 @@ describe("RunRepository", () => {
     await service.markError("run-1", "boom");
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "cancelling", "requires_action"] } },
+      where: {
+        id: "run-1",
+        status: {
+          in: [
+            "queued",
+            "preparing",
+            "running",
+            "cancelling",
+            "requires_action",
+          ],
+        },
+      },
       data: expect.objectContaining({ status: "error", error: "boom" }),
     });
   });
@@ -101,7 +126,18 @@ describe("RunRepository", () => {
     await service.markCancelling("run-1");
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "cancelling", "requires_action"] } },
+      where: {
+        id: "run-1",
+        status: {
+          in: [
+            "queued",
+            "preparing",
+            "running",
+            "cancelling",
+            "requires_action",
+          ],
+        },
+      },
       data: { status: "cancelling" },
     });
   });
@@ -113,7 +149,10 @@ describe("RunRepository", () => {
     await service.markRequiresAction("run-1");
 
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "run-1", status: { in: ["queued", "preparing", "running", "requires_action"] } },
+      where: {
+        id: "run-1",
+        status: { in: ["queued", "preparing", "running", "requires_action"] },
+      },
       data: { status: "requires_action" },
     });
   });
@@ -250,13 +289,17 @@ describe("RunRepository", () => {
         ],
       },
     });
-    expect(detail.runtimeInstance).not.toHaveProperty("workspaceRuntimeInstances");
+    expect(detail.runtimeInstance).not.toHaveProperty(
+      "workspaceRuntimeInstances"
+    );
     // 详情不再内嵌事件列表，事件改由 listAdminEvents 独立分页提供
     expect(detail).not.toHaveProperty("events");
   });
 
   it("finds the most recent active run for a conversation", async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: "run-1", status: "running" });
+    const findFirst = vi
+      .fn()
+      .mockResolvedValue({ id: "run-1", status: "running" });
     const service = new RunRepository({ run: { findFirst } } as never);
 
     const run = await service.findActiveByConversationId("conversation-1");
@@ -264,7 +307,15 @@ describe("RunRepository", () => {
     expect(findFirst).toHaveBeenCalledWith({
       where: {
         conversationId: "conversation-1",
-        status: { in: ["queued", "preparing", "running", "cancelling", "requires_action"] },
+        status: {
+          in: [
+            "queued",
+            "preparing",
+            "running",
+            "cancelling",
+            "requires_action",
+          ],
+        },
       },
       orderBy: { createdAt: "desc" },
     });

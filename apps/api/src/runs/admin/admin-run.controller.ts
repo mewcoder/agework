@@ -73,7 +73,7 @@ export class AdminRunController {
  * 解析多选 query 参数，兼容逗号分隔（`"platform,worker"`）和标准重复 key 数组格式
  * （NestJS 对 `?origin=a&origin=b` 会解析成 `string[]`）。
  */
-function parseMulti(value?: string | string[]): string[] | undefined {
+export function parseMulti(value?: string | string[]): string[] | undefined {
   if (!value) return undefined;
   const raw = Array.isArray(value) ? value : value.split(",");
   const items = raw.map((item) => item.trim()).filter(Boolean);

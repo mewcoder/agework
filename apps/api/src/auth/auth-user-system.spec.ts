@@ -85,7 +85,10 @@ class MemoryPrisma {
     create: (args: { data: UserData; select?: UserSelect }) => {
       const now = new Date();
       const user: TestUser = {
-        id: typeof args.data.id === "string" ? args.data.id : `user-${this.nextId++}`,
+        id:
+          typeof args.data.id === "string"
+            ? args.data.id
+            : `user-${this.nextId++}`,
         username: requiredString(args.data.username, "username"),
         passwordHash: requiredString(args.data.passwordHash, "passwordHash"),
         role: optionalString(args.data.role, "user"),
@@ -196,11 +199,9 @@ function makeServices() {
   const systemInitialization = new SystemInitService(
     prisma as unknown as PrismaService
   );
-  const users = new UserService(
-    prisma as unknown as PrismaService,
-    auth,
-    { emit: vi.fn() } as never
-  );
+  const users = new UserService(prisma as unknown as PrismaService, auth, {
+    emit: vi.fn(),
+  } as never);
   const guard = new JwtAuthGuard(
     jwt,
     new Reflector(),
@@ -325,8 +326,14 @@ describe("auth and user management security flows", () => {
   });
 
   afterEach(() => {
-    restoreEnv("AGEWORK_DEV_AUTH_DISABLED", originalEnv.AGEWORK_DEV_AUTH_DISABLED);
-    restoreEnv("AGEWORK_PRIVATE_JWT_SECRET", originalEnv.AGEWORK_PRIVATE_JWT_SECRET);
+    restoreEnv(
+      "AGEWORK_DEV_AUTH_DISABLED",
+      originalEnv.AGEWORK_DEV_AUTH_DISABLED
+    );
+    restoreEnv(
+      "AGEWORK_PRIVATE_JWT_SECRET",
+      originalEnv.AGEWORK_PRIVATE_JWT_SECRET
+    );
     restoreEnv("NODE_ENV", originalEnv.NODE_ENV);
   });
 
@@ -392,7 +399,9 @@ describe("auth and user management security flows", () => {
     await expect(auth.register("SameName1", "SameName1")).rejects.toThrow(
       "密码不能和用户名相同"
     );
-    await expect(auth.register("common_user", "password1")).resolves.toMatchObject({
+    await expect(
+      auth.register("common_user", "password1")
+    ).resolves.toMatchObject({
       username: "common_user",
       status: "pending",
     });
@@ -550,7 +559,9 @@ describe("auth and user management security flows", () => {
     const login = await auth.login("erin", created.temporaryPassword);
 
     await expect(
-      guard.canActivate(contextForToken(login.token, "/api/v1/admin/users/list"))
+      guard.canActivate(
+        contextForToken(login.token, "/api/v1/admin/users/list")
+      )
     ).rejects.toThrow();
     await expect(
       guard.canActivate(contextForToken(login.token, "/api/v1/auth/query"))

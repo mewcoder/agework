@@ -9,7 +9,7 @@ describe("RuntimeControlQueue", () => {
     queue = new RuntimeControlQueue();
     queue.setControlSentRecorder({
       recordControlSent: vi.fn().mockResolvedValue(undefined),
-    } as never);
+    });
   });
 
   afterEach(() => {
@@ -26,7 +26,12 @@ describe("RuntimeControlQueue", () => {
       runId: "run-1",
       seq: 1,
       type: "control",
-      payload: { type: "cancel", commandId: "cmd-1", runId: "run-1", conversationId: "conversation-1" },
+      payload: {
+        type: "cancel",
+        commandId: "cmd-1",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
       ts: new Date().toISOString(),
     };
 
@@ -38,13 +43,27 @@ describe("RuntimeControlQueue", () => {
 
   it("should only return controls after given seq", () => {
     const e1: Envelope<ControlPayload> = {
-      runId: "run-1", seq: 1, type: "control",
-      payload: { type: "cancel", commandId: "cmd-1", runId: "run-1", conversationId: "conversation-1" },
+      runId: "run-1",
+      seq: 1,
+      type: "control",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-1",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
       ts: "",
     };
     const e2: Envelope<ControlPayload> = {
-      runId: "run-1", seq: 2, type: "control",
-      payload: { type: "cancel", commandId: "cmd-2", runId: "run-1", conversationId: "conversation-1" },
+      runId: "run-1",
+      seq: 2,
+      type: "control",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-2",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
       ts: "",
     };
 
@@ -58,8 +77,15 @@ describe("RuntimeControlQueue", () => {
 
   it("should cleanup a run's queue", () => {
     const envelope: Envelope<ControlPayload> = {
-      runId: "run-1", seq: 1, type: "control",
-      payload: { type: "cancel", commandId: "cmd-1", runId: "run-1", conversationId: "conversation-1" },
+      runId: "run-1",
+      seq: 1,
+      type: "control",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-1",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
       ts: "",
     };
     queue.push("run-1", envelope);
@@ -70,8 +96,15 @@ describe("RuntimeControlQueue", () => {
   it("should resolve a workspace waiter when a matching control is pushed", async () => {
     const pending = queue.waitForWorkspace("ws-1", 0, 1_000);
     const envelope: Envelope<ControlPayload> = {
-      runId: "run-1", seq: 1, type: "control",
-      payload: { type: "cancel", commandId: "cmd-1", runId: "run-1", conversationId: "conversation-1" },
+      runId: "run-1",
+      seq: 1,
+      type: "control",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-1",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
       ts: "",
     };
 
@@ -88,5 +121,4 @@ describe("RuntimeControlQueue", () => {
 
     await expect(pending).resolves.toEqual([]);
   });
-
 });

@@ -11,7 +11,12 @@ import {
 describe("getApiKey", () => {
   it("returns providerConfig.apiKey", () => {
     expect(
-      getApiKey({ baseUrl: "https://x", apiKey: "sk-test", models: ["m"], extraConfig: {} })
+      getApiKey({
+        baseUrl: "https://x",
+        apiKey: "sk-test",
+        models: ["m"],
+        extraConfig: {},
+      })
     ).toBe("sk-test");
   });
 });

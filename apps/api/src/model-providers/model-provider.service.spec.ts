@@ -58,7 +58,7 @@ describe("ModelProviderService", () => {
 
     const result = await service.listEnabled("claude");
 
-    expect(JSON.parse(result.list[0]!.providerConfig)).toEqual({
+    expect(JSON.parse(result.list[0].providerConfig)).toEqual({
       baseUrl: "https://example.com/anthropic",
       apiKey: "",
       models: ["claude-test"],
@@ -88,7 +88,7 @@ describe("ModelProviderService", () => {
 
     const result = await service.listForAdmin("claude");
 
-    expect(JSON.parse(result.list[0]!.providerConfig)).toEqual({
+    expect(JSON.parse(result.list[0].providerConfig)).toEqual({
       baseUrl: "https://example.com/anthropic",
       apiKey: "sk-secret",
       models: ["claude-test"],
@@ -186,8 +186,8 @@ describe("ModelProviderService", () => {
     process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
     mockSpawnSync.mockReturnValue({ status: 0 } as never);
     const credentialsPath = join("/custom/claude", ".credentials.json");
-    mockExistsSync.mockImplementation((path) =>
-      String(path) === credentialsPath
+    mockExistsSync.mockImplementation(
+      (path) => String(path) === credentialsPath
     );
 
     try {
@@ -213,9 +213,7 @@ describe("ModelProviderService", () => {
       const result = await service.listForAdmin("claude");
 
       expect(result.list[0]?.systemStatus?.configAvailable).toBe(true);
-      expect(mockExistsSync).toHaveBeenCalledWith(
-        credentialsPath
-      );
+      expect(mockExistsSync).toHaveBeenCalledWith(credentialsPath);
     } finally {
       if (originalClaudeConfigDir === undefined) {
         delete process.env.CLAUDE_CONFIG_DIR;
@@ -244,8 +242,8 @@ describe("ModelProviderService", () => {
     const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
     process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
     const credentialsPath = join("/custom/claude", ".credentials.json");
-    mockExistsSync.mockImplementation((path) =>
-      String(path) === credentialsPath
+    mockExistsSync.mockImplementation(
+      (path) => String(path) === credentialsPath
     );
 
     try {

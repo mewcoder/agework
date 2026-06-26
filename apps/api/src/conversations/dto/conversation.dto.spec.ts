@@ -39,7 +39,10 @@ describe("CreateConversationDto", () => {
 
   it("rejects a non-string agentType", async () => {
     await expect(
-      transformBody(CreateConversationDto, { workspaceId: "proj-1", agentType: 123 })
+      transformBody(CreateConversationDto, {
+        workspaceId: "proj-1",
+        agentType: 123,
+      })
     ).rejects.toThrow(BadRequestException);
   });
 
@@ -79,7 +82,9 @@ describe("UpdateConversationDto", () => {
 
 describe("ConversationIdDto", () => {
   it("accepts a valid payload", async () => {
-    const result = await transformBody(ConversationIdDto, { id: "conversation-1" });
+    const result = await transformBody(ConversationIdDto, {
+      id: "conversation-1",
+    });
     expect(result.id).toBe("conversation-1");
   });
 

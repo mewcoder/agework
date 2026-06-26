@@ -1,5 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import type { RunConfig, SandboxRuntimePlacement } from "@agework/shared/protocol";
+import type {
+  RunConfig,
+  SandboxRuntimePlacement,
+} from "@agework/shared/protocol";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
 import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
 
@@ -38,7 +41,7 @@ function makePlacement(
       sandboxEngineType: "docker",
     },
     ...overrides,
-  } as SandboxRuntimePlacement;
+  };
 }
 
 function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
@@ -182,9 +185,7 @@ describe("SandboxRuntimeInstanceService", () => {
     );
     expect(
       vi.mocked(access.issueRuntimeInstanceKey).mock.invocationCallOrder[0]
-    ).toBeLessThan(
-      vi.mocked(engine.startWorker).mock.invocationCallOrder[0]
-    );
+    ).toBeLessThan(vi.mocked(engine.startWorker).mock.invocationCallOrder[0]);
   });
 
   it("publishes cancelled status for runs cancelled before runtime is ready", async () => {

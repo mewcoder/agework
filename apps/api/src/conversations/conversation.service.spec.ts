@@ -152,31 +152,33 @@ describe("ConversationService", () => {
       message: { findMany },
     } as never);
 
-    await expect(service.listMessages(mockUserId, "conversation-1")).resolves.toEqual(
-      [
-        {
-          id: "user-1",
-          parent_id: null,
-          format: "assistant-ui",
-          content: { id: "user-1", role: "user", content: "hello" },
-        },
-        {
-          id: "user-2",
-          parent_id: "user-1",
-          format: "assistant-ui",
-          content: { id: "user-2", role: "user", content: "next" },
-        },
-      ]
-    );
+    await expect(
+      service.listMessages(mockUserId, "conversation-1")
+    ).resolves.toEqual([
+      {
+        id: "user-1",
+        parent_id: null,
+        format: "assistant-ui",
+        content: { id: "user-1", role: "user", content: "hello" },
+      },
+      {
+        id: "user-2",
+        parent_id: "user-1",
+        format: "assistant-ui",
+        content: { id: "user-2", role: "user", content: "next" },
+      },
+    ]);
   });
 
   describe("search", () => {
-    function makeConversation(overrides: Partial<{
-      id: string;
-      title: string | null;
-      status: string;
-      workspaceId: string;
-    }> = {}) {
+    function makeConversation(
+      overrides: Partial<{
+        id: string;
+        title: string | null;
+        status: string;
+        workspaceId: string;
+      }> = {}
+    ) {
       const createdAt = new Date("2026-06-01T00:00:00.000Z");
       const updatedAt = new Date("2026-06-18T00:00:00.000Z");
       return {
@@ -201,9 +203,11 @@ describe("ConversationService", () => {
     });
 
     it("matches conversation title and returns a snippet", async () => {
-      const findMany = vi.fn().mockResolvedValue([
-        makeConversation({ id: "c-title", title: "Refactor auth module" }),
-      ]);
+      const findMany = vi
+        .fn()
+        .mockResolvedValue([
+          makeConversation({ id: "c-title", title: "Refactor auth module" }),
+        ]);
       const messageFindMany = vi.fn().mockResolvedValue([]);
       const service = new ConversationService({
         conversation: { findMany },
@@ -222,9 +226,11 @@ describe("ConversationService", () => {
     });
 
     it("matches message content when title does not match", async () => {
-      const findMany = vi.fn().mockResolvedValue([
-        makeConversation({ id: "c-msg", title: "untitled" }),
-      ]);
+      const findMany = vi
+        .fn()
+        .mockResolvedValue([
+          makeConversation({ id: "c-msg", title: "untitled" }),
+        ]);
       const messageFindMany = vi.fn().mockResolvedValue([
         {
           id: "m-1",
@@ -232,9 +238,7 @@ describe("ConversationService", () => {
           content: {
             id: "m-1",
             role: "user",
-            content: [
-              { type: "text", text: "How do I deploy to production?" },
-            ],
+            content: [{ type: "text", text: "How do I deploy to production?" }],
           },
         },
       ]);
@@ -252,9 +256,13 @@ describe("ConversationService", () => {
     });
 
     it("skips archived conversations", async () => {
-      const findMany = vi.fn().mockImplementation((args: { where?: { status?: string } }) =>
-        Promise.resolve(args.where?.status === "regular" ? [] : [makeConversation()])
-      );
+      const findMany = vi
+        .fn()
+        .mockImplementation((args: { where?: { status?: string } }) =>
+          Promise.resolve(
+            args.where?.status === "regular" ? [] : [makeConversation()]
+          )
+        );
       const service = new ConversationService({
         conversation: { findMany },
         message: { findMany: vi.fn().mockResolvedValue([]) },
@@ -285,9 +293,11 @@ describe("ConversationService", () => {
 
     it("builds snippet with ellipsis when match is not at text boundary", async () => {
       const longTitle = "a".repeat(80) + "target" + "b".repeat(80);
-      const findMany = vi.fn().mockResolvedValue([
-        makeConversation({ id: "c-snip", title: longTitle }),
-      ]);
+      const findMany = vi
+        .fn()
+        .mockResolvedValue([
+          makeConversation({ id: "c-snip", title: longTitle }),
+        ]);
       const service = new ConversationService({
         conversation: { findMany },
         message: { findMany: vi.fn().mockResolvedValue([]) },

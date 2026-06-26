@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpenSandboxEngine } from "./opensandbox-engine";
 import type { SandboxStartInput, SandboxPlacement } from ".";
-import type { OpenSandboxClientLike, OpenSandboxSandboxLike } from "../opensandbox-client";
+import type {
+  OpenSandboxClientLike,
+  OpenSandboxSandboxLike,
+} from "../opensandbox-client";
 
 function makeSandboxMock(id: string): OpenSandboxSandboxLike {
   const sandbox = {
@@ -19,7 +22,9 @@ function makeSandboxMock(id: string): OpenSandboxSandboxLike {
   return sandbox;
 }
 
-function makePlacement(overrides?: Partial<SandboxPlacement>): SandboxPlacement {
+function makePlacement(
+  overrides?: Partial<SandboxPlacement>
+): SandboxPlacement {
   return {
     isolationScope: "workspace",
     scopeKey: "ws-1",
@@ -50,9 +55,9 @@ function makeClient(): OpenSandboxClientLike {
     }),
     getSandbox: vi.fn().mockResolvedValue(null),
     pauseSandbox: vi.fn().mockResolvedValue(undefined),
-    resumeSandbox: vi.fn().mockImplementation(async (id: string) =>
-      makeSandboxMock(id)
-    ),
+    resumeSandbox: vi
+      .fn()
+      .mockImplementation(async (id: string) => makeSandboxMock(id)),
     deleteSandbox: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -73,7 +78,9 @@ describe("OpenSandboxEngine", () => {
       })
     );
 
-    const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    const createdSandbox = await (
+      client.createSandbox as ReturnType<typeof vi.fn>
+    ).mock.results[0].value;
     expect(createdSandbox.runCommand).not.toHaveBeenCalled();
 
     await engine.startWorker(result, makeInput());
@@ -90,15 +97,17 @@ describe("OpenSandboxEngine", () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    await engine.getOrCreate(makeInput({
-      env: {
-        AGEWORK_INTERNAL_TRANSPORT: "http",
-        AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
-      },
-      metadata: {
-        "agework.io/workspace-id": "ws-1",
-      },
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        env: {
+          AGEWORK_INTERNAL_TRANSPORT: "http",
+          AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
+        },
+        metadata: {
+          "agework.io/workspace-id": "ws-1",
+        },
+      })
+    );
 
     expect(client.createSandbox).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -117,12 +126,14 @@ describe("OpenSandboxEngine", () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    await engine.getOrCreate(makeInput({
-      placement: makePlacement({
-        workspaceHostPath: "/tmp/workspace",
-        workspaceMountPath: "/workspace",
-      }),
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        placement: makePlacement({
+          workspaceHostPath: "/tmp/workspace",
+          workspaceMountPath: "/workspace",
+        }),
+      })
+    );
 
     expect(client.createSandbox).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -136,10 +147,12 @@ describe("OpenSandboxEngine", () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    await engine.getOrCreate(makeInput({
-      runtimeLogHostPath: "/tmp/agework-logs/runtime",
-      runtimeLogMountPath: "/home/agework/.agework/logs/runtime",
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        runtimeLogHostPath: "/tmp/agework-logs/runtime",
+        runtimeLogMountPath: "/home/agework/.agework/logs/runtime",
+      })
+    );
 
     expect(client.createSandbox).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -161,7 +174,9 @@ describe("OpenSandboxEngine", () => {
     const runtime = await engine.getOrCreate(input);
     await engine.startWorker(runtime, input);
 
-    const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    const createdSandbox = await (
+      client.createSandbox as ReturnType<typeof vi.fn>
+    ).mock.results[0].value;
     expect(createdSandbox.runCommand).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -181,7 +196,9 @@ describe("OpenSandboxEngine", () => {
     const runtime = await engine.getOrCreate(input);
     await engine.startWorker(runtime, input);
 
-    const createdSandbox = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value;
+    const createdSandbox = await (
+      client.createSandbox as ReturnType<typeof vi.fn>
+    ).mock.results[0].value;
     expect(createdSandbox.runCommand).toHaveBeenCalledWith(
       expect.any(String),
       expect.objectContaining({
@@ -198,13 +215,21 @@ describe("OpenSandboxEngine", () => {
 
     const input = makeInput();
     const runtime = await engine.getOrCreate(input);
-    const runCommandCallsBefore = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value
-      .then((s: OpenSandboxSandboxLike) => (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length);
+    const runCommandCallsBefore = await (
+      client.createSandbox as ReturnType<typeof vi.fn>
+    ).mock.results[0].value.then(
+      (s: OpenSandboxSandboxLike) =>
+        (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length
+    );
 
     await engine.startWorker(runtime, input);
 
-    const runCommandCallsAfter = await (client.createSandbox as ReturnType<typeof vi.fn>).mock.results[0]!.value
-      .then((s: OpenSandboxSandboxLike) => (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length);
+    const runCommandCallsAfter = await (
+      client.createSandbox as ReturnType<typeof vi.fn>
+    ).mock.results[0].value.then(
+      (s: OpenSandboxSandboxLike) =>
+        (s.runCommand as ReturnType<typeof vi.fn>).mock.calls.length
+    );
     expect(runCommandCallsBefore).toBe(0);
     expect(runCommandCallsAfter).toBe(1);
   });
@@ -222,7 +247,7 @@ describe("OpenSandboxEngine", () => {
     const client = makeClient();
     const engine = new OpenSandboxEngine(client);
 
-    const runtime = await engine.resume!("sandbox-abc", makeInput());
+    const runtime = await engine.resume("sandbox-abc", makeInput());
 
     expect(client.resumeSandbox).toHaveBeenCalledWith("sandbox-abc");
     expect(runtime).toEqual({
@@ -256,7 +281,7 @@ describe("OpenSandboxEngine", () => {
     (client.getSandbox as ReturnType<typeof vi.fn>).mockResolvedValue(sandbox);
     const engine = new OpenSandboxEngine(client);
 
-    const healthy = await engine.isHealthy!("sandbox-1");
+    const healthy = await engine.isHealthy("sandbox-1");
     expect(healthy).toBe(true);
   });
 
@@ -265,7 +290,7 @@ describe("OpenSandboxEngine", () => {
     (client.getSandbox as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const engine = new OpenSandboxEngine(client);
 
-    const healthy = await engine.isHealthy!("sandbox-gone");
+    const healthy = await engine.isHealthy("sandbox-gone");
     expect(healthy).toBe(false);
   });
 });

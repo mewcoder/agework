@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { NotFoundException } from "@nestjs/common";
 import { AdminRuntimeController } from "./admin-runtime.controller";
 
-function makeController(overrides: {
-  configService?: Record<string, unknown>;
-  prisma?: Record<string, unknown>;
-  runtimeService?: Record<string, unknown>;
-} = {}) {
+function makeController(
+  overrides: {
+    configService?: Record<string, unknown>;
+    prisma?: Record<string, unknown>;
+    runtimeService?: Record<string, unknown>;
+  } = {}
+) {
   return new AdminRuntimeController(
     {
       getDefaultRuntimeType: vi.fn().mockReturnValue("sandbox"),

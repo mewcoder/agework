@@ -80,15 +80,18 @@ function makeProvider(engineOverride?: SandboxEngine) {
     access as never,
     controlQueue as never
   );
-  const provider = new SandboxRuntimeProvider(
-    runtimeInstances,
-    workerSessions
-  );
+  const provider = new SandboxRuntimeProvider(runtimeInstances, workerSessions);
   provider.setRunEventReceiver(eventProcessor as never);
 
   return {
-    provider, engine, access, controlQueue, configStore, eventProcessor,
-    config, workspaceRuntimeService,
+    provider,
+    engine,
+    access,
+    controlQueue,
+    configStore,
+    eventProcessor,
+    config,
+    workspaceRuntimeService,
   };
 }
 
@@ -99,10 +102,15 @@ const baseRun = {
   runtimePath: "/workspace",
   env: {},
   input: {},
-  agentProviderConfig: { agentType: "claude" as const, source: "custom" as const },
+  agentProviderConfig: {
+    agentType: "claude" as const,
+    source: "custom" as const,
+  },
 };
 
-function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement {
+function makePlacement(
+  overrides?: Partial<RuntimePlacement>
+): RuntimePlacement {
   return {
     runtimeType: "sandbox",
     userId: "user-1",
@@ -110,7 +118,7 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
     hostPath: "/tmp/workspace",
     runtimePath: "/workspace",
     sandbox: {
-      isolationScope: "workspace" as IsolationScope,
+      isolationScope: "workspace",
       mountTarget: "/workspace",
       sandboxEngineType: "docker",
     },
@@ -121,7 +129,11 @@ function makePlacement(overrides?: Partial<RuntimePlacement>): RuntimePlacement 
 function makeRuntimeTarget(
   overrides: Partial<RuntimeTarget> = {}
 ): RuntimeTarget {
-  return { ...makePlacement(), scopeKey: "ws-1", ...overrides } as RuntimeTarget;
+  return {
+    ...makePlacement(),
+    scopeKey: "ws-1",
+    ...overrides,
+  } as RuntimeTarget;
 }
 
 function startProvider(
@@ -133,7 +145,8 @@ function startProvider(
     runtimeTarget: {
       ...placement,
       scopeKey:
-        (placement as { sandbox: { isolationScope: string } }).sandbox.isolationScope === "user"
+        (placement as { sandbox: { isolationScope: string } }).sandbox
+          .isolationScope === "user"
           ? placement.userId
           : placement.workspaceId,
     },
@@ -144,8 +157,12 @@ function startProvider(
 // ── Provider contract tests ─────────────────────────────────────────
 
 describe("SandboxRuntimeProvider — provider contracts", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("startWorkerExecution fails fast when the runtime resource is not sandbox", () => {
     const { provider, engine } = makeProvider();
@@ -165,8 +182,12 @@ describe("SandboxRuntimeProvider — provider contracts", () => {
 // ── Workspace-scoped tests ───────────────────────────────────────────
 
 describe("SandboxRuntimeProvider — workspace scope", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("starts a sandbox for the first run and returns handle with runtimeType=sandbox", async () => {
     const { provider } = makeProvider();
@@ -228,7 +249,10 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(configStore.register).toHaveBeenCalledWith("run-1", expect.anything());
+    expect(configStore.register).toHaveBeenCalledWith(
+      "run-1",
+      expect.anything()
+    );
     expect(controlQueue.pushForWorkspace).toHaveBeenCalledWith(
       "ws-1",
       expect.objectContaining({
@@ -247,7 +271,9 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conversation-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conversation-2",
     });
     await vi.runOnlyPendingTimersAsync();
 
@@ -302,7 +328,10 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     const engine = makeMockEngine("docker");
     let resolveGetOrCreate: (value: SandboxRuntime) => void;
     (engine.getOrCreate as ReturnType<typeof vi.fn>).mockImplementation(
-      () => new Promise<SandboxRuntime>((resolve) => { resolveGetOrCreate = resolve; })
+      () =>
+        new Promise<SandboxRuntime>((resolve) => {
+          resolveGetOrCreate = resolve;
+        })
     );
     const { provider, eventProcessor } = makeProvider(engine);
 
@@ -374,11 +403,16 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     await vi.advanceTimersByTimeAsync(65_000);
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conv-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conv-2",
     });
     await vi.runOnlyPendingTimersAsync();
 
-    expect(engine.resume).toHaveBeenCalledWith("docker-resource-1", expect.anything());
+    expect(engine.resume).toHaveBeenCalledWith(
+      "docker-resource-1",
+      expect.anything()
+    );
     expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
   });
 
@@ -413,8 +447,12 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 // ── User-scoped tests ────────────────────────────────────────────────
 
 describe("SandboxRuntimeProvider — user scope", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   const userPlacement = makePlacement({
     userId: "user-1",
@@ -432,8 +470,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
 
     startProvider(
       provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" } as never,
-      userPlacement as never
+      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
+      userPlacement
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -444,8 +482,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
         runId: "run-2",
         conversationId: "conv-2",
         workspaceId: "ws-2",
-      } as never,
-      { ...userPlacement, workspaceId: "ws-2" } as never
+      },
+      { ...userPlacement, workspaceId: "ws-2" }
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -458,8 +496,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
 
     startProvider(
       provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" } as never,
-      userPlacement as never
+      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
+      userPlacement
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -470,8 +508,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
         runId: "run-2",
         conversationId: "conv-2",
         workspaceId: "ws-2",
-      } as never,
-      { ...userPlacement, userId: "user-2", workspaceId: "ws-2" } as never
+      },
+      { ...userPlacement, userId: "user-2", workspaceId: "ws-2" }
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -483,8 +521,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
 
     startProvider(
       provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" } as never,
-      userPlacement as never
+      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
+      userPlacement
     );
     await vi.runOnlyPendingTimersAsync();
 
@@ -499,8 +537,8 @@ describe("SandboxRuntimeProvider — user scope", () => {
 
     startProvider(
       provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" } as never,
-      userPlacement as never
+      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
+      userPlacement
     );
     await vi.runOnlyPendingTimersAsync();
     provider.shutdownRuntimeInstance("user-1");
@@ -517,8 +555,12 @@ describe("SandboxRuntimeProvider — user scope", () => {
 // ── Idle stop tests ──────────────────────────────────────────────────
 
 describe("SandboxRuntimeProvider — idle stop", () => {
-  beforeEach(() => { vi.useFakeTimers(); });
-  afterEach(() => { vi.useRealTimers(); });
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("starts idle timer when all runs finish (cleanup)", async () => {
     const { provider, engine, config } = makeProvider();
@@ -544,7 +586,9 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     vi.advanceTimersByTime(5_000);
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conv-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conv-2",
     });
     await vi.runOnlyPendingTimersAsync();
 
@@ -553,7 +597,8 @@ describe("SandboxRuntimeProvider — idle stop", () => {
   });
 
   it("after idle timeout, marks resource stopped and resets runtimeInstanceId without revoking access", async () => {
-    const { provider, config, workspaceRuntimeService, access } = makeProvider();
+    const { provider, config, workspaceRuntimeService, access } =
+      makeProvider();
     config.getIdleTimeoutSeconds.mockReturnValue(5);
 
     startProvider(provider);
@@ -580,15 +625,24 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     provider.cleanup("run-1");
     await vi.advanceTimersByTimeAsync(5_500);
 
-    const getOrCreateCallsBefore = (engine.getOrCreate as ReturnType<typeof vi.fn>).mock.calls.length;
+    const getOrCreateCallsBefore = (
+      engine.getOrCreate as ReturnType<typeof vi.fn>
+    ).mock.calls.length;
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conv-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conv-2",
     });
     await vi.runOnlyPendingTimersAsync();
 
-    expect(engine.resume).toHaveBeenCalledWith("docker-resource-1", expect.anything());
-    const getOrCreateCallsAfter = (engine.getOrCreate as ReturnType<typeof vi.fn>).mock.calls.length;
+    expect(engine.resume).toHaveBeenCalledWith(
+      "docker-resource-1",
+      expect.anything()
+    );
+    const getOrCreateCallsAfter = (
+      engine.getOrCreate as ReturnType<typeof vi.fn>
+    ).mock.calls.length;
     expect(getOrCreateCallsAfter).toBe(getOrCreateCallsBefore);
   });
 
@@ -602,14 +656,21 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     provider.cleanup("run-1");
     await vi.advanceTimersByTimeAsync(5_500);
 
-    (engine.resume as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("resume failed"));
+    (engine.resume as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("resume failed")
+    );
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conv-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conv-2",
     });
     await vi.runOnlyPendingTimersAsync();
 
-    expect(engine.resume).toHaveBeenCalledWith("docker-resource-1", expect.anything());
+    expect(engine.resume).toHaveBeenCalledWith(
+      "docker-resource-1",
+      expect.anything()
+    );
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
   });
 
@@ -621,7 +682,9 @@ describe("SandboxRuntimeProvider — idle stop", () => {
     await vi.runOnlyPendingTimersAsync();
 
     startProvider(provider, {
-      ...baseRun, runId: "run-2", conversationId: "conv-2",
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conv-2",
     });
     await vi.runOnlyPendingTimersAsync();
 

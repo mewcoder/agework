@@ -9,7 +9,9 @@ vi.mock("node:child_process", () => ({
 
 const mockExecFile = vi.mocked(execFile);
 
-function makePlacement(overrides?: Partial<SandboxPlacement>): SandboxPlacement {
+function makePlacement(
+  overrides?: Partial<SandboxPlacement>
+): SandboxPlacement {
   return {
     isolationScope: "workspace",
     scopeKey: "ws-1",
@@ -75,12 +77,14 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
     }) as any);
 
-    await engine.getOrCreate(makeInput({
-      metadata: {
-        "agework.io/runtime-scope-key": "ws-1",
-        "agework.io/isolation-scope": "workspace",
-      },
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        metadata: {
+          "agework.io/runtime-scope-key": "ws-1",
+          "agework.io/isolation-scope": "workspace",
+        },
+      })
+    );
 
     const runCall = mockExecFile.mock.calls.find(
       (c) => (c[1] as string[])[0] === "run"
@@ -97,13 +101,15 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
     }) as any);
 
-    await engine.getOrCreate(makeInput({
-      env: {
-        AGEWORK_INTERNAL_TRANSPORT: "http",
-        AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: "test-key",
-        AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
-      },
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        env: {
+          AGEWORK_INTERNAL_TRANSPORT: "http",
+          AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: "test-key",
+          AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
+        },
+      })
+    );
 
     const runCall = mockExecFile.mock.calls.find(
       (c) => (c[1] as string[])[0] === "run"
@@ -119,10 +125,12 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
     }) as any);
 
-    await engine.getOrCreate(makeInput({
-      runtimeLogHostPath: "/tmp/agework-logs/runtime",
-      runtimeLogMountPath: "/home/agework/.agework/logs/runtime",
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        runtimeLogHostPath: "/tmp/agework-logs/runtime",
+        runtimeLogMountPath: "/home/agework/.agework/logs/runtime",
+      })
+    );
 
     const runCall = mockExecFile.mock.calls.find(
       (c) => (c[1] as string[])[0] === "run"
@@ -301,7 +309,7 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "", stderr: "" });
     }) as any);
 
-    const result = await engine.resume!("container-abc", makeInput());
+    const result = await engine.resume("container-abc", makeInput());
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "docker",
@@ -318,7 +326,11 @@ describe("DockerSandboxEngine", () => {
   it("startWorker is a no-op for Docker", async () => {
     const engine = new DockerSandboxEngine();
     await engine.startWorker(
-      { engineType: "docker", runtimeInstanceId: "container-abc", workspaceMountPath: "/workspace" },
+      {
+        engineType: "docker",
+        runtimeInstanceId: "container-abc",
+        workspaceMountPath: "/workspace",
+      },
       makeInput()
     );
   });
@@ -338,12 +350,14 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
     }) as any);
 
-    await engine.getOrCreate(makeInput({
-      placement: makePlacement({
-        workspaceHostPath: "/tmp/workspace",
-        workspaceMountPath: "/workspace",
-      }),
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        placement: makePlacement({
+          workspaceHostPath: "/tmp/workspace",
+          workspaceMountPath: "/workspace",
+        }),
+      })
+    );
 
     const runCall = mockExecFile.mock.calls.find(
       (c) => (c[1] as string[])[0] === "run"
@@ -360,9 +374,11 @@ describe("DockerSandboxEngine", () => {
       args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
     }) as any);
 
-    await engine.getOrCreate(makeInput({
-      placement: makePlacement({ workspaceHostPath: "" }),
-    }));
+    await engine.getOrCreate(
+      makeInput({
+        placement: makePlacement({ workspaceHostPath: "" }),
+      })
+    );
 
     const runCall = mockExecFile.mock.calls.find(
       (c) => (c[1] as string[])[0] === "run"

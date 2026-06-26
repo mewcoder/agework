@@ -19,7 +19,12 @@ describe("CreateModelProviderDto", () => {
     const result = await transformBody(CreateModelProviderDto, {
       agentType: "claude",
       name: "My Config",
-      providerConfig: { baseUrl: "https://example.com", apiKey: "sk-xxx", models: ["claude-test"], extraConfig: {} },
+      providerConfig: {
+        baseUrl: "https://example.com",
+        apiKey: "sk-xxx",
+        models: ["claude-test"],
+        extraConfig: {},
+      },
     });
     expect(result).toBeInstanceOf(CreateModelProviderDto);
     expect(result.providerConfig).toEqual({
@@ -56,7 +61,12 @@ describe("CreateModelProviderDto", () => {
       transformBody(CreateModelProviderDto, {
         agentType: "claude",
         name: "My Config",
-        providerConfig: { baseUrl: "https://example.com", apiKey: "sk-xxx", models: ["claude-test"], extraConfig: { FOO: 123 } },
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-xxx",
+          models: ["claude-test"],
+          extraConfig: { FOO: 123 },
+        },
       })
     ).rejects.toThrow(BadRequestException);
   });
@@ -76,7 +86,12 @@ describe("CreateModelProviderDto", () => {
       transformBody(CreateModelProviderDto, {
         agentType: "claude",
         name: "My Config",
-        providerConfig: { baseUrl: "https://example.com", apiKey: "sk-xxx", models: [], extraConfig: {} },
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-xxx",
+          models: [],
+          extraConfig: {},
+        },
       })
     ).rejects.toThrow(BadRequestException);
   });
@@ -97,14 +112,27 @@ describe("UpdateModelProviderDto", () => {
     const result = await transformBody(UpdateModelProviderDto, {
       id: "mc-1",
       name: "Renamed",
-      providerConfig: { baseUrl: "https://example.com", apiKey: "sk-xxx", models: ["m"], extraConfig: {} },
+      providerConfig: {
+        baseUrl: "https://example.com",
+        apiKey: "sk-xxx",
+        models: ["m"],
+        extraConfig: {},
+      },
     });
     expect(result.id).toBe("mc-1");
   });
 
   it("rejects a payload missing id", async () => {
     await expect(
-      transformBody(UpdateModelProviderDto, { name: "Renamed", providerConfig: { baseUrl: "https://example.com", apiKey: "sk-xxx", models: ["m"], extraConfig: {} } })
+      transformBody(UpdateModelProviderDto, {
+        name: "Renamed",
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-xxx",
+          models: ["m"],
+          extraConfig: {},
+        },
+      })
     ).rejects.toThrow(BadRequestException);
   });
 });

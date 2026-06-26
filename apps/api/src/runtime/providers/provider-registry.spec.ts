@@ -10,7 +10,9 @@ describe("RuntimeProviderRegistry", () => {
 
   beforeEach(() => {
     mockLocalProvider = { type: "local" as const } as LocalRuntimeProvider;
-    mockSandboxProvider = { type: "sandbox" as const } as SandboxRuntimeProvider;
+    mockSandboxProvider = {
+      type: "sandbox" as const,
+    } as SandboxRuntimeProvider;
     registry = new RuntimeProviderRegistry([
       mockLocalProvider,
       mockSandboxProvider,

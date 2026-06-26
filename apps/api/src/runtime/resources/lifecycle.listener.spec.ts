@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle.listener";
 import { WorkspaceDeletedEvent } from "../../workspaces/workspace.events";
-import {
-  UserDeletedEvent,
-  UserDisabledEvent,
-} from "../../users/user.events";
+import { UserDeletedEvent, UserDisabledEvent } from "../../users/user.events";
 
 describe("RuntimeInstanceLifecycleListener", () => {
   it("shuts down the workspace runtime resource on WorkspaceDeletedEvent", async () => {
@@ -19,15 +16,13 @@ describe("RuntimeInstanceLifecycleListener", () => {
   });
 
   it("swallows shutdown failures so the source operation is unaffected", async () => {
-    const shutdownForWorkspace = vi
-      .fn()
-      .mockRejectedValue(new Error("boom"));
+    const shutdownForWorkspace = vi.fn().mockRejectedValue(new Error("boom"));
     const listener = new RuntimeInstanceLifecycleListener({
       shutdownForWorkspace,
     } as never);
 
     await expect(
-      listener.onWorkspaceDeleted(new WorkspaceDeletedEvent("ws-1")),
+      listener.onWorkspaceDeleted(new WorkspaceDeletedEvent("ws-1"))
     ).resolves.toBeUndefined();
   });
 
@@ -51,7 +46,7 @@ describe("RuntimeInstanceLifecycleListener", () => {
     } as never);
 
     await expect(
-      listener.onUserResourcesReleased(new UserDeletedEvent("user-1")),
+      listener.onUserResourcesReleased(new UserDeletedEvent("user-1"))
     ).resolves.toBeUndefined();
   });
 });

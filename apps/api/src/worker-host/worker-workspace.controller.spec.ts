@@ -13,9 +13,11 @@ describe("WorkerWorkspaceController", () => {
   describe("pollWorkspaceControls()", () => {
     it("polls the control queue by workspaceId and afterSeq", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
-        pollByWorkspace: vi.fn().mockReturnValue([
-          { seq: 1, runId: "run-1", payload: { type: "cancel" } },
-        ]),
+        pollByWorkspace: vi
+          .fn()
+          .mockReturnValue([
+            { seq: 1, runId: "run-1", payload: { type: "cancel" } },
+          ]),
       };
 
       const controller = new WorkerWorkspaceController(
@@ -48,9 +50,11 @@ describe("WorkerWorkspaceController", () => {
 
     it("long-polls when waitMs is provided", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
-        waitForWorkspace: vi.fn().mockResolvedValue([
-          { seq: 2, runId: "run-2", payload: { type: "user_message" } },
-        ]),
+        waitForWorkspace: vi
+          .fn()
+          .mockResolvedValue([
+            { seq: 2, runId: "run-2", payload: { type: "user_message" } },
+          ]),
       };
 
       const controller = new WorkerWorkspaceController(
@@ -58,9 +62,17 @@ describe("WorkerWorkspaceController", () => {
         makeHeartbeatRegistry()
       );
 
-      const result = await controller.pollWorkspaceControls("ws-1", "1", "25000");
+      const result = await controller.pollWorkspaceControls(
+        "ws-1",
+        "1",
+        "25000"
+      );
 
-      expect(controlQueue.waitForWorkspace).toHaveBeenCalledWith("ws-1", 1, 25000);
+      expect(controlQueue.waitForWorkspace).toHaveBeenCalledWith(
+        "ws-1",
+        1,
+        25000
+      );
       expect(result.controls).toHaveLength(1);
     });
   });
@@ -77,7 +89,9 @@ describe("WorkerWorkspaceController", () => {
 
       const result = controller.heartbeat("ws-1");
 
-      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith("ws-1");
+      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith(
+        "ws-1"
+      );
       expect(result).toEqual({ ok: true });
     });
   });

@@ -64,7 +64,9 @@ describe("HeartbeatWatchdog", () => {
 
 describe("resolveDockerApiBase", () => {
   it("defaults to host.docker.internal with the api base path included", () => {
-    expect(resolveDockerApiBase({})).toBe("http://host.docker.internal:3000/api/v1");
+    expect(resolveDockerApiBase({})).toBe(
+      "http://host.docker.internal:3000/api/v1"
+    );
   });
 
   it("includes AGEWORK_CONTEXT in the path", () => {
@@ -78,6 +80,4 @@ describe("resolveDockerApiBase", () => {
       "http://host.docker.internal:4000/api/v1"
     );
   });
-
-
 });

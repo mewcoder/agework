@@ -30,7 +30,9 @@ function route(
   controller: ControllerClass,
   methodName: string
 ): { path: string; method: RequestMethod } {
-  const handler = controller.prototype[methodName] as (...args: never[]) => unknown;
+  const handler = controller.prototype[methodName] as (
+    ...args: never[]
+  ) => unknown;
   return {
     path: Reflect.getMetadata(PATH_METADATA, handler),
     method: Reflect.getMetadata(METHOD_METADATA, handler),
@@ -55,7 +57,12 @@ describe("external API route convention", () => {
     expectRoute(ConversationController, "list", "get", "list");
     expectRoute(ConversationController, "create", "post", "create");
     expectRoute(ConversationController, "findOne", "get", "query");
-    expectRoute(ConversationController, "queryStatuses", "post", "statuses/query");
+    expectRoute(
+      ConversationController,
+      "queryStatuses",
+      "post",
+      "statuses/query"
+    );
     expectRoute(ConversationController, "update", "post", "update");
     expectRoute(ConversationController, "archive", "post", "archive");
     expectRoute(ConversationController, "unarchive", "post", "unarchive");
@@ -78,7 +85,12 @@ describe("external API route convention", () => {
     expectRoute(AdminUserController, "create", "post", "create");
     expectRoute(AdminUserController, "approve", "post", "approve");
     expectRoute(AdminUserController, "update", "post", "update");
-    expectRoute(AdminUserController, "updatePassword", "post", "update-password");
+    expectRoute(
+      AdminUserController,
+      "updatePassword",
+      "post",
+      "update-password"
+    );
     expectRoute(AdminUserController, "remove", "post", "remove");
   });
 
@@ -88,11 +100,18 @@ describe("external API route convention", () => {
     expectRoute(ModelProviderController, "systemInfo", "get", "system-info");
     expectRoute(ModelProviderController, "ping", "post", "ping");
 
-    expect(controllerPath(AdminModelProviderController)).toBe("admin/model-providers");
+    expect(controllerPath(AdminModelProviderController)).toBe(
+      "admin/model-providers"
+    );
     expectRoute(AdminModelProviderController, "list", "get", "list");
     expectRoute(AdminModelProviderController, "create", "post", "create");
     expectRoute(AdminModelProviderController, "update", "post", "update");
-    expectRoute(AdminModelProviderController, "setEnabled", "post", "set-enabled");
+    expectRoute(
+      AdminModelProviderController,
+      "setEnabled",
+      "post",
+      "set-enabled"
+    );
     expectRoute(AdminModelProviderController, "remove", "post", "remove");
     expectRoute(AdminModelProviderController, "ping", "post", "ping");
   });
@@ -130,7 +149,12 @@ describe("external API route convention", () => {
     expectRoute(AdminRuntimeController, "getRuntimePolicy", "get", "policy");
     expectRoute(AdminRuntimeController, "getRuntimeStats", "get", "stats");
     expectRoute(AdminRuntimeController, "listResources", "get", "resources");
-    expectRoute(AdminRuntimeController, "stopResource", "post", "resources/stop");
+    expectRoute(
+      AdminRuntimeController,
+      "stopResource",
+      "post",
+      "resources/stop"
+    );
 
     expect(controllerPath(AdminWorkspaceController)).toBe("admin/workspaces");
     expectRoute(AdminWorkspaceController, "listAll", "get", "all");

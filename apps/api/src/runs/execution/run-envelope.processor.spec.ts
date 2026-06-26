@@ -36,7 +36,7 @@ describe("RunEnvelopeProcessor", () => {
       writeAgui: vi.fn(),
     };
     mockRunEventRecorder = {
-      append: vi.fn().mockResolvedValue({} as never),
+      append: vi.fn().mockResolvedValue({}),
       forgetRun: vi.fn(),
     };
 
@@ -105,7 +105,10 @@ describe("RunEnvelopeProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    await runEventProcessor.forceErrorStatus("run-1", "worker heartbeat timeout");
+    await runEventProcessor.forceErrorStatus(
+      "run-1",
+      "worker heartbeat timeout"
+    );
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
@@ -172,7 +175,12 @@ describe("RunEnvelopeProcessor", () => {
       agentType: "claude",
     };
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -210,7 +218,12 @@ describe("RunEnvelopeProcessor", () => {
   it("should not forward MESSAGES_SNAPSHOT events to the SSE response", async () => {
     const res = { write: vi.fn(), writableEnded: false } as any;
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -230,16 +243,21 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     expect(res.write).not.toHaveBeenCalled();
-    expect(mockRawEventLogWriter.writeAgui).toHaveBeenCalledWith(
-      undefined,
-      { type: "MESSAGES_SNAPSHOT", messages: [] }
-    );
+    expect(mockRawEventLogWriter.writeAgui).toHaveBeenCalledWith(undefined, {
+      type: "MESSAGES_SNAPSHOT",
+      messages: [],
+    });
   });
 
   it("streamingSnapshot=true 推送累积快照而非原始事件", async () => {
     const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -252,25 +270,66 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     // RUN_STARTED + 文本开始 + 内容 + 结束
-    await runEventProcessor.publish({ runId: "run-1", seq: 1, type: "agui.event", payload: { type: "RUN_STARTED", runId: "run-1" }, ts: "" });
-    await runEventProcessor.publish({ runId: "run-1", seq: 2, type: "agui.event", payload: { type: "TEXT_MESSAGE_START", messageId: "m-1", role: "assistant" }, ts: "" });
-    await runEventProcessor.publish({ runId: "run-1", seq: 3, type: "agui.event", payload: { type: "TEXT_MESSAGE_CONTENT", messageId: "m-1", delta: "hello" }, ts: "" });
-    await runEventProcessor.publish({ runId: "run-1", seq: 4, type: "agui.event", payload: { type: "TEXT_MESSAGE_END", messageId: "m-1" }, ts: "" });
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event",
+      payload: { type: "RUN_STARTED", runId: "run-1" },
+      ts: "",
+    });
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 2,
+      type: "agui.event",
+      payload: {
+        type: "TEXT_MESSAGE_START",
+        messageId: "m-1",
+        role: "assistant",
+      },
+      ts: "",
+    });
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 3,
+      type: "agui.event",
+      payload: {
+        type: "TEXT_MESSAGE_CONTENT",
+        messageId: "m-1",
+        delta: "hello",
+      },
+      ts: "",
+    });
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 4,
+      type: "agui.event",
+      payload: { type: "TEXT_MESSAGE_END", messageId: "m-1" },
+      ts: "",
+    });
 
     // TEXT_MESSAGE_END 是事件边界，应推送一个含 "hello" 文本的累积快照
-    const lastWrite = (res.write as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
+    const lastWrite = (res.write as ReturnType<typeof vi.fn>).mock.calls.at(
+      -1
+    )?.[0] as string;
     expect(lastWrite).toContain("hello");
     expect(lastWrite.startsWith("data:")).toBe(true);
     const parsed = JSON.parse(lastWrite.slice(6).trim());
     expect(parsed.content).toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: "text", text: "hello" })])
+      expect.arrayContaining([
+        expect.objectContaining({ type: "text", text: "hello" }),
+      ])
     );
   });
 
   it("streamingSnapshot=false 走原始事件转发（回归）", async () => {
     const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
     runRegistry.register("run-2", {
-      runtimeHandle: { runId: "run-2", runtimeType: "local", runtimeInstanceId: "2:token", conversationId: "conversation-2" },
+      runtimeHandle: {
+        runId: "run-2",
+        runtimeType: "local",
+        runtimeInstanceId: "2:token",
+        conversationId: "conversation-2",
+      },
       runId: "run-2",
       conversationId: "conversation-2",
       workspaceId: "ws-1",
@@ -283,18 +342,28 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     await runEventProcessor.publish({
-      runId: "run-2", seq: 1, type: "agui.event",
-      payload: { type: "RUN_STARTED", runId: "run-2" }, ts: "",
+      runId: "run-2",
+      seq: 1,
+      type: "agui.event",
+      payload: { type: "RUN_STARTED", runId: "run-2" },
+      ts: "",
     });
 
     // 原始事件直接 JSON 转发，不是快照形态
-    const written = (res.write as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0] as string;
+    const written = (res.write as ReturnType<typeof vi.fn>).mock.calls.at(
+      -1
+    )?.[0] as string;
     expect(written).toContain('"type":"RUN_STARTED"');
   });
 
   it("records failed tool results as tool.failed facts", async () => {
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",
@@ -349,7 +418,12 @@ describe("RunEnvelopeProcessor", () => {
       agentType: "claude",
     };
     runRegistry.register("run-1", {
-      runtimeHandle: { runId: "run-1", runtimeType: "local", runtimeInstanceId: "1:token", conversationId: "conversation-1" },
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
       runId: "run-1",
       conversationId: "conversation-1",
       workspaceId: "ws-1",

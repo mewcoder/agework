@@ -46,8 +46,14 @@ describe("resolveRuntimeTarget", () => {
     });
 
     it("different workspaces of the same user get different runtimePaths, same scopeKey", () => {
-      const a = resolve({ workspaceId: "ws-a", workspaceRootPath: "/data/users/user-1/ws-a" });
-      const b = resolve({ workspaceId: "ws-b", workspaceRootPath: "/data/users/user-1/ws-b" });
+      const a = resolve({
+        workspaceId: "ws-a",
+        workspaceRootPath: "/data/users/user-1/ws-a",
+      });
+      const b = resolve({
+        workspaceId: "ws-b",
+        workspaceRootPath: "/data/users/user-1/ws-b",
+      });
       expect(a.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-a`);
       expect(b.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-b`);
       expect(a.scopeKey).toBe(b.scopeKey); // 同用户共享桶
@@ -80,7 +86,9 @@ describe("resolveRuntimeTarget", () => {
 
   describe("validation", () => {
     it("throws when workspaceRootPath is outside userWorkspaceRootPath (user isolation)", () => {
-      expect(() => resolve({ workspaceRootPath: "/data/users/user-2/ws-1" })).toThrow();
+      expect(() =>
+        resolve({ workspaceRootPath: "/data/users/user-2/ws-1" })
+      ).toThrow();
     });
 
     it("throws when workspaceRootPath is relative", () => {
@@ -102,7 +110,7 @@ describe("runtimeScopeKey", () => {
   });
 
   it("throws on an unknown scope", () => {
-    expect(() => runtimeScopeKey("nope" as IsolationScope, "u-1", "ws-1")).toThrow(
+    expect(() => runtimeScopeKey("nope", "u-1", "ws-1")).toThrow(
       "Unknown runtime isolation scope: nope"
     );
   });

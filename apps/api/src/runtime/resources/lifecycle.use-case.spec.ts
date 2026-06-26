@@ -55,7 +55,9 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
           }),
         },
       });
-      expect(deleteMany).toHaveBeenCalledWith({ where: { workspaceId: "ws-1" } });
+      expect(deleteMany).toHaveBeenCalledWith({
+        where: { workspaceId: "ws-1" },
+      });
     });
 
     it("does not stop a shared user-isolated resource when one workspace is deleted", async () => {
@@ -80,7 +82,9 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
       await service.shutdownForWorkspace("ws-1");
 
       expect(registry.resolve).not.toHaveBeenCalled();
-      expect(deleteMany).toHaveBeenCalledWith({ where: { workspaceId: "ws-1" } });
+      expect(deleteMany).toHaveBeenCalledWith({
+        where: { workspaceId: "ws-1" },
+      });
     });
   });
 
@@ -137,10 +141,12 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
   });
 
   it("logs a warning and continues when a provider throws", async () => {
-    const findMany = vi.fn().mockResolvedValue([
-      makeResource({ id: "rr-1", ownerWorkspaceId: "ws-1" }),
-      makeResource({ id: "rr-2", ownerWorkspaceId: "ws-2" }),
-    ]);
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([
+        makeResource({ id: "rr-1", ownerWorkspaceId: "ws-1" }),
+        makeResource({ id: "rr-2", ownerWorkspaceId: "ws-2" }),
+      ]);
     const shutdownRuntimeInstance = vi
       .fn()
       .mockImplementationOnce(() => {

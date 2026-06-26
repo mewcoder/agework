@@ -46,7 +46,11 @@ function makeMocks() {
 
 describe("WorkspaceService", () => {
   it("creates a directory for the workspace and maps directory.rootPath back to rootPath", async () => {
-    const expectedRootPath = join("/tmp/workspace", "admin-1", "ws260614113047");
+    const expectedRootPath = join(
+      "/tmp/workspace",
+      "admin-1",
+      "ws260614113047"
+    );
 
     const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
       Promise.resolve({
@@ -72,7 +76,9 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
       } as never,
       {
         getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
@@ -141,7 +147,9 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
         workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
       } as never,
       {
@@ -205,7 +213,9 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
         workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
       } as never,
       {
@@ -238,7 +248,10 @@ describe("WorkspaceService", () => {
   });
 
   it("places sandbox workspace-isolated directories outside the user root", async () => {
-    const expectedRootPath = join("/tmp/agework/workspaces", "admin-1_ws260614113047");
+    const expectedRootPath = join(
+      "/tmp/agework/workspaces",
+      "admin-1_ws260614113047"
+    );
     const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
       Promise.resolve({
         ...args.data,
@@ -263,7 +276,9 @@ describe("WorkspaceService", () => {
     const service = new WorkspaceService(
       {
         $transaction: transaction,
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
       } as never,
       {
         getWorkspace: () => "/tmp/agework/workspaces",
@@ -310,7 +325,9 @@ describe("WorkspaceService", () => {
   it("rejects workspace-isolated custom directories inside the user root", async () => {
     const service = new WorkspaceService(
       {
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
@@ -343,7 +360,9 @@ describe("WorkspaceService", () => {
   it("rejects sandbox custom directories when user isolation is explicitly selected", async () => {
     const service = new WorkspaceService(
       {
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
@@ -375,7 +394,9 @@ describe("WorkspaceService", () => {
   it("rejects sandbox custom directories when workspace isolation is not allowed", async () => {
     const service = new WorkspaceService(
       {
-        user: { findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }) },
+        user: {
+          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
+        },
         workspaceDirectory: { findFirst: vi.fn() },
       } as never,
       {
@@ -507,7 +528,9 @@ describe("WorkspaceService", () => {
       const prismaMock = {
         workspace: {
           findFirst: vi.fn().mockResolvedValue({ id: workspaceId }),
-          update: vi.fn().mockResolvedValue({ id: workspaceId, deletedAt: new Date() }),
+          update: vi
+            .fn()
+            .mockResolvedValue({ id: workspaceId, deletedAt: new Date() }),
         },
         run: {
           findFirst: vi.fn().mockResolvedValue(null),
@@ -521,7 +544,7 @@ describe("WorkspaceService", () => {
       const service = new WorkspaceService(
         prismaMock,
         mocks.config,
-        mocks.events,
+        mocks.events
       );
 
       return { ...mocks, service, prismaMock };
@@ -534,7 +557,7 @@ describe("WorkspaceService", () => {
 
       expect(emit).toHaveBeenCalledWith(
         WORKSPACE_DELETED_EVENT,
-        new WorkspaceDeletedEvent(workspaceId),
+        new WorkspaceDeletedEvent(workspaceId)
       );
     });
   });

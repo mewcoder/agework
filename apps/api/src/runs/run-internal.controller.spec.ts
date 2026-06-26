@@ -58,7 +58,7 @@ describe("RunInternalController", () => {
         type: "run.status",
         payload: { status: "finished" },
         ts: new Date().toISOString(),
-      } as never);
+      });
 
       expect(runWorkerExecution.cleanup).toHaveBeenCalledWith("run-1");
     });
@@ -78,7 +78,7 @@ describe("RunInternalController", () => {
         type: "run.status",
         payload: { status: "running" },
         ts: new Date().toISOString(),
-      } as never);
+      });
 
       expect(runWorkerExecution.cleanup).not.toHaveBeenCalled();
     });
@@ -98,7 +98,7 @@ describe("RunInternalController", () => {
         type: "heartbeat",
         payload: { at: new Date().toISOString() },
         ts: new Date().toISOString(),
-      } as never);
+      });
 
       expect(runWorkerExecution.heartbeat).toHaveBeenCalledWith("run-1");
     });
@@ -118,7 +118,7 @@ describe("RunInternalController", () => {
         type: "heartbeat",
         payload: { at: new Date().toISOString() },
         ts: new Date().toISOString(),
-      } as never);
+      });
 
       expect(runWorkerExecution.heartbeat).not.toHaveBeenCalled();
     });

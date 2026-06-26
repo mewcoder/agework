@@ -36,7 +36,7 @@ function makePlacement(
     hostPath: "/tmp/ws",
     runtimePath: "/tmp/ws",
     ...overrides,
-  } as LocalRuntimePlacement;
+  };
 }
 
 function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
@@ -52,7 +52,11 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
 function makeRuntimeTarget(
   overrides: Partial<RuntimeTarget> = {}
 ): RuntimeTarget {
-  return { ...makePlacement(), scopeKey: "ws-1", ...overrides } as RuntimeTarget;
+  return {
+    ...makePlacement(),
+    scopeKey: "ws-1",
+    ...overrides,
+  } as RuntimeTarget;
 }
 
 describe("LocalRuntimeProvider", () => {
@@ -97,16 +101,20 @@ describe("LocalRuntimeProvider", () => {
       runConfig,
     });
 
-    expect(childProcessMock.fork).toHaveBeenCalled();
-    expect(childProcessMock.child.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runId: "run-1",
-        seq: 0,
-        type: "run.config",
-        payload: runConfig,
-      })
-    );
-    expect(provider.getHandle("run-1")).toBe(handle);
+    try {
+      expect(childProcessMock.fork).toHaveBeenCalled();
+      expect(childProcessMock.child.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "run-1",
+          seq: 0,
+          type: "run.config",
+          payload: runConfig,
+        })
+      );
+      expect(provider.getHandle("run-1")).toBe(handle);
+    } finally {
+      provider.cleanup("run-1");
+    }
   });
 
   it("startWorkerExecution fails fast when the runtime resource is not local", () => {
@@ -143,7 +151,9 @@ describe("LocalRuntimeProvider", () => {
         throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
       });
 
-      await expect(provider.recoverOrphan("12345:some-token")).resolves.toBeUndefined();
+      await expect(
+        provider.recoverOrphan("12345:some-token")
+      ).resolves.toBeUndefined();
     });
   });
 });

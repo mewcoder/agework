@@ -20,7 +20,7 @@ function placement(
       sandboxEngineType: "docker",
     },
     ...overrides,
-  } as SandboxRuntimePlacement;
+  };
 }
 
 describe("WorkspaceRuntimeInstanceRepository", () => {
@@ -292,7 +292,9 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
   });
 
   it("finds active resources by provider runtime id", async () => {
-    const findUnique = vi.fn().mockResolvedValue({ id: "rr-1", status: "running" });
+    const findUnique = vi
+      .fn()
+      .mockResolvedValue({ id: "rr-1", status: "running" });
     const service = new WorkspaceRuntimeInstanceRepository({
       runtimeInstance: { findUnique },
     } as never);

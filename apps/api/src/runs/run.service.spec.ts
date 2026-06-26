@@ -11,10 +11,7 @@ import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunConfigAssembler } from "./run-config.assembler";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
-import type {
-  RuntimePlacement,
-  RuntimeTarget,
-} from "@agework/shared/protocol";
+import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
 
 function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
@@ -38,9 +35,7 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
   };
 }
 
-function makeRuntimeTarget(
-  placement = makePlacement("local")
-): RuntimeTarget {
+function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
   return {
     ...placement,
     scopeKey:
@@ -155,7 +150,7 @@ describe("RunService", () => {
       findOne: vi.fn().mockResolvedValue({}),
     };
     mockRunEventRecorder = {
-      append: vi.fn().mockResolvedValue({} as never),
+      append: vi.fn().mockResolvedValue({}),
       forgetRun: vi.fn(),
     };
     mockRunConfigAssembler = {

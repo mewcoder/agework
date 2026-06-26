@@ -110,10 +110,9 @@ describe("AgentService", () => {
 
     await service.run(body, res as Response, user);
 
-    expect(mockModelProviderService.resolveEnabledProvider).toHaveBeenCalledWith(
-      "claude",
-      "mc-1"
-    );
+    expect(
+      mockModelProviderService.resolveEnabledProvider
+    ).toHaveBeenCalledWith("claude", "mc-1");
 
     expect(mockRunService.start).toHaveBeenCalledTimes(1);
     const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
@@ -131,15 +130,17 @@ describe("AgentService", () => {
   });
 
   it("passes a custom agent provider config to RunService.start", async () => {
-    mockModelProviderService.resolveEnabledProvider = vi.fn().mockResolvedValue({
-      source: "custom",
-      providerConfig: {
-        baseUrl: "https://example.com",
-        apiKey: "sk-test",
-        models: ["claude-test"],
-        extraConfig: { FOO: "bar" },
-      },
-    });
+    mockModelProviderService.resolveEnabledProvider = vi
+      .fn()
+      .mockResolvedValue({
+        source: "custom",
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-test",
+          models: ["claude-test"],
+          extraConfig: { FOO: "bar" },
+        },
+      });
 
     await service.run(
       baseBody({
@@ -166,15 +167,17 @@ describe("AgentService", () => {
   });
 
   it("throws when the requested model is not available for a custom provider", async () => {
-    mockModelProviderService.resolveEnabledProvider = vi.fn().mockResolvedValue({
-      source: "custom",
-      providerConfig: {
-        baseUrl: "https://example.com",
-        apiKey: "sk-test",
-        models: ["claude-test"],
-        extraConfig: {},
-      },
-    });
+    mockModelProviderService.resolveEnabledProvider = vi
+      .fn()
+      .mockResolvedValue({
+        source: "custom",
+        providerConfig: {
+          baseUrl: "https://example.com",
+          apiKey: "sk-test",
+          models: ["claude-test"],
+          extraConfig: {},
+        },
+      });
 
     await expect(
       service.run(
@@ -234,9 +237,9 @@ describe("AgentService", () => {
     });
 
     it("throws when conversationId is missing", async () => {
-      await expect(
-        service.resume("", res as Response, user)
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.resume("", res as Response, user)).rejects.toThrow(
+        BadRequestException
+      );
     });
   });
 

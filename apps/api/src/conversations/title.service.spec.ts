@@ -26,10 +26,12 @@ const CUSTOM_PROVIDER = {
   },
 } as const;
 
-function createService(options: {
-  messages?: Array<{ content: unknown }>;
-  resolvedProvider?: unknown;
-} = {}) {
+function createService(
+  options: {
+    messages?: Array<{ content: unknown }>;
+    resolvedProvider?: unknown;
+  } = {}
+) {
   const prisma = {
     message: {
       findMany: vi.fn().mockResolvedValue(options.messages ?? []),
@@ -54,7 +56,9 @@ function createService(options: {
 describe("TitleService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(generateText).mockResolvedValue({ text: "「简洁标题」" } as never);
+    vi.mocked(generateText).mockResolvedValue({
+      text: "「简洁标题」",
+    } as never);
     vi.mocked(createAnthropic).mockReturnValue({
       languageModel: vi.fn().mockReturnValue("anthropic-title-model"),
     } as never);

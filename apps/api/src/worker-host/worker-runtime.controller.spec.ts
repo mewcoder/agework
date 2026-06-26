@@ -14,7 +14,11 @@ describe("WorkerRuntimeController", () => {
   describe("pollRuntimeControls()", () => {
     it("resolves scopeKey from runtimeInstanceId and polls the workspace queue", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
-        pollByWorkspace: vi.fn().mockReturnValue([{ seq: 1, runId: "run-1", payload: { type: "cancel" } }]),
+        pollByWorkspace: vi
+          .fn()
+          .mockReturnValue([
+            { seq: 1, runId: "run-1", payload: { type: "cancel" } },
+          ]),
       };
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
@@ -27,7 +31,9 @@ describe("WorkerRuntimeController", () => {
 
       const result = await controller.pollRuntimeControls("rr-1", "3");
 
-      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith("rr-1");
+      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith(
+        "rr-1"
+      );
       expect(controlQueue.pollByWorkspace).toHaveBeenCalledWith("ws-1", 3);
       expect(result.controls).toHaveLength(1);
       expect(result.controls[0].seq).toBe(1);
@@ -71,7 +77,11 @@ describe("WorkerRuntimeController", () => {
 
     it("long-polls the resolved resource key when waitMs is provided", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
-        waitForWorkspace: vi.fn().mockResolvedValue([{ seq: 2, runId: "run-2", payload: { type: "user_message" } }]),
+        waitForWorkspace: vi
+          .fn()
+          .mockResolvedValue([
+            { seq: 2, runId: "run-2", payload: { type: "user_message" } },
+          ]),
       };
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
@@ -84,13 +94,21 @@ describe("WorkerRuntimeController", () => {
 
       const result = await controller.pollRuntimeControls("rr-1", "1", "25000");
 
-      expect(controlQueue.waitForWorkspace).toHaveBeenCalledWith("ws-1", 1, 25000);
+      expect(controlQueue.waitForWorkspace).toHaveBeenCalledWith(
+        "ws-1",
+        1,
+        25000
+      );
       expect(result.controls).toHaveLength(1);
     });
 
     it("returns no controls when scopeKey is not found", async () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
-        pollByWorkspace: vi.fn().mockReturnValue([{ seq: 1, runId: "run-1", payload: { type: "cancel" } }]),
+        pollByWorkspace: vi
+          .fn()
+          .mockReturnValue([
+            { seq: 1, runId: "run-1", payload: { type: "cancel" } },
+          ]),
       };
       const runtimeAccess: Partial<RuntimeInternalAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue(undefined),
@@ -123,8 +141,12 @@ describe("WorkerRuntimeController", () => {
 
       const result = await controller.heartbeat("rr-1");
 
-      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith("rr-1");
-      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith("ws-1");
+      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith(
+        "rr-1"
+      );
+      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith(
+        "ws-1"
+      );
       expect(result).toEqual({ ok: true });
     });
 
@@ -142,7 +164,9 @@ describe("WorkerRuntimeController", () => {
 
       const result = await controller.heartbeat("rr-unknown");
 
-      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith("rr-unknown");
+      expect(runtimeAccess.getScopeKeyForRuntimeInstance).toHaveBeenCalledWith(
+        "rr-unknown"
+      );
       expect(runtimeService.heartbeatRuntimeInstance).not.toHaveBeenCalled();
       expect(result).toEqual({ ok: true });
     });
