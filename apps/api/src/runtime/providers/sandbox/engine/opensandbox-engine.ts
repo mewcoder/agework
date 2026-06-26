@@ -31,11 +31,11 @@ export class OpenSandboxEngine implements SandboxEngine {
     const sandbox = await this.client.createSandbox({
       image,
       env: {
-        AGEWORK_INTERNAL_TRANSPORT: "http",
-        AGEWORK_INTERNAL_API_BASE: apiBaseUrl,
-        AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_INTERNAL_WORKSPACE_ID: scopeKey,
-        AGEWORK_INTERNAL_ISOLATION_SCOPE: isolationScope,
+        AGEWORK_WORKER_CHANNEL: "http",
+        AGEWORK_WORKER_API_BASE: apiBaseUrl,
+        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
+        AGEWORK_WORKER_WORKSPACE_ID: scopeKey,
+        AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
       },
       timeoutSeconds: null,
@@ -130,14 +130,13 @@ export class OpenSandboxEngine implements SandboxEngine {
 
     try {
       const envs: Record<string, string> = {
-        AGEWORK_INTERNAL_TRANSPORT: "http",
-        AGEWORK_INTERNAL_WORKER_MODE: "persistent",
-        AGEWORK_INTERNAL_WORKSPACE_ID: scopeKey,
-        AGEWORK_INTERNAL_API_BASE: apiBaseUrl,
-        AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_INTERNAL_ISOLATION_SCOPE: isolationScope,
+        AGEWORK_WORKER_CHANNEL: "http",
+        AGEWORK_WORKER_WORKSPACE_ID: scopeKey,
+        AGEWORK_WORKER_API_BASE: apiBaseUrl,
+        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
+        AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
-        AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID: sandbox.id,
+        AGEWORK_WORKER_RUNTIME_INSTANCE_ID: sandbox.id,
       };
 
       await sandbox.runCommand("node /app/dist/main.js", {

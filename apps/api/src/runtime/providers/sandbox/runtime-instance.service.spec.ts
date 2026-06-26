@@ -165,8 +165,8 @@ describe("SandboxRuntimeInstanceService", () => {
           workspaceId: "ws-1",
         }),
         env: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_TYPE: "sandbox",
-          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
+          AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
+          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
         }),
       })
     );

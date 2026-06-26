@@ -33,7 +33,7 @@ export type {
   ControlTracePayload,
   UpstreamMessage,
   Unsubscribe,
-  RuntimeTransport,
+  RuntimeChannel,
   RuntimeTarget,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
@@ -42,4 +42,4 @@ export type {
   LocalRuntimePlacement,
   SandboxRuntimePlacement,
   SandboxPlacementInfo,
-} from "./transport";
+} from "./channel";

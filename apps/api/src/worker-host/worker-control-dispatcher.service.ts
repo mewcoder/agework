@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { ControlPayload, RunConfig } from "@agework/shared/protocol";
 import { RuntimeConfigStore } from "./config-store";
-import { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAccessService } from "./access.service";
 import { RuntimeControlQueue } from "./control-queue";
 import { nextControlEnvelope } from "./control-envelope";
 
@@ -18,7 +18,7 @@ export class WorkerControlDispatcher {
 
   constructor(
     private readonly runConfigStore: RuntimeConfigStore,
-    private readonly runtimeAccess: RuntimeInternalAccessService,
+    private readonly runtimeAccess: WorkerAccessService,
     private readonly controlQueue: RuntimeControlQueue
   ) {}
 
@@ -70,7 +70,6 @@ export class WorkerControlDispatcher {
 
   cleanupRun(runId: string): void {
     this.runConfigStore.unregister(runId);
-    this.controlQueue.cleanup(runId);
     this.runtimeAccess.revokeAccess(runId);
   }
 

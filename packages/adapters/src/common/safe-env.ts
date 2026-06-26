@@ -20,7 +20,7 @@ export function pickSafeEnv(options: {
   const result: Record<string, string | undefined> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (key.startsWith("AGEWORK_PRIVATE_")) continue;
-    if (key.startsWith("AGEWORK_INTERNAL_")) continue;
+    if (key.startsWith("AGEWORK_WORKER_")) continue;
     if (!options.includeClaudeEnv && CLAUDE_ENV_KEYS.has(key)) continue;
     result[key] = value;
   }

@@ -2,8 +2,8 @@ import { Module } from "@nestjs/common";
 
 import { RuntimeConfigStore } from "./config-store";
 import { RuntimeControlQueue } from "./control-queue";
-import { RuntimeInternalAccessService } from "./access.service";
-import { RuntimeInternalAuthGuard } from "./auth.guard";
+import { WorkerAccessService } from "./access.service";
+import { WorkerAuthGuard } from "./auth.guard";
 import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
 import { WorkerControlDispatcher } from "./worker-control-dispatcher.service";
 import { WorkerRuntimeController } from "./worker-runtime.controller";
@@ -20,16 +20,16 @@ import { WorkerWorkspaceController } from "./worker-workspace.controller";
   providers: [
     RuntimeConfigStore,
     RuntimeControlQueue,
-    RuntimeInternalAccessService,
-    RuntimeInternalAuthGuard,
+    WorkerAccessService,
+    WorkerAuthGuard,
     RuntimeHeartbeatRegistry,
     WorkerControlDispatcher,
   ],
   exports: [
     RuntimeConfigStore,
     RuntimeControlQueue,
-    RuntimeInternalAccessService,
-    RuntimeInternalAuthGuard,
+    WorkerAccessService,
+    WorkerAuthGuard,
     RuntimeHeartbeatRegistry,
     WorkerControlDispatcher,
   ],

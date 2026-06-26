@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkerRuntimeController } from "./worker-runtime.controller";
 import { RuntimeControlQueue } from "./control-queue";
-import { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAccessService } from "./access.service";
 import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
 
 function makeHeartbeatRegistry(): RuntimeHeartbeatRegistry {
@@ -20,12 +20,12 @@ describe("WorkerRuntimeController", () => {
             { seq: 1, runId: "run-1", payload: { type: "cancel" } },
           ]),
       };
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
       const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         makeHeartbeatRegistry()
       );
 
@@ -43,12 +43,12 @@ describe("WorkerRuntimeController", () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
         pollByWorkspace: vi.fn().mockReturnValue([]),
       };
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
       const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         makeHeartbeatRegistry()
       );
 
@@ -61,12 +61,12 @@ describe("WorkerRuntimeController", () => {
       const controlQueue: Partial<RuntimeControlQueue> = {
         pollByWorkspace: vi.fn().mockReturnValue([]),
       };
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
       const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         makeHeartbeatRegistry()
       );
 
@@ -83,12 +83,12 @@ describe("WorkerRuntimeController", () => {
             { seq: 2, runId: "run-2", payload: { type: "user_message" } },
           ]),
       };
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
       const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         makeHeartbeatRegistry()
       );
 
@@ -110,12 +110,12 @@ describe("WorkerRuntimeController", () => {
             { seq: 1, runId: "run-1", payload: { type: "cancel" } },
           ]),
       };
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue(undefined),
       };
       const controller = new WorkerRuntimeController(
         controlQueue as RuntimeControlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         makeHeartbeatRegistry()
       );
 
@@ -129,13 +129,13 @@ describe("WorkerRuntimeController", () => {
   describe("heartbeat()", () => {
     it("dispatches heartbeat via scopeKey lookup", async () => {
       const controlQueue = {} as RuntimeControlQueue;
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue("ws-1"),
       };
       const runtimeService = makeHeartbeatRegistry();
       const controller = new WorkerRuntimeController(
         controlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         runtimeService
       );
 
@@ -152,13 +152,13 @@ describe("WorkerRuntimeController", () => {
 
     it("returns ok even when scopeKey is not found", async () => {
       const controlQueue = {} as RuntimeControlQueue;
-      const runtimeAccess: Partial<RuntimeInternalAccessService> = {
+      const runtimeAccess: Partial<WorkerAccessService> = {
         getScopeKeyForRuntimeInstance: vi.fn().mockReturnValue(undefined),
       };
       const runtimeService = makeHeartbeatRegistry();
       const controller = new WorkerRuntimeController(
         controlQueue,
-        runtimeAccess as RuntimeInternalAccessService,
+        runtimeAccess as WorkerAccessService,
         runtimeService
       );
 

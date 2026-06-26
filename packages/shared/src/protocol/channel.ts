@@ -137,11 +137,10 @@ export type UpstreamMessage =
 export type Unsubscribe = () => void;
 
 /**
- * worker 主体唯一依赖的通信接口。`IpcTransport`（本轮，process.send/on('message')）
- * 与 `HttpTransport`（下一轮，POST /events + 轮询 /controls）都实现此接口，
- * 对 worker 和 Agent Adapter 透明。
+ * 单 run worker 依赖的通信接口，由 `IpcChannel`（process.send/on('message')）实现。
+ * 持久容器 worker 不走此接口，改用 `PersistentHttpClient`（按 runId 参数化的 HTTP 收发）。
  */
-export interface RuntimeTransport {
+export interface RuntimeChannel {
   fetchRunConfig(): Promise<RunConfig>;
   emit(msg: UpstreamMessage): Promise<void>;
   subscribeControls(cb: (control: Envelope<ControlPayload>) => void): Unsubscribe;

@@ -13,10 +13,9 @@ import type {
   RunConfig,
   RunStatusPayload,
   AGUIEvent,
-  RuntimeTransport,
+  RuntimeChannel,
 } from "@agework/shared/protocol";
-import { IpcTransport } from "./ipc-transport.js";
-import { HttpTransport } from "./http-transport.js";
+import { IpcChannel } from "./ipc-channel.js";
 import { PersistentHttpClient } from "./persistent-http-client.js";
 import { RunRouter } from "./run-router.js";
 import {
@@ -38,23 +37,20 @@ const CONTROL_LONG_POLL_MS = 25_000;
 const CONTROL_EMPTY_RETRY_DELAY_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 8_000;
 
-function createTransport(): RuntimeTransport {
-  const transportType = process.env.AGEWORK_INTERNAL_TRANSPORT ?? "ipc";
-  if (transportType === "http") {
-    return new HttpTransport();
-  }
+function createChannel(): RuntimeChannel {
+  // 单 run worker 只用 IPC（local provider fork）。沙箱/持久容器走 runPersistent。
   if (!process.send) {
     workerLog("IPC transport requires process to be forked with IPC channel", undefined, "error");
     process.exit(1);
   }
-  return new IpcTransport();
+  return new IpcChannel();
 }
 
 async function main() {
   if (
-    process.env.AGEWORK_INTERNAL_TRANSPORT === "http" &&
-    (process.env.AGEWORK_INTERNAL_WORKSPACE_ID ||
-      process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID)
+    process.env.AGEWORK_WORKER_CHANNEL === "http" &&
+    (process.env.AGEWORK_WORKER_WORKSPACE_ID ||
+      process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID)
   ) {
     return runPersistent();
   }
@@ -62,7 +58,7 @@ async function main() {
 }
 
 async function runSingle() {
-  const transport = createTransport();
+  const transport = createChannel();
   const config: RunConfig = await transport.fetchRunConfig();
   setWorkerLogFilePath(config.workerLogFilePath);
   const { runId, conversationId } = config;
@@ -258,9 +254,9 @@ async function runPersistent() {
     });
   });
   workerLog("persistent worker started", {
-    workspaceId: process.env.AGEWORK_INTERNAL_WORKSPACE_ID,
-    runtimeInstanceId: process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID,
-    runtimeTransport: process.env.AGEWORK_INTERNAL_TRANSPORT,
+    workspaceId: process.env.AGEWORK_WORKER_WORKSPACE_ID,
+    runtimeInstanceId: process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID,
+    runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
   });
 
   const mux = new RunRouter(
@@ -556,7 +552,7 @@ function createAdapter(
 }
 
 function emitStatus(
-  transport: RuntimeTransport,
+  transport: RuntimeChannel,
   runId: string,
   payload: RunStatusPayload
 ) {
@@ -571,7 +567,7 @@ function emitStatus(
 
 /** 上报 control 处理 trace（received/handled/failed），与 API 侧 control.sent 通过 commandId 回连。 */
 function emitControlTrace(
-  transport: RuntimeTransport,
+  transport: RuntimeChannel,
   runId: string,
   phase: "received" | "handled" | "failed",
   control: ControlPayload,

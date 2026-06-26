@@ -16,12 +16,12 @@ describe("RuntimeControlQueue", () => {
     vi.useRealTimers();
   });
 
-  it("should return empty array for unknown runId", () => {
-    const result = queue.poll("nonexistent", 0);
+  it("should return empty array for unknown workspaceId", () => {
+    const result = queue.pollByWorkspace("nonexistent", 0);
     expect(result).toEqual([]);
   });
 
-  it("should push and poll controls", () => {
+  it("should push and poll workspace controls", () => {
     const envelope: Envelope<ControlPayload> = {
       runId: "run-1",
       seq: 1,
@@ -35,13 +35,13 @@ describe("RuntimeControlQueue", () => {
       ts: new Date().toISOString(),
     };
 
-    queue.push("run-1", envelope);
-    const result = queue.poll("run-1", 0);
+    queue.pushForWorkspace("ws-1", envelope);
+    const result = queue.pollByWorkspace("ws-1", 0);
     expect(result).toHaveLength(1);
     expect(result[0].seq).toBe(1);
   });
 
-  it("should only return controls after given seq", () => {
+  it("should only return workspace controls after given seq", () => {
     const e1: Envelope<ControlPayload> = {
       runId: "run-1",
       seq: 1,
@@ -67,15 +67,15 @@ describe("RuntimeControlQueue", () => {
       ts: "",
     };
 
-    queue.push("run-1", e1);
-    queue.push("run-1", e2);
+    queue.pushForWorkspace("ws-1", e1);
+    queue.pushForWorkspace("ws-1", e2);
 
-    const result = queue.poll("run-1", 1);
+    const result = queue.pollByWorkspace("ws-1", 1);
     expect(result).toHaveLength(1);
     expect(result[0].seq).toBe(2);
   });
 
-  it("should cleanup a run's queue", () => {
+  it("should cleanup a workspace's queue", () => {
     const envelope: Envelope<ControlPayload> = {
       runId: "run-1",
       seq: 1,
@@ -88,9 +88,9 @@ describe("RuntimeControlQueue", () => {
       },
       ts: "",
     };
-    queue.push("run-1", envelope);
-    queue.cleanup("run-1");
-    expect(queue.poll("run-1", 0)).toEqual([]);
+    queue.pushForWorkspace("ws-1", envelope);
+    queue.cleanupWorkspace("ws-1");
+    expect(queue.pollByWorkspace("ws-1", 0)).toEqual([]);
   });
 
   it("should resolve a workspace waiter when a matching control is pushed", async () => {

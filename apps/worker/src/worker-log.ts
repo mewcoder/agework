@@ -151,7 +151,7 @@ function resolveLogFiles(details: Record<string, unknown> | undefined): string[]
   const files = new Set<string>();
   const defaultFile =
     workerLogFilePath ??
-    process.env.AGEWORK_INTERNAL_WORKER_LOG_FILE ??
+    process.env.AGEWORK_WORKER_LOG_FILE ??
     DEFAULT_LOG_FILE;
   if (defaultFile) files.add(defaultFile);
 
@@ -190,15 +190,15 @@ function safeJson(value: Record<string, unknown>): string {
 
 function initialWorkerLogContext(): Record<string, unknown> {
   return compactObject({
-    runtimeTransport: process.env.AGEWORK_INTERNAL_TRANSPORT,
-    runtimeType: process.env.AGEWORK_INTERNAL_RUNTIME_TYPE,
-    sandboxEngine: process.env.AGEWORK_INTERNAL_SANDBOX_ENGINE,
-    isolationScope: process.env.AGEWORK_INTERNAL_ISOLATION_SCOPE,
+    runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
+    runtimeType: process.env.AGEWORK_WORKER_RUNTIME_TYPE,
+    sandboxEngine: process.env.AGEWORK_WORKER_SANDBOX_ENGINE,
+    isolationScope: process.env.AGEWORK_WORKER_ISOLATION_SCOPE,
     runtimeScopeKey:
-      process.env.AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY ??
-      process.env.AGEWORK_INTERNAL_WORKSPACE_ID,
-    runtimeInstanceId: process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID,
-    runtimeResourceName: process.env.AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME,
+      process.env.AGEWORK_WORKER_RUNTIME_SCOPE_KEY ??
+      process.env.AGEWORK_WORKER_WORKSPACE_ID,
+    runtimeInstanceId: process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID,
+    runtimeResourceName: process.env.AGEWORK_WORKER_RUNTIME_RESOURCE_NAME,
     containerHostname: hostname(),
     workerPid: process.pid,
     nodeVersion: process.version,

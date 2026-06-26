@@ -4,7 +4,6 @@ import {
   Post,
   Param,
   Body,
-  Query,
   UseGuards,
   NotFoundException,
   Logger,
@@ -17,38 +16,36 @@ import type {
 } from "@agework/shared/protocol";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { RuntimeInternalAuthGuard } from "../worker-host/auth.guard";
+import { WorkerAuthGuard } from "../worker-host/auth.guard";
 import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeConfigStore } from "../worker-host/config-store";
 import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
-import { RuntimeControlQueue } from "../worker-host/control-queue";
 import { safeLogJson, summarizeEnvelopePayload } from "../common/logging";
 
 const TERMINAL_RUN_STATUSES: RunStatus[] = ["finished", "error", "cancelled"];
 
 /**
- * Internal runtime API — 仅供 worker 调用，不暴露给前端。
- * 所有端点需要 run-scoped internal access key，与用户登录态无关，
- * 因此标记 @Public() 以跳过全局 JwtAuthGuard，鉴权完全交由 RuntimeInternalAuthGuard。
+ * Worker run API — 仅供 worker 调用，不暴露给前端。
+ * 所有端点需要 run-scoped worker access key，与用户登录态无关，
+ * 因此标记 @Public() 以跳过全局 JwtAuthGuard，鉴权完全交由 WorkerAuthGuard。
  */
 @Public()
 @RawResponse()
-@Controller("internal/runs")
-@UseGuards(RuntimeInternalAuthGuard)
-export class RunInternalController {
-  private readonly logger = new Logger(RunInternalController.name);
+@Controller("worker/runs")
+@UseGuards(WorkerAuthGuard)
+export class WorkerRunController {
+  private readonly logger = new Logger(WorkerRunController.name);
 
   constructor(
     private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runConfigStore: RuntimeConfigStore,
     private readonly runRegistry: RunActiveStore,
-    private readonly runWorkerExecution: RunWorkerExecutionService,
-    private readonly controlQueue: RuntimeControlQueue
+    private readonly runWorkerExecution: RunWorkerExecutionService
   ) {}
 
   /**
-   * GET /internal/runs/:runId
+   * GET /worker/runs/:runId
    * Worker 启动后拉取 RunConfig。
    */
   @Get(":runId")
@@ -74,7 +71,7 @@ export class RunInternalController {
   }
 
   /**
-   * POST /internal/runs/:runId/events
+   * POST /worker/runs/:runId/events
    * Worker 上报上行事件（run.status / agui.event / sdk.raw / heartbeat）。
    */
   @Post(":runId/events")
@@ -117,29 +114,5 @@ export class RunInternalController {
     }
 
     return { ok: true };
-  }
-
-  /**
-   * GET /internal/runs/:runId/controls?afterSeq=N
-   * Worker 轮询下行控制指令。
-   */
-  @Get(":runId/controls")
-  async pollControls(
-    @Param("runId") runId: string,
-    @Query("afterSeq") afterSeq?: string
-  ): Promise<{ controls: Envelope[] }> {
-    const parsed = afterSeq ? parseInt(afterSeq, 10) : 0;
-    const seq = Number.isFinite(parsed) ? parsed : 0;
-    const controls = this.controlQueue.poll(runId, seq);
-    if (controls.length > 0) {
-      this.logger.debug(
-        `run controls fetched ${safeLogJson({
-          runId,
-          afterSeq: seq,
-          count: controls.length,
-        })}`
-      );
-    }
-    return { controls };
   }
 }

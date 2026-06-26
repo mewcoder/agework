@@ -10,14 +10,14 @@ type WorkspaceWaiter = {
 };
 
 /**
- * 内存 control 队列，供 DockerRuntimeProvider 写入 control，
- * RuntimeInternalController.pollControls() 读取。
+ * 内存 control 队列：SandboxRuntimeProvider 经 WorkerControlDispatcher 按 scopeKey
+ * 写入 control，持久容器 worker 经 WorkerWorkspaceController / WorkerRuntimeController
+ * 按 workspaceId / runtimeInstanceId 轮询读取。
  * LocalRuntimeProvider 不经过此队列（直接 IPC send）。
  */
 @Injectable()
 export class RuntimeControlQueue {
   private readonly logger = new Logger(RuntimeControlQueue.name);
-  private readonly queues = new Map<string, Envelope<ControlPayload>[]>();
   /** workspace 级队列——持久容器通过 workspaceId 轮询控制消息。 */
   private readonly workspaceQueues = new Map<
     string,
@@ -28,24 +28,6 @@ export class RuntimeControlQueue {
 
   setControlSentRecorder(recorder: ControlSentRecorder): void {
     this.recorder = recorder;
-  }
-
-  push(runId: string, envelope: Envelope<ControlPayload>): void {
-    let queue = this.queues.get(runId);
-    if (!queue) {
-      queue = [];
-      this.queues.set(runId, queue);
-    }
-    queue.push(envelope);
-    this.recordEnqueued(runId, envelope);
-    this.logger.debug(
-      `push run control ${safeLogJson({
-        runId,
-        seq: envelope.seq,
-        type: envelope.payload.type,
-        queueSize: queue.length,
-      })}`
-    );
   }
 
   /** 按 workspaceId 推送控制消息（持久容器场景）。 */
@@ -70,27 +52,6 @@ export class RuntimeControlQueue {
         queueSize: queue.length,
       })}`
     );
-  }
-
-  /** 获取 afterSeq 之后的 control envelopes，并删除已读取的旧条目 */
-  poll(runId: string, afterSeq: number): Envelope<ControlPayload>[] {
-    const queue = this.queues.get(runId);
-    if (!queue) return [];
-
-    // 只保留 afterSeq 之后的条目，已读取的旧条目随之被丢弃
-    const result = queue.filter((e) => e.seq > afterSeq);
-    this.queues.set(runId, result);
-    if (result.length > 0) {
-      this.logger.debug(
-        `poll run controls ${safeLogJson({
-          runId,
-          afterSeq,
-          returned: result.length,
-          nextQueueSize: result.length,
-        })}`
-      );
-    }
-    return result;
   }
 
   waitForWorkspace(
@@ -138,11 +99,6 @@ export class RuntimeControlQueue {
       );
     }
     return result;
-  }
-
-  cleanup(runId: string): void {
-    this.queues.delete(runId);
-    this.logger.debug(`cleanup run controls ${safeLogJson({ runId })}`);
   }
 
   /** control 入队即记一条 sent trace，commandId 供 worker 上行的 received/handled/failed 回连。 */

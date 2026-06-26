@@ -26,7 +26,7 @@ describe("workerLog", () => {
     const dir = mkdtempSync(join(tmpdir(), "agework-worker-log-"));
     tempDirs.push(dir);
     const filePath = join(dir, "worker.log");
-    vi.stubEnv("AGEWORK_INTERNAL_WORKER_LOG_FILE", filePath);
+    vi.stubEnv("AGEWORK_WORKER_LOG_FILE", filePath);
     vi.stubEnv("AGEWORK_WORKER_LOG_LEVEL", "info");
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -46,7 +46,7 @@ describe("workerLog", () => {
     tempDirs.push(dir);
     const runtimeFilePath = join(dir, "runtime.worker.log");
     const conversationFilePath = join(dir, "conversation-1.worker.log");
-    vi.stubEnv("AGEWORK_INTERNAL_WORKER_LOG_FILE", runtimeFilePath);
+    vi.stubEnv("AGEWORK_WORKER_LOG_FILE", runtimeFilePath);
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 
     setWorkerLogContext({ runtimeScopeKey: "ws-1" });
@@ -73,7 +73,7 @@ describe("workerLog", () => {
     const dir = mkdtempSync(join(tmpdir(), "agework-worker-log-"));
     tempDirs.push(dir);
     const filePath = join(dir, "worker.log");
-    vi.stubEnv("AGEWORK_INTERNAL_WORKER_LOG_FILE", filePath);
+    vi.stubEnv("AGEWORK_WORKER_LOG_FILE", filePath);
     vi.spyOn(console, "log").mockImplementation(() => {});
 
     workerLog("structured message", { runId: "run-1", seq: 3, source: "transport" }, "info");
@@ -95,7 +95,7 @@ describe("workerLog", () => {
     const dir = mkdtempSync(join(tmpdir(), "agework-worker-log-"));
     tempDirs.push(dir);
     const filePath = join(dir, "worker.log");
-    vi.stubEnv("AGEWORK_INTERNAL_WORKER_LOG_FILE", filePath);
+    vi.stubEnv("AGEWORK_WORKER_LOG_FILE", filePath);
     vi.stubEnv("AGEWORK_WORKER_LOG_MAX_FILE_MB", "1");
     vi.spyOn(console, "log").mockImplementation(() => {});
 

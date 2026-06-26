@@ -4,7 +4,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 const ACCESS_KEY_BYTES = 32;
 
 @Injectable()
-export class RuntimeInternalAccessService {
+export class WorkerAccessService {
   private readonly accessKeys = new Map<string, string>();
   private readonly workspaceKeys = new Map<string, string>();
   /** runtimeInstanceId → accessKey */
@@ -16,7 +16,7 @@ export class RuntimeInternalAccessService {
 
   /**
    * 为单个 run 签发内部访问 key。
-   * Worker 用它访问 /internal/runs/*；run 清理时可撤销。
+   * Worker 用它访问 /worker/runs/*；run 清理时可撤销。
    */
   issueAccessKey(runId: string): string {
     const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
@@ -64,7 +64,7 @@ export class RuntimeInternalAccessService {
   /**
    * 为 runtimeInstanceId 签发内部访问 key。
    * 复用 scopeKey 对应的 workspaceKey，使同一个 key 可同时用于
-   * /internal/workspaces/:workspaceId 和 /internal/runtimes/:runtimeInstanceId。
+   * /worker/workspaces/:workspaceId 和 /worker/runtimes/:runtimeInstanceId。
    */
   issueRuntimeInstanceKey(
     runtimeInstanceId: string,

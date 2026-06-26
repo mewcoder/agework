@@ -2,34 +2,34 @@ import { Controller, Get, Post, Param, Query, UseGuards, Logger } from "@nestjs/
 import type { Envelope } from "@agework/shared/protocol";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { RuntimeInternalAuthGuard } from "./auth.guard";
+import { WorkerAuthGuard } from "./auth.guard";
 import { RuntimeControlQueue } from "./control-queue";
-import { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAccessService } from "./access.service";
 import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
 import { safeLogJson } from "../common/logging";
 
 const MAX_CONTROL_WAIT_MS = 30_000;
 
 /**
- * Internal runtime resource API — 仅供持久容器内的 worker 调用。
+ * Worker runtime resource API — 仅供持久容器内的 worker 调用。
  * 与 WorkerWorkspaceController 类似，但以 runtimeInstanceId 为分区键，
  * 使得 user scope 下同一容器可服务多个 workspace 的请求。
  */
 @Public()
 @RawResponse()
-@Controller("internal/runtimes")
-@UseGuards(RuntimeInternalAuthGuard)
+@Controller("worker/runtimes")
+@UseGuards(WorkerAuthGuard)
 export class WorkerRuntimeController {
   private readonly logger = new Logger(WorkerRuntimeController.name);
 
   constructor(
     private readonly controlQueue: RuntimeControlQueue,
-    private readonly runtimeAccess: RuntimeInternalAccessService,
+    private readonly runtimeAccess: WorkerAccessService,
     private readonly heartbeatRegistry: RuntimeHeartbeatRegistry
   ) {}
 
   /**
-   * GET /internal/runtimes/:runtimeInstanceId/controls?afterSeq=N
+   * GET /worker/runtimes/:runtimeInstanceId/controls?afterSeq=N
    * 持久容器的 worker 按 runtimeInstanceId 轮询下行控制指令。
    */
   @Get(":runtimeInstanceId/controls")
@@ -67,7 +67,7 @@ export class WorkerRuntimeController {
   }
 
   /**
-   * POST /internal/runtimes/:runtimeInstanceId/heartbeat
+   * POST /worker/runtimes/:runtimeInstanceId/heartbeat
    * 持久容器 worker 定期上报心跳，通过 runtimeInstanceId 反查 scopeKey
    * 后分发到对应 provider。
    */

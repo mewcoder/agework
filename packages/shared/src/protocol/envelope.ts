@@ -1,5 +1,5 @@
 /**
- * Unified message envelope used by RuntimeTransport (Ipc/Http).
+ * Unified message envelope used by RuntimeChannel (Ipc/Http).
  * `seq` is monotonically increasing per `runId` and is the basis for
  * at-least-once delivery + idempotent dedup (key = `runId:seq`).
  */

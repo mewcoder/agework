@@ -1,5 +1,5 @@
 import type {
-  RuntimeTransport,
+  RuntimeChannel,
   RunConfig,
   UpstreamMessage,
   ControlPayload,
@@ -11,19 +11,19 @@ import { errorDetails, workerLog } from "./worker-log.js";
 const CONFIG_TIMEOUT_MS = 10_000;
 
 /**
- * RuntimeTransport 的本地子进程实现。
+ * RuntimeChannel 的本地子进程实现。
  * 通过 Node.js IPC channel（process.send / process.on("message")）
  * 与父进程（API）通信。
  */
-export class IpcTransport implements RuntimeTransport {
+export class IpcChannel implements RuntimeChannel {
   private seq = 0;
   private readonly runId: string;
 
   constructor() {
     if (!process.send) {
-      throw new Error("IpcTransport requires process to be forked with IPC");
+      throw new Error("IpcChannel requires process to be forked with IPC");
     }
-    this.runId = process.env.AGEWORK_INTERNAL_RUN_ID ?? "";
+    this.runId = process.env.AGEWORK_WORKER_RUN_ID ?? "";
   }
 
   fetchRunConfig(): Promise<RunConfig> {

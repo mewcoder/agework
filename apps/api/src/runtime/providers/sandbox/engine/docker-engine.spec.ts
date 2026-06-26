@@ -104,9 +104,9 @@ describe("DockerSandboxEngine", () => {
     await engine.getOrCreate(
       makeInput({
         env: {
-          AGEWORK_INTERNAL_TRANSPORT: "http",
-          AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: "test-key",
-          AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_CHANNEL: "http",
+          AGEWORK_WORKER_RUNTIME_ACCESS_KEY: "test-key",
+          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
         },
       })
     );
@@ -115,8 +115,8 @@ describe("DockerSandboxEngine", () => {
       (c) => (c[1] as string[])[0] === "run"
     );
     const runArgs = runCall![1] as string[];
-    expect(runArgs).toContain("AGEWORK_INTERNAL_TRANSPORT=http");
-    expect(runArgs).toContain("AGEWORK_INTERNAL_WORKSPACE_ID=ws-1");
+    expect(runArgs).toContain("AGEWORK_WORKER_CHANNEL=http");
+    expect(runArgs).toContain("AGEWORK_WORKER_WORKSPACE_ID=ws-1");
   });
 
   it("getOrCreate mounts runtime log directory when provided", async () => {

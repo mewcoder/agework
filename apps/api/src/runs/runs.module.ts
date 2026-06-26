@@ -16,7 +16,7 @@ import { RunWorkerExecutionService } from "./execution/run-worker-execution.serv
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
-import { RunInternalController } from "./run-internal.controller";
+import { WorkerRunController } from "./worker-run.controller";
 
 // deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
@@ -33,7 +33,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
  */
 @Module({
   imports: [RuntimeModule, WorkerHostModule, ConversationModule, ModelProviderModule],
-  controllers: [AdminRunController, RunInternalController],
+  controllers: [AdminRunController, WorkerRunController],
   providers: [
     RunRepository,
     RunActiveStore,

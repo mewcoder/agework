@@ -4,9 +4,9 @@ import { PersistentHttpClient } from "./persistent-http-client";
 
 describe("PersistentHttpClient", () => {
   beforeEach(() => {
-    vi.stubEnv("AGEWORK_INTERNAL_API_BASE", "http://api");
-    vi.stubEnv("AGEWORK_INTERNAL_WORKSPACE_ID", "ws-1");
-    vi.stubEnv("AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY", "ws-key");
+    vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
+    vi.stubEnv("AGEWORK_WORKER_WORKSPACE_ID", "ws-1");
+    vi.stubEnv("AGEWORK_WORKER_RUNTIME_ACCESS_KEY", "ws-key");
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -25,14 +25,14 @@ describe("PersistentHttpClient", () => {
     const controls = await client.pollControls();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/internal/workspaces/ws-1/controls?afterSeq=0",
+      "http://api/worker/workspaces/ws-1/controls?afterSeq=0",
       expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
     );
     expect(controls[0].payload).toMatchObject({ type: "user_message", runId: "run-1" });
     // 下一次 poll 用更新后的 afterSeq
     await client.pollControls();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/internal/workspaces/ws-1/controls?afterSeq=3",
+      "http://api/worker/workspaces/ws-1/controls?afterSeq=3",
       expect.anything()
     );
   });
@@ -48,7 +48,7 @@ describe("PersistentHttpClient", () => {
     const config = await client.fetchRunConfig("run-1");
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/internal/runs/run-1",
+      "http://api/worker/runs/run-1",
       expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
     );
     expect(config).toMatchObject({ runId: "run-1" });
@@ -65,7 +65,7 @@ describe("PersistentHttpClient", () => {
     await client.pollControls(25_000);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/internal/workspaces/ws-1/controls?afterSeq=0&waitMs=25000",
+      "http://api/worker/workspaces/ws-1/controls?afterSeq=0&waitMs=25000",
       expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
     );
   });
@@ -84,7 +84,7 @@ describe("PersistentHttpClient", () => {
     } as unknown as UpstreamMessage);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/internal/runs/run-1/events",
+      "http://api/worker/runs/run-1/events",
       expect.objectContaining({ method: "POST" })
     );
   });
@@ -184,7 +184,7 @@ describe("PersistentHttpClient", () => {
     await client.emitWorkspaceHeartbeat();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/internal/workspaces/ws-1/heartbeat",
+      "http://api/worker/workspaces/ws-1/heartbeat",
       expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer ws-key" } })
     );
   });
@@ -209,9 +209,9 @@ describe("PersistentHttpClient", () => {
     expect(seqInLastCall()).toBe("1");
   });
 
-  describe("with AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", () => {
+  describe("with AGEWORK_WORKER_RUNTIME_INSTANCE_ID", () => {
     beforeEach(() => {
-      vi.stubEnv("AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", "rr-42");
+      vi.stubEnv("AGEWORK_WORKER_RUNTIME_INSTANCE_ID", "rr-42");
     });
 
     it("polls the runtime controls endpoint", async () => {
@@ -225,14 +225,14 @@ describe("PersistentHttpClient", () => {
       const controls = await client.pollControls();
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/internal/runtimes/rr-42/controls?afterSeq=0",
+        "http://api/worker/runtimes/rr-42/controls?afterSeq=0",
         expect.objectContaining({ headers: { Authorization: "Bearer ws-key" } })
       );
       expect(controls[0].payload).toMatchObject({ type: "user_message", runId: "run-2" });
       // Next poll uses updated afterSeq
       await client.pollControls();
       expect(fetchMock).toHaveBeenLastCalledWith(
-        "http://api/internal/runtimes/rr-42/controls?afterSeq=5",
+        "http://api/worker/runtimes/rr-42/controls?afterSeq=5",
         expect.anything()
       );
     });
@@ -245,13 +245,13 @@ describe("PersistentHttpClient", () => {
       await client.emitWorkspaceHeartbeat();
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/internal/runtimes/rr-42/heartbeat",
+        "http://api/worker/runtimes/rr-42/heartbeat",
         expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer ws-key" } })
       );
     });
   });
 
-  describe("without AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID", () => {
+  describe("without AGEWORK_WORKER_RUNTIME_INSTANCE_ID", () => {
     it("uses workspace endpoint for pollControls", async () => {
       const fetchMock = vi.fn().mockResolvedValue({
         ok: true,
@@ -263,7 +263,7 @@ describe("PersistentHttpClient", () => {
       await client.pollControls();
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/internal/workspaces/ws-1/controls?afterSeq=0",
+        "http://api/worker/workspaces/ws-1/controls?afterSeq=0",
         expect.anything()
       );
     });
@@ -276,7 +276,7 @@ describe("PersistentHttpClient", () => {
       await client.emitWorkspaceHeartbeat();
 
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://api/internal/workspaces/ws-1/heartbeat",
+        "http://api/worker/workspaces/ws-1/heartbeat",
         expect.objectContaining({ method: "POST" })
       );
     });

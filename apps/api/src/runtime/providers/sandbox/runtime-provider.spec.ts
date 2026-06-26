@@ -212,11 +212,11 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
           scopeKey: "ws-1",
         }),
         env: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_TYPE: "sandbox",
-          AGEWORK_INTERNAL_SANDBOX_ENGINE: "docker",
-          AGEWORK_INTERNAL_ISOLATION_SCOPE: "workspace",
-          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
-          AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME: "agework-worker-ws-1",
+          AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
+          AGEWORK_WORKER_SANDBOX_ENGINE: "docker",
+          AGEWORK_WORKER_ISOLATION_SCOPE: "workspace",
+          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
+          AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: "agework-worker-ws-1",
         }),
       })
     );

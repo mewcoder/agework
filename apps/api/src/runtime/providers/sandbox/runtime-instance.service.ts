@@ -9,7 +9,7 @@ import type {
 import { isSandboxPlacement } from "../../resources/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
-import { RuntimeInternalAccessService } from "../../../worker-host/access.service";
+import { WorkerAccessService } from "../../../worker-host/access.service";
 import { WorkspaceRuntimeInstanceRepository } from "../../resources/workspace-runtime-instance.repository";
 import { swallow } from "../../../common/swallow";
 import {
@@ -77,7 +77,7 @@ export class SandboxRuntimeInstanceService {
   constructor(
     private readonly configService: ConfigService,
     private readonly workspaceRuntimeService: WorkspaceRuntimeInstanceRepository,
-    private readonly runtimeAccess: RuntimeInternalAccessService,
+    private readonly runtimeAccess: WorkerAccessService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));
@@ -358,19 +358,19 @@ export class SandboxRuntimeInstanceService {
       apiBaseUrl: apiBase,
       accessKey,
       env: {
-        AGEWORK_INTERNAL_TRANSPORT: "http",
-        AGEWORK_INTERNAL_API_BASE: apiBase,
-        AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY: accessKey,
-        AGEWORK_INTERNAL_WORKSPACE_ID: context.scopeKey,
-        AGEWORK_INTERNAL_RUNTIME_TYPE: "sandbox",
-        AGEWORK_INTERNAL_SANDBOX_ENGINE: context.engineType,
-        AGEWORK_INTERNAL_ISOLATION_SCOPE: context.isolationScope,
-        AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: context.scopeKey,
-        AGEWORK_INTERNAL_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(
+        AGEWORK_WORKER_CHANNEL: "http",
+        AGEWORK_WORKER_API_BASE: apiBase,
+        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
+        AGEWORK_WORKER_WORKSPACE_ID: context.scopeKey,
+        AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
+        AGEWORK_WORKER_SANDBOX_ENGINE: context.engineType,
+        AGEWORK_WORKER_ISOLATION_SCOPE: context.isolationScope,
+        AGEWORK_WORKER_RUNTIME_SCOPE_KEY: context.scopeKey,
+        AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(
           context.scopeKey
         )}`,
-        AGEWORK_INTERNAL_LOG_DIR: CONTAINER_RUNTIME_LOG_DIR,
-        AGEWORK_INTERNAL_WORKER_LOG_FILE: `${CONTAINER_RUNTIME_LOG_DIR}/${safePathPart(
+        AGEWORK_WORKER_LOG_DIR: CONTAINER_RUNTIME_LOG_DIR,
+        AGEWORK_WORKER_LOG_FILE: `${CONTAINER_RUNTIME_LOG_DIR}/${safePathPart(
           context.scopeKey
         )}.runtime.worker.log`,
       },

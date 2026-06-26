@@ -100,8 +100,8 @@ describe("OpenSandboxEngine", () => {
     await engine.getOrCreate(
       makeInput({
         env: {
-          AGEWORK_INTERNAL_TRANSPORT: "http",
-          AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_CHANNEL: "http",
+          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
         },
         metadata: {
           "agework.io/workspace-id": "ws-1",
@@ -112,8 +112,8 @@ describe("OpenSandboxEngine", () => {
     expect(client.createSandbox).toHaveBeenCalledWith(
       expect.objectContaining({
         env: expect.objectContaining({
-          AGEWORK_INTERNAL_TRANSPORT: "http",
-          AGEWORK_INTERNAL_WORKSPACE_ID: "ws-1",
+          AGEWORK_WORKER_CHANNEL: "http",
+          AGEWORK_WORKER_WORKSPACE_ID: "ws-1",
         }),
         metadata: expect.objectContaining({
           "agework.io/workspace-id": "ws-1",
@@ -168,7 +168,7 @@ describe("OpenSandboxEngine", () => {
 
     const input = makeInput({
       env: {
-        AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
+        AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
       },
     });
     const runtime = await engine.getOrCreate(input);
@@ -181,8 +181,7 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_SCOPE_KEY: "ws-1",
-          AGEWORK_INTERNAL_WORKER_MODE: "persistent",
+          AGEWORK_WORKER_RUNTIME_SCOPE_KEY: "ws-1",
         }),
       })
     );
@@ -203,7 +202,7 @@ describe("OpenSandboxEngine", () => {
       expect.any(String),
       expect.objectContaining({
         envs: expect.objectContaining({
-          AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID: "sandbox-1",
+          AGEWORK_WORKER_RUNTIME_INSTANCE_ID: "sandbox-1",
         }),
       })
     );

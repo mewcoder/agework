@@ -19,7 +19,6 @@ function makeService() {
   };
   const controlQueue = {
     pushForWorkspace: vi.fn(),
-    cleanup: vi.fn(),
     cleanupWorkspace: vi.fn(),
   };
   const service = new WorkerControlDispatcher(
@@ -110,7 +109,6 @@ describe("WorkerControlDispatcher", () => {
 
     expect(configStore.unregister).toHaveBeenCalledWith("run-1");
     expect(access.revokeAccess).toHaveBeenCalledWith("run-1");
-    expect(controlQueue.cleanup).toHaveBeenCalledWith("run-1");
     expect(controlQueue.cleanupWorkspace).toHaveBeenCalledWith("ws-1");
   });
 });

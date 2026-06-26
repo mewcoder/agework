@@ -69,11 +69,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     const child = fork(TSX_CLI, [WORKER_MAIN], {
       env: {
         ...process.env,
-        AGEWORK_INTERNAL_TRANSPORT: "ipc",
-        AGEWORK_INTERNAL_RUN_ID: runId,
-        AGEWORK_INTERNAL_RUN_START_TOKEN: startToken,
+        AGEWORK_WORKER_CHANNEL: "ipc",
+        AGEWORK_WORKER_RUN_ID: runId,
+        AGEWORK_WORKER_RUN_START_TOKEN: startToken,
         ...(runConfig.workerLogFilePath
-          ? { AGEWORK_INTERNAL_WORKER_LOG_FILE: runConfig.workerLogFilePath }
+          ? { AGEWORK_WORKER_LOG_FILE: runConfig.workerLogFilePath }
           : {}),
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],

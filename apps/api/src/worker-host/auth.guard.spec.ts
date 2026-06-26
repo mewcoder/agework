@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
-import { RuntimeInternalAuthGuard } from "./auth.guard";
-import type { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAuthGuard } from "./auth.guard";
+import type { WorkerAccessService } from "./access.service";
 
-function makeGuard(access?: Partial<RuntimeInternalAccessService>) {
+function makeGuard(access?: Partial<WorkerAccessService>) {
   const runtimeAccess = {
     verifyAccessKey: vi.fn().mockReturnValue(false),
     verifyWorkspaceKey: vi.fn().mockReturnValue(false),
@@ -13,8 +13,8 @@ function makeGuard(access?: Partial<RuntimeInternalAccessService>) {
     ...access,
   };
   return {
-    guard: new RuntimeInternalAuthGuard(
-      runtimeAccess as unknown as RuntimeInternalAccessService
+    guard: new WorkerAuthGuard(
+      runtimeAccess as unknown as WorkerAccessService
     ),
     runtimeAccess,
   };
@@ -38,7 +38,7 @@ function makeContext(params: Record<string, string>, authHeader?: string) {
   };
 }
 
-describe("RuntimeInternalAuthGuard", () => {
+describe("WorkerAuthGuard", () => {
   it("rejects when no bearer token is provided", async () => {
     const { guard } = makeGuard();
     const { context } = makeContext({ runId: "run-1" });

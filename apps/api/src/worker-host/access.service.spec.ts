@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAccessService } from "./access.service";
 
-describe("RuntimeInternalAccessService", () => {
-  let service: RuntimeInternalAccessService;
+describe("WorkerAccessService", () => {
+  let service: WorkerAccessService;
 
   beforeEach(() => {
-    service = new RuntimeInternalAccessService();
+    service = new WorkerAccessService();
   });
 
   it("issues an access key that can be verified for the same run", () => {

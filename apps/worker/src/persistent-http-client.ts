@@ -8,8 +8,9 @@ import { errorDetails, workerLog } from "./worker-log.js";
 
 /**
  * 持久容器 worker 的 HTTP 客户端。
- * 与 `HttpTransport` 的区别：controls 轮询是 workspace 级
- * （`/internal/workspaces/:workspaceId/controls`），emit/fetchRunConfig 按 runId 参数化。
+ * controls 轮询是 workspace / runtimeInstance 级
+ * （`/worker/workspaces/:workspaceId/controls` 或 `/worker/runtimes/:runtimeInstanceId/controls`），
+ * emit/fetchRunConfig 按 runId 参数化。
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
@@ -25,17 +26,17 @@ export class PersistentHttpClient {
   private readonly emitChains = new Map<string, Promise<void>>();
 
   constructor() {
-    this.apiBase = process.env.AGEWORK_INTERNAL_API_BASE ?? "http://localhost:3000";
-    this.workspaceId = process.env.AGEWORK_INTERNAL_WORKSPACE_ID ?? "";
+    this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
+    this.workspaceId = process.env.AGEWORK_WORKER_WORKSPACE_ID ?? "";
     this.runtimeInstanceId =
-      process.env.AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID || undefined;
-    this.accessKey = process.env.AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY ?? "";
+      process.env.AGEWORK_WORKER_RUNTIME_INSTANCE_ID || undefined;
+    this.accessKey = process.env.AGEWORK_WORKER_RUNTIME_ACCESS_KEY ?? "";
 
     if (!this.workspaceId && !this.runtimeInstanceId) {
-      throw new Error("AGEWORK_INTERNAL_WORKSPACE_ID or AGEWORK_INTERNAL_RUNTIME_INSTANCE_ID is required for persistent worker");
+      throw new Error("AGEWORK_WORKER_WORKSPACE_ID or AGEWORK_WORKER_RUNTIME_INSTANCE_ID is required for persistent worker");
     }
     if (!this.accessKey) {
-      throw new Error("AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY is required for persistent worker");
+      throw new Error("AGEWORK_WORKER_RUNTIME_ACCESS_KEY is required for persistent worker");
     }
 
     workerLog("persistent http client initialized", {
@@ -44,7 +45,7 @@ export class PersistentHttpClient {
       runtimeInstanceId: this.runtimeInstanceId,
       accessKeyPresent: Boolean(this.accessKey),
       logFile:
-        process.env.AGEWORK_INTERNAL_WORKER_LOG_FILE ??
+        process.env.AGEWORK_WORKER_LOG_FILE ??
         "/tmp/agework-worker.log",
     });
   }
@@ -55,8 +56,8 @@ export class PersistentHttpClient {
 
   async pollControls(waitMs = 0): Promise<Envelope<ControlPayload>[]> {
     const controlsPath = this.runtimeInstanceId
-      ? `/internal/runtimes/${this.runtimeInstanceId}/controls`
-      : `/internal/workspaces/${this.workspaceId}/controls`;
+      ? `/worker/runtimes/${this.runtimeInstanceId}/controls`
+      : `/worker/workspaces/${this.workspaceId}/controls`;
     const params = new URLSearchParams({ afterSeq: String(this.controlSeq) });
     if (waitMs > 0) {
       params.set("waitMs", String(waitMs));
@@ -135,7 +136,7 @@ export class PersistentHttpClient {
       workspaceId: this.workspaceId,
       runtimeInstanceId: this.runtimeInstanceId,
     }, "debug");
-    const res = await fetch(`${this.apiBase}/internal/runs/${runId}`, {
+    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
       headers: this.authHeaders,
     });
     if (!res.ok) {
@@ -171,7 +172,7 @@ export class PersistentHttpClient {
   }
 
   private async doEmit(runId: string, msg: UpstreamMessage): Promise<void> {
-    const url = `${this.apiBase}/internal/runs/${runId}/events`;
+    const url = `${this.apiBase}/worker/runs/${runId}/events`;
     const envelope = {
       ...msg,
       runId,
@@ -252,8 +253,8 @@ export class PersistentHttpClient {
 
   async emitWorkspaceHeartbeat(): Promise<void> {
     const heartbeatPath = this.runtimeInstanceId
-      ? `/internal/runtimes/${this.runtimeInstanceId}/heartbeat`
-      : `/internal/workspaces/${this.workspaceId}/heartbeat`;
+      ? `/worker/runtimes/${this.runtimeInstanceId}/heartbeat`
+      : `/worker/workspaces/${this.workspaceId}/heartbeat`;
     const res = await fetch(`${this.apiBase}${heartbeatPath}`, {
       method: "POST",
       headers: this.authHeaders,

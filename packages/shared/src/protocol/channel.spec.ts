@@ -1,12 +1,12 @@
 import type { Envelope } from "./envelope";
 import type {
   RunConfig,
-  RuntimeTransport,
+  RuntimeChannel,
   ControlPayload,
   UpstreamMessage,
-} from "./transport";
+} from "./channel";
 
-describe("RuntimeTransport contract", () => {
+describe("RuntimeChannel contract", () => {
   it("RunConfig carries runtimePath and env for the worker", () => {
     const config: RunConfig = {
       runId: "run-1",
@@ -29,11 +29,11 @@ describe("RuntimeTransport contract", () => {
     expect(config.agentProviderConfig.agentType).toBe("claude");
   });
 
-  it("a RuntimeTransport implementation can fetch config, emit upstream messages and subscribe controls", async () => {
+  it("a RuntimeChannel implementation can fetch config, emit upstream messages and subscribe controls", async () => {
     const sent: UpstreamMessage[] = [];
     let controlHandler: ((c: Envelope<ControlPayload>) => void) | undefined;
 
-    const transport: RuntimeTransport = {
+    const transport: RuntimeChannel = {
       fetchRunConfig: () =>
         Promise.resolve({
           runId: "run-1",

@@ -5,7 +5,7 @@ import {
   Logger,
   UnauthorizedException,
 } from "@nestjs/common";
-import { RuntimeInternalAccessService } from "./access.service";
+import { WorkerAccessService } from "./access.service";
 import { extractBearerToken } from "../auth/extract-bearer-token";
 
 type RequestWithRunId = {
@@ -17,14 +17,14 @@ type RequestWithRunId = {
 };
 
 /**
- * 校验 worker 的 run-scoped internal access key。
- * 仅用于 /internal/runs/* 端点，与用户 JWT auth 分离。
+ * 校验 worker 的 run-scoped worker access key。
+ * 仅用于 /worker/runs/* 端点，与用户 JWT auth 分离。
  */
 @Injectable()
-export class RuntimeInternalAuthGuard implements CanActivate {
-  private readonly logger = new Logger(RuntimeInternalAuthGuard.name);
+export class WorkerAuthGuard implements CanActivate {
+  private readonly logger = new Logger(WorkerAuthGuard.name);
 
-  constructor(private readonly runtimeAccess: RuntimeInternalAccessService) {}
+  constructor(private readonly runtimeAccess: WorkerAccessService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<RequestWithRunId>();

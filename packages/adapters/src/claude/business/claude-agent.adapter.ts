@@ -115,7 +115,7 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
     );
 
     // Claude Agent SDK 的 options.env 会替换整个子进程环境，而不是和
-    // process.env 合并。继承本机系统环境，但剔除 AGEWORK_PRIVATE_* / AGEWORK_INTERNAL_*；
+    // process.env 合并。继承本机系统环境，但剔除 AGEWORK_PRIVATE_* / AGEWORK_WORKER_*；
     // 系统环境模式额外保留 Claude 认证变量。
     const npmCacheDir = join(tmpdir(), "npm-cache-agent-runtime");
     const baseEnv: Record<string, string | undefined> = {
