@@ -7,7 +7,7 @@ import type { Envelope } from "@agework/shared/protocol";
  * 生命周期的一方（run 层）。由 run 在启动时注册实现，从而保持 worker-host → run 零依赖。
  */
 export interface WorkerUpstreamReceiver {
-  ingestEvent(runId: string, envelope: Envelope): Promise<void>;
+  sendEvent(runId: string, envelope: Envelope): Promise<void>;
 }
 
 /**
@@ -22,9 +22,9 @@ export class WorkerUpstreamRegistry {
     this.receiver = receiver;
   }
 
-  ingestEvent(runId: string, envelope: Envelope): Promise<void> {
+  sendEvent(runId: string, envelope: Envelope): Promise<void> {
     return this.receiver
-      ? this.receiver.ingestEvent(runId, envelope)
+      ? this.receiver.sendEvent(runId, envelope)
       : Promise.resolve();
   }
 }

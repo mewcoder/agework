@@ -9,8 +9,8 @@ import type { Envelope } from "@agework/shared/protocol";
  * 实现并注入，属于 API 进程内的依赖倒置契约，而非 worker↔api 的线缆协议，不放在 shared/protocol。
  */
 export interface RunEventReceiver {
-  /** 转发 worker 上行事件流（local 模式 IPC 入口；sandbox 模式不经此，直走 worker-host）。 */
-  publish(envelope: Envelope<unknown>): Promise<void>;
+  /** 转发上行 event（local 模式 IPC 入口；sandbox 模式直走 worker-host）。 */
+  sendEvent(runId: string, envelope: Envelope<unknown>): Promise<void>;
   /**
    * 通知 run：worker 异常（进程崩溃 / 心跳超时 / sandbox 创建失败等）。
    * run 自行判断当前状态并决定是否转为 error 终态。

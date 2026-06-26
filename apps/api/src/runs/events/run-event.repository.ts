@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type {
   RecordRunEventInput,
@@ -8,17 +8,17 @@ import type {
 } from "@agework/shared/protocol";
 import type { Prisma, RunEvent } from "../../../generated/prisma/client.js";
 import { PrismaService } from "../../prisma/prisma.service";
-import { errorLogFields, redactLogValue, safeLogJson } from "../../common/logging";
+import { redactLogValue } from "../../common/logging";
 
 const MAX_SUMMARY_LENGTH = 500;
 const MAX_DATA_JSON_LENGTH = 8_000;
 
-type RunEventCreateInput = RecordRunEventInput & {
+export type RunEventCreateInput = RecordRunEventInput & {
   runSeq: number;
 };
 
 @Injectable()
-export class RunEventStore {
+export class RunEventRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async maxRunSeq(runId: string): Promise<number> {
@@ -30,85 +30,27 @@ export class RunEventStore {
     return latest?.runSeq ?? 0;
   }
 
-  async insertOrGetByEventKey(input: RunEventCreateInput): Promise<RunEvent> {
+  async insertOrGetByEventKey(
+    input: RunEventCreateInput
+  ): Promise<RunEventRecord> {
     try {
-      return await this.prisma.runEvent.create({
-        data: toPrismaCreateInput(input),
+      const row = await this.prisma.runEvent.create({
+        data: toPrismaCreateInput(normalizeCreateInput(input)),
       });
+      return toRunEventRecord(row);
     } catch (err) {
       if (input.eventKey && isPrismaUniqueError(err)) {
         const existing = await this.prisma.runEvent.findFirst({
           where: { runId: input.runId, eventKey: input.eventKey },
         });
-        if (existing) return existing;
+        if (existing) return toRunEventRecord(existing);
       }
       throw err;
     }
   }
 }
 
-/**
- * Per-run seq is allocated in-process for the single API instance deployment.
- * Multi-instance deployment must move seq allocation into RunEventStore/DB.
- */
-@Injectable()
-export class RunEventRecorder {
-  private readonly logger = new Logger(RunEventRecorder.name);
-  private readonly runSeqCounters = new Map<string, number>();
-  private readonly runLocks = new Map<string, Promise<unknown>>();
-
-  constructor(private readonly store: RunEventStore) {}
-
-  append(fact: RecordRunEventInput): Promise<RunEventRecord> {
-    return this.withRunLock(fact.runId, async () => {
-      if (!this.runSeqCounters.has(fact.runId)) {
-        this.runSeqCounters.set(
-          fact.runId,
-          await this.store.maxRunSeq(fact.runId)
-        );
-      }
-
-      const runSeq = (this.runSeqCounters.get(fact.runId) ?? 0) + 1;
-      this.runSeqCounters.set(fact.runId, runSeq);
-
-      try {
-        const row = await this.store.insertOrGetByEventKey({
-          ...normalizeFact(fact),
-          runSeq,
-        });
-        return toRunEventRecord(row);
-      } catch (err) {
-        this.logger.warn(
-          `append run event failed ${safeLogJson({
-            runId: fact.runId,
-            type: fact.type,
-            ...errorLogFields(err),
-          })}`
-        );
-        throw err;
-      }
-    });
-  }
-
-  forgetRun(runId: string): void {
-    this.runSeqCounters.delete(runId);
-  }
-
-  private withRunLock<T>(runId: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.runLocks.get(runId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(fn);
-    const stored = next.catch(() => undefined);
-    this.runLocks.set(runId, stored);
-    stored.finally(() => {
-      if (this.runLocks.get(runId) === stored) {
-        this.runLocks.delete(runId);
-      }
-    });
-    return next;
-  }
-}
-
-function normalizeFact(input: RecordRunEventInput): RecordRunEventInput {
+function normalizeCreateInput(input: RunEventCreateInput): RunEventCreateInput {
   return {
     ...input,
     summary: truncate(input.summary, MAX_SUMMARY_LENGTH),

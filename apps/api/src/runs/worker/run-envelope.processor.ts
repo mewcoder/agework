@@ -9,11 +9,11 @@ import type {
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
-  RunActiveStore,
+  ActiveRunRegistry,
   type RunHandle,
   type RunTimeoutErrorSink,
-} from "./run-active.store";
-import { RunDriver } from "../worker/run-driver";
+} from "../lifecycle/active-run.registry";
+import { RunDriver } from "./run-driver";
 import { ConversationService } from "../../conversations/conversation.service";
 import { swallow } from "../../common/swallow";
 import {
@@ -21,18 +21,10 @@ import {
   safeLogJson,
   summarizeEnvelopePayload,
 } from "../../common/logging";
-import { RawEventLogWriter } from "../events/raw-event-log.writer";
-import { RunEventRecorder } from "../events/run-event-recorder";
-import { decideRunStatusUpdate } from "./run-lifecycle.policy";
-import {
-  aguiEventFacts,
-  commandTraceFact,
-  runStatusFact,
-  sdkRawErrorFact,
-  shouldLogAgUiEvent,
-  workerSeqGapFact,
-} from "../events/run-event-normalizer";
-import { RunStatusHandler } from "./run-status.handler";
+import { AgentEventTraceWriter } from "../events/agent-event-trace.writer";
+import { RunEventService } from "../events/run-event.service";
+import { decideRunStatusUpdate } from "../lifecycle/run-status.policy";
+import { RunStatusService } from "../lifecycle/run-status.service";
 
 const CHUNK_SAVE_INTERVAL = 20;
 /** 终态完成后保留记录的时长，用于阻止 exit handler 等延迟事件覆盖已终态 */
@@ -49,12 +41,12 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
   private readonly completedRuns = new Map<string, NodeJS.Timeout>();
 
   constructor(
-    private readonly runService: RunRepository,
-    private readonly runRegistry: RunActiveStore,
+    private readonly runRepository: RunRepository,
+    private readonly activeRuns: ActiveRunRegistry,
     private readonly conversationService: ConversationService,
-    private readonly rawEventLogWriter: RawEventLogWriter,
-    private readonly runEventRecorder: RunEventRecorder,
-    private readonly runStatusHandler: RunStatusHandler,
+    private readonly eventTraceWriter: AgentEventTraceWriter,
+    private readonly runEvents: RunEventService,
+    private readonly runStatusService: RunStatusService,
     private readonly runDriver: RunDriver
   ) {}
 
@@ -106,8 +98,8 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
         })}`
       );
       // gap 只 warn 不可在管理端追溯；落一条摘要事件，使其在 run detail 中可见。
-      this.recordRunEventFact(
-        workerSeqGapFact({
+      this.recordRunEvent(
+        this.runEvents.fromWorkerSeqGap({
           runId,
           expected,
           got: seq,
@@ -192,7 +184,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     this.recordRunStatusTraceEvent(runId, payload);
 
     try {
-      const handle = this.runRegistry.get(runId);
+      const handle = this.activeRuns.get(runId);
 
       // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
       // 必须在 saveRun/res.write 等可能抛异常的操作之前设置，
@@ -206,7 +198,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
         this.completedRuns.set(runId, timer);
       }
 
-      await this.runStatusHandler.apply({
+      await this.runStatusService.apply({
         runId,
         payload,
         effect,
@@ -217,7 +209,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
         this.finalizingRuns.delete(runId);
         this.lastSeqMap.delete(runId);
         this.chunkCounters.delete(runId);
-        this.runEventRecorder.forgetRun(runId);
+        this.runEvents.forgetRun(runId);
       }
     }
   }
@@ -247,7 +239,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
   }
 
   private async handleAgUiEvent(runId: string, event: unknown) {
-    const handle = this.runRegistry.get(runId);
+    const handle = this.activeRuns.get(runId);
     if (!handle) {
       this.logger.warn(
         `drop AG-UI event without active handle ${safeLogJson({ runId })}`
@@ -257,13 +249,13 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
 
     const evt = event as Record<string, unknown>;
     const eventType = typeof evt.type === "string" ? evt.type : "unknown";
-    if (shouldLogAgUiEvent(eventType)) {
+    if (this.runEvents.shouldLogAgUiEvent(eventType)) {
       this.logger.debug(
         `forward AG-UI event ${safeLogJson({ runId, type: eventType })}`
       );
     }
     this.recordAgUiTraceEvent(runId, eventType, evt);
-    this.rawEventLogWriter.writeAgui(handle.agentEventTrace, event);
+    this.eventTraceWriter.writeAgui(handle.agentEventTrace, event);
     handle.aggregator.handle(evt as { type: string; [key: string]: unknown });
 
     // Chunk-based save throttle（兼 resume 快照推送节流）
@@ -347,7 +339,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     if (evt.type === "RUN_FINISHED") {
       const usage = normalizeRunUsage(evt.result);
       if (usage) {
-        this.runService
+        this.runRepository
           .recordUsage(runId, usage)
           .catch(swallow(this.logger, `record usage for run ${runId}`));
       }
@@ -374,14 +366,14 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
   }
 
   private async handleSdkRawEvent(runId: string, event: unknown) {
-    const handle = this.runRegistry.get(runId);
+    const handle = this.activeRuns.get(runId);
     if (!handle) {
       this.logger.debug(
         `drop raw SDK event without active handle ${safeLogJson({ runId })}`
       );
       return;
     }
-    this.rawEventLogWriter.writeRaw(handle.agentEventTrace, event);
+    this.eventTraceWriter.writeRaw(handle.agentEventTrace, event);
     this.recordSdkRawTraceEvent(runId, event);
   }
 
@@ -389,8 +381,8 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     runId: string,
     payload: RunStatusPayload
   ): void {
-    this.recordRunEventFact(
-      runStatusFact(runId, payload),
+    this.recordRunEvent(
+      this.runEvents.fromRunStatusPayload(runId, payload),
       `record run status event for run ${runId}`
     );
   }
@@ -400,10 +392,10 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     eventType: string,
     event: Record<string, unknown>
   ): void {
-    const facts = aguiEventFacts(runId, eventType, event);
-    for (const fact of facts) {
-      this.recordRunEventFact(
-        fact,
+    const events = this.runEvents.fromAgUiEvent(runId, eventType, event);
+    for (const event of events) {
+      this.recordRunEvent(
+        event,
         `record AG-UI event ${eventType} for run ${runId}`
       );
     }
@@ -413,8 +405,8 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     runId: string,
     event: unknown
   ): void {
-    this.recordRunEventFact(
-      sdkRawErrorFact(runId, event),
+    this.recordRunEvent(
+      this.runEvents.fromSdkRawEvent(runId, event),
       `record raw SDK error event for run ${runId}`
     );
   }
@@ -424,19 +416,19 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     runId: string,
     payload: CommandTracePayload
   ): void {
-    this.recordRunEventFact(
-      commandTraceFact(runId, payload),
+    this.recordRunEvent(
+      this.runEvents.fromCommandTrace(runId, payload),
       `record command trace for run ${runId}`
     );
   }
 
-  private recordRunEventFact(
-    fact: RecordRunEventInput | undefined,
+  private recordRunEvent(
+    event: RecordRunEventInput | undefined,
     context: string
   ): void {
-    if (!fact) return;
-    this.runEventRecorder
-      .append(fact)
+    if (!event) return;
+    this.runEvents
+      .append(event)
       .catch(swallow(this.logger, context));
   }
 }

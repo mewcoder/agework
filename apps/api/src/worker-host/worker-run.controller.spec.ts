@@ -52,10 +52,10 @@ describe("WorkerRunController", () => {
 
   describe("postEvent()", () => {
     it("delegates the envelope to the upstream sink", async () => {
-      const ingestEvent = vi.fn().mockResolvedValue(undefined);
+      const sendEvent = vi.fn().mockResolvedValue(undefined);
       const controller = makeController({
         configStore: {},
-        upstream: { ingestEvent },
+        upstream: { sendEvent },
       });
 
       const envelope = {
@@ -68,7 +68,7 @@ describe("WorkerRunController", () => {
       await expect(controller.postEvent("run-1", envelope)).resolves.toEqual({
         ok: true,
       });
-      expect(ingestEvent).toHaveBeenCalledWith("run-1", envelope);
+      expect(sendEvent).toHaveBeenCalledWith("run-1", envelope);
     });
   });
 });

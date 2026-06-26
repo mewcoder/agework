@@ -1,8 +1,10 @@
+import { describe, expect, it, vi } from "vitest";
+
 vi.mock("../../../prisma/prisma.service", () => ({
   PrismaService: class PrismaService {},
 }));
 
-import { RunEventQuery } from "./run-event-query";
+import { RunEventQuery } from "./run-event.query";
 
 describe("RunEventQuery", () => {
   it("lists run events with pagination and filters", async () => {

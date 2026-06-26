@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { RunMessageAggregator } from "./run-message.aggregator";
+import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 
-describe("RunMessageAggregator", () => {
+describe("AssistantMessageAggregator", () => {
   it("uses streaming for incomplete snapshots by default", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({
       type: "TEXT_MESSAGE_START",
@@ -23,7 +23,7 @@ describe("RunMessageAggregator", () => {
   });
 
   it("preserves cancelled for explicit run cancellation", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({
       type: "TEXT_MESSAGE_START",
@@ -44,7 +44,7 @@ describe("RunMessageAggregator", () => {
   });
 
   it("can mark a cancelled stream as user-steered", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({
       type: "TEXT_MESSAGE_START",
@@ -65,7 +65,7 @@ describe("RunMessageAggregator", () => {
   });
 
   it("reports the server messageId from TEXT_MESSAGE_START", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({
       type: "TEXT_MESSAGE_START",
@@ -83,7 +83,7 @@ describe("RunMessageAggregator", () => {
   });
 
   it("reports complete/unknown for a normal RUN_FINISHED (shared with the frontend aggregator)", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({ type: "TEXT_MESSAGE_CONTENT", delta: "hello" });
     aggregator.handle({ type: "RUN_FINISHED" });
@@ -95,7 +95,7 @@ describe("RunMessageAggregator", () => {
   });
 
   it("stamps mcp-apps activity snapshots onto resolved tool calls (newly shared with the frontend aggregator)", () => {
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     aggregator.handle({ type: "RUN_STARTED" });
     aggregator.handle({
       type: "TOOL_CALL_START",

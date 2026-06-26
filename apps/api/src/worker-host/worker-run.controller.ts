@@ -70,7 +70,7 @@ export class WorkerRunController {
     @Param("runId") runId: string,
     @Body() envelope: Envelope
   ): Promise<{ ok: boolean }> {
-    await this.upstream.ingestEvent(runId, envelope);
+    await this.upstream.sendEvent(runId, envelope);
     return { ok: true };
   }
 }

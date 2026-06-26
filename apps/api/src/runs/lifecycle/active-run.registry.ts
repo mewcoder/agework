@@ -6,8 +6,8 @@ import type {
 } from "@agework/shared/protocol";
 import type {
   IncompleteMessageReason,
-  RunMessageAggregator,
-} from "../messages/run-message.aggregator";
+  AssistantMessageAggregator,
+} from "../assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
@@ -21,7 +21,7 @@ export interface RunTimeoutErrorSink {
 export type RunHandle = {
   runtimeHandle: WorkerExecutionHandle;
   res: Response | null;
-  aggregator: RunMessageAggregator;
+  aggregator: AssistantMessageAggregator;
   conversationId: string;
   runId: string;
   workspaceId: string;
@@ -44,8 +44,8 @@ export type RunHandle = {
 };
 
 @Injectable()
-export class RunActiveStore {
-  private readonly logger = new Logger(RunActiveStore.name);
+export class ActiveRunRegistry {
+  private readonly logger = new Logger(ActiveRunRegistry.name);
   private readonly handles = new Map<string, RunHandle>();
   private readonly timeoutTimers = new Map<string, NodeJS.Timeout>();
   private timeoutErrorSink?: RunTimeoutErrorSink;

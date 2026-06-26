@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { RunRecoveryUseCase } from "./run-recovery.use-case";
+import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import { ConversationService } from "../../conversations/conversation.service";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
@@ -19,7 +19,7 @@ function makePrisma() {
   };
 }
 
-describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
+describe("RunRecoveryService.recoverOrphanRuns", () => {
   it("recovers orphan runs via the matching provider's recoverOrphan, based on runtimeType", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
     const mockRunRepository: Partial<RunRepository> = {
@@ -40,7 +40,7 @@ describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
     };
 
-    const service = new RunRecoveryUseCase(
+    const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
@@ -80,7 +80,7 @@ describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
       resolve: vi.fn(),
     };
 
-    const service = new RunRecoveryUseCase(
+    const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
@@ -97,7 +97,7 @@ describe("RunRecoveryUseCase.recoverOrphanRuns", () => {
   });
 });
 
-describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
+describe("RunRecoveryService.recoverOrphanContainers", () => {
   it("stops running workspace-scope runtime resources and marks them stopped", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
     const mockRunRepository: Partial<RunRepository> = {
@@ -125,7 +125,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       },
     ]);
 
-    const service = new RunRecoveryUseCase(
+    const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,
@@ -181,7 +181,7 @@ describe("RunRecoveryUseCase.recoverOrphanContainers", () => {
       },
     ]);
 
-    const service = new RunRecoveryUseCase(
+    const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       mockProviderRegistry as RuntimeProviderRegistry,

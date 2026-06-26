@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { AdminRunController, parseMulti } from "./admin-run.controller";
 import type { RunRepository } from "../run.repository";
-import type { RunEventQuery } from "../events/run-event-query";
+import type { RunEventQuery } from "./run-event.query";
 
 function makeController() {
-  const runService = {
+  const runRepository = {
     listAdmin: vi.fn().mockResolvedValue({ list: [] }),
     detailAdmin: vi.fn().mockResolvedValue({}),
   };
@@ -13,10 +13,10 @@ function makeController() {
   };
   return {
     controller: new AdminRunController(
-      runService as unknown as RunRepository,
+      runRepository as unknown as RunRepository,
       runEventQueryService as unknown as RunEventQuery
     ),
-    runService,
+    runRepository,
     runEventQueryService,
   };
 }
@@ -24,9 +24,9 @@ function makeController() {
 describe("AdminRunController", () => {
   describe("listAdmin()", () => {
     it("passes pagination and status filter", async () => {
-      const { controller, runService } = makeController();
+      const { controller, runRepository } = makeController();
       await controller.listAdmin("running", "2", "25");
-      expect(runService.listAdmin).toHaveBeenCalledWith({
+      expect(runRepository.listAdmin).toHaveBeenCalledWith({
         status: "running",
         take: 25,
         skip: 25,
@@ -34,9 +34,9 @@ describe("AdminRunController", () => {
     });
 
     it("uses defaults when params are omitted", async () => {
-      const { controller, runService } = makeController();
+      const { controller, runRepository } = makeController();
       await controller.listAdmin();
-      expect(runService.listAdmin).toHaveBeenCalledWith({
+      expect(runRepository.listAdmin).toHaveBeenCalledWith({
         status: undefined,
         take: 10,
         skip: 0,
@@ -45,10 +45,10 @@ describe("AdminRunController", () => {
   });
 
   describe("query()", () => {
-    it("delegates to runService.detailAdmin", async () => {
-      const { controller, runService } = makeController();
+    it("delegates to runRepository.detailAdmin", async () => {
+      const { controller, runRepository } = makeController();
       await controller.query("run-1");
-      expect(runService.detailAdmin).toHaveBeenCalledWith("run-1");
+      expect(runRepository.detailAdmin).toHaveBeenCalledWith("run-1");
     });
   });
 

@@ -2,9 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { RawEventLogWriter } from "./raw-event-log.writer";
+import { AgentEventTraceWriter } from "./agent-event-trace.writer";
 
-describe("RawEventLogWriter", () => {
+describe("AgentEventTraceWriter", () => {
   const tempDirs: string[] = [];
 
   afterEach(() => {
@@ -18,7 +18,7 @@ describe("RawEventLogWriter", () => {
     tempDirs.push(dir);
     const rawFilePath = join(dir, "conversation-1.raw.jsonl");
     const aguiFilePath = join(dir, "conversation-1.agui.jsonl");
-    const service = new RawEventLogWriter();
+    const service = new AgentEventTraceWriter();
     const config = {
       enabled: true,
       rawFilePath,

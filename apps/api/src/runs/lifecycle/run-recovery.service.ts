@@ -14,11 +14,11 @@ import {
  * 让对应 provider 清理底层进程/容器，并将 run/thread 状态标记为 error。
  */
 @Injectable()
-export class RunRecoveryUseCase {
-  private readonly logger = new Logger(RunRecoveryUseCase.name);
+export class RunRecoveryService {
+  private readonly logger = new Logger(RunRecoveryService.name);
 
   constructor(
-    private readonly runService: RunRepository,
+    private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly prisma: PrismaService
@@ -26,7 +26,7 @@ export class RunRecoveryUseCase {
 
   async recoverOrphanRuns(): Promise<void> {
     try {
-      const activeRuns = await this.runService.findAllActive();
+      const activeRuns = await this.runRepository.findAllActive();
       if (activeRuns.length === 0) {
         this.logger.log("No orphan runs found.");
       } else {
@@ -44,7 +44,10 @@ export class RunRecoveryUseCase {
             // container/sandbox because one run is orphaned would kill the others.
             // Only call recoverOrphan when the runtime is NOT user-scoped.
             const shouldRecoverOrphan =
-              await this.shouldRecoverOrphanRuntime(run.runtimeInstanceId, run.runtimeType);
+              await this.shouldRecoverOrphanRuntime(
+                run.runtimeInstanceId,
+                run.runtimeType
+              );
             if (shouldRecoverOrphan) {
               await provider
                 .recoverOrphan(run.runtimeInstanceId)
@@ -56,7 +59,7 @@ export class RunRecoveryUseCase {
             }
           }
 
-          await this.runService.markError(run.id, "服务重启导致运行中断");
+          await this.runRepository.markError(run.id, "服务重启导致运行中断");
           await this.conversationService
             .setActiveRunStatus(run.conversationId, "error")
             .catch(

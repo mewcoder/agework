@@ -110,9 +110,9 @@ export class LocalRuntimeProvider
     // Forward upstream messages to RunEnvelopeProcessor
     child.on("message", (msg: unknown) => {
       const envelope = msg as Envelope<unknown>;
-      this.receiver.publish(envelope).catch((err) => {
+      this.receiver.sendEvent(runId, envelope).catch((err) => {
         this.logger.warn(
-          `runtime event publish failed ${safeLogJson({
+          `worker envelope receive failed ${safeLogJson({
             runId,
             type: envelope.type,
             ...errorLogFields(err),

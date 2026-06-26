@@ -1,13 +1,13 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { Roles } from "../../auth/roles.decorator";
 import { RunRepository } from "../run.repository";
-import { RunEventQuery } from "../events/run-event-query";
+import { RunEventQuery } from "./run-event.query";
 
 @Controller("admin/runs")
 @Roles("admin")
 export class AdminRunController {
   constructor(
-    private readonly runService: RunRepository,
+    private readonly runRepository: RunRepository,
     private readonly runEventQueryService: RunEventQuery
   ) {}
 
@@ -19,7 +19,7 @@ export class AdminRunController {
   ) {
     const take = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
     const pageNum = Math.max(Number(pageNo) || 1, 1);
-    return this.runService.listAdmin({
+    return this.runRepository.listAdmin({
       status: status || undefined,
       take,
       skip: (pageNum - 1) * take,
@@ -28,7 +28,7 @@ export class AdminRunController {
 
   @Get("query")
   query(@Query("id") id: string) {
-    return this.runService.detailAdmin(id);
+    return this.runRepository.detailAdmin(id);
   }
 
   @Get("events")

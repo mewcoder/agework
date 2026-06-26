@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RunActiveStore, type RunHandle } from "./run-active.store";
+import { ActiveRunRegistry, type RunHandle } from "./active-run.registry";
 import type { ConfigService } from "../../config/config.service";
 
 function makeConfig(timeoutSeconds = 60): ConfigService {
@@ -27,13 +27,13 @@ function makeHandle(runId = "run-1"): RunHandle {
   };
 }
 
-describe("RunActiveStore", () => {
+describe("ActiveRunRegistry", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it("registers, retrieves and unregisters a run handle", () => {
-    const registry = new RunActiveStore(makeConfig());
+    const registry = new ActiveRunRegistry(makeConfig());
     const handle = makeHandle();
 
     registry.register("run-1", handle);
@@ -44,14 +44,14 @@ describe("RunActiveStore", () => {
   });
 
   it("returns undefined for an unknown run id", () => {
-    const registry = new RunActiveStore(makeConfig());
+    const registry = new ActiveRunRegistry(makeConfig());
     expect(registry.get("missing")).toBeUndefined();
   });
 
   it("forces a run error after the configured timeout", async () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
-    const registry = new RunActiveStore(makeConfig(1));
+    const registry = new ActiveRunRegistry(makeConfig(1));
     registry.setTimeoutErrorSink({ markRunTimedOut });
 
     const handle = makeHandle();
@@ -68,7 +68,7 @@ describe("RunActiveStore", () => {
   it("clears the timeout when a run is unregistered", async () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
-    const registry = new RunActiveStore(makeConfig(1));
+    const registry = new ActiveRunRegistry(makeConfig(1));
     registry.setTimeoutErrorSink({ markRunTimedOut });
 
     registry.register("run-1", makeHandle());

@@ -4,7 +4,7 @@ import {
   isTerminalRunStatus,
   RUNNING_MUTABLE_STATUSES,
   runStatusEffect,
-} from "./run-lifecycle.policy";
+} from "./run-status.policy";
 
 describe("run lifecycle policy", () => {
   it("classifies terminal run statuses", () => {

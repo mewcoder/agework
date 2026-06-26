@@ -2,16 +2,16 @@ import { Module, OnModuleInit } from "@nestjs/common";
 
 // core
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./lifecycle/run-active.store";
-import { RunEnvelopeProcessor } from "./lifecycle/run-envelope.processor";
-import { RunStatusHandler } from "./lifecycle/run-status.handler";
-import { RawEventLogWriter } from "./events/raw-event-log.writer";
-import { RunEventRecorder, RunEventStore } from "./events/run-event-recorder";
-import { RunEventQuery } from "./events/run-event-query";
-import { RunRecoveryUseCase } from "./lifecycle/run-recovery.use-case";
+import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
+import { RunEnvelopeProcessor } from "./worker/run-envelope.processor";
+import { RunStatusService } from "./lifecycle/run-status.service";
+import { AgentEventTraceWriter } from "./events/agent-event-trace.writer";
+import { RunEventRepository } from "./events/run-event.repository";
+import { RunEventService } from "./events/run-event.service";
+import { RunEventQuery } from "./admin/run-event.query";
+import { RunRecoveryService } from "./lifecycle/run-recovery.service";
 import { RunService } from "./run.service";
-import { RunEventReceiverAdapter } from "./worker/run-event-receiver.adapter";
-import { WorkerUpstreamAdapter } from "./worker/worker-upstream.adapter";
+import { WorkerEventReceiverAdapter } from "./worker/worker-event-receiver.adapter";
 import { RunDriver } from "./worker/run-driver";
 
 // controllers
@@ -30,7 +30,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。单向依赖 runtime / worker-host，
- * 并在启动时把反向通知端口的实现注入下层：RunEventReceiver → runtime provider /
+ * 并在启动时把 worker 事件统一入口注入下层：RunEventReceiver → runtime provider /
  * command queue；WorkerUpstreamReceiver → worker-host 的 WorkerRunController。
  */
 @Module({
@@ -43,43 +43,41 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
   controllers: [AdminRunController],
   providers: [
     RunRepository,
-    RunActiveStore,
+    ActiveRunRegistry,
     RunEnvelopeProcessor,
-    RawEventLogWriter,
-    RunEventStore,
-    RunEventRecorder,
+    AgentEventTraceWriter,
+    RunEventRepository,
+    RunEventService,
     RunEventQuery,
-    RunRecoveryUseCase,
-    RunStatusHandler,
+    RunRecoveryService,
+    RunStatusService,
     RunService,
     RunDriver,
-    RunEventReceiverAdapter,
-    WorkerUpstreamAdapter,
+    WorkerEventReceiverAdapter,
   ],
   exports: [RunService, RunRepository],
 })
 export class RunsModule implements OnModuleInit {
   constructor(
-    private readonly runRecovery: RunRecoveryUseCase,
+    private readonly runRecovery: RunRecoveryService,
     private readonly providerRegistry: RuntimeProviderRegistry,
     private readonly commandQueue: WorkerCommandQueue,
     private readonly commandDispatcher: WorkerCommandDispatcher,
     private readonly accessService: WorkerAccessService,
     private readonly workerUpstream: WorkerUpstreamRegistry,
-    private readonly runRegistry: RunActiveStore,
-    private readonly runEventProcessor: RunEnvelopeProcessor,
-    private readonly runEventReceiver: RunEventReceiverAdapter,
-    private readonly workerUpstreamAdapter: WorkerUpstreamAdapter
+    private readonly activeRuns: ActiveRunRegistry,
+    private readonly runEnvelopeProcessor: RunEnvelopeProcessor,
+    private readonly workerEvents: WorkerEventReceiverAdapter
   ) {}
 
   async onModuleInit() {
     // 把反向通知端口的实现注入下层（它们只认接口，不直接依赖 run 实现）：
-    this.providerRegistry.setRunEventReceiver(this.runEventReceiver);
+    this.providerRegistry.setRunEventReceiver(this.workerEvents);
     this.providerRegistry.setCommandPort(this.commandDispatcher);
     this.providerRegistry.setAccessPort(this.accessService);
-    this.commandQueue.setCommandSentRecorder(this.runEventReceiver);
-    this.workerUpstream.setReceiver(this.workerUpstreamAdapter);
-    this.runRegistry.setTimeoutErrorSink(this.runEventProcessor);
+    this.commandQueue.setCommandSentRecorder(this.workerEvents);
+    this.workerUpstream.setReceiver(this.workerEvents);
+    this.activeRuns.setTimeoutErrorSink(this.runEnvelopeProcessor);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

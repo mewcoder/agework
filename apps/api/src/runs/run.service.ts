@@ -16,22 +16,21 @@ import type {
 } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./lifecycle/run-active.store";
+import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
 import { RunDriver } from "./worker/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import {
-  RunMessageAggregator,
+  AssistantMessageAggregator,
   type IncompleteMessageReason,
-} from "./messages/run-message.aggregator";
+} from "./assistant-message.aggregator";
 import { ConfigService, type IsolationScope } from "../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
 import { EnvKey } from "../config/env-key";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
-import { RunEventRecorder } from "./events/run-event-recorder";
-import { RunEventFacts, compactData } from "./events/run-event-facts";
+import { RunEventService, compactData } from "./events/run-event.service";
 import type { StartRunInput } from "./run-service.types";
 import { PrismaService } from "../prisma/prisma.service";
 import { safePathPart } from "../common/safe-path";
@@ -53,11 +52,11 @@ export class RunService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly runRegistry: RunActiveStore,
+    private readonly activeRuns: ActiveRunRegistry,
     private readonly runtimeService: RuntimeService,
     private readonly runDriver: RunDriver,
     private readonly conversationService: ConversationService,
-    private readonly runEventRecorder: RunEventRecorder,
+    private readonly runEvents: RunEventService,
     private readonly titleService: TitleService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService
@@ -198,7 +197,7 @@ export class RunService {
     }
 
     // 6. aggregator + saveRun
-    const aggregator = new RunMessageAggregator();
+    const aggregator = new AssistantMessageAggregator();
     // 串行化 saveRun：chunk 节流 / 事件边界 / 终态会多次调用，原 fire-and-forget
     // 并发 upsert 可能乱序完成——较早的不完整快照若晚于终态完整快照落库，会把
     // status 覆盖回 incomplete。用 promise 链按调用顺序执行 build+upsert，
@@ -263,9 +262,9 @@ export class RunService {
         agentType,
         runtimeType,
       });
-      this.runEventRecorder
+      this.runEvents
         .append(
-          RunEventFacts.runCreated({
+          this.runEvents.runCreated({
             runId,
             conversationId,
             workspaceId: placement.workspaceId,
@@ -284,9 +283,9 @@ export class RunService {
               `attach user message ${userMessageId} to run ${runId}`
             )
           );
-        this.runEventRecorder
+        this.runEvents
           .append(
-            RunEventFacts.messageAccepted({
+            this.runEvents.messageAccepted({
               runId,
               conversationId,
               messageId: userMessageId,
@@ -318,9 +317,9 @@ export class RunService {
     // Start worker through the Run-layer execution boundary.
     let runtimeHandle: WorkerExecutionHandle;
     try {
-      this.runEventRecorder
+      this.runEvents
         .append(
-          RunEventFacts.runtimeStatusChanged({
+          this.runEvents.runtimeStatusChanged({
             runId,
             status: "starting",
             runtimeType,
@@ -340,9 +339,9 @@ export class RunService {
             .catch(
               swallow(this.logger, `persist runtime handle for run ${runId}`)
             );
-          this.runEventRecorder
+          this.runEvents
             .append(
-              RunEventFacts.runtimeStatusChanged({
+              this.runEvents.runtimeStatusChanged({
                 runId,
                 eventKey: `runtime:${runtimeInstanceId}:ready`,
                 status: "ready",
@@ -368,9 +367,9 @@ export class RunService {
       await this.runRepository
         .markError(runId, "Failed to start worker")
         .catch(swallow(this.logger, `mark run ${runId} start failure`));
-      this.runEventRecorder
+      this.runEvents
         .append(
-          RunEventFacts.runtimeStatusChanged({
+          this.runEvents.runtimeStatusChanged({
             runId,
             status: "start_failed",
             error: err instanceof Error ? err.message : String(err),
@@ -380,7 +379,7 @@ export class RunService {
         .catch(
           swallow(this.logger, `record runtime start failure for run ${runId}`)
         )
-        .finally(() => this.runEventRecorder.forgetRun(runId));
+        .finally(() => this.runEvents.forgetRun(runId));
       await this.conversationService
         .setActiveRunStatus(conversationId, "error")
         .catch(
@@ -408,9 +407,9 @@ export class RunService {
           runtimeHandle.runtimeInstanceId
         )
         .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
-      this.runEventRecorder
+      this.runEvents
         .append(
-          RunEventFacts.runtimeStatusChanged({
+          this.runEvents.runtimeStatusChanged({
             runId,
             eventKey: `runtime:${runtimeHandle.runtimeInstanceId}:ready`,
             status: "ready",
@@ -422,8 +421,8 @@ export class RunService {
         .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
     }
 
-    // Register with RunActiveStore
-    this.runRegistry.register(runId, {
+    // Register with ActiveRunRegistry
+    this.activeRuns.register(runId, {
       runtimeHandle,
       res,
       aggregator,
@@ -439,7 +438,7 @@ export class RunService {
 
     // SSE disconnect: null out the response ref (don't cancel the run)
     res.on("close", () => {
-      const handle = this.runRegistry.get(runId);
+      const handle = this.activeRuns.get(runId);
       if (handle) {
         handle.res = null;
       }
@@ -460,7 +459,7 @@ export class RunService {
   ): Promise<void> {
     const activeRun =
       await this.runRepository.findActiveByConversationId(conversationId);
-    const handle = activeRun ? this.runRegistry.get(activeRun.id) : undefined;
+    const handle = activeRun ? this.activeRuns.get(activeRun.id) : undefined;
     if (!handle) {
       throw new NotFoundException(
         `No active run for conversation: ${conversationId}`
@@ -493,7 +492,7 @@ export class RunService {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
-      ? this.runRegistry.get(activeRunRecord.id)
+      ? this.activeRuns.get(activeRunRecord.id)
       : undefined;
 
     // run 已结束 / 无内存 handle：发终态快照收尾
@@ -527,7 +526,7 @@ export class RunService {
     handle.streamingSnapshot = true;
     res.on("close", () => {
       // 连接断开只清引用，不取消 run（与正常 run 的 res.on close 一致）
-      const current = this.runRegistry.get(handle.runId);
+      const current = this.activeRuns.get(handle.runId);
       if (current && current.res === res) {
         current.res = null;
         current.streamingSnapshot = false;
@@ -650,15 +649,15 @@ export class RunService {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
-      ? this.runRegistry.get(activeRunRecord.id)
+      ? this.activeRuns.get(activeRunRecord.id)
       : undefined;
     if (!handle) {
       // No in-memory handle — clean up stale state
       if (activeRunRecord) {
         await this.runRepository.markCancelled(activeRunRecord.id);
-        this.runEventRecorder
+        this.runEvents
           .append(
-            RunEventFacts.runStatusChanged({
+            this.runEvents.runStatusChanged({
               runId: activeRunRecord.id,
               origin: "platform",
               status: "cancelled",
@@ -678,9 +677,9 @@ export class RunService {
     handle.stopReason = options?.reason;
     if (activeRunRecord) {
       await this.runRepository.markCancelling(activeRunRecord.id);
-      this.runEventRecorder
+      this.runEvents
         .append(
-          RunEventFacts.runStatusChanged({
+          this.runEvents.runStatusChanged({
             runId: activeRunRecord.id,
             origin: "platform",
             status: "cancelling",
@@ -715,7 +714,7 @@ type RuntimeLogPaths = {
 };
 
 // AGEWORK_AGENT_EVENT_TRACE_ENABLED 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，
-// 不是事件索引）。DB 关键事件索引（RunEventRecorder 写入的 RunEvent）与本开关无关，始终记录，
+// 不是事件索引）。DB 关键事件索引（RunEventService 写入的 RunEvent）与本开关无关，始终记录，
 // 关闭本开关后 run 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。
 function buildAgentEventTraceConfig(input: {
   runId: string;

@@ -2,22 +2,22 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { RunStatusPayload } from "@agework/shared/protocol";
 import { ConversationService } from "../../conversations/conversation.service";
 import { swallow } from "../../common/swallow";
-import type { RunHandle } from "./run-active.store";
-import { RunActiveStore } from "./run-active.store";
+import type { RunHandle } from "./active-run.registry";
+import { ActiveRunRegistry } from "./active-run.registry";
 import type {
   RunStatusEffect,
   RunStatusPersistenceAction,
-} from "./run-lifecycle.policy";
+} from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 
 @Injectable()
-export class RunStatusHandler {
-  private readonly logger = new Logger(RunStatusHandler.name);
+export class RunStatusService {
+  private readonly logger = new Logger(RunStatusService.name);
 
   constructor(
-    private readonly runService: RunRepository,
+    private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
-    private readonly runRegistry: RunActiveStore
+    private readonly activeRuns: ActiveRunRegistry
   ) {}
 
   async apply(input: {
@@ -58,27 +58,27 @@ export class RunStatusHandler {
   ): Promise<void> {
     switch (action) {
       case "markRunning":
-        await this.runService
+        await this.runRepository
           .markRunning(runId)
           .catch(swallow(this.logger, `mark run ${runId} running`));
         break;
       case "markRequiresAction":
-        await this.runService
+        await this.runRepository
           .markRequiresAction(runId)
           .catch(swallow(this.logger, `mark run ${runId} requires_action`));
         break;
       case "markFinished":
-        await this.runService
+        await this.runRepository
           .markFinished(runId)
           .catch(swallow(this.logger, `mark run ${runId} finished`));
         break;
       case "markError":
-        await this.runService
+        await this.runRepository
           .markError(runId, payload.error ?? "unknown error")
           .catch(swallow(this.logger, `mark run ${runId} error`));
         break;
       case "markCancelled":
-        await this.runService
+        await this.runRepository
           .markCancelled(runId)
           .catch(swallow(this.logger, `mark run ${runId} cancelled`));
         break;
@@ -101,7 +101,7 @@ export class RunStatusHandler {
       );
       this.writeTerminalSse(runId, payload, effect, handle);
     } finally {
-      this.runRegistry.unregister(runId);
+      this.activeRuns.unregister(runId);
     }
   }
 
@@ -114,7 +114,7 @@ export class RunStatusHandler {
 
     // 查询失败时返回 undefined（区别于查询成功但无活跃 run 的 null），跳过状态重置，
     // 但不能让异常中断下面的 saveRun / SSE 收尾 / unregister。
-    const newerActiveRun = await this.runService
+    const newerActiveRun = await this.runRepository
       .findActiveByConversationId(handle.conversationId)
       .catch((err: unknown) => {
         swallow(

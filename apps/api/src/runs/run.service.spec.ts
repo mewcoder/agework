@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./lifecycle/run-active.store";
+import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
 import { RunDriver } from "./worker/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
-import { RunEventRecorder } from "./events/run-event-recorder";
+import { RunEventService } from "./events/run-event.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
@@ -76,11 +76,11 @@ function makeWorkspace(overrides: Record<string, unknown> = {}) {
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
-  let mockRunActiveStore: Partial<RunActiveStore>;
+  let mockActiveRunRegistry: Partial<ActiveRunRegistry>;
   let mockRuntimeService: Partial<RuntimeService>;
   let mockRunDriver: Partial<RunDriver>;
   let mockConversationService: Partial<ConversationService>;
-  let mockRunEventRecorder: Partial<RunEventRecorder>;
+  let mockRunEvents: RunEventService;
   let mockTitleService: Partial<TitleService>;
   let mockConfigService: Partial<ConfigService>;
   let mockPrismaService: Partial<PrismaService>;
@@ -128,7 +128,7 @@ describe("RunService", () => {
       markCancelled: vi.fn().mockResolvedValue(undefined),
       updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
-    mockRunActiveStore = {
+    mockActiveRunRegistry = {
       register: vi.fn(),
       unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
@@ -156,10 +156,9 @@ describe("RunService", () => {
       setAgentSessionId: vi.fn().mockResolvedValue(undefined),
       findOne: vi.fn().mockResolvedValue({}),
     };
-    mockRunEventRecorder = {
-      append: vi.fn().mockResolvedValue({}),
-      forgetRun: vi.fn(),
-    };
+    mockRunEvents = new RunEventService({} as never);
+    vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
+    vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockTitleService = {
       generateIfNeeded: vi.fn().mockResolvedValue(undefined),
     };
@@ -182,11 +181,11 @@ describe("RunService", () => {
 
     service = new RunService(
       mockRunRepository as RunRepository,
-      mockRunActiveStore as RunActiveStore,
+      mockActiveRunRegistry as ActiveRunRegistry,
       mockRuntimeService as RuntimeService,
       mockRunDriver as RunDriver,
       mockConversationService as ConversationService,
-      mockRunEventRecorder as RunEventRecorder,
+      mockRunEvents,
       mockTitleService as TitleService,
       mockConfigService as ConfigService,
       mockPrismaService as PrismaService
@@ -237,7 +236,7 @@ describe("RunService", () => {
           }),
         })
       );
-      expect(mockRunActiveStore.register).toHaveBeenCalledWith(
+      expect(mockActiveRunRegistry.register).toHaveBeenCalledWith(
         "run-1",
         expect.objectContaining({
           runId: "run-1",
@@ -254,7 +253,7 @@ describe("RunService", () => {
         "1:token"
       );
       const registered = (
-        mockRunActiveStore.register as ReturnType<typeof vi.fn>
+        mockActiveRunRegistry.register as ReturnType<typeof vi.fn>
       ).mock.calls[0][1];
       expect(typeof registered.saveRun).toBe("function");
       expect(typeof registered.onAgentSessionId).toBe("function");
@@ -312,7 +311,7 @@ describe("RunService", () => {
         "msg-1",
         "run-1"
       );
-      expect(mockRunEventRecorder.append).toHaveBeenCalledWith(
+      expect(mockRunEvents.append).toHaveBeenCalledWith(
         expect.objectContaining({
           eventKey: "message:msg-1:accepted",
           type: "message.accepted",
@@ -321,7 +320,7 @@ describe("RunService", () => {
     });
 
     it("continues starting the worker when audit event recording fails", async () => {
-      mockRunEventRecorder.append = vi
+      mockRunEvents.append = vi
         .fn()
         .mockRejectedValue(new Error("SQLITE_BUSY"));
       const res = makeRes();
@@ -329,7 +328,7 @@ describe("RunService", () => {
       await service.start(makeStartInput({ res }));
 
       expect(mockRunDriver.start).toHaveBeenCalled();
-      expect(mockRunActiveStore.register).toHaveBeenCalled();
+      expect(mockActiveRunRegistry.register).toHaveBeenCalled();
       expect(mockRunRepository.markError).not.toHaveBeenCalled();
       expect(res.write).not.toHaveBeenCalled();
     });
@@ -384,7 +383,7 @@ describe("RunService", () => {
 
       await service.start(makeStartInput({ res }));
 
-      expect(mockRunActiveStore.register).not.toHaveBeenCalled();
+      expect(mockActiveRunRegistry.register).not.toHaveBeenCalled();
       expect(mockRunRepository.markError).toHaveBeenCalledWith(
         "run-1",
         "Failed to start worker"
@@ -394,7 +393,7 @@ describe("RunService", () => {
         "error"
       );
       await Promise.resolve();
-      expect(mockRunEventRecorder.forgetRun).toHaveBeenCalledWith("run-1");
+      expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
     });
   });
 
@@ -420,7 +419,7 @@ describe("RunService", () => {
           conversationId: "conversation-1",
         },
       };
-      mockRunActiveStore.get = vi.fn().mockReturnValue(handle);
+      mockActiveRunRegistry.get = vi.fn().mockReturnValue(handle);
 
       await service.resolveApproval("conversation-1", { decision: "yes" });
 
@@ -440,7 +439,7 @@ describe("RunService", () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1" });
-      mockRunActiveStore.get = vi.fn().mockReturnValue(undefined);
+      mockActiveRunRegistry.get = vi.fn().mockReturnValue(undefined);
 
       const hadHandle = await service.stop("conversation-1");
 
@@ -461,7 +460,7 @@ describe("RunService", () => {
         },
         stopRequested: false,
       };
-      mockRunActiveStore.get = vi.fn().mockReturnValue(handle);
+      mockActiveRunRegistry.get = vi.fn().mockReturnValue(handle);
 
       const hadHandle = await service.stop("conversation-1");
 
@@ -501,7 +500,7 @@ describe("RunService", () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1", status: "requires_action" });
-      mockRunActiveStore.get = vi.fn().mockReturnValue({ runId: "run-1" });
+      mockActiveRunRegistry.get = vi.fn().mockReturnValue({ runId: "run-1" });
       const res = {
         setHeader: vi.fn(),
         write: vi.fn(),

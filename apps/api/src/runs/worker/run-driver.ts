@@ -15,7 +15,7 @@ export type RunDriverStartInput = {
 
 /**
  * Run 驱动 provider 的薄缝：按 runtimeType 解析 provider，下发 start / command /
- * cancel / terminate / cleanup。无状态——live handle 由 RunActiveStore 单独持有，
+ * cancel / terminate / cleanup。无状态——live handle 由 ActiveRunRegistry 单独持有，
  * 各方法要么返回 handle、要么收 handle，不再自留派发表。
  *
  * worker 的物理启动（local fork / sandbox 容器会话）在 runtime provider 内实现，

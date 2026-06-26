@@ -21,8 +21,8 @@ type AgentEventLogEntry = {
 };
 
 @Injectable()
-export class RawEventLogWriter {
-  private readonly logger = new Logger(RawEventLogWriter.name);
+export class AgentEventTraceWriter {
+  private readonly logger = new Logger(AgentEventTraceWriter.name);
   private readonly truncated = new Set<string>();
 
   writeRaw(config: AgentEventTraceConfig | undefined, payload: unknown): void {
@@ -72,7 +72,7 @@ export class RawEventLogWriter {
       appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
     } catch (err) {
       this.logger.warn(
-        `write agent event log failed ${safeLogJson({
+        `write agent event trace failed ${safeLogJson({
           filePath,
           kind,
           runId: config.runId,
