@@ -12,7 +12,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
+import { RunDriver } from "./execution/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import {
@@ -45,7 +45,7 @@ export class RunService {
     private readonly runRepository: RunRepository,
     private readonly runRegistry: RunActiveStore,
     private readonly runtimeService: RuntimeService,
-    private readonly runWorkerExecution: RunWorkerExecutionService,
+    private readonly runDriver: RunDriver,
     private readonly conversationService: ConversationService,
     private readonly runEventRecorder: RunEventRecorder,
     private readonly runConfigAssembler: RunConfigAssembler,
@@ -322,7 +322,7 @@ export class RunService {
         .catch(
           swallow(this.logger, `record runtime starting for run ${runId}`)
         );
-      runtimeHandle = this.runWorkerExecution.start({
+      runtimeHandle = this.runDriver.start({
         runConfig,
         runtimeTarget,
         onRuntimeInstanceIdReady: (runtimeInstanceId) => {
@@ -457,7 +457,7 @@ export class RunService {
         `No active run for conversation: ${conversationId}`
       );
     }
-    this.runWorkerExecution.sendCommand(handle.runtimeHandle, {
+    this.runDriver.sendCommand(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
@@ -624,7 +624,7 @@ export class RunService {
           )
         );
     }
-    this.runWorkerExecution.cancel(handle.runtimeHandle);
+    this.runDriver.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       if (handle.res && !handle.res.writableEnded) {

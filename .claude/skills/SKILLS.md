@@ -1,6 +1,6 @@
 # Skills 文档
 
-项目 `.claude/skills/` 目录下共 **30 个 skill**，按功能分为 6 大类。
+项目 `.claude/skills/` 目录下共 **31 个 skill**，按功能分为 6 大类。
 
 ## 如何使用
 
@@ -70,6 +70,7 @@
 | Skill | 斜杠命令 | 说明 | 触发场景 |
 |-------|---------|------|---------|
 | **monorepo-management** | `/monorepo-management` | Monorepo 管理（Turborepo/Nx/pnpm） | 搭建 monorepo、优化构建、共享依赖、CI/CD、版本发布 |
+| **code-review** | `/code-review` | 审查暂存区代码变更 | "审查暂存区代码"、"review 暂存区"、"codereview"、"审查代码" |
 
 ---
 
@@ -111,4 +112,5 @@ OpenSpec 是一套实验性的变更管理工作流，4 个 skill 形成完整�
 | 数据获取/缓存 | `/tanstack-query` |
 | 路由配置 | `/tanstack-router` |
 | Monorepo 管理 | `/monorepo-management` |
+| 审查暂存区代码 | `/code-review` |
 | 变更管理全流程 | `/opsx:explore` → `/opsx:propose` → `/opsx:apply` → `/opsx:archive` |

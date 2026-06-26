@@ -7,7 +7,7 @@ import type { RunConfig } from "@agework/shared/protocol";
  * LocalRuntimeProvider 不使用此 store（IPC 直接发送 config）。
  */
 @Injectable()
-export class RuntimeConfigStore {
+export class WorkerConfigStore {
   private readonly configs = new Map<string, RunConfig>();
 
   register(runId: string, config: RunConfig): void {

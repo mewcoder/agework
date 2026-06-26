@@ -8,7 +8,7 @@ import {
   runtimeInstanceDiagnostics,
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
-} from "../resources/runtime-instance-metadata";
+} from "../instances/runtime-instance-metadata";
 
 @Controller("admin/runtime")
 @Roles("admin")

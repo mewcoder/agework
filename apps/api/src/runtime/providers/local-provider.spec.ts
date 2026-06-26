@@ -73,9 +73,8 @@ describe("LocalRuntimeProvider", () => {
     provider = new LocalRuntimeProvider();
     provider.setRunEventReceiver({
       publish: vi.fn().mockResolvedValue(undefined),
-      isTerminalOrFinalizing: vi.fn().mockReturnValue(false),
-      forceErrorStatus: vi.fn().mockResolvedValue(undefined),
-      forceCancelledStatus: vi.fn().mockResolvedValue(undefined),
+      notifyWorkerError: vi.fn().mockResolvedValue(undefined),
+      notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
       recordCommandSent: vi.fn().mockResolvedValue(undefined),
     });
   });

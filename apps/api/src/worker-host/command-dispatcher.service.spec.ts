@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RunConfig } from "@agework/shared/protocol";
-import { WorkerCommandDispatcher } from "./worker-command-dispatcher.service";
+import { WorkerCommandDispatcher } from "./command-dispatcher.service";
 
 function makeRunConfig(): RunConfig {
   return {
@@ -30,26 +30,17 @@ function makeService() {
 }
 
 describe("WorkerCommandDispatcher", () => {
-  it("registers run config without touching command queue", () => {
-    const { service, configStore, commandQueue } = makeService();
-    const runConfig = makeRunConfig();
+  it("opens a session: stores config, binds access, enqueues first user_message", () => {
+    const { service, configStore, access, commandQueue } = makeService();
 
-    service.registerRunConfig("run-1", runConfig);
-
-    expect(configStore.register).toHaveBeenCalledWith("run-1", runConfig);
-    expect(commandQueue.pushByOwnerId).not.toHaveBeenCalled();
-  });
-
-  it("registers run session and enqueues the first user_message command", () => {
-    const { service, access, commandQueue } = makeService();
-
-    service.registerRunSession({
+    service.openSession({
       runId: "run-1",
       ownerId: "owner-1",
       accessKey: "owner-key",
       runConfig: makeRunConfig(),
     });
 
+    expect(configStore.register).toHaveBeenCalledWith("run-1", makeRunConfig());
     expect(access.registerRun).toHaveBeenCalledWith("run-1", "owner-key");
     expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
       "owner-1",
@@ -68,7 +59,7 @@ describe("WorkerCommandDispatcher", () => {
   it("increments command sequence per owner", () => {
     const { service, commandQueue } = makeService();
 
-    service.registerRunSession({
+    service.openSession({
       runId: "run-1",
       ownerId: "owner-1",
       accessKey: "owner-key",
@@ -90,15 +81,6 @@ describe("WorkerCommandDispatcher", () => {
         payload: expect.objectContaining({ type: "cancel" }),
       })
     );
-  });
-
-  it("tracks cancel-before-ready runs as consumable state", () => {
-    const { service } = makeService();
-
-    service.markCancelledBeforeReady("run-1");
-
-    expect(service.consumeCancelledStartingRun("run-1")).toBe(true);
-    expect(service.consumeCancelledStartingRun("run-1")).toBe(false);
   });
 
   it("cleans run and owner session state", () => {

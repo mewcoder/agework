@@ -7,29 +7,44 @@ import type {
 } from "@agework/shared/protocol";
 import { swallow } from "../../../common/swallow";
 import { safeLogJson } from "../../../common/logging";
-import { publishWorkerErrorStatus } from "../provider-utils";
-import type { RunEventReceiver } from "../run-event-receiver";
-import type { RuntimeProvider } from "../provider-contracts";
+import type { RunEventReceiver } from "../run-event-receiver.port";
+import type { CommandPort } from "../command-port";
+import type { AccessPort } from "../access-port";
+import type {
+  WorkerExecutionProvider,
+  RuntimeInstanceManager,
+} from "../provider-contracts";
 import {
   SandboxRuntimeInstanceService,
   type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
 } from "./runtime-instance.service";
-import { WorkerCommandDispatcher } from "../../../worker-host/worker-command-dispatcher.service";
 
 @Injectable()
-export class SandboxRuntimeProvider implements RuntimeProvider {
+export class SandboxRuntimeProvider
+  implements WorkerExecutionProvider, RuntimeInstanceManager
+{
   readonly type = "sandbox" as const;
   private readonly logger = new Logger(SandboxRuntimeProvider.name);
   private receiver!: RunEventReceiver;
+  private commands!: CommandPort;
 
   constructor(
-    private readonly runtimeInstances: SandboxRuntimeInstanceService,
-    private readonly workerSessions: WorkerCommandDispatcher
+    private readonly runtimeInstances: SandboxRuntimeInstanceService
   ) {}
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
     this.receiver = receiver;
+  }
+
+  /** 由 run 层注入命令通道（worker-host 的 dispatcher），使 runtime 不直接依赖 worker-host。 */
+  setCommandPort(commands: CommandPort): void {
+    this.commands = commands;
+  }
+
+  /** 由 run 层注入鉴权通道（worker-host 的 access service），转发给 instance service。 */
+  setAccessPort(access: AccessPort): void {
+    this.runtimeInstances.setAccessPort(access);
   }
 
   startWorkerExecution(
@@ -44,7 +59,6 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     const context =
       this.runtimeInstances.resolveWorkerExecutionContext(input);
     this.logWorkerExecutionStart(context);
-    this.workerSessions.registerRunConfig(context.runId, context.runConfig);
 
     const handle = this.runtimeInstances.createRunHandle(context);
     const ownerState = this.runtimeInstances.ensureOwnerState(context);
@@ -52,7 +66,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     // provider 同时持有 resource 与 session，故由它写 ownerState 的 activeRuns，
     // dispatcher 不再触碰 sandbox 容器状态。
     ownerState.activeRuns.set(context.runId, context.runConfig.conversationId);
-    this.workerSessions.registerRunSession({
+    this.commands.openSession({
       runId: context.runId,
       ownerId: context.ownerId,
       accessKey: ownerState.accessKey,
@@ -83,7 +97,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
       );
       return;
     }
-    this.workerSessions.sendCommand(ownerId, handle.runId, command);
+    this.commands.sendCommand(ownerId, handle.runId, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
@@ -92,7 +106,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
       ? this.runtimeInstances.getOwnerState(ownerId)
       : undefined;
     if (!ownerState?.runtimeInstanceId) {
-      this.workerSessions.markCancelledBeforeReady(handle.runId);
+      this.runtimeInstances.markCancelledBeforeReady(handle.runId);
       this.logger.debug(
         `sandbox cancel queued before ready ${safeLogJson({
           runId: handle.runId,
@@ -123,7 +137,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
   shutdownRuntimeInstance(ownerId: string): void {
     this.runtimeInstances.shutdownRuntimeInstance(ownerId, {
-      cleanupByOwnerId: (key) => this.workerSessions.cleanupByOwnerId(key),
+      cleanupByOwnerId: (key) => this.commands.cleanupByOwnerId(key),
     });
   }
 
@@ -133,7 +147,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
   cleanup(runId: string): void {
     this.runtimeInstances.cleanupRun(runId);
-    this.workerSessions.cleanupRun(runId);
+    this.commands.cleanupRun(runId);
   }
 
   private logWorkerExecutionStart(
@@ -153,20 +167,16 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
 
   private runtimeInstanceCallbacks(): SandboxRuntimeInstanceCallbacks {
     return {
-      consumeCancelledStartingRun: (runId) =>
-        this.workerSessions.consumeCancelledStartingRun(runId),
-      forceCancelled: (runId) => this.forceCancelled(runId),
+      forceCancelled: (runId) =>
+        this.receiver
+          .notifyCancelledBeforeReady(runId)
+          .catch(swallow(this.logger, `notify cancelled before ready for run ${runId}`)),
       publishWorkerError: (runId, error) =>
-        publishWorkerErrorStatus(this.receiver, runId, error),
+        this.receiver
+          .notifyWorkerError(runId, error)
+          .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
       cleanupByOwnerId: (ownerId) =>
-        this.workerSessions.cleanupByOwnerId(ownerId),
+        this.commands.cleanupByOwnerId(ownerId),
     };
-  }
-
-  private forceCancelled(runId: string): void {
-    if (this.receiver.isTerminalOrFinalizing(runId)) return;
-    this.receiver
-      .forceCancelledStatus(runId)
-      .catch(swallow(this.logger, `force cancelled status for run ${runId}`));
   }
 }

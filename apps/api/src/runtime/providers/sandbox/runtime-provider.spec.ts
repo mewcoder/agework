@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRuntimeProvider } from "./runtime-provider";
 import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
-import { WorkerCommandDispatcher } from "../../../worker-host/worker-command-dispatcher.service";
+import { WorkerCommandDispatcher } from "../../../worker-host/command-dispatcher.service";
 import type { SandboxEngine, SandboxRuntime } from "./engine";
 import type {
   IsolationScope,
@@ -36,9 +36,10 @@ function makeMockEngine(type: "docker" | "opensandbox"): SandboxEngine {
 function makeProvider(engineOverride?: SandboxEngine) {
   const engine = engineOverride ?? makeMockEngine("docker");
   const eventProcessor = {
-    forceErrorStatus: vi.fn().mockResolvedValue(undefined),
-    forceCancelledStatus: vi.fn().mockResolvedValue(undefined),
-    isTerminalOrFinalizing: vi.fn().mockReturnValue(false),
+    publish: vi.fn().mockResolvedValue(undefined),
+    notifyWorkerError: vi.fn().mockResolvedValue(undefined),
+    notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
+    recordCommandSent: vi.fn().mockResolvedValue(undefined),
   };
   const configStore = { register: vi.fn(), unregister: vi.fn() };
   const access = {
@@ -71,16 +72,17 @@ function makeProvider(engineOverride?: SandboxEngine) {
   const runtimeInstances = new SandboxRuntimeInstanceService(
     config as never,
     workspaceRuntimeService as never,
-    access as never,
     [engine]
   );
+  runtimeInstances.setAccessPort(access as never);
   const workerSessions = new WorkerCommandDispatcher(
     configStore as never,
     access as never,
     commandQueue as never
   );
-  const provider = new SandboxRuntimeProvider(runtimeInstances, workerSessions);
+  const provider = new SandboxRuntimeProvider(runtimeInstances);
   provider.setRunEventReceiver(eventProcessor as never);
+  provider.setCommandPort(workerSessions);
 
   return {
     provider,
@@ -290,7 +292,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(eventProcessor.forceErrorStatus).toHaveBeenCalledWith(
+    expect(eventProcessor.notifyWorkerError).toHaveBeenCalledWith(
       "run-1",
       expect.stringContaining("engine unavailable")
     );
@@ -345,7 +347,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     await vi.runOnlyPendingTimersAsync();
     await Promise.resolve();
 
-    expect(eventProcessor.forceCancelledStatus).toHaveBeenCalledWith("run-1");
+    expect(eventProcessor.notifyCancelledBeforeReady).toHaveBeenCalledWith("run-1");
   });
 
   it("cleanup revokes per-run access without stopping sandbox", async () => {
@@ -386,7 +388,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
     await vi.advanceTimersByTimeAsync(65_000);
 
-    expect(eventProcessor.forceErrorStatus).toHaveBeenCalledWith(
+    expect(eventProcessor.notifyWorkerError).toHaveBeenCalledWith(
       "run-1",
       "worker heartbeat timeout"
     );

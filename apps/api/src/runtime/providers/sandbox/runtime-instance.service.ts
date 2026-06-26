@@ -6,11 +6,11 @@ import type {
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { isSandboxPlacement } from "../../resources/runtime-resource";
+import { isSandboxPlacement } from "../../placement/runtime-resource";
 import { ConfigService } from "../../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
-import { WorkerAccessService } from "../../../worker-host/access.service";
-import { WorkspaceRuntimeInstanceRepository } from "../../resources/workspace-runtime-instance.repository";
+import type { AccessPort } from "../access-port";
+import { WorkspaceRuntimeInstanceRepository } from "../../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../../common/swallow";
 import {
   HeartbeatWatchdog,
@@ -58,7 +58,6 @@ export type SandboxRuntimeInstanceAttachment = {
 };
 
 export type SandboxRuntimeInstanceCallbacks = {
-  consumeCancelledStartingRun(runId: string): boolean;
   forceCancelled(runId: string): void;
   publishWorkerError(runId: string, error: string): void;
   cleanupByOwnerId(ownerId: string): void;
@@ -69,18 +68,25 @@ export class SandboxRuntimeInstanceService {
   private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
   private readonly ownerStates = new Map<string, SandboxOwnerState>();
+  /** run 在 runtime 实例 ready 之前被取消的标记；ready 时消费并强制置 cancelled。 */
+  private readonly cancelledStartingRuns = new Set<string>();
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
   private readonly heartbeats = new HeartbeatWatchdog();
   private readonly idleWatchdog = new IdleWatchdog();
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
+  private access!: AccessPort;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly workspaceRuntimeService: WorkspaceRuntimeInstanceRepository,
-    private readonly runtimeAccess: WorkerAccessService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));
+  }
+
+  /** 由 run 层经 provider 注入鉴权通道（worker-host 的 access service）。 */
+  setAccessPort(access: AccessPort): void {
+    this.access = access;
   }
 
   resolveWorkerExecutionContext(
@@ -121,7 +127,7 @@ export class SandboxRuntimeInstanceService {
   ): SandboxOwnerState {
     let ownerState = this.ownerStates.get(context.ownerId);
     if (!ownerState) {
-      const accessKey = this.runtimeAccess.issueOwnerKey(
+      const accessKey = this.access.issueOwnerKey(
         context.ownerId
       );
       ownerState = {
@@ -141,7 +147,7 @@ export class SandboxRuntimeInstanceService {
       !this.pendingSandboxes.has(context.ownerId) &&
       !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      ownerState.accessKey = this.runtimeAccess.issueOwnerKey(
+      ownerState.accessKey = this.access.issueOwnerKey(
         context.ownerId
       );
       ownerState.engineType = context.engineType;
@@ -179,6 +185,11 @@ export class SandboxRuntimeInstanceService {
 
   getOwnerState(ownerId: string): SandboxOwnerState | undefined {
     return this.ownerStates.get(ownerId);
+  }
+
+  /** runtime 实例 ready 之前收到的 cancel：登记标记，待 ready 时统一收尾。 */
+  markCancelledBeforeReady(runId: string): void {
+    this.cancelledStartingRuns.add(runId);
   }
 
   getHandle(runId: string): WorkerExecutionHandle | undefined {
@@ -245,7 +256,7 @@ export class SandboxRuntimeInstanceService {
           )
         );
     }
-    this.runtimeAccess.revokeOwner(ownerId);
+    this.access.revokeOwner(ownerId);
     callbacks.cleanupByOwnerId(ownerId);
     this.ownerStates.delete(ownerId);
     this.pendingSandboxes.delete(ownerId);
@@ -279,7 +290,7 @@ export class SandboxRuntimeInstanceService {
     const { context, handle, onRuntimeInstanceIdReady } = attachment;
     void runtimePromise
       .then((runtime) => {
-        if (callbacks.consumeCancelledStartingRun(context.runId)) {
+        if (this.consumeCancelledStartingRun(context.runId)) {
           this.ownerStates
             .get(context.ownerId)
             ?.activeRuns.delete(context.runId);
@@ -455,7 +466,7 @@ export class SandboxRuntimeInstanceService {
 
     this.ownerStates.delete(context.ownerId);
     callbacks.cleanupByOwnerId(context.ownerId);
-    this.runtimeAccess.revokeOwner(context.ownerId);
+    this.access.revokeOwner(context.ownerId);
   }
 
   private forceCancelledStartingRuns(
@@ -463,11 +474,15 @@ export class SandboxRuntimeInstanceService {
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     for (const runId of state.activeRuns.keys()) {
-      if (callbacks.consumeCancelledStartingRun(runId)) {
+      if (this.consumeCancelledStartingRun(runId)) {
         state.activeRuns.delete(runId);
         callbacks.forceCancelled(runId);
       }
     }
+  }
+
+  private consumeCancelledStartingRun(runId: string): boolean {
+    return this.cancelledStartingRuns.delete(runId);
   }
 
   private startRuntimeHeartbeat(
@@ -606,7 +621,7 @@ export class SandboxRuntimeInstanceService {
     context: SandboxWorkerExecutionContext,
     runtimeInstanceId: string
   ): void {
-    this.runtimeAccess.issueRuntimeInstanceKey(
+    this.access.issueRuntimeInstanceKey(
       runtimeInstanceId,
       context.ownerId
     );

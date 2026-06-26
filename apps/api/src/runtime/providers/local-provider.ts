@@ -2,20 +2,22 @@ import { Injectable, Logger } from "@nestjs/common";
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
-import type {
-  RunConfig,
-  WorkerExecutionHandle,
-  WorkerExecutionStartInput,
-  CommandPayload,
-  Envelope,
+import {
+  nextCommandEnvelope,
+  type RunConfig,
+  type WorkerExecutionHandle,
+  type WorkerExecutionStartInput,
+  type CommandPayload,
+  type Envelope,
 } from "@agework/shared/protocol";
-import type { RunEventReceiver } from "./run-event-receiver";
-import type { RuntimeProvider } from "./provider-contracts";
+import type { RunEventReceiver } from "./run-event-receiver.port";
+import type {
+  WorkerExecutionProvider,
+  RuntimeInstanceManager,
+} from "./provider-contracts";
 import {
   HeartbeatWatchdog,
-  publishWorkerErrorStatus,
 } from "./provider-utils";
-import { nextCommandEnvelope } from "../../worker-host/command-envelope";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -42,7 +44,9 @@ const TSX_CLI = require.resolve("tsx/cli");
  * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
  */
 @Injectable()
-export class LocalRuntimeProvider implements RuntimeProvider {
+export class LocalRuntimeProvider
+  implements WorkerExecutionProvider, RuntimeInstanceManager
+{
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly states = new Map<string, LocalRunState>();
@@ -131,11 +135,16 @@ export class LocalRuntimeProvider implements RuntimeProvider {
         this.logger.warn(
           `local worker exited unexpectedly ${safeLogJson({ runId, code })}`
         );
-        publishWorkerErrorStatus(
-          this.receiver,
-          runId,
-          `worker exited with code ${code}`
-        );
+        this.receiver
+          .notifyWorkerError(runId, `worker exited with code ${code}`)
+          .catch((err) => {
+            this.logger.warn(
+              `notify worker error failed ${safeLogJson({
+                runId,
+                ...errorLogFields(err),
+              })}`
+            );
+          });
       }
     });
 
@@ -154,7 +163,16 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       );
       child.kill();
       this.cleanup(runId);
-      publishWorkerErrorStatus(this.receiver, runId, "worker heartbeat timeout");
+      this.receiver
+        .notifyWorkerError(runId, "worker heartbeat timeout")
+        .catch((err) => {
+          this.logger.warn(
+            `notify worker error failed ${safeLogJson({
+              runId,
+              ...errorLogFields(err),
+            })}`
+          );
+        });
     });
 
     return handle;

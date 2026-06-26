@@ -1,18 +1,18 @@
 import { describe, it, expect, vi } from "vitest";
-import { WorkerCommandController } from "./worker-command.controller";
-import { RuntimeCommandQueue } from "./command-queue";
-import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
+import { WorkerCommandController } from "./command.controller";
+import { WorkerCommandQueue } from "./command-queue";
+import { WorkerHeartbeatRegistry } from "./heartbeat.registry";
 
-function makeHeartbeatRegistry(): RuntimeHeartbeatRegistry {
+function makeHeartbeatRegistry(): WorkerHeartbeatRegistry {
   return {
     heartbeatRuntimeInstance: vi.fn(),
-  } as unknown as RuntimeHeartbeatRegistry;
+  } as unknown as WorkerHeartbeatRegistry;
 }
 
 describe("WorkerCommandController", () => {
   describe("pollCommands()", () => {
     it("polls the command queue by ownerId and afterSeq", async () => {
-      const commandQueue: Partial<RuntimeCommandQueue> = {
+      const commandQueue: Partial<WorkerCommandQueue> = {
         pollByOwnerId: vi
           .fn()
           .mockReturnValue([
@@ -21,7 +21,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as RuntimeCommandQueue,
+        commandQueue as WorkerCommandQueue,
         makeHeartbeatRegistry()
       );
 
@@ -34,12 +34,12 @@ describe("WorkerCommandController", () => {
     });
 
     it("defaults afterSeq to 0 when not provided", async () => {
-      const commandQueue: Partial<RuntimeCommandQueue> = {
+      const commandQueue: Partial<WorkerCommandQueue> = {
         pollByOwnerId: vi.fn().mockReturnValue([]),
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as RuntimeCommandQueue,
+        commandQueue as WorkerCommandQueue,
         makeHeartbeatRegistry()
       );
 
@@ -49,12 +49,12 @@ describe("WorkerCommandController", () => {
     });
 
     it("defaults afterSeq to 0 when invalid", async () => {
-      const commandQueue: Partial<RuntimeCommandQueue> = {
+      const commandQueue: Partial<WorkerCommandQueue> = {
         pollByOwnerId: vi.fn().mockReturnValue([]),
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as RuntimeCommandQueue,
+        commandQueue as WorkerCommandQueue,
         makeHeartbeatRegistry()
       );
 
@@ -64,7 +64,7 @@ describe("WorkerCommandController", () => {
     });
 
     it("long-polls when waitMs is provided", async () => {
-      const commandQueue: Partial<RuntimeCommandQueue> = {
+      const commandQueue: Partial<WorkerCommandQueue> = {
         waitForOwnerId: vi
           .fn()
           .mockResolvedValue([
@@ -73,7 +73,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as RuntimeCommandQueue,
+        commandQueue as WorkerCommandQueue,
         makeHeartbeatRegistry()
       );
 
@@ -90,7 +90,7 @@ describe("WorkerCommandController", () => {
 
   describe("heartbeat()", () => {
     it("broadcasts the heartbeat by ownerId", async () => {
-      const commandQueue = {} as RuntimeCommandQueue;
+      const commandQueue = {} as WorkerCommandQueue;
       const runtimeService = makeHeartbeatRegistry();
 
       const controller = new WorkerCommandController(

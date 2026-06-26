@@ -1,10 +1,5 @@
-import { Logger } from "@nestjs/common";
-import type { RunEventReceiver } from "./run-event-receiver";
 import { resolveApiBasePath } from "../../common/path.util";
-import { swallow } from "../../common/swallow";
 import { EnvKey } from "../../config/env-key";
-
-const logger = new Logger("provider-utils");
 
 const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;
 const HEARTBEAT_TIMEOUT_MS = 60_000;
@@ -49,22 +44,6 @@ export class HeartbeatWatchdog {
     }
     this.lastHeartbeats.delete(key);
   }
-}
-
-/** 发布 run.status=error 终态事件（worker 异常退出 / 心跳超时），失败时静默忽略。
- *  若 run 已在终态处理中或已完成终态则跳过，避免覆盖 legitimate 的 finished/cancelled 状态。 */
-export function publishWorkerErrorStatus(
-  receiver: RunEventReceiver,
-  runId: string,
-  error: string
-): Promise<void> {
-  if (receiver.isTerminalOrFinalizing(runId)) {
-    logger.debug(`Skipping error status for already-terminal run ${runId}`);
-    return Promise.resolve();
-  }
-  return receiver
-    .forceErrorStatus(runId, error)
-    .catch(swallow(logger, `force error status for run ${runId}`));
 }
 
 /**

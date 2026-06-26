@@ -2,12 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import type {
   CommandPayload,
   RunConfig,
-  RuntimePlacement,
   RuntimeTarget,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
-import { RunWorkerExecutionService } from "./run-worker-execution.service";
+import { RunDriver } from "./run-driver";
 
 function makeProvider() {
   return {
@@ -33,12 +32,12 @@ const handle: WorkerExecutionHandle = {
   conversationId: "conversation-1",
 };
 
-describe("RunWorkerExecutionService", () => {
+describe("RunDriver", () => {
   it("resolves the provider by runtimeType and starts worker execution", () => {
     const provider = makeProvider();
     provider.startWorkerExecution.mockReturnValue(handle);
     const registry = makeRegistry(provider);
-    const service = new RunWorkerExecutionService(registry);
+    const driver = new RunDriver(registry);
 
     const runConfig = { runId: "run-1" } as RunConfig;
     const runtimeTarget = {
@@ -51,7 +50,7 @@ describe("RunWorkerExecutionService", () => {
     } as RuntimeTarget;
     const onReady = vi.fn();
 
-    const result = service.start({
+    const result = driver.start({
       runConfig,
       runtimeTarget,
       onRuntimeInstanceIdReady: onReady,
@@ -66,10 +65,10 @@ describe("RunWorkerExecutionService", () => {
     expect(result).toBe(handle);
   });
 
-  it("dispatches command and cancel by handle.runtimeType", () => {
+  it("dispatches command / cancel / heartbeat / cleanup by handle.runtimeType (stateless)", () => {
     const provider = makeProvider();
     const registry = makeRegistry(provider);
-    const service = new RunWorkerExecutionService(registry);
+    const driver = new RunDriver(registry);
     const command = {
       type: "approval_resolved",
       commandId: "command-1",
@@ -77,45 +76,15 @@ describe("RunWorkerExecutionService", () => {
       answers: {},
     } as CommandPayload;
 
-    service.sendCommand(handle, command);
-    service.cancel(handle);
+    driver.sendCommand(handle, command);
+    driver.cancel(handle);
+    driver.heartbeat(handle);
+    driver.cleanup(handle);
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(provider.sendCommand).toHaveBeenCalledWith(handle, command);
     expect(provider.cancel).toHaveBeenCalledWith(handle);
-  });
-
-  it("heartbeat / cleanup dispatch by the runId registered at start", () => {
-    const provider = makeProvider();
-    provider.startWorkerExecution.mockReturnValue(handle);
-    const registry = makeRegistry(provider);
-    const service = new RunWorkerExecutionService(registry);
-
-    service.start({
-      runConfig: { runId: "run-1" } as RunConfig,
-      runtimeTarget: { runtimeType: "local" } as RuntimeTarget,
-    });
-
-    service.heartbeat("run-1");
     expect(provider.heartbeat).toHaveBeenCalledWith("run-1");
-
-    service.cleanup("run-1");
     expect(provider.cleanup).toHaveBeenCalledWith("run-1");
-
-    // after cleanup the handle is unregistered → no further dispatch
-    service.heartbeat("run-1");
-    expect(provider.heartbeat).toHaveBeenCalledTimes(1);
-  });
-
-  it("heartbeat / cleanup are no-ops for an unknown runId", () => {
-    const provider = makeProvider();
-    const registry = makeRegistry(provider);
-    const service = new RunWorkerExecutionService(registry);
-
-    service.heartbeat("ghost");
-    service.cleanup("ghost");
-
-    expect(provider.heartbeat).not.toHaveBeenCalled();
-    expect(provider.cleanup).not.toHaveBeenCalled();
   });
 });

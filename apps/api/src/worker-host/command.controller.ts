@@ -3,8 +3,8 @@ import type { Envelope } from "@agework/shared/protocol";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
-import { RuntimeCommandQueue } from "./command-queue";
-import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
+import { WorkerCommandQueue } from "./command-queue";
+import { WorkerHeartbeatRegistry } from "./heartbeat.registry";
 import { safeLogJson } from "../common/logging";
 
 const MAX_COMMAND_WAIT_MS = 30_000;
@@ -22,8 +22,8 @@ export class WorkerCommandController {
   private readonly logger = new Logger(WorkerCommandController.name);
 
   constructor(
-    private readonly commandQueue: RuntimeCommandQueue,
-    private readonly heartbeatRegistry: RuntimeHeartbeatRegistry
+    private readonly commandQueue: WorkerCommandQueue,
+    private readonly heartbeatRegistry: WorkerHeartbeatRegistry
   ) {}
 
   /**

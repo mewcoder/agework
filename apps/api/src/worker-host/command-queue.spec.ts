@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { RuntimeCommandQueue } from "./command-queue";
+import { WorkerCommandQueue } from "./command-queue";
 import type { Envelope, CommandPayload } from "@agework/shared/protocol";
 
-describe("RuntimeCommandQueue", () => {
-  let queue: RuntimeCommandQueue;
+describe("WorkerCommandQueue", () => {
+  let queue: WorkerCommandQueue;
 
   beforeEach(() => {
-    queue = new RuntimeCommandQueue();
+    queue = new WorkerCommandQueue();
     queue.setCommandSentRecorder({
       recordCommandSent: vi.fn().mockResolvedValue(undefined),
     });

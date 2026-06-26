@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { nextCommandEnvelope } from "./command-envelope";
-import type { CommandPayload } from "@agework/shared/protocol";
+import { nextCommandEnvelope } from "./index";
+import type { CommandPayload } from "./channel";
 
 const cancelCommand: CommandPayload = {
   type: "cancel",

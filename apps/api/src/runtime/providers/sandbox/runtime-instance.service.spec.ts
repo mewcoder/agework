@@ -79,9 +79,9 @@ function makeService(engine = makeEngine()) {
   const service = new SandboxRuntimeInstanceService(
     config as never,
     workspaceRuntimeService as never,
-    access as never,
     [engine]
   );
+  service.setAccessPort(access as never);
   return { service, engine, config, workspaceRuntimeService, access };
 }
 
@@ -100,7 +100,6 @@ function makeStartInput(placement = makePlacement()) {
 
 function makeCallbacks() {
   return {
-    consumeCancelledStartingRun: vi.fn().mockReturnValue(false),
     forceCancelled: vi.fn(),
     publishWorkerError: vi.fn(),
     cleanupByOwnerId: vi.fn(),
@@ -201,7 +200,7 @@ describe("SandboxRuntimeInstanceService", () => {
     const ownerState = service.ensureOwnerState(context);
     ownerState.activeRuns.set("run-1", "conversation-1");
     const callbacks = makeCallbacks();
-    callbacks.consumeCancelledStartingRun.mockReturnValueOnce(true);
+    service.markCancelledBeforeReady("run-1");
 
     service.attachOrStartRuntimeInstance(
       { context, ownerState, handle: service.createRunHandle(context) },

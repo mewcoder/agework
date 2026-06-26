@@ -4,7 +4,7 @@ import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { RunActiveStore } from "./execution/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunWorkerExecutionService } from "./execution/run-worker-execution.service";
+import { RunDriver } from "./execution/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import { RunEventRecorder } from "./events/run-event-recorder";
@@ -73,7 +73,7 @@ describe("RunService", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockRunActiveStore: Partial<RunActiveStore>;
   let mockRuntimeService: Partial<RuntimeService>;
-  let mockRunWorkerExecution: Partial<RunWorkerExecutionService>;
+  let mockRunDriver: Partial<RunDriver>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunEventRecorder: Partial<RunEventRecorder>;
   let mockRunConfigAssembler: Partial<RunConfigAssembler>;
@@ -131,7 +131,7 @@ describe("RunService", () => {
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
     };
-    mockRunWorkerExecution = {
+    mockRunDriver = {
       start: vi.fn().mockReturnValue({
         runId: "run-1",
         runtimeType: "local",
@@ -184,7 +184,7 @@ describe("RunService", () => {
       mockRunRepository as RunRepository,
       mockRunActiveStore as RunActiveStore,
       mockRuntimeService as RuntimeService,
-      mockRunWorkerExecution as RunWorkerExecutionService,
+      mockRunDriver as RunDriver,
       mockConversationService as ConversationService,
       mockRunEventRecorder as RunEventRecorder,
       mockRunConfigAssembler as RunConfigAssembler,
@@ -209,7 +209,7 @@ describe("RunService", () => {
         agentType: "claude",
         runtimeType: "local",
       });
-      expect(mockRunWorkerExecution.start).toHaveBeenCalledWith(
+      expect(mockRunDriver.start).toHaveBeenCalledWith(
         expect.objectContaining({
           runConfig: expect.objectContaining({ runId: "run-1" }),
           runtimeTarget: expect.objectContaining({
@@ -309,7 +309,7 @@ describe("RunService", () => {
 
       await service.start(makeStartInput({ res }));
 
-      expect(mockRunWorkerExecution.start).toHaveBeenCalled();
+      expect(mockRunDriver.start).toHaveBeenCalled();
       expect(mockRunActiveStore.register).toHaveBeenCalled();
       expect(mockRunRepository.markError).not.toHaveBeenCalled();
       expect(res.write).not.toHaveBeenCalled();
@@ -320,7 +320,7 @@ describe("RunService", () => {
       mockRuntimeService.resolveRuntimeTarget = vi
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
-      mockRunWorkerExecution.start = vi
+      mockRunDriver.start = vi
         .fn()
         .mockImplementation(({ onRuntimeInstanceIdReady }) => {
           const handle = {
@@ -347,7 +347,7 @@ describe("RunService", () => {
     });
 
     it("rolls back on worker start failure", async () => {
-      mockRunWorkerExecution.start = vi.fn().mockImplementation(() => {
+      mockRunDriver.start = vi.fn().mockImplementation(() => {
         throw new Error("spawn failed");
       });
       const res = makeRes();
@@ -394,7 +394,7 @@ describe("RunService", () => {
 
       await service.resolveApproval("conversation-1", { decision: "yes" });
 
-      expect(mockRunWorkerExecution.sendCommand).toHaveBeenCalledWith(
+      expect(mockRunDriver.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
         expect.objectContaining({
           type: "approval_resolved",
@@ -436,7 +436,7 @@ describe("RunService", () => {
       const hadHandle = await service.stop("conversation-1");
 
       expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
-      expect(mockRunWorkerExecution.cancel).toHaveBeenCalledWith(
+      expect(mockRunDriver.cancel).toHaveBeenCalledWith(
         handle.runtimeHandle
       );
       expect(hadHandle).toBe(true);

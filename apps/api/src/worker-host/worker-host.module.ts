@@ -1,35 +1,39 @@
 import { Module } from "@nestjs/common";
 
-import { RuntimeConfigStore } from "./config-store";
-import { RuntimeCommandQueue } from "./command-queue";
+import { WorkerConfigStore } from "./config-store";
+import { WorkerCommandQueue } from "./command-queue";
 import { WorkerAccessService } from "./access.service";
 import { WorkerAuthGuard } from "./auth.guard";
-import { RuntimeHeartbeatRegistry } from "./runtime-heartbeat.registry";
-import { WorkerCommandDispatcher } from "./worker-command-dispatcher.service";
-import { WorkerCommandController } from "./worker-command.controller";
+import { WorkerHeartbeatRegistry } from "./heartbeat.registry";
+import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
+import { WorkerCommandDispatcher } from "./command-dispatcher.service";
+import { WorkerCommandController } from "./command.controller";
+import { WorkerRunController } from "./worker-run.controller";
 
 /**
- * worker-host：API ↔ worker 进程之间的通信基础设施（配置下发、命令下发、
- * 心跳上报、鉴权）。与 run / runtime 平级且不依赖任何一方——run 与 runtime 反向
- * 通知所需的端口（CommandSentRecorder / RuntimeInstanceHeartbeatSink）由各自在
- * 启动时注入实现。
+ * worker-host：API ↔ worker 进程之间的通信边界（配置下发、命令下发、上行事件、
+ * 心跳上报、鉴权）。worker 调用的全部 HTTP 端点都在此。与 run / runtime 平级且不
+ * 依赖任何一方——反向通知所需的端口（CommandSentRecorder / RuntimeInstanceHeartbeatReceiver
+ * / WorkerUpstreamReceiver）由各自在启动时注入实现。
  */
 @Module({
-  controllers: [WorkerCommandController],
+  controllers: [WorkerCommandController, WorkerRunController],
   providers: [
-    RuntimeConfigStore,
-    RuntimeCommandQueue,
+    WorkerConfigStore,
+    WorkerCommandQueue,
     WorkerAccessService,
     WorkerAuthGuard,
-    RuntimeHeartbeatRegistry,
+    WorkerHeartbeatRegistry,
+    WorkerUpstreamRegistry,
     WorkerCommandDispatcher,
   ],
   exports: [
-    RuntimeConfigStore,
-    RuntimeCommandQueue,
+    WorkerConfigStore,
+    WorkerCommandQueue,
     WorkerAccessService,
     WorkerAuthGuard,
-    RuntimeHeartbeatRegistry,
+    WorkerHeartbeatRegistry,
+    WorkerUpstreamRegistry,
     WorkerCommandDispatcher,
   ],
 })

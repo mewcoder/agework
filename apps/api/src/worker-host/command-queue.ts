@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { Envelope, CommandPayload } from "@agework/shared/protocol";
-import type { CommandSentRecorder } from "./command-sent-recorder";
+import type { CommandSentRecorder } from "./command-sent-recorder.port";
 import { errorLogFields, safeLogJson } from "../common/logging";
 
 type OwnerWaiter = {
@@ -18,8 +18,8 @@ type OwnerWaiter = {
  * 一个 ownerId 对应一个可复用的持久容器，对应一个独立的命令队列分区。
  */
 @Injectable()
-export class RuntimeCommandQueue {
-  private readonly logger = new Logger(RuntimeCommandQueue.name);
+export class WorkerCommandQueue {
+  private readonly logger = new Logger(WorkerCommandQueue.name);
   /** ownerId 级队列——持久容器通过 ownerId 轮询命令。 */
   private readonly ownerQueues = new Map<
     string,

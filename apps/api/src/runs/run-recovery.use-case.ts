@@ -7,7 +7,7 @@ import { swallow } from "../common/swallow";
 import {
   runtimeInstanceMetadataJson,
   stoppedInstanceMetadata,
-} from "../runtime/resources/runtime-instance-metadata";
+} from "../runtime/instances/runtime-instance-metadata";
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，

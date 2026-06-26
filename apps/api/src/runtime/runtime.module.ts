@@ -1,9 +1,9 @@
-import { Module, OnModuleInit } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 
 // core
-import { WorkspaceRuntimeInstanceRepository } from "./resources/workspace-runtime-instance.repository";
-import { RuntimeInstanceLifecycleUseCase } from "./resources/lifecycle.use-case";
-import { RuntimeInstanceLifecycleListener } from "./resources/lifecycle.listener";
+import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
+import { RuntimeInstanceLifecycleUseCase } from "./instances/lifecycle.use-case";
+import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener";
 
 // providers
 import { LocalRuntimeProvider } from "./providers/local-provider";
@@ -24,20 +24,15 @@ import { RuntimeService } from "./runtime.service";
 // admin
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 
-// worker 通信基础设施（平级模块，runtime → worker-host）
-import { WorkerHostModule } from "../worker-host/worker-host.module";
-import { RuntimeHeartbeatRegistry } from "../worker-host/runtime-heartbeat.registry";
-
 // external deps
 import { ConfigService } from "../config/config.service";
 
 /**
  * Runtime 领域：执行环境（provider / sandbox engine / placement）、workspace runtime
- * 资源生命周期、以及 worker 面向的 internal 控制面。对 run 层零依赖；run 事件经
- * RunEventReceiver 接口由 run 层在启动时注入（见 RunsModule）。
+ * 资源生命周期。对 worker-host 零依赖：run 事件、命令通道、鉴权通道、心跳 sink 均
+ * 为 runtime 定义的 port，由 run 层在启动时注入实现（见 RunsModule）。
  */
 @Module({
-  imports: [WorkerHostModule],
   controllers: [AdminRuntimeController],
   providers: [
     // core
@@ -76,15 +71,5 @@ import { ConfigService } from "../config/config.service";
     RuntimeInstanceLifecycleUseCase,
   ],
 })
-export class RuntimeModule implements OnModuleInit {
-  constructor(
-    private readonly heartbeatRegistry: RuntimeHeartbeatRegistry,
-    private readonly runtimeService: RuntimeService
-  ) {}
+export class RuntimeModule {}
 
-  onModuleInit(): void {
-    // worker 经 worker-host 控制器上报的 runtime 实例心跳转发给 RuntimeService
-    // （worker-host 只认 RuntimeInstanceHeartbeatSink 接口，不依赖 runtime 实现）。
-    this.heartbeatRegistry.setSink(this.runtimeService);
-  }
-}

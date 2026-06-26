@@ -5,13 +5,13 @@ import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
   type RuntimeTargetDefaults,
-} from "./resources/runtime-resource";
+} from "./placement/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
 /**
  * Runtime 层对上层的门面：只负责运行环境——解析 runtime resource、管理 resource 生命周期
  * （心跳 / shutdown）。它不拥有「执行」：worker 的启动与 per-run control 由 Run 层的
- * RunWorkerExecutionService 驱动 provider 完成。
+ * RunDriver 驱动 provider 完成。
  */
 @Injectable()
 export class RuntimeService {

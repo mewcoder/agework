@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { RunEventReceiverImpl } from "./run-event-receiver";
+import { RunEventReceiverAdapter } from "./run-event-receiver.adapter";
 import type { RunEnvelopeProcessor } from "./run-envelope.processor";
 import type { RunEventRecorder } from "../events/run-event-recorder";
 
@@ -14,7 +14,7 @@ function makeReceiver() {
     append: vi.fn().mockResolvedValue(undefined),
   };
   return {
-    receiver: new RunEventReceiverImpl(
+    receiver: new RunEventReceiverAdapter(
       processor as unknown as RunEnvelopeProcessor,
       recorder as unknown as RunEventRecorder
     ),
@@ -23,7 +23,7 @@ function makeReceiver() {
   };
 }
 
-describe("RunEventReceiverImpl", () => {
+describe("RunEventReceiverAdapter", () => {
   it("publish() delegates to processor", async () => {
     const { receiver, processor } = makeReceiver();
     const envelope = { runId: "run-1", seq: 1 } as never;
@@ -31,21 +31,39 @@ describe("RunEventReceiverImpl", () => {
     expect(processor.publish).toHaveBeenCalledWith(envelope);
   });
 
-  it("isTerminalOrFinalizing() delegates to processor", () => {
+  it("notifyWorkerError() skips when run already terminal/finalizing", async () => {
     const { receiver, processor } = makeReceiver();
-    receiver.isTerminalOrFinalizing("run-1");
-    expect(processor.isTerminalOrFinalizing).toHaveBeenCalledWith("run-1");
+    processor.isTerminalOrFinalizing.mockReturnValue(true);
+
+    await receiver.notifyWorkerError("run-1", "crashed");
+
+    expect(processor.forceErrorStatus).not.toHaveBeenCalled();
   });
 
-  it("forceErrorStatus() delegates to processor", async () => {
+  it("notifyWorkerError() forces error status when run not terminal", async () => {
     const { receiver, processor } = makeReceiver();
-    await receiver.forceErrorStatus("run-1", "crashed");
+    processor.isTerminalOrFinalizing.mockReturnValue(false);
+
+    await receiver.notifyWorkerError("run-1", "crashed");
+
     expect(processor.forceErrorStatus).toHaveBeenCalledWith("run-1", "crashed");
   });
 
-  it("forceCancelledStatus() delegates to processor", async () => {
+  it("notifyCancelledBeforeReady() skips when run already terminal/finalizing", async () => {
     const { receiver, processor } = makeReceiver();
-    await receiver.forceCancelledStatus("run-1");
+    processor.isTerminalOrFinalizing.mockReturnValue(true);
+
+    await receiver.notifyCancelledBeforeReady("run-1");
+
+    expect(processor.forceCancelledStatus).not.toHaveBeenCalled();
+  });
+
+  it("notifyCancelledBeforeReady() forces cancelled when run not terminal", async () => {
+    const { receiver, processor } = makeReceiver();
+    processor.isTerminalOrFinalizing.mockReturnValue(false);
+
+    await receiver.notifyCancelledBeforeReady("run-1");
+
     expect(processor.forceCancelledStatus).toHaveBeenCalledWith("run-1");
   });
 

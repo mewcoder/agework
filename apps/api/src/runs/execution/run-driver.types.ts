@@ -5,7 +5,7 @@ import type {
 
 export type { WorkerExecutionHandle } from "@agework/shared/protocol";
 
-export type RunWorkerExecutionStartInput = {
+export type RunDriverStartInput = {
   runConfig: RunConfig;
   runtimeTarget: RuntimeTarget;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
