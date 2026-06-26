@@ -178,10 +178,6 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                 value={formatDateTimeMs(run.startedAt)}
               />
               <DetailItem
-                label="最近心跳"
-                value={formatDateTimeMs(run.lastHeartbeatAt)}
-              />
-              <DetailItem
                 label="结束时间"
                 value={formatDateTimeMs(run.finishedAt)}
               />

@@ -32,7 +32,6 @@ import {
 } from "./agent-event-trace.js";
 import { resolveAgentCliPaths } from "./agent-cli-paths.js";
 
-const HEARTBEAT_INTERVAL_MS = 5_000;
 const COMMAND_LONG_POLL_MS = 25_000;
 const COMMAND_EMPTY_RETRY_DELAY_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 8_000;
@@ -81,19 +80,6 @@ async function runSingle() {
 
   // Emit "running" status
   await emitStatus(transport, runId, { status: "running" });
-
-  // Heartbeat timer
-  const heartbeatTimer = setInterval(() => {
-    transport
-      .emit({
-        runId,
-        seq: 0,
-        type: "heartbeat",
-        payload: { at: new Date().toISOString() },
-        ts: "",
-      })
-      .catch(() => {});
-  }, HEARTBEAT_INTERVAL_MS);
 
   // Command dedup
   const processedCommands = new Set<string>();
@@ -171,7 +157,6 @@ async function runSingle() {
     if (forcedExitRequested) return;
     if (finalizePromise) return;
     forcedExitRequested = true;
-    clearInterval(heartbeatTimer);
 
     const forceExitTimer = setTimeout(() => {
       workerLog("single worker interrupt grace period exceeded", {
@@ -209,8 +194,7 @@ async function runSingle() {
     status: "finished" | "error" | "cancelled",
     error?: string
   ) {
-    clearInterval(heartbeatTimer);
-    // 终态上报必须成功：失败时 API 侧 Run 会卡在 running 直到心跳超时。
+    // 终态上报必须成功：失败时 API 侧 Run 会卡在 running 直到 run 超时。
     // 此时以非零退出，让 LocalRuntimeProvider 的 exit handler（code !== 0）
     // 立即触发 publishWorkerErrorStatus 将 Run 标记为 error。
     let statusReported = false;
@@ -292,10 +276,6 @@ async function runPersistent() {
         });
     }
   );
-
-  const heartbeatTimer = setInterval(() => {
-    void client.emitOwnerHeartbeat();
-  }, HEARTBEAT_INTERVAL_MS);
 
   const processedCommands = new Set<string>();
   let pollIterations = 0;
@@ -462,7 +442,6 @@ async function runPersistent() {
 
   async function shutdown(signal: NodeJS.Signals) {
     shuttingDown = true;
-    clearInterval(heartbeatTimer);
 
     const activeRuns = mux.activeRuns();
     workerLog("persistent worker received shutdown signal", {

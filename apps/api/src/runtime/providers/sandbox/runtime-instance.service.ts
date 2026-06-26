@@ -13,7 +13,6 @@ import type { AccessPort } from "../access-port";
 import { WorkspaceRuntimeInstanceRepository } from "../../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../../common/swallow";
 import {
-  HeartbeatWatchdog,
   IdleWatchdog,
   resolveDockerApiBase,
 } from "../provider-utils";
@@ -71,7 +70,6 @@ export class SandboxRuntimeInstanceService {
   /** run 在 runtime 实例 ready 之前被取消的标记；ready 时消费并强制置 cancelled。 */
   private readonly cancelledStartingRuns = new Set<string>();
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
-  private readonly heartbeats = new HeartbeatWatchdog();
   private readonly idleWatchdog = new IdleWatchdog();
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
   private access!: AccessPort;
@@ -205,16 +203,6 @@ export class SandboxRuntimeInstanceService {
     };
   }
 
-  heartbeatRun(runId: string): void {
-    const ownerId = this.findOwnerIdByRun(runId);
-    if (!ownerId) return;
-    this.heartbeats.beat(ownerId);
-  }
-
-  heartbeatRuntimeInstance(ownerId: string): void {
-    this.heartbeats.beat(ownerId);
-  }
-
   cleanupRun(runId: string): void {
     const ownerId = this.findOwnerIdByRun(runId);
     if (!ownerId) return;
@@ -234,7 +222,6 @@ export class SandboxRuntimeInstanceService {
     callbacks: Pick<SandboxRuntimeInstanceCallbacks, "cleanupByOwnerId">
   ): void {
     const state = this.ownerStates.get(ownerId);
-    this.heartbeats.stop(ownerId);
     this.idleWatchdog.cancel(ownerId);
     if (state?.runtimeInstanceId) {
       const engine = this.engines.get(state.engineType);
@@ -431,13 +418,6 @@ export class SandboxRuntimeInstanceService {
       handle.runtimeInstanceId = runtime.runtimeInstanceId;
       onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
     }
-
-    this.startRuntimeHeartbeat(
-      context.ownerId,
-      context.runId,
-      runtime,
-      callbacks
-    );
   }
 
   private onRuntimeInstanceStartFailed(
@@ -483,35 +463,6 @@ export class SandboxRuntimeInstanceService {
 
   private consumeCancelledStartingRun(runId: string): boolean {
     return this.cancelledStartingRuns.delete(runId);
-  }
-
-  private startRuntimeHeartbeat(
-    ownerId: string,
-    fallbackRunId: string,
-    runtime: SandboxRuntime,
-    callbacks: SandboxRuntimeInstanceCallbacks
-  ): void {
-    this.heartbeats.start(ownerId, () => {
-      const state = this.ownerStates.get(ownerId);
-      const targetRunIds = state?.activeRuns.size
-        ? [...state.activeRuns.keys()]
-        : [fallbackRunId];
-      this.logger.error(
-        `sandbox heartbeat timeout ${safeLogJson({
-          ownerId,
-          engineType: runtime.engineType,
-          activeRuns: targetRunIds.length,
-        })}`
-      );
-      // 心跳超时只代表失联，不代表容器/资源已损坏：不主动 stop/删除容器，
-      // 只是放弃对它的引用，让下次该 owner 的请求重新创建。
-      if (state) {
-        this.releaseOwnerRuntime(ownerId, state);
-      }
-      for (const runId of targetRunIds) {
-        callbacks.publishWorkerError(runId, "worker heartbeat timeout");
-      }
-    });
   }
 
   private async createSandbox(
@@ -573,7 +524,6 @@ export class SandboxRuntimeInstanceService {
     ownerId: string,
     state: SandboxOwnerState
   ): void {
-    this.heartbeats.stop(ownerId);
     this.idleWatchdog.cancel(ownerId);
     state.activeRuns.clear();
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;

@@ -11,8 +11,8 @@ import type {
 import { RunRepository } from "../run.repository";
 
 @Injectable()
-export class RunExecutionStatusHandler {
-  private readonly logger = new Logger(RunExecutionStatusHandler.name);
+export class RunStatusHandler {
+  private readonly logger = new Logger(RunStatusHandler.name);
 
   constructor(
     private readonly runService: RunRepository,

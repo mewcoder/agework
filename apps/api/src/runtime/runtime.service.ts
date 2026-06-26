@@ -10,7 +10,7 @@ import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
 /**
  * Runtime 层对上层的门面：只负责运行环境——解析 runtime resource、管理 resource 生命周期
- * （心跳 / shutdown）。它不拥有「执行」：worker 的启动与 per-run control 由 Run 层的
+ * （shutdown）。它不拥有「执行」：worker 的启动与 per-run control 由 Run 层的
  * RunDriver 驱动 provider 完成。
  */
 @Injectable()
@@ -31,16 +31,6 @@ export class RuntimeService {
   /** 从 run 输入解析出目标运行环境（纯计算，不启动 worker）。 */
   resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
     return resolveRuntimeTarget(input, this.defaults);
-  }
-
-  /**
-   * 按 ownerId 喂容器级 watchdog。worker 只知道 ownerId、不知道
-   * 是哪个 provider 在持有它，因此广播给所有 provider；未持有该 owner 的 provider 自然 no-op。
-   */
-  heartbeatRuntimeInstance(ownerId: string): void {
-    for (const provider of this.providerRegistry.all()) {
-      provider.heartbeatRuntimeInstance?.(ownerId);
-    }
   }
 
   /** 停止并删除指定 owner 对应的持久容器/沙箱。 */

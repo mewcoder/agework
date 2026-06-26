@@ -21,7 +21,6 @@ export type AdminRunResponse = {
   status: RunStatus;
   phase: string | null;
   error: string | null;
-  lastHeartbeatAt: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   /** ISO 8601 */

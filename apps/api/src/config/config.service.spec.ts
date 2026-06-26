@@ -148,12 +148,18 @@ describe("runtime capability config", () => {
 
 describe("ConfigService settings (DB > env > default)", () => {
   const original = process.env.AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS;
+  const originalRunTimeout = process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS;
 
   afterEach(() => {
     if (original === undefined) {
       delete process.env.AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS;
     } else {
       process.env.AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS = original;
+    }
+    if (originalRunTimeout === undefined) {
+      delete process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS;
+    } else {
+      process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS = originalRunTimeout;
     }
   });
 
@@ -181,6 +187,32 @@ describe("ConfigService settings (DB > env > default)", () => {
     await service.onModuleInit();
 
     expect(service.getIdleTimeoutSeconds()).toBe(1800);
+  });
+
+  it("reads run timeout from env when no DB override exists", async () => {
+    process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS = "120";
+    const { service } = createService([]);
+    await service.onModuleInit();
+
+    expect(service.getRunTimeoutSeconds()).toBe(120);
+  });
+
+  it("DB run timeout override takes priority over env", async () => {
+    process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS = "120";
+    const { service } = createService([
+      { key: "AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS", value: "240" },
+    ]);
+    await service.onModuleInit();
+
+    expect(service.getRunTimeoutSeconds()).toBe(240);
+  });
+
+  it("falls back to the default run timeout when neither DB nor env is set", async () => {
+    delete process.env.AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS;
+    const { service } = createService([]);
+    await service.onModuleInit();
+
+    expect(service.getRunTimeoutSeconds()).toBe(1800);
   });
 
   it("setSetting() persists and immediately refreshes the cache (hot reload)", async () => {

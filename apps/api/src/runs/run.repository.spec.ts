@@ -202,7 +202,6 @@ describe("RunRepository", () => {
       status: "running",
       phase: null,
       lastSeq: 2,
-      lastHeartbeatAt: now,
       error: null,
       startedAt: now,
       finishedAt: null,

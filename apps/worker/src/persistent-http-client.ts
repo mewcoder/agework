@@ -238,27 +238,6 @@ export class PersistentHttpClient {
     throw lastError ?? new Error("Event POST failed after retries");
   }
 
-  async emitOwnerHeartbeat(): Promise<void> {
-    const heartbeatPath = `/worker/owners/${this.ownerId}/heartbeat`;
-    const res = await fetch(`${this.apiBase}${heartbeatPath}`, {
-      method: "POST",
-      headers: this.authHeaders,
-    }).catch((err) => {
-      workerLog("owner heartbeat failed", {
-        ownerId: this.ownerId,
-        ...errorDetails(err),
-      }, "warn");
-      return undefined;
-    });
-    if (res && !res.ok) {
-      workerLog("owner heartbeat returned non-ok", {
-        ownerId: this.ownerId,
-        status: res.status,
-        body: await safeText(res),
-      }, "warn");
-    }
-  }
-
   private nextEventSeq(runId: string): number {
     const seq = (this.eventSeqs.get(runId) ?? 0) + 1;
     this.eventSeqs.set(runId, seq);

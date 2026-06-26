@@ -4,10 +4,16 @@ import type {
   RunStatusPayload,
   CommandTracePayload,
   RecordRunEventInput,
+  RunUsage,
+  WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
-import { normalizeRunUsage } from "./run-usage.mapper";
-import { RunActiveStore, type RunHandle } from "./run-active.store";
+import {
+  RunActiveStore,
+  type RunHandle,
+  type RunTimeoutErrorSink,
+} from "./run-active.store";
+import { RunDriver } from "../worker/run-driver";
 import { ConversationService } from "../../conversations/conversation.service";
 import { swallow } from "../../common/swallow";
 import {
@@ -26,14 +32,14 @@ import {
   shouldLogAgUiEvent,
   workerSeqGapFact,
 } from "../events/run-event-normalizer";
-import { RunExecutionStatusHandler } from "./run-execution-status.handler";
+import { RunStatusHandler } from "./run-status.handler";
 
 const CHUNK_SAVE_INTERVAL = 20;
 /** 终态完成后保留记录的时长，用于阻止 exit handler 等延迟事件覆盖已终态 */
 const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
-export class RunEnvelopeProcessor {
+export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
   private readonly logger = new Logger(RunEnvelopeProcessor.name);
   private readonly lastSeqMap = new Map<string, number>();
   private readonly chunkCounters = new Map<string, number>();
@@ -48,7 +54,8 @@ export class RunEnvelopeProcessor {
     private readonly conversationService: ConversationService,
     private readonly rawEventLogWriter: RawEventLogWriter,
     private readonly runEventRecorder: RunEventRecorder,
-    private readonly runExecutionStatusHandler: RunExecutionStatusHandler
+    private readonly runStatusHandler: RunStatusHandler,
+    private readonly runDriver: RunDriver
   ) {}
 
   async publish(envelope: Envelope<unknown>): Promise<void> {
@@ -115,9 +122,6 @@ export class RunEnvelopeProcessor {
       case "run.status":
         await this.handleRunStatus(runId, envelope.payload as RunStatusPayload);
         break;
-      case "heartbeat":
-        await this.handleHeartbeat(runId);
-        break;
       case "agui.event":
         await this.handleAgUiEvent(runId, envelope.payload);
         break;
@@ -133,9 +137,20 @@ export class RunEnvelopeProcessor {
     }
   }
 
-  /** 强制将 run 标记为终态 error，跳过 seq 去重（worker 异常退出 / 心跳超时场景）。 */
+  /** 强制将 run 标记为终态 error，跳过 seq 去重（worker 异常退出 / run 超时场景）。 */
   async forceErrorStatus(runId: string, error: string): Promise<void> {
     await this.handleRunStatus(runId, { status: "error", error });
+  }
+
+  async markRunTimedOut(
+    runId: string,
+    runtimeHandle: WorkerExecutionHandle
+  ): Promise<void> {
+    try {
+      await this.forceErrorStatus(runId, "run timeout");
+    } finally {
+      this.runDriver.terminateExecution(runtimeHandle, "run timeout");
+    }
   }
 
   /** 强制将 run 标记为终态 cancelled，跳过 seq 去重（启动中取消且 worker 尚未上报场景）。 */
@@ -191,7 +206,7 @@ export class RunEnvelopeProcessor {
         this.completedRuns.set(runId, timer);
       }
 
-    await this.runExecutionStatusHandler.apply({
+      await this.runStatusHandler.apply({
         runId,
         payload,
         effect,
@@ -205,12 +220,6 @@ export class RunEnvelopeProcessor {
         this.runEventRecorder.forgetRun(runId);
       }
     }
-  }
-
-  private async handleHeartbeat(runId: string) {
-    await this.runService
-      .updateHeartbeat(runId)
-      .catch(swallow(this.logger, `update heartbeat for run ${runId}`));
   }
 
   private shouldIgnoreRunStatus(
@@ -430,4 +439,67 @@ export class RunEnvelopeProcessor {
       .append(fact)
       .catch(swallow(this.logger, context));
   }
+}
+
+/**
+ * 从 `RUN_FINISHED.result`（unknown）安全抽取并归一化为 `RunUsage`。
+ *
+ * 两个 adapter 上报的字段名不同：
+ * - Codex：`{ usage: { input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens }, numTurns }`
+ * - Claude：`{ usage: { input_tokens, cache_read_input_tokens, cache_creation_input_tokens, output_tokens }, totalCostUsd, numTurns }`
+ *
+ * 任一非数值字段按 0 处理；整体为 null/非对象/没有任何已知 token 字段时返回 null。
+ */
+function normalizeRunUsage(result: unknown): RunUsage | null {
+  if (!result || typeof result !== "object") return null;
+  const r = result as Record<string, unknown>;
+  const usageRaw = r.usage;
+  const usage =
+    usageRaw && typeof usageRaw === "object"
+      ? (usageRaw as Record<string, unknown>)
+      : {};
+
+  const inputTokens = num(usage.input_tokens);
+  const outputTokens = num(usage.output_tokens);
+  const cachedInputTokens =
+    num(usage.cached_input_tokens) || num(usage.cache_read_input_tokens);
+  const reasoningOutputTokens = num(usage.reasoning_output_tokens);
+  const cacheCreationInputTokens = num(usage.cache_creation_input_tokens);
+  const totalCostUsd = nullableNum(r.totalCostUsd);
+  const numTurns = num(r.numTurns);
+  const durationApiMs = nullableNum(r.durationApiMs);
+
+  if (
+    inputTokens === 0 &&
+    outputTokens === 0 &&
+    cachedInputTokens === 0 &&
+    reasoningOutputTokens === 0 &&
+    cacheCreationInputTokens === 0 &&
+    totalCostUsd === null &&
+    numTurns === 0 &&
+    durationApiMs === null
+  ) {
+    return null;
+  }
+
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    reasoningOutputTokens,
+    cacheCreationInputTokens,
+    totalCostUsd,
+    numTurns,
+    durationApiMs,
+  };
+}
+
+/** 取数值字段：非有限数（含 null/undefined/NaN/string）一律视为 0。 */
+function num(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+/** 取可空数值：非有限数返回 null（用于 cost 这类「有就有、没有就空」的字段）。 */
+function nullableNum(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

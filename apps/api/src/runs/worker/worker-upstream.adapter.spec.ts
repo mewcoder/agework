@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkerUpstreamAdapter } from "./worker-upstream.adapter";
-import type { RunEnvelopeProcessor } from "./run-envelope.processor";
-import type { RunActiveStore } from "./run-active.store";
+import type { RunEnvelopeProcessor } from "../lifecycle/run-envelope.processor";
+import type { RunActiveStore } from "../lifecycle/run-active.store";
 import type { RunDriver } from "./run-driver";
 
 const activeHandle = {
@@ -78,35 +78,5 @@ describe("WorkerUpstreamAdapter", () => {
     });
 
     expect(runDriver.cleanup).not.toHaveBeenCalled();
-  });
-
-  it("feeds the heartbeat watchdog via RunDriver on heartbeat events", async () => {
-    const runDriver: Partial<RunDriver> = { heartbeat: vi.fn() };
-    const { adapter } = makeAdapter({ handle: activeHandle, runDriver });
-
-    await adapter.ingestEvent("run-1", {
-      runId: "run-1",
-      seq: 1,
-      type: "heartbeat",
-      payload: { at: new Date().toISOString() },
-      ts: new Date().toISOString(),
-    });
-
-    expect(runDriver.heartbeat).toHaveBeenCalledWith(activeHandle.runtimeHandle);
-  });
-
-  it("does not feed heartbeat when no run handle is registered", async () => {
-    const runDriver: Partial<RunDriver> = { heartbeat: vi.fn() };
-    const { adapter } = makeAdapter({ handle: undefined, runDriver });
-
-    await adapter.ingestEvent("run-1", {
-      runId: "run-1",
-      seq: 1,
-      type: "heartbeat",
-      payload: { at: new Date().toISOString() },
-      ts: new Date().toISOString(),
-    });
-
-    expect(runDriver.heartbeat).not.toHaveBeenCalled();
   });
 });

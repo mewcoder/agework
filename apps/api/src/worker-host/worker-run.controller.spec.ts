@@ -61,7 +61,7 @@ describe("WorkerRunController", () => {
       const envelope = {
         runId: "run-1",
         seq: 1,
-        type: "heartbeat",
+        type: "agui.event",
         payload: {},
         ts: new Date().toISOString(),
       };

@@ -1,13 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerCommandQueue } from "./command-queue";
-import { WorkerHeartbeatRegistry } from "./heartbeat.registry";
-
-function makeHeartbeatRegistry(): WorkerHeartbeatRegistry {
-  return {
-    heartbeatRuntimeInstance: vi.fn(),
-  } as unknown as WorkerHeartbeatRegistry;
-}
 
 describe("WorkerCommandController", () => {
   describe("pollCommands()", () => {
@@ -21,8 +14,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as WorkerCommandQueue,
-        makeHeartbeatRegistry()
+        commandQueue as WorkerCommandQueue
       );
 
       const result = await controller.pollCommands("owner-1", "3");
@@ -39,8 +31,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as WorkerCommandQueue,
-        makeHeartbeatRegistry()
+        commandQueue as WorkerCommandQueue
       );
 
       await controller.pollCommands("owner-1");
@@ -54,8 +45,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as WorkerCommandQueue,
-        makeHeartbeatRegistry()
+        commandQueue as WorkerCommandQueue
       );
 
       await controller.pollCommands("owner-1", "not-a-number");
@@ -73,8 +63,7 @@ describe("WorkerCommandController", () => {
       };
 
       const controller = new WorkerCommandController(
-        commandQueue as WorkerCommandQueue,
-        makeHeartbeatRegistry()
+        commandQueue as WorkerCommandQueue
       );
 
       const result = await controller.pollCommands("owner-1", "1", "25000");
@@ -88,22 +77,4 @@ describe("WorkerCommandController", () => {
     });
   });
 
-  describe("heartbeat()", () => {
-    it("broadcasts the heartbeat by ownerId", async () => {
-      const commandQueue = {} as WorkerCommandQueue;
-      const runtimeService = makeHeartbeatRegistry();
-
-      const controller = new WorkerCommandController(
-        commandQueue,
-        runtimeService
-      );
-
-      const result = await controller.heartbeat("owner-1");
-
-      expect(runtimeService.heartbeatRuntimeInstance).toHaveBeenCalledWith(
-        "owner-1"
-      );
-      expect(result).toEqual({ ok: true });
-    });
-  });
 });

@@ -83,10 +83,10 @@ describe("AdminRunController", () => {
 
     it("parses comma-separated type filter", async () => {
       const { controller, runEventQueryService } = makeController();
-      await controller.listEvents("run-1", "run.status,heartbeat");
+      await controller.listEvents("run-1", "run.status,command.trace");
       expect(runEventQueryService.listAdminEvents).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: ["run.status", "heartbeat"],
+          type: ["run.status", "command.trace"],
         })
       );
     });

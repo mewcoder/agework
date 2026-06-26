@@ -18,7 +18,7 @@ export type RunStatusPayload = {
 
 /**
  * 一次 run 的 token 用量，在 API 侧从 `RUN_FINISHED.result` 归一化得到。
- * Claude / Codex 两个 adapter 上报的字段名不同（见 `normalizeRunUsage`），统一到这里。
+ * Claude / Codex 两个 adapter 上报的字段名不同，由 API 侧 RunEnvelopeProcessor 统一到这里。
  */
 export interface RunUsage {
   inputTokens: number;
@@ -35,10 +35,6 @@ export interface RunUsage {
   /** adapter 上报的纯 API 耗时（ms）。无值时为 null。 */
   durationApiMs: number | null;
 }
-
-export type HeartbeatPayload = {
-  at: string;
-};
 
 export type ArtifactRefPayload = {
   artifactId: string;
@@ -125,12 +121,11 @@ export type CommandTracePayload = {
   error?: string;
 };
 
-/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `heartbeat` / `artifact.ref` / `command.trace`）。 */
+/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `artifact.ref` / `command.trace`）。 */
 export type UpstreamMessage =
   | Envelope<RunStatusPayload>
   | Envelope<AGUIEvent>
   | Envelope<AgentEventTracePayload>
-  | Envelope<HeartbeatPayload>
   | Envelope<ArtifactRefPayload>
   | Envelope<CommandTracePayload>;
 
@@ -216,7 +211,7 @@ export interface WorkerExecutionHandle {
  *   - user 隔离 → userId
  *   - workspace 隔离 → workspaceId
  * 一个 ownerId 对应一个可复用的容器实例（同一 owner 的多个 run 共用一个容器）。
- * 它承担容器命名、控制队列分区、access key 索引、心跳反查 provider 等职责，
+ * 它承担容器命名、控制队列分区、access key 索引等职责，
  * 必须在 runtimeInstanceId 生成之前就稳定可用。
  */
 export type RuntimeTarget = RuntimePlacement & { ownerId: string };

@@ -127,14 +127,6 @@ export class SandboxRuntimeProvider
     return this.runtimeInstances.getHandle(runId);
   }
 
-  heartbeat(runId: string): void {
-    this.runtimeInstances.heartbeatRun(runId);
-  }
-
-  heartbeatRuntimeInstance(ownerId: string): void {
-    this.runtimeInstances.heartbeatRuntimeInstance(ownerId);
-  }
-
   shutdownRuntimeInstance(ownerId: string): void {
     this.runtimeInstances.shutdownRuntimeInstance(ownerId, {
       cleanupByOwnerId: (key) => this.commands.cleanupByOwnerId(key),
@@ -143,6 +135,10 @@ export class SandboxRuntimeProvider
 
   recoverOrphan(runtimeInstanceId: string): Promise<void> {
     return this.runtimeInstances.recoverOrphan(runtimeInstanceId);
+  }
+
+  terminateExecution(runId: string): void {
+    this.cleanup(runId);
   }
 
   cleanup(runId: string): void {

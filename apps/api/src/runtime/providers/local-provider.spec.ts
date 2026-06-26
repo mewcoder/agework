@@ -14,6 +14,7 @@ const childProcessMock = vi.hoisted(() => {
     stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
     kill: vi.fn(),
+    killed: false,
   };
 
   return {
@@ -69,6 +70,7 @@ describe("LocalRuntimeProvider", () => {
     childProcessMock.child.stdout.on.mockClear();
     childProcessMock.child.stderr.on.mockClear();
     childProcessMock.child.kill.mockClear();
+    childProcessMock.child.killed = false;
 
     provider = new LocalRuntimeProvider();
     provider.setRunEventReceiver({
@@ -126,6 +128,23 @@ describe("LocalRuntimeProvider", () => {
       "LocalRuntimeProvider cannot start worker for runtime type: sandbox"
     );
     expect(childProcessMock.fork).not.toHaveBeenCalled();
+  });
+
+  it("terminateExecution sends SIGTERM to the local worker and clears state", () => {
+    const handle = provider.startWorkerExecution({
+      runtimeTarget: makeRuntimeTarget(),
+      runConfig: makeRunConfig(),
+    });
+
+    provider.terminateExecution("run-1", "run timeout");
+
+    expect(childProcessMock.child.kill).toHaveBeenCalledWith("SIGTERM");
+    expect(provider.getHandle("run-1")).toBeUndefined();
+    provider.sendCommand(handle, {
+      type: "interrupt",
+      commandId: "command-1",
+    });
+    expect(childProcessMock.child.send).toHaveBeenCalledTimes(1);
   });
 
   describe("recoverOrphan()", () => {

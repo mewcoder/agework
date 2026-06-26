@@ -145,7 +145,6 @@ model Run {
   status            String       @default("queued")
   phase             String?
   lastSeq           Int          @default(0)
-  lastHeartbeatAt   DateTime?
   error             String?
   startedAt         DateTime?
   finishedAt        DateTime?

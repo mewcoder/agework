@@ -3,10 +3,18 @@ import { RunEnvelopeProcessor } from "./run-envelope.processor";
 import { RunRepository } from "../run.repository";
 import { RunActiveStore } from "./run-active.store";
 import { ConversationService } from "../../conversations/conversation.service";
-import { RunMessageAggregator } from "./run-message.aggregator";
+import { RunMessageAggregator } from "../messages/run-message.aggregator";
 import { RawEventLogWriter } from "../events/raw-event-log.writer";
 import { RunEventRecorder } from "../events/run-event-recorder";
-import { RunExecutionStatusHandler } from "./run-execution-status.handler";
+import { RunStatusHandler } from "./run-status.handler";
+import type { ConfigService } from "../../config/config.service";
+import type { RunDriver } from "../worker/run-driver";
+
+function makeConfig(): ConfigService {
+  return {
+    getRunTimeoutSeconds: () => 60,
+  } as ConfigService;
+}
 
 describe("RunEnvelopeProcessor", () => {
   let runEventProcessor: RunEnvelopeProcessor;
@@ -15,6 +23,7 @@ describe("RunEnvelopeProcessor", () => {
   let mockConversationService: Partial<ConversationService>;
   let mockRawEventLogWriter: Partial<RawEventLogWriter>;
   let mockRunEventRecorder: Partial<RunEventRecorder>;
+  let mockRunDriver: Partial<RunDriver>;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -23,8 +32,8 @@ describe("RunEnvelopeProcessor", () => {
       markError: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
       markRequiresAction: vi.fn().mockResolvedValue(undefined),
-      updateHeartbeat: vi.fn().mockResolvedValue(undefined),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
+      recordUsage: vi.fn().mockResolvedValue(undefined),
     };
 
     mockConversationService = {
@@ -39,9 +48,12 @@ describe("RunEnvelopeProcessor", () => {
       append: vi.fn().mockResolvedValue({}),
       forgetRun: vi.fn(),
     };
+    mockRunDriver = {
+      terminateExecution: vi.fn(),
+    };
 
-    runRegistry = new RunActiveStore();
-    const runExecutionStatusHandler = new RunExecutionStatusHandler(
+    runRegistry = new RunActiveStore(makeConfig());
+    const runExecutionStatusHandler = new RunStatusHandler(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
       runRegistry
@@ -52,7 +64,8 @@ describe("RunEnvelopeProcessor", () => {
       mockConversationService as ConversationService,
       mockRawEventLogWriter as RawEventLogWriter,
       mockRunEventRecorder as RunEventRecorder,
-      runExecutionStatusHandler
+      runExecutionStatusHandler,
+      mockRunDriver as RunDriver
     );
   });
 
@@ -82,20 +95,6 @@ describe("RunEnvelopeProcessor", () => {
     );
   });
 
-  it("should handle heartbeat envelope", async () => {
-    const envelope = {
-      runId: "run-1",
-      seq: 1,
-      type: "heartbeat" as const,
-      payload: { at: new Date().toISOString() },
-      ts: new Date().toISOString(),
-    };
-
-    await runEventProcessor.publish(envelope);
-    expect(mockRunRepository.updateHeartbeat).toHaveBeenCalledWith("run-1");
-    expect(mockRunEventRecorder.append).not.toHaveBeenCalled();
-  });
-
   it("forceErrorStatus marks the run as error and bypasses seq dedup", async () => {
     await runEventProcessor.publish({
       runId: "run-1",
@@ -105,14 +104,31 @@ describe("RunEnvelopeProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    await runEventProcessor.forceErrorStatus(
-      "run-1",
-      "worker heartbeat timeout"
-    );
+    await runEventProcessor.forceErrorStatus("run-1", "run timeout");
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
-      "worker heartbeat timeout"
+      "run timeout"
+    );
+  });
+
+  it("markRunTimedOut marks error and terminates the execution session", async () => {
+    const runtimeHandle = {
+      runId: "run-1",
+      runtimeType: "local",
+      runtimeInstanceId: "1:token",
+      conversationId: "conversation-1",
+    };
+
+    await runEventProcessor.markRunTimedOut("run-1", runtimeHandle);
+
+    expect(mockRunRepository.markError).toHaveBeenCalledWith(
+      "run-1",
+      "run timeout"
+    );
+    expect(mockRunDriver.terminateExecution).toHaveBeenCalledWith(
+      runtimeHandle,
+      "run timeout"
     );
   });
 
@@ -404,6 +420,87 @@ describe("RunEnvelopeProcessor", () => {
       mockRunEventRecorder.append as ReturnType<typeof vi.fn>
     ).mock.calls.map(([fact]) => fact.type);
     expect(recordedTypes).not.toContain("tool.completed");
+  });
+
+  it("records normalized usage from RUN_FINISHED results", async () => {
+    runRegistry.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      res: null,
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {
+        type: "RUN_FINISHED",
+        result: {
+          numTurns: 3,
+          usage: {
+            input_tokens: 1000,
+            cached_input_tokens: 200,
+            output_tokens: 500,
+            reasoning_output_tokens: 80,
+          },
+        },
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunRepository.recordUsage).toHaveBeenCalledWith("run-1", {
+      inputTokens: 1000,
+      outputTokens: 500,
+      cachedInputTokens: 200,
+      reasoningOutputTokens: 80,
+      cacheCreationInputTokens: 0,
+      totalCostUsd: null,
+      numTurns: 3,
+      durationApiMs: null,
+    });
+  });
+
+  it("skips usage persistence when RUN_FINISHED has no usable usage fields", async () => {
+    runRegistry.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      res: null,
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await runEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {
+        type: "RUN_FINISHED",
+        result: { usage: { input_tokens: "oops", output_tokens: null } },
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunRepository.recordUsage).not.toHaveBeenCalled();
   });
 
   it("writes raw SDK events without forwarding them to the aggregator", async () => {

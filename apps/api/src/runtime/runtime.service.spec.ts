@@ -8,7 +8,6 @@ describe("RuntimeService", () => {
   let providerRegistry: Partial<RuntimeProviderRegistry>;
   let provider: {
     type: string;
-    heartbeatRuntimeInstance: ReturnType<typeof vi.fn>;
     shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
   };
   let service: RuntimeService;
@@ -16,7 +15,6 @@ describe("RuntimeService", () => {
   beforeEach(() => {
     provider = {
       type: "local",
-      heartbeatRuntimeInstance: vi.fn(),
       shutdownRuntimeInstance: vi.fn(),
     };
     configService = {
@@ -26,7 +24,6 @@ describe("RuntimeService", () => {
     };
     providerRegistry = {
       resolve: vi.fn().mockReturnValue(provider),
-      all: vi.fn().mockReturnValue([provider]),
     };
     service = new RuntimeService(
       configService as ConfigService,
@@ -45,12 +42,6 @@ describe("RuntimeService", () => {
     expect(result.runtimeType).toBe("local");
     expect(result.ownerId).toBe("ws-1");
     expect(configService.getDefaultRuntimeType).toHaveBeenCalled();
-  });
-
-  it("heartbeatRuntimeInstance broadcasts to all providers by resource key", () => {
-    service.heartbeatRuntimeInstance("ws-1");
-    expect(providerRegistry.all).toHaveBeenCalled();
-    expect(provider.heartbeatRuntimeInstance).toHaveBeenCalledWith("ws-1");
   });
 
   it("shutdownRuntimeInstance dispatches to the resolved provider by type", () => {

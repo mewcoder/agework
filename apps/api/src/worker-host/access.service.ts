@@ -23,7 +23,7 @@ export class WorkerAccessService {
 
   /**
    * 为 runtime owner 签发内部访问 key。
-   * Worker 用同一个 key 访问 per-run 端点和 owner 控制端点（commands/heartbeat）。
+   * Worker 用同一个 key 访问 per-run 端点和 owner 命令端点。
    */
   issueOwnerKey(ownerId: string): string {
     const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
@@ -61,7 +61,7 @@ export class WorkerAccessService {
   /**
    * 为 runtimeInstanceId 签发内部访问 key。
    * 复用 ownerId 对应的 ownerKey，使同一个 key 可同时用于
-   * /worker/owners/:ownerId 和 /worker/runs/:runId 端点鉴权。
+   * owner 命令端点和 /worker/runs/:runId 端点鉴权。
    */
   issueRuntimeInstanceKey(
     runtimeInstanceId: string,

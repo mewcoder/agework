@@ -1,51 +1,6 @@
 import { resolveApiBasePath } from "../../common/path.util";
 import { EnvKey } from "../../config/env-key";
 
-const HEARTBEAT_CHECK_INTERVAL_MS = 5_000;
-const HEARTBEAT_TIMEOUT_MS = 60_000;
-
-/**
- * 共享心跳 watchdog：跟踪每个实体（run 或 workspace）最近一次心跳时间，
- * 超过 HEARTBEAT_TIMEOUT_MS 未收到心跳则触发 onTimeout。
- * LocalRuntimeProvider 以 runId 为 key，DockerRuntimeProvider 以 workspaceId 为 key。
- */
-export class HeartbeatWatchdog {
-  private readonly lastHeartbeats = new Map<string, number>();
-  private readonly timers = new Map<string, NodeJS.Timeout>();
-
-  /** @param key - runId（Local 模式）或 workspaceId（Docker 模式） */
-  start(key: string, onTimeout: () => void): void {
-    this.stop(key);
-    this.lastHeartbeats.set(key, Date.now());
-    const check = () => {
-      const last = this.lastHeartbeats.get(key) ?? 0;
-      if (Date.now() - last > HEARTBEAT_TIMEOUT_MS) {
-        onTimeout();
-        return; // 超时后不再调度
-      }
-      const timer = setTimeout(check, HEARTBEAT_CHECK_INTERVAL_MS);
-      this.timers.set(key, timer);
-    };
-    const timer = setTimeout(check, HEARTBEAT_CHECK_INTERVAL_MS);
-    this.timers.set(key, timer);
-  }
-
-  /** @param key - runId（Local 模式）或 workspaceId（Docker 模式） */
-  beat(key: string): void {
-    this.lastHeartbeats.set(key, Date.now());
-  }
-
-  /** @param key - runId（Local 模式）或 workspaceId（Docker 模式） */
-  stop(key: string): void {
-    const timer = this.timers.get(key);
-    if (timer) {
-      clearTimeout(timer);
-      this.timers.delete(key);
-    }
-    this.lastHeartbeats.delete(key);
-  }
-}
-
 /**
  * worker 容器访问宿主 API 的 base URL。
  * 默认指向 `host.docker.internal:<PORT>`，并拼上与 main.ts 一致的 API 挂载前缀
@@ -85,4 +40,3 @@ export class IdleWatchdog {
     }
   }
 }
-

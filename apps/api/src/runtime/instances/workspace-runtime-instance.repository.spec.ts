@@ -193,38 +193,6 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     });
   });
 
-  it("marks a runtime resource missing by owner", async () => {
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
-    const service = new WorkspaceRuntimeInstanceRepository({
-      runtimeInstance: { updateMany },
-    } as never);
-
-    await service.markMissingByOwner(
-      "sandbox",
-      "workspace",
-      "w1",
-      "heartbeat_lost"
-    );
-
-    expect(updateMany).toHaveBeenCalledWith({
-      where: {
-        runtimeType: "sandbox",
-        isolationScope: "workspace",
-        ownerId: "w1",
-      },
-      data: {
-        status: "missing",
-        metadata: expect.objectContaining({
-          ownerId: "w1",
-          runtimeType: "sandbox",
-          isolationScope: "workspace",
-          statusReason: "heartbeat_lost",
-          lastSeenAt: expect.any(String),
-        }),
-      },
-    });
-  });
-
   it("marks a runtime resource error by owner", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const service = new WorkspaceRuntimeInstanceRepository({

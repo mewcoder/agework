@@ -2,18 +2,17 @@ import { Module, OnModuleInit } from "@nestjs/common";
 
 // core
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./execution/run-active.store";
-import { RunEnvelopeProcessor } from "./execution/run-envelope.processor";
-import { RunExecutionStatusHandler } from "./execution/run-execution-status.handler";
+import { RunActiveStore } from "./lifecycle/run-active.store";
+import { RunEnvelopeProcessor } from "./lifecycle/run-envelope.processor";
+import { RunStatusHandler } from "./lifecycle/run-status.handler";
 import { RawEventLogWriter } from "./events/raw-event-log.writer";
 import { RunEventRecorder, RunEventStore } from "./events/run-event-recorder";
 import { RunEventQuery } from "./events/run-event-query";
-import { RunRecoveryUseCase } from "./run-recovery.use-case";
+import { RunRecoveryUseCase } from "./lifecycle/run-recovery.use-case";
 import { RunService } from "./run.service";
-import { RunConfigAssembler } from "./run-config.assembler";
-import { RunEventReceiverAdapter } from "./execution/run-event-receiver.adapter";
-import { WorkerUpstreamAdapter } from "./execution/worker-upstream.adapter";
-import { RunDriver } from "./execution/run-driver";
+import { RunEventReceiverAdapter } from "./worker/run-event-receiver.adapter";
+import { WorkerUpstreamAdapter } from "./worker/worker-upstream.adapter";
+import { RunDriver } from "./worker/run-driver";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -21,12 +20,10 @@ import { AdminRunController } from "./admin/admin-run.controller";
 // deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
-import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
 import { WorkerCommandQueue } from "../worker-host/command-queue";
 import { WorkerCommandDispatcher } from "../worker-host/command-dispatcher.service";
 import { WorkerAccessService } from "../worker-host/access.service";
-import { WorkerHeartbeatRegistry } from "../worker-host/heartbeat.registry";
 import { WorkerUpstreamRegistry } from "../worker-host/worker-upstream.registry";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
@@ -37,7 +34,12 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
  * command queue；WorkerUpstreamReceiver → worker-host 的 WorkerRunController。
  */
 @Module({
-  imports: [RuntimeModule, WorkerHostModule, ConversationModule, ModelProviderModule],
+  imports: [
+    RuntimeModule,
+    WorkerHostModule,
+    ConversationModule,
+    ModelProviderModule,
+  ],
   controllers: [AdminRunController],
   providers: [
     RunRepository,
@@ -48,14 +50,13 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
     RunEventRecorder,
     RunEventQuery,
     RunRecoveryUseCase,
-    RunExecutionStatusHandler,
+    RunStatusHandler,
     RunService,
-    RunConfigAssembler,
     RunDriver,
     RunEventReceiverAdapter,
     WorkerUpstreamAdapter,
   ],
-  exports: [RunService, RunRepository, RunConfigAssembler],
+  exports: [RunService, RunRepository],
 })
 export class RunsModule implements OnModuleInit {
   constructor(
@@ -64,9 +65,9 @@ export class RunsModule implements OnModuleInit {
     private readonly commandQueue: WorkerCommandQueue,
     private readonly commandDispatcher: WorkerCommandDispatcher,
     private readonly accessService: WorkerAccessService,
-    private readonly heartbeatRegistry: WorkerHeartbeatRegistry,
-    private readonly runtimeService: RuntimeService,
     private readonly workerUpstream: WorkerUpstreamRegistry,
+    private readonly runRegistry: RunActiveStore,
+    private readonly runEventProcessor: RunEnvelopeProcessor,
     private readonly runEventReceiver: RunEventReceiverAdapter,
     private readonly workerUpstreamAdapter: WorkerUpstreamAdapter
   ) {}
@@ -78,8 +79,7 @@ export class RunsModule implements OnModuleInit {
     this.providerRegistry.setAccessPort(this.accessService);
     this.commandQueue.setCommandSentRecorder(this.runEventReceiver);
     this.workerUpstream.setReceiver(this.workerUpstreamAdapter);
-    // runtime 实例心跳接收方：worker 经 worker-host 上报 → RuntimeService 喂容器 watchdog
-    this.heartbeatRegistry.setReceiver(this.runtimeService);
+    this.runRegistry.setTimeoutErrorSink(this.runEventProcessor);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

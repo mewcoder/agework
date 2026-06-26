@@ -3,7 +3,14 @@ import { ConversationService } from "../../conversations/conversation.service";
 import { RunActiveStore, type RunHandle } from "./run-active.store";
 import { runStatusEffect } from "./run-lifecycle.policy";
 import { RunRepository } from "../run.repository";
-import { RunExecutionStatusHandler } from "./run-execution-status.handler";
+import { RunStatusHandler } from "./run-status.handler";
+import type { ConfigService } from "../../config/config.service";
+
+function makeConfig(): ConfigService {
+  return {
+    getRunTimeoutSeconds: () => 60,
+  } as ConfigService;
+}
 
 function makeHandle(overrides: Partial<RunHandle> = {}): RunHandle {
   return {
@@ -43,12 +50,12 @@ function makeSubject(input?: {
     setPendingUserAction: vi.fn().mockResolvedValue(undefined),
     setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
   };
-  const registry = input?.registry ?? new RunActiveStore();
+  const registry = input?.registry ?? new RunActiveStore(makeConfig());
   return {
     runService,
     conversationService,
     registry,
-    handler: new RunExecutionStatusHandler(
+    handler: new RunStatusHandler(
       runService as unknown as RunRepository,
       conversationService as unknown as ConversationService,
       registry
@@ -56,7 +63,7 @@ function makeSubject(input?: {
   };
 }
 
-describe("RunExecutionStatusHandler", () => {
+describe("RunStatusHandler", () => {
   it("persists requires_action and saves a partial message snapshot", async () => {
     const { handler, runService, conversationService } = makeSubject();
     const handle = makeHandle();
@@ -77,7 +84,7 @@ describe("RunExecutionStatusHandler", () => {
   });
 
   it("applies error terminal effects and closes the SSE response", async () => {
-    const registry = new RunActiveStore();
+    const registry = new RunActiveStore(makeConfig());
     const unregister = vi.spyOn(registry, "unregister");
     const { handler, runService, conversationService } = makeSubject({
       activeRun: { id: "run-1" },
@@ -124,7 +131,7 @@ describe("RunExecutionStatusHandler", () => {
   });
 
   it("unregisters terminal runs even when final message saving fails", async () => {
-    const registry = new RunActiveStore();
+    const registry = new RunActiveStore(makeConfig());
     const unregister = vi.spyOn(registry, "unregister");
     const { handler } = makeSubject({ registry });
     const handle = makeHandle({

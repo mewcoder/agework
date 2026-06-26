@@ -5,28 +5,38 @@ import {
   ConflictException,
   NotFoundException,
 } from "@nestjs/common";
+import { join, posix } from "node:path";
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
-import type { RunConfig, WorkerExecutionHandle } from "@agework/shared/protocol";
+import type {
+  AgentProviderConfig,
+  RunConfig,
+  RuntimePlacement,
+  WorkerExecutionHandle,
+} from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./execution/run-active.store";
+import { RunActiveStore } from "./lifecycle/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunDriver } from "./execution/run-driver";
+import { RunDriver } from "./worker/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import {
   RunMessageAggregator,
   type IncompleteMessageReason,
-} from "./execution/run-message.aggregator";
-import { RunConfigAssembler } from "./run-config.assembler";
+} from "./messages/run-message.aggregator";
 import { ConfigService, type IsolationScope } from "../config/config.service";
+import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
+import { EnvKey } from "../config/env-key";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRecorder } from "./events/run-event-recorder";
 import { RunEventFacts, compactData } from "./events/run-event-facts";
 import type { StartRunInput } from "./run-service.types";
 import { PrismaService } from "../prisma/prisma.service";
+import { safePathPart } from "../common/safe-path";
+
+const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
 type RunWorkspace = {
   workspaceId: string;
@@ -48,7 +58,6 @@ export class RunService {
     private readonly runDriver: RunDriver,
     private readonly conversationService: ConversationService,
     private readonly runEventRecorder: RunEventRecorder,
-    private readonly runConfigAssembler: RunConfigAssembler,
     private readonly titleService: TitleService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService
@@ -107,7 +116,7 @@ export class RunService {
     // 2. 组装 RunConfig（agent provider 由 agent 层提供，路径/trace 由 placement 决定）
     let runConfig: RunConfig;
     try {
-      runConfig = this.runConfigAssembler.assemble({
+      runConfig = this.assembleRunConfig({
         agentProviderConfig,
         placement,
         workspaceId: workspace.workspaceId,
@@ -547,6 +556,67 @@ export class RunService {
     };
   }
 
+  private assembleRunConfig(params: {
+    agentProviderConfig: AgentProviderConfig;
+    placement: RuntimePlacement;
+    workspaceId: string;
+    runId: string;
+    conversationId: string;
+    input: unknown;
+  }): RunConfig {
+    const {
+      agentProviderConfig,
+      placement,
+      workspaceId,
+      runId,
+      conversationId,
+      input,
+    } = params;
+    const logPaths = this.buildRuntimeLogPaths(placement, conversationId);
+
+    return {
+      runId,
+      conversationId,
+      workspaceId,
+      runtimePath: placement.runtimePath,
+      env: {},
+      input,
+      agentProviderConfig,
+      agentEventTrace: buildAgentEventTraceConfig({
+        runId,
+        conversationId,
+        workspaceId,
+        agentType: agentProviderConfig.agentType,
+        ...logPaths,
+      }),
+      workerLogFilePath: logPaths.workerRuntimeFilePath,
+    };
+  }
+
+  private buildRuntimeLogPaths(
+    placement: RuntimePlacement,
+    conversationId: string
+  ): RuntimeLogPaths {
+    const logDir = this.configService.getRuntimeLogDir();
+    const conversationFileName = safePathPart(conversationId);
+    const rawFileName = `${conversationFileName}.raw.jsonl`;
+    const aguiFileName = `${conversationFileName}.agui.jsonl`;
+    const workerFileName = `${conversationFileName}.worker.log`;
+    const isSandbox = placement.runtimeType === "sandbox";
+
+    return {
+      logDir,
+      rawFilePath: join(logDir, rawFileName),
+      rawRuntimeFilePath: isSandbox
+        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, rawFileName)
+        : join(logDir, rawFileName),
+      aguiFilePath: join(logDir, aguiFileName),
+      workerRuntimeFilePath: isSandbox
+        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, workerFileName)
+        : join(logDir, workerFileName),
+    };
+  }
+
   /** 把 aggregator.build() 的快照转成 ChatModelRunResult 形态并写成 SSE。 */
   private writeSnapshot(
     res: Response,
@@ -634,4 +704,55 @@ export class RunService {
     }
     return true;
   }
+}
+
+type RuntimeLogPaths = {
+  logDir: string;
+  rawFilePath: string;
+  rawRuntimeFilePath: string;
+  aguiFilePath: string;
+  workerRuntimeFilePath: string;
+};
+
+// AGEWORK_AGENT_EVENT_TRACE_ENABLED 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，
+// 不是事件索引）。DB 关键事件索引（RunEventRecorder 写入的 RunEvent）与本开关无关，始终记录，
+// 关闭本开关后 run 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。
+function buildAgentEventTraceConfig(input: {
+  runId: string;
+  conversationId: string;
+  workspaceId: string;
+  agentType: string;
+  logDir: string;
+  rawFilePath: string;
+  rawRuntimeFilePath: string;
+  aguiFilePath: string;
+}) {
+  const enabled = isTruthy(process.env[EnvKey.AGENT_EVENT_TRACE_ENABLED]);
+  const maxFileMb = parsePositiveInt(
+    process.env[EnvKey.AGENT_EVENT_TRACE_MAX_FILE_MB],
+    DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB
+  );
+
+  return {
+    enabled,
+    logDir: enabled ? input.logDir : undefined,
+    rawFilePath: enabled ? input.rawFilePath : undefined,
+    rawRuntimeFilePath: enabled ? input.rawRuntimeFilePath : undefined,
+    aguiFilePath: enabled ? input.aguiFilePath : undefined,
+    maxFileMb,
+    runId: input.runId,
+    conversationId: input.conversationId,
+    workspaceId: input.workspaceId,
+    agentType: input.agentType,
+  };
+}
+
+function isTruthy(value: string | undefined): boolean {
+  if (!value) return false;
+  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }

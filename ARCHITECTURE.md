@@ -55,7 +55,7 @@
 │  Agent Adapter (Claude/Codex)   │   │  Agent Adapter (Claude/Codex)         │
 │   -> Observable<AGUIEvent>      │   │   -> Observable<AGUIEvent>            │
 │  emit(agui.event/run.status/    │   │  emit(...) ◄─ POST /internal/.../events│
-│       heartbeat) via child.send │   │  subscribeControls() ◄─ GET .../controls│
+│       command.trace) via IPC    │   │  subscribeControls() ◄─ GET .../controls│
 │  subscribeControls() via IPC    │   │       (2s 间隔短轮询, afterSeq)       │
 └──────────────────────────────────┘   └──────────────────────────────────────┘
 ```
@@ -70,7 +70,7 @@
     -> RuntimeTransport.emit(agui.event)   (Ipc | Http)
     -> RuntimeEventProcessor.publish()
         - 按 runId+seq 去重 / 顺序校验 (lastSeqMap)
-        - 更新 Run 状态 (run.status / heartbeat)
+        - 更新 Run 状态 (run.status)
         - 推送 SSE subscribers
         - RuntimeMessageAggregator -> Message upsert
 
@@ -85,22 +85,30 @@
     -> Agent Adapter.interrupt() / resolveQuestion(...)
 ```
 
-## 3. 心跳与终止清理
+## 3. 运行超时与终止清理
 
 ```
-worker 每 5s 发 heartbeat ──► HeartbeatWatchdog (每个 provider 各自维护)
-                                  │
-                                  ├─ 60s 内收到心跳 -> 正常
-                                  │
-                                  └─ 超时 -> publishWorkerErrorStatus()
-                                            -> Run.status = "error"
-                                            -> provider.cleanup(runId)
+RunActiveStore.register(runId)
+  -> 启动 run timeout timer
+  -> 超时未进入终态
+      -> RunTimeoutErrorSink.markRunTimedOut(runId)
+      -> RunEnvelopeProcessor.forceErrorStatus(runId, "run timeout")
+      -> Run.status = "error"
+      -> RunDriver.terminateExecution()
+          - local: SIGTERM per-run child process
+          - sandbox: cleanup run session / access，不停止可复用容器
 
 正常/取消终止：
   worker emit run.status (finished | error | cancelled)
-    -> RuntimeEventProcessor.handleRunStatus() 识别终态
-    -> RuntimeInternalController.postEvent / IPC handler
-        -> provider.cleanup(runId)   (清理 heartbeat watchdog / control queue / container)
+    -> RunEnvelopeProcessor.handleRunStatus() 识别终态
+    -> RunExecutionStatusHandler
+        -> RunActiveStore.unregister(runId)
+        -> WorkerUpstreamAdapter / provider cleanup run session
+
+Sandbox 资源回收：
+  activeRuns 降为 0
+    -> IdleWatchdog
+    -> 空闲超时后停止/释放 sandbox runtime resource
 ```
 
 ## 4. 关键模块对应关系
@@ -111,7 +119,7 @@ worker 每 5s 发 heartbeat ──► HeartbeatWatchdog (每个 provider 各自�
 | 通信通道 | `RuntimeTransport` | `IpcTransport` | `HttpTransport` |
 | 控制下发 | `sendControl()` | `child.send()` | `RuntimeControlQueue.push()` + 2s 短轮询 |
 | 内部访问 | — | 同机父子进程信任 | `RuntimeInternalAccessService` 签发 run-scoped access key，`RuntimeInternalAuthGuard` 校验 |
-| 心跳/清理 | — | `HeartbeatWatchdog` (runtime-provider-utils.ts) | 同左 |
+| 超时/清理 | — | `RunActiveStore` run timeout + provider cleanup | run timeout + `IdleWatchdog` 空闲回收 |
 
 ## 5. 数据模型（要点）
 
@@ -119,12 +127,11 @@ worker 每 5s 发 heartbeat ──► HeartbeatWatchdog (每个 provider 各自�
 Workspace ──< Project ──< Conversation ──< Run
                                        │
                                        ├ runtimeType: "local" | "sandbox"
-                                       ├ runtimeResourceId: pid | containerId
+                                       ├ runtimeInstanceId: pid | containerId
                                        ├ status: queued/preparing/running/
                                        │         requires_action/cancelling/
                                        │         finished/error/cancelled
-                                       ├ lastSeq / lastControlSeq
-                                       └ lastHeartbeatAt
+                                       └ lastSeq
 ```
 
 `Conversation.activeRunStatus` 等前端字段由 active/latest Run 派生，Run 是运行事实源。

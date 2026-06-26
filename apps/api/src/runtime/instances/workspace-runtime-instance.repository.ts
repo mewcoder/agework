@@ -108,28 +108,6 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  async markMissingByOwner(
-    runtimeType: string,
-    isolationScope: string,
-    ownerId: string,
-    reason = "missing"
-  ) {
-    await this.prisma.runtimeInstance.updateMany({
-      where: ownerWhere(runtimeType, isolationScope, ownerId),
-      data: {
-        status: "missing",
-        metadata: runtimeInstanceMetadataJson(
-          statusInstanceMetadata({
-            runtimeType,
-            isolationScope,
-            ownerId,
-            reason,
-          })
-        ),
-      },
-    });
-  }
-
   async markErrorByOwner(
     runtimeType: string,
     isolationScope: string,

@@ -15,9 +15,6 @@ import type {
   WorkerExecutionProvider,
   RuntimeInstanceManager,
 } from "./provider-contracts";
-import {
-  HeartbeatWatchdog,
-} from "./provider-utils";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -50,7 +47,6 @@ export class LocalRuntimeProvider
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly states = new Map<string, LocalRunState>();
-  private readonly heartbeats = new HeartbeatWatchdog();
   private readonly commandSeqs = new Map<string, number>();
   private receiver!: RunEventReceiver;
 
@@ -114,9 +110,6 @@ export class LocalRuntimeProvider
     // Forward upstream messages to RunEnvelopeProcessor
     child.on("message", (msg: unknown) => {
       const envelope = msg as Envelope<unknown>;
-      if (envelope.type === "heartbeat") {
-        this.heartbeats.beat(runId);
-      }
       this.receiver.publish(envelope).catch((err) => {
         this.logger.warn(
           `runtime event publish failed ${safeLogJson({
@@ -154,25 +147,6 @@ export class LocalRuntimeProvider
     });
     child.stderr?.on("data", (data: Buffer) => {
       this.logger.debug(`[worker:${runId}:stderr] ${data.toString().trimEnd()}`);
-    });
-
-    // Start heartbeat check
-    this.heartbeats.start(runId, () => {
-      this.logger.error(
-        `local worker heartbeat timeout ${safeLogJson({ runId })}`
-      );
-      child.kill();
-      this.cleanup(runId);
-      this.receiver
-        .notifyWorkerError(runId, "worker heartbeat timeout")
-        .catch((err) => {
-          this.logger.warn(
-            `notify worker error failed ${safeLogJson({
-              runId,
-              ...errorLogFields(err),
-            })}`
-          );
-        });
     });
 
     return handle;
@@ -223,15 +197,38 @@ export class LocalRuntimeProvider
     return this.states.get(runId)?.handle;
   }
 
-  heartbeat(runId: string): void {
-    this.heartbeats.beat(runId);
-  }
-
   /** Run 终态后清理（也由 RuntimeProvider 接口的统一清理路径调用，幂等）。 */
   cleanup(runId: string): void {
     this.states.delete(runId);
-    this.heartbeats.stop(runId);
     this.commandSeqs.delete(runId);
+  }
+
+  terminateExecution(runId: string, reason: string): void {
+    const state = this.states.get(runId);
+    if (!state) return;
+
+    this.logger.warn(
+      `terminating local worker ${safeLogJson({
+        runId,
+        reason,
+        pid: state.child.pid,
+      })}`
+    );
+    try {
+      if (!state.child.killed) {
+        state.child.kill("SIGTERM");
+      }
+    } catch (err) {
+      this.logger.warn(
+        `terminate local worker failed ${safeLogJson({
+          runId,
+          reason,
+          ...errorLogFields(err),
+        })}`
+      );
+    } finally {
+      this.cleanup(runId);
+    }
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */

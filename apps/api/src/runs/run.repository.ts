@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   ACTIVE_RUN_STATUSES,
   RUNNING_MUTABLE_STATUSES,
-} from "./execution/run-lifecycle.policy";
+} from "./lifecycle/run-lifecycle.policy";
 
 @Injectable()
 export class RunRepository {
@@ -105,13 +105,6 @@ export class RunRepository {
     await this.prisma.run.updateMany({
       where: { id: runId, status: { in: RUNNING_MUTABLE_STATUSES } },
       data: { status: "requires_action" },
-    });
-  }
-
-  async updateHeartbeat(runId: string) {
-    await this.prisma.run.update({
-      where: { id: runId },
-      data: { lastHeartbeatAt: new Date() },
     });
   }
 

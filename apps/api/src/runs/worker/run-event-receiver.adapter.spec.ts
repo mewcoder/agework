@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunEventReceiverAdapter } from "./run-event-receiver.adapter";
-import type { RunEnvelopeProcessor } from "./run-envelope.processor";
+import type { RunEnvelopeProcessor } from "../lifecycle/run-envelope.processor";
 import type { RunEventRecorder } from "../events/run-event-recorder";
 
 function makeReceiver() {

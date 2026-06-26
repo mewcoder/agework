@@ -14,7 +14,7 @@ function makeProvider() {
     startWorkerExecution: vi.fn(),
     sendCommand: vi.fn(),
     cancel: vi.fn(),
-    heartbeat: vi.fn(),
+    terminateExecution: vi.fn(),
     cleanup: vi.fn(),
   };
 }
@@ -65,7 +65,7 @@ describe("RunDriver", () => {
     expect(result).toBe(handle);
   });
 
-  it("dispatches command / cancel / heartbeat / cleanup by handle.runtimeType (stateless)", () => {
+  it("dispatches command / cancel / terminate / cleanup by handle.runtimeType (stateless)", () => {
     const provider = makeProvider();
     const registry = makeRegistry(provider);
     const driver = new RunDriver(registry);
@@ -78,13 +78,16 @@ describe("RunDriver", () => {
 
     driver.sendCommand(handle, command);
     driver.cancel(handle);
-    driver.heartbeat(handle);
+    driver.terminateExecution(handle, "run timeout");
     driver.cleanup(handle);
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(provider.sendCommand).toHaveBeenCalledWith(handle, command);
     expect(provider.cancel).toHaveBeenCalledWith(handle);
-    expect(provider.heartbeat).toHaveBeenCalledWith("run-1");
+    expect(provider.terminateExecution).toHaveBeenCalledWith(
+      "run-1",
+      "run timeout"
+    );
     expect(provider.cleanup).toHaveBeenCalledWith("run-1");
   });
 });

@@ -370,53 +370,6 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
   });
 
-  it("heartbeat feeds the heartbeat watchdog", async () => {
-    const { provider } = makeProvider();
-    startProvider(provider);
-    await vi.runOnlyPendingTimersAsync();
-
-    for (let i = 0; i < 20; i++) {
-      vi.advanceTimersByTime(5_000);
-      provider.heartbeat("run-1");
-    }
-  });
-
-  it("marks run as error after 60s without heartbeat, without stopping the sandbox or revoking access", async () => {
-    const { provider, engine, eventProcessor, access } = makeProvider();
-    startProvider(provider);
-    await vi.runOnlyPendingTimersAsync();
-
-    await vi.advanceTimersByTimeAsync(65_000);
-
-    expect(eventProcessor.notifyWorkerError).toHaveBeenCalledWith(
-      "run-1",
-      "worker heartbeat timeout"
-    );
-    expect(access.revokeOwner).not.toHaveBeenCalled();
-    expect(engine.stop).not.toHaveBeenCalled();
-  });
-
-  it("resumes the previous container on the next run after a heartbeat timeout", async () => {
-    const { provider, engine } = makeProvider();
-    startProvider(provider);
-    await vi.runOnlyPendingTimersAsync();
-
-    await vi.advanceTimersByTimeAsync(65_000);
-
-    startProvider(provider, {
-      ...baseRun,
-      runId: "run-2",
-      conversationId: "conv-2",
-    });
-    await vi.runOnlyPendingTimersAsync();
-
-    expect(engine.resume).toHaveBeenCalledWith(
-      "docker-resource-1",
-      expect.anything()
-    );
-    expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
-  });
-
   it("getHandle returns handle with runtimeType=sandbox", async () => {
     const { provider } = makeProvider();
     startProvider(provider);
@@ -514,22 +467,6 @@ describe("SandboxRuntimeProvider — user scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
-  });
-
-  it("heartbeatRuntimeInstance feeds the heartbeat watchdog for user scope", async () => {
-    const { provider } = makeProvider();
-
-    startProvider(
-      provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
-      userPlacement
-    );
-    await vi.runOnlyPendingTimersAsync();
-
-    for (let i = 0; i < 3; i++) {
-      await vi.advanceTimersByTimeAsync(25_000);
-      provider.heartbeatRuntimeInstance("user-1");
-    }
   });
 
   it("shutdownRuntimeInstance for user scope tears down the shared user sandbox", async () => {

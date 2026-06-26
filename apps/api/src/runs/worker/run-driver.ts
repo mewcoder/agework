@@ -1,14 +1,21 @@
 import { Injectable } from "@nestjs/common";
-import type { CommandPayload } from "@agework/shared/protocol";
-import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
 import type {
-  RunDriverStartInput,
+  CommandPayload,
+  RunConfig,
+  RuntimeTarget,
   WorkerExecutionHandle,
-} from "./run-driver.types";
+} from "@agework/shared/protocol";
+import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
+
+export type RunDriverStartInput = {
+  runConfig: RunConfig;
+  runtimeTarget: RuntimeTarget;
+  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
+};
 
 /**
  * Run 驱动 provider 的薄缝：按 runtimeType 解析 provider，下发 start / command /
- * cancel / heartbeat / cleanup。无状态——live handle 由 RunActiveStore 单独持有，
+ * cancel / terminate / cleanup。无状态——live handle 由 RunActiveStore 单独持有，
  * 各方法要么返回 handle、要么收 handle，不再自留派发表。
  *
  * worker 的物理启动（local fork / sandbox 容器会话）在 runtime provider 内实现，
@@ -35,8 +42,10 @@ export class RunDriver {
     this.providerRegistry.resolve(handle.runtimeType).cancel(handle);
   }
 
-  heartbeat(handle: WorkerExecutionHandle): void {
-    this.providerRegistry.resolve(handle.runtimeType).heartbeat(handle.runId);
+  terminateExecution(handle: WorkerExecutionHandle, reason: string): void {
+    this.providerRegistry
+      .resolve(handle.runtimeType)
+      .terminateExecution?.(handle.runId, reason);
   }
 
   cleanup(handle: WorkerExecutionHandle): void {

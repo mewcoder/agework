@@ -1,5 +1,9 @@
 import { BadRequestException } from "@nestjs/common";
-import { DEFAULT_APP_NAME, DEFAULT_IDLE_TIMEOUT_SECONDS } from "./defaults";
+import {
+  DEFAULT_APP_NAME,
+  DEFAULT_IDLE_TIMEOUT_SECONDS,
+  DEFAULT_RUN_TIMEOUT_SECONDS,
+} from "./defaults";
 
 /**
  * 系统设置白名单：仅这里声明的 key 可被管理员通过后台接口读写。
@@ -9,6 +13,7 @@ import { DEFAULT_APP_NAME, DEFAULT_IDLE_TIMEOUT_SECONDS } from "./defaults";
 export const SettingKey = {
   APP_NAME: "AGEWORK_APP_NAME",
   RUNTIME_IDLE_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS",
+  RUNTIME_RUN_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS",
 } as const;
 
 export type SettingKey = (typeof SettingKey)[keyof typeof SettingKey];
@@ -41,6 +46,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     label: "Runtime 空闲超时（秒）",
     description: "Runtime 资源空闲超过该时长后会被回收",
     defaultValue: String(DEFAULT_IDLE_TIMEOUT_SECONDS),
+  },
+  {
+    key: SettingKey.RUNTIME_RUN_TIMEOUT_SECONDS,
+    type: "number",
+    label: "Run 执行超时（秒）",
+    description: "Run 执行超过该时长未进入终态后会标记为错误",
+    defaultValue: String(DEFAULT_RUN_TIMEOUT_SECONDS),
   },
 ];
 

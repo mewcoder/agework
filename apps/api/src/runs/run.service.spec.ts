@@ -1,18 +1,20 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
-import { RunActiveStore } from "./execution/run-active.store";
+import { RunActiveStore } from "./lifecycle/run-active.store";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunDriver } from "./execution/run-driver";
+import { RunDriver } from "./worker/run-driver";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import { RunEventRecorder } from "./events/run-event-recorder";
-import { RunConfigAssembler } from "./run-config.assembler";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
+import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
+
+const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
 
 function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
   const common = {
@@ -48,8 +50,11 @@ function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
 
 const AGENT_EVENT_TRACE = {
   enabled: true,
-  rawFilePath: "/tmp/conversation-1.raw.jsonl",
-  aguiFilePath: "/tmp/conversation-1.agui.jsonl",
+  logDir: RUNTIME_LOG_DIR,
+  rawFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
+  rawRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
+  aguiFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
+  maxFileMb: 5,
   runId: "run-1",
   conversationId: "conversation-1",
   workspaceId: "ws-1",
@@ -76,7 +81,6 @@ describe("RunService", () => {
   let mockRunDriver: Partial<RunDriver>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunEventRecorder: Partial<RunEventRecorder>;
-  let mockRunConfigAssembler: Partial<RunConfigAssembler>;
   let mockTitleService: Partial<TitleService>;
   let mockConfigService: Partial<ConfigService>;
   let mockPrismaService: Partial<PrismaService>;
@@ -112,6 +116,9 @@ describe("RunService", () => {
   }
 
   beforeEach(() => {
+    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_ENABLED", "true");
+    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_MAX_FILE_MB", "5");
+
     mockRunRepository = {
       create: vi.fn().mockResolvedValue({ id: "run-1" }),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
@@ -153,14 +160,6 @@ describe("RunService", () => {
       append: vi.fn().mockResolvedValue({}),
       forgetRun: vi.fn(),
     };
-    mockRunConfigAssembler = {
-      assemble: vi.fn().mockReturnValue({
-        runId: "run-1",
-        conversationId: "conversation-1",
-        workspaceId: "ws-1",
-        agentEventTrace: AGENT_EVENT_TRACE,
-      }),
-    };
     mockTitleService = {
       generateIfNeeded: vi.fn().mockResolvedValue(undefined),
     };
@@ -172,6 +171,7 @@ describe("RunService", () => {
       isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
+      getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_DIR),
     };
     mockWorkspaceFindFirst = vi.fn().mockResolvedValue(makeWorkspace());
     mockPrismaService = {
@@ -187,11 +187,14 @@ describe("RunService", () => {
       mockRunDriver as RunDriver,
       mockConversationService as ConversationService,
       mockRunEventRecorder as RunEventRecorder,
-      mockRunConfigAssembler as RunConfigAssembler,
       mockTitleService as TitleService,
       mockConfigService as ConfigService,
       mockPrismaService as PrismaService
     );
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   describe("start()", () => {
@@ -202,7 +205,6 @@ describe("RunService", () => {
       expect(mockRuntimeService.resolveRuntimeTarget).toHaveBeenCalledWith(
         expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
       );
-      expect(mockRunConfigAssembler.assemble).toHaveBeenCalled();
       expect(mockRunRepository.create).toHaveBeenCalledWith({
         id: "run-1",
         conversationId: "conversation-1",
@@ -215,6 +217,23 @@ describe("RunService", () => {
           runtimeTarget: expect.objectContaining({
             runtimeType: "local",
             ownerId: "ws-1",
+          }),
+        })
+      );
+      expect(mockRunDriver.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            runId: "run-1",
+            conversationId: "conversation-1",
+            workspaceId: "ws-1",
+            runtimePath: "/tmp/ws",
+            input: { messages: [{ id: "msg-1" }] },
+            agentProviderConfig: expect.objectContaining({
+              agentType: "claude",
+              source: "system",
+            }),
+            agentEventTrace: AGENT_EVENT_TRACE,
+            workerLogFilePath: `${RUNTIME_LOG_DIR}/conversation-1.worker.log`,
           }),
         })
       );
@@ -277,7 +296,7 @@ describe("RunService", () => {
     });
 
     it("wraps RunConfig assembly errors as BadRequestException", async () => {
-      mockRunConfigAssembler.assemble = vi.fn().mockImplementation(() => {
+      mockConfigService.getRuntimeLogDir = vi.fn().mockImplementation(() => {
         throw new Error("模型服务不可用");
       });
       await expect(service.start(makeStartInput())).rejects.toThrow(
@@ -343,6 +362,17 @@ describe("RunService", () => {
         "run-1",
         "sandbox",
         "container-abc"
+      );
+      expect(mockRunDriver.start).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runConfig: expect.objectContaining({
+            runtimePath: "/workspace",
+            agentEventTrace: expect.objectContaining({
+              rawRuntimeFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
+            }),
+            workerLogFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.worker.log`,
+          }),
+        })
       );
     });
 

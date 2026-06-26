@@ -46,7 +46,6 @@ export type {
   RunStatus,
   RunStatusPayload,
   RunUsage,
-  HeartbeatPayload,
   ArtifactRefPayload,
   RunConfig,
   SystemAgentProviderConfig,

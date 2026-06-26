@@ -176,19 +176,6 @@ describe("PersistentHttpClient", () => {
     vi.useRealTimers();
   });
 
-  it("emits an owner heartbeat", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
-
-    await client.emitOwnerHeartbeat();
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/heartbeat",
-      expect.objectContaining({ method: "POST", headers: { Authorization: "Bearer owner-key" } })
-    );
-  });
-
   it("cleanup resets the per-run seq counter", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
