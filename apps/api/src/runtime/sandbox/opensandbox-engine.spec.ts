@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { OpenSandboxEngine } from "./opensandbox-engine";
-import type { SandboxStartInput, SandboxPlacement } from ".";
+import type { SandboxStartInput, SandboxPlacement } from "./sandbox-engine";
 import type {
   OpenSandboxClientLike,
   OpenSandboxSandboxLike,
-} from "../opensandbox-client";
+} from "./opensandbox-client";
 
 function makeSandboxMock(id: string): OpenSandboxSandboxLike {
   const sandbox = {

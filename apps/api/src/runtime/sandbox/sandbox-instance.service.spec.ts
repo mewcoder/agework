@@ -3,8 +3,8 @@ import type {
   RunConfig,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import type { SandboxEngine, SandboxRuntime } from "./engine";
-import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
+import type { SandboxEngine, SandboxRuntime } from "./sandbox-engine";
+import { SandboxRuntimeInstanceService } from "./sandbox-instance.service";
 
 function makeEngine(): SandboxEngine {
   let nextId = 0;

@@ -1,8 +1,16 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { isAbsolute } from "node:path";
-import type { SandboxEngine, SandboxEngineType, SandboxStartInput, SandboxRuntime } from ".";
-import type { OpenSandboxClientLike, OpenSandboxSandboxLike } from "../opensandbox-client";
-import { OPENSANDBOX_CLIENT } from "../opensandbox-client.token";
+import type {
+  SandboxEngine,
+  SandboxEngineType,
+  SandboxStartInput,
+  SandboxRuntime,
+} from "./sandbox-engine";
+import {
+  OPENSANDBOX_CLIENT,
+  type OpenSandboxClientLike,
+  type OpenSandboxSandboxLike,
+} from "./opensandbox-client";
 
 @Injectable()
 export class OpenSandboxEngine implements SandboxEngine {
@@ -10,7 +18,10 @@ export class OpenSandboxEngine implements SandboxEngine {
   private readonly logger = new Logger(OpenSandboxEngine.name);
   private readonly sandboxes = new Map<string, OpenSandboxSandboxLike>();
 
-  constructor(@Inject(OPENSANDBOX_CLIENT) private readonly client: OpenSandboxClientLike) {}
+  constructor(
+    @Inject(OPENSANDBOX_CLIENT)
+    private readonly client: OpenSandboxClientLike
+  ) {}
 
   async getOrCreate(input: SandboxStartInput): Promise<SandboxRuntime> {
     const { placement, image, apiBaseUrl, accessKey, env, metadata } = input;

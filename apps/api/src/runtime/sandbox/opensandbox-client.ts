@@ -1,10 +1,17 @@
-import { Sandbox, SandboxManager, ConnectionConfig } from "@alibaba-group/opensandbox";
-import type { ConfigService } from "../../../config/config.service";
+import {
+  ConnectionConfig,
+  Sandbox,
+  SandboxManager,
+} from "@alibaba-group/opensandbox";
+import type { ConfigService } from "../../config/config.service";
 
 /**
  * OpenSandbox SDK 适配边界：定义内部接口，provider 不直接依赖真实 SDK 的完整类型。
  * 真实 SDK 的 import 只出现在此文件中，单测 provider 时 mock OpenSandboxClientLike 即可。
  */
+
+/** OpenSandboxClientLike 的 DI token，用于接口类型注入。 */
+export const OPENSANDBOX_CLIENT = Symbol("OPENSANDBOX_CLIENT");
 
 export interface OpenSandboxCreateInput {
   image: string;

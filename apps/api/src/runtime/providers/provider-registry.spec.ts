@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { RuntimeProviderRegistry } from "./provider-registry";
-import type { SandboxRuntimeProvider } from "./sandbox/runtime-provider";
+import type { SandboxRuntimeProvider } from "../sandbox/sandbox-provider";
 import type { LocalRuntimeProvider } from "./local-provider";
 
 describe("RuntimeProviderRegistry", () => {

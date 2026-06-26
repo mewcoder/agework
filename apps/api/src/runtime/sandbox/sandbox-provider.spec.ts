@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SandboxRuntimeProvider } from "./runtime-provider";
-import { SandboxRuntimeInstanceService } from "./runtime-instance.service";
-import { WorkerCommandDispatcher } from "../../../worker-host/command-dispatcher.service";
-import type { SandboxEngine, SandboxRuntime } from "./engine";
+import { SandboxRuntimeProvider } from "./sandbox-provider";
+import { SandboxRuntimeInstanceService } from "./sandbox-instance.service";
+import { WorkerCommandDispatcher } from "../../worker-host/command-dispatcher.service";
+import type { SandboxEngine, SandboxRuntime } from "./sandbox-engine";
 import type {
   IsolationScope,
   RuntimePlacement,
@@ -36,7 +36,7 @@ function makeMockEngine(type: "docker" | "opensandbox"): SandboxEngine {
 function makeProvider(engineOverride?: SandboxEngine) {
   const engine = engineOverride ?? makeMockEngine("docker");
   const eventProcessor = {
-    publish: vi.fn().mockResolvedValue(undefined),
+    sendEvent: vi.fn().mockResolvedValue(undefined),
     notifyWorkerError: vi.fn().mockResolvedValue(undefined),
     notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
     recordCommandSent: vi.fn().mockResolvedValue(undefined),

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveDockerApiBase } from "./provider-utils";
+import { resolveDockerApiBase } from "./sandbox-utils";
 
 describe("resolveDockerApiBase", () => {
   it("defaults to host.docker.internal with the api base path included", () => {

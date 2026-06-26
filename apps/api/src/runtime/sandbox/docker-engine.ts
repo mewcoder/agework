@@ -2,8 +2,13 @@ import { Injectable, Logger } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import type { SandboxEngine, SandboxEngineType, SandboxStartInput, SandboxRuntime } from ".";
-import { swallow } from "../../../../common/swallow";
+import type {
+  SandboxEngine,
+  SandboxEngineType,
+  SandboxStartInput,
+  SandboxRuntime,
+} from "./sandbox-engine";
+import { swallow } from "../../common/swallow";
 
 const execFileAsync = promisify(execFile);
 

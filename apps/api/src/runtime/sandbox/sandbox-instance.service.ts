@@ -6,26 +6,29 @@ import type {
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { isSandboxPlacement } from "../../placement/runtime-resource";
-import { ConfigService } from "../../../config/config.service";
-import { CONTAINER_RUNTIME_LOG_DIR, DEFAULT_WORKER_IMAGE } from "../../../config/defaults";
-import type { AccessPort } from "../access-port";
-import { WorkspaceRuntimeInstanceRepository } from "../../instances/workspace-runtime-instance.repository";
-import { swallow } from "../../../common/swallow";
+import { isSandboxPlacement } from "../placement/runtime-resource";
+import { ConfigService } from "../../config/config.service";
+import {
+  CONTAINER_RUNTIME_LOG_DIR,
+  DEFAULT_WORKER_IMAGE,
+} from "../../config/defaults";
+import type { AccessPort } from "../providers/access-port";
+import { WorkspaceRuntimeInstanceRepository } from "../instances/workspace-runtime-instance.repository";
+import { swallow } from "../../common/swallow";
 import {
   IdleWatchdog,
   resolveDockerApiBase,
-} from "../provider-utils";
+} from "./sandbox-utils";
 import type {
   SandboxEngine,
   SandboxEngineType,
   SandboxPlacement,
   SandboxRuntime,
   SandboxStartInput,
-} from "./engine";
-import { SANDBOX_ENGINES } from "./engine";
-import { errorLogFields, safeLogJson } from "../../../common/logging";
-import { safePathPart } from "../../../common/safe-path";
+} from "./sandbox-engine";
+import { SANDBOX_ENGINES } from "./sandbox-engine";
+import { errorLogFields, safeLogJson } from "../../common/logging";
+import { safePathPart } from "../../common/safe-path";
 
 export type SandboxOwnerState = {
   runtimeInstanceId: string;

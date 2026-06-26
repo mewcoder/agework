@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { execFile } from "node:child_process";
 import { DockerSandboxEngine } from "./docker-engine";
-import type { SandboxStartInput, SandboxPlacement } from ".";
+import type { SandboxStartInput, SandboxPlacement } from "./sandbox-engine";
 
 vi.mock("node:child_process", () => ({
   execFile: vi.fn(),

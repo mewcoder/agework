@@ -5,20 +5,20 @@ import type {
   WorkerExecutionStartInput,
   CommandPayload,
 } from "@agework/shared/protocol";
-import { swallow } from "../../../common/swallow";
-import { safeLogJson } from "../../../common/logging";
-import type { RunEventReceiver } from "../run-event-receiver.port";
-import type { CommandPort } from "../command-port";
-import type { AccessPort } from "../access-port";
+import { swallow } from "../../common/swallow";
+import { safeLogJson } from "../../common/logging";
+import type { RunEventReceiver } from "../providers/run-event-receiver.port";
+import type { CommandPort } from "../providers/command-port";
+import type { AccessPort } from "../providers/access-port";
 import type {
   WorkerExecutionProvider,
   RuntimeInstanceManager,
-} from "../provider-contracts";
+} from "../providers/provider-contracts";
 import {
   SandboxRuntimeInstanceService,
   type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
-} from "./runtime-instance.service";
+} from "./sandbox-instance.service";
 
 @Injectable()
 export class SandboxRuntimeProvider

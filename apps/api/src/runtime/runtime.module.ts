@@ -7,17 +7,21 @@ import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener
 
 // providers
 import { LocalRuntimeProvider } from "./providers/local-provider";
-import { DockerSandboxEngine } from "./providers/sandbox/engine/docker-engine";
-import { OpenSandboxEngine } from "./providers/sandbox/engine/opensandbox-engine";
-import { SandboxRuntimeProvider } from "./providers/sandbox/runtime-provider";
-import { SandboxRuntimeInstanceService } from "./providers/sandbox/runtime-instance.service";
-import { OpenSandboxClient } from "./providers/sandbox/opensandbox-client";
-import { OPENSANDBOX_CLIENT } from "./providers/sandbox/opensandbox-client.token";
-import { RuntimeProviderRegistry } from "./providers/provider-registry";
-import { RUNTIME_PROVIDERS } from "./providers/provider.token";
-import { SANDBOX_ENGINES } from "./providers/sandbox/engine";
+import { DockerSandboxEngine } from "./sandbox/docker-engine";
+import { OpenSandboxEngine } from "./sandbox/opensandbox-engine";
+import { SandboxRuntimeProvider } from "./sandbox/sandbox-provider";
+import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
+import {
+  OpenSandboxClient,
+  OPENSANDBOX_CLIENT,
+} from "./sandbox/opensandbox-client";
+import {
+  RuntimeProviderRegistry,
+  RUNTIME_PROVIDERS,
+} from "./providers/provider-registry";
+import { SANDBOX_ENGINES } from "./sandbox/sandbox-engine";
 import type { RuntimeProvider } from "./providers/provider-contracts";
-import type { SandboxEngine } from "./providers/sandbox/engine";
+import type { SandboxEngine } from "./sandbox/sandbox-engine";
 
 import { RuntimeService } from "./runtime.service";
 
@@ -72,4 +76,3 @@ import { ConfigService } from "../config/config.service";
   ],
 })
 export class RuntimeModule {}
-
