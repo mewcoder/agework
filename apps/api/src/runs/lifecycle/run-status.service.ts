@@ -149,30 +149,24 @@ export class RunStatusService {
     effect: RunStatusEffect,
     handle: RunHandle
   ): void {
-    if (!handle.res || handle.res.writableEnded) return;
-
-    if (handle.streamingSnapshot) {
+    if (handle.stream.isSnapshotMode) {
       const finalSnap = handle.aggregator.build(
         effect.terminalMessageComplete === true,
         effect.terminalIncompleteReason
       );
-      handle.res.write(
-        `data: ${JSON.stringify({
-          content: finalSnap.content,
-          status: finalSnap.status,
-          ...(finalSnap.metadata ? { metadata: finalSnap.metadata } : {}),
-        })}\n\n`
-      );
+      handle.stream.writeSnapshot({
+        content: finalSnap.content,
+        status: finalSnap.status,
+        ...(finalSnap.metadata ? { metadata: finalSnap.metadata } : {}),
+      });
     } else if (payload.status === "error") {
-      const errorEvent = {
-        type: "RUN_ERROR",
+      handle.stream.writeError({
         threadId: handle.conversationId,
         runId,
         message: payload.error ?? "unknown error",
-      };
-      handle.res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
+      });
     }
 
-    handle.res.end();
+    handle.stream.end();
   }
 }

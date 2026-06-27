@@ -12,6 +12,7 @@ import type {
   AgentProviderConfig,
   RunConfig,
   RuntimePlacement,
+  RuntimeTarget,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -34,6 +35,7 @@ import { RunEventService, compactData } from "./events/run-event.service";
 import type { StartRunInput } from "./run-service.types";
 import { PrismaService } from "../prisma/prisma.service";
 import { safePathPart } from "../common/safe-path";
+import { RunStream } from "./lifecycle/run-stream";
 
 const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
@@ -45,6 +47,11 @@ type RunWorkspace = {
   sandboxEngine?: string | null;
   username: string;
 };
+
+type SaveRun = (
+  complete: boolean,
+  incompleteReason?: IncompleteMessageReason
+) => void;
 
 @Injectable()
 export class RunService {
@@ -77,9 +84,111 @@ export class RunService {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
-    const workspace = await this.resolveRunWorkspace(workspaceId);
+    const workspace = await this.getWorkspace(workspaceId);
+    const runtimeTarget = this.getPlacement({ workspace, userId });
+    const placement = runtimeTarget;
+    const runtimeType = placement.runtimeType;
+    const sandbox =
+      placement.runtimeType === "sandbox" ? placement.sandbox : undefined;
+    const runConfig = this.makeRunConfig({
+      agentProviderConfig,
+      placement,
+      workspaceId: workspace.workspaceId,
+      runId,
+      conversationId,
+      input: runInput,
+    });
+    const stream = new RunStream(res);
 
-    // 1. 校验 runtime/isolation 是否被部署允许，并解析 placement
+    await this.claimRun({ conversationId, userId, runId, interruptReason });
+    await this.saveUserTurn({
+      conversationId,
+      userMessage,
+      agentType,
+      modelProviderId,
+    });
+
+    const aggregator = new AssistantMessageAggregator();
+    const saveRun = this.makeSaveRun({ conversationId, runId, aggregator });
+    const onAgentSessionId = this.saveSession(conversationId);
+
+    this.logger.log(
+      `run starting ${safeLogJson({
+        runId,
+        conversationId,
+        workspaceId: placement.workspaceId,
+        agentType,
+        runtimeType,
+        isolationScope: sandbox?.isolationScope,
+      })}`
+    );
+
+    const runCreated = await this.createRun({
+      runId,
+      conversationId,
+      workspaceId: placement.workspaceId,
+      agentType,
+      runtimeType,
+      isolationScope: sandbox?.isolationScope,
+      userMessageId,
+      userId,
+      stream,
+    });
+    if (!runCreated) return;
+
+    const runtimeHandle = await this.startWorker({
+      runId,
+      conversationId,
+      runtimeType,
+      isolationScope: sandbox?.isolationScope,
+      sandboxEngineType: sandbox?.sandboxEngineType,
+      runConfig,
+      runtimeTarget,
+      stream,
+    });
+    if (!runtimeHandle) return;
+
+    await this.saveRuntime(runId, runtimeHandle);
+    this.registerRun({
+      runId,
+      conversationId,
+      runtimeHandle,
+      stream,
+      aggregator,
+      runConfig,
+      agentType,
+      saveRun,
+      onAgentSessionId,
+      res,
+    });
+  }
+
+  private async getWorkspace(workspaceId: string): Promise<RunWorkspace> {
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { id: workspaceId, deletedAt: null },
+      include: { directory: true, user: { select: { username: true } } },
+    });
+    if (!workspace) {
+      throw new NotFoundException(`Workspace ${workspaceId} not found`);
+    }
+    if (!workspace.directory?.rootPath) {
+      throw new BadRequestException("工作空间必须关联目录才能运行 agent");
+    }
+    return {
+      workspaceId: workspace.id,
+      workspaceRootPath: workspace.directory.rootPath,
+      runtimeType: workspace.runtimeType ?? undefined,
+      isolationScope: workspace.isolationScope,
+      sandboxEngine: workspace.sandboxEngine,
+      username: workspace.user.username,
+    };
+  }
+
+  private getPlacement(input: {
+    workspace: RunWorkspace;
+    userId: string;
+  }): RuntimeTarget {
+    const { workspace, userId } = input;
     const requestedRuntimeType =
       workspace.runtimeType ?? this.configService.getDefaultRuntimeType();
     if (!this.configService.isRuntimeTypeAllowed(requestedRuntimeType)) {
@@ -95,7 +204,8 @@ export class RunService {
       }
       isolationScope = resolvedIsolationScope;
     }
-    const runtimeTarget = this.runtimeService.resolveRuntimeTarget({
+
+    return this.runtimeService.resolveRuntimeTarget({
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
@@ -107,107 +217,145 @@ export class RunService {
       sandboxEngine:
         (workspace.sandboxEngine as "docker" | "opensandbox") ?? undefined,
     });
-    const placement = runtimeTarget;
-    const runtimeType = placement.runtimeType;
-    const sandbox =
-      placement.runtimeType === "sandbox" ? placement.sandbox : undefined;
+  }
 
-    // 2. 组装 RunConfig（agent provider 由 agent 层提供，路径/trace 由 placement 决定）
-    let runConfig: RunConfig;
+  private makeRunConfig(params: {
+    agentProviderConfig: AgentProviderConfig;
+    placement: RuntimePlacement;
+    workspaceId: string;
+    runId: string;
+    conversationId: string;
+    input: unknown;
+  }): RunConfig {
+    const {
+      agentProviderConfig,
+      placement,
+      workspaceId,
+      runId,
+      conversationId,
+      input,
+    } = params;
     try {
-      runConfig = this.assembleRunConfig({
-        agentProviderConfig,
-        placement,
-        workspaceId: workspace.workspaceId,
+      const logPaths = this.makeLogPaths(placement, conversationId);
+
+      return {
         runId,
         conversationId,
-        input: runInput,
-      });
+        workspaceId,
+        runtimePath: placement.runtimePath,
+        env: {},
+        input,
+        agentProviderConfig,
+        agentEventTrace: buildAgentEventTraceConfig({
+          runId,
+          conversationId,
+          workspaceId,
+          agentType: agentProviderConfig.agentType,
+          ...logPaths,
+        }),
+        workerLogFilePath: logPaths.workerRuntimeFilePath,
+      };
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
       );
     }
+  }
 
-    // 3. SSE 响应头
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
+  private makeLogPaths(
+    placement: RuntimePlacement,
+    conversationId: string
+  ): RuntimeLogPaths {
+    const logDir = this.configService.getRuntimeLogDir();
+    const conversationFileName = safePathPart(conversationId);
+    const rawFileName = `${conversationFileName}.raw.jsonl`;
+    const aguiFileName = `${conversationFileName}.agui.jsonl`;
+    const workerFileName = `${conversationFileName}.worker.log`;
+    const isSandbox = placement.runtimeType === "sandbox";
 
-    // 4. 并发守卫：乐观锁尝试把 conversation 置为 running
-    // setActiveRunStatus 内部只在 activeRunStatus in ["idle", "error"] 时才更新为 running
-    if (conversationId) {
-      const result = await this.conversationService.setActiveRunStatus(
-        conversationId,
-        "running"
-      );
+    return {
+      logDir,
+      rawFilePath: join(logDir, rawFileName),
+      rawRuntimeFilePath: isSandbox
+        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, rawFileName)
+        : join(logDir, rawFileName),
+      aguiFilePath: join(logDir, aguiFileName),
+      workerRuntimeFilePath: isSandbox
+        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, workerFileName)
+        : join(logDir, workerFileName),
+    };
+  }
 
-      if (result.count === 0) {
-        // 更新失败，查询当前状态以区分情况
-        try {
-          await this.conversationService.findOne(userId, conversationId);
-          if (interruptReason === "user_steered") {
-            await this.stop(conversationId, {
-              reason: "user_steered",
-              endResponse: true,
-            });
-            this.logger.log(
-              `active run interrupted by user steering ${safeLogJson({
-                conversationId,
-                runId,
-              })}`
-            );
-          } else {
-            // conversation 存在但更新失败，说明状态为 running
-            throw new ConflictException(
-              "A run is already active for this conversation"
-            );
-          }
-        } catch (err) {
-          if (err instanceof ConflictException) throw err;
-          // findOne 失败：conversation 不存在或数据库错误
-          if (
-            err instanceof Prisma.PrismaClientKnownRequestError &&
-            err.code === "P2025"
-          ) {
-            throw new NotFoundException(
-              `Conversation ${conversationId} not found`
-            );
-          }
-          throw err;
-        }
-      }
-    }
+  private async claimRun(input: {
+    conversationId: string;
+    userId: string;
+    runId: string;
+    interruptReason?: "user_steered";
+  }): Promise<void> {
+    const { conversationId, userId, runId, interruptReason } = input;
+    const activated = await this.conversationService.setActiveRunStatus(
+      conversationId,
+      "running"
+    );
+    if (activated) return;
 
-    // 5. 保存用户消息 + 触发会话标题（标题只依赖首条用户消息，与助手回复并行）
-    if (conversationId && userMessage) {
-      await this.conversationService.saveUserMessage(
-        conversationId,
-        userMessage
-      );
-
-      this.titleService
-        .generateIfNeeded({ conversationId, agentType, modelProviderId })
-        .catch(
-          swallow(
-            this.logger,
-            `generate title for conversation ${conversationId}`
-          )
+    try {
+      await this.conversationService.findOne(userId, conversationId);
+      if (interruptReason === "user_steered") {
+        await this.stop(conversationId, {
+          reason: "user_steered",
+          endResponse: true,
+        });
+        this.logger.log(
+          `active run interrupted by user steering ${safeLogJson({
+            conversationId,
+            runId,
+          })}`
         );
-    }
+        return;
+      }
 
-    // 6. aggregator + saveRun
-    const aggregator = new AssistantMessageAggregator();
-    // 串行化 saveRun：chunk 节流 / 事件边界 / 终态会多次调用，原 fire-and-forget
-    // 并发 upsert 可能乱序完成——较早的不完整快照若晚于终态完整快照落库，会把
-    // status 覆盖回 incomplete。用 promise 链按调用顺序执行 build+upsert，
-    // 保证终态写入最后落库。build 也在链中执行，确保终态取到含全部内容的快照。
+      throw new ConflictException(
+        "A run is already active for this conversation"
+      );
+    } catch (err) {
+      if (err instanceof ConflictException) throw err;
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === "P2025"
+      ) {
+        throw new NotFoundException(`Conversation ${conversationId} not found`);
+      }
+      throw err;
+    }
+  }
+
+  private async saveUserTurn(input: {
+    conversationId: string;
+    userMessage: StartRunInput["userMessage"];
+    agentType: AgentProviderConfig["agentType"];
+    modelProviderId: string;
+  }): Promise<void> {
+    const { conversationId, userMessage, agentType, modelProviderId } = input;
+    if (!userMessage) return;
+
+    await this.conversationService.saveUserMessage(conversationId, userMessage);
+    this.titleService
+      .generateIfNeeded({ conversationId, agentType, modelProviderId })
+      .catch(
+        swallow(this.logger, `generate title for conversation ${conversationId}`)
+      );
+  }
+
+  private makeSaveRun(input: {
+    conversationId: string;
+    runId: string;
+    aggregator: AssistantMessageAggregator;
+  }): SaveRun {
+    const { conversationId, runId, aggregator } = input;
     let saveChain: Promise<void> = Promise.resolve();
-    const saveRun = (
-      complete: boolean,
-      incompleteReason?: IncompleteMessageReason
-    ) => {
-      if (!conversationId) return;
+
+    return (complete, incompleteReason) => {
       saveChain = saveChain
         .then(() => {
           const snap = aggregator.build(complete, incompleteReason);
@@ -233,28 +381,41 @@ export class RunService {
           );
         });
     };
+  }
 
-    // 7. agent session id 回写
-    const onAgentSessionId = (sessionId: string) => {
+  private saveSession(conversationId: string): (sessionId: string) => void {
+    return (sessionId) => {
       this.conversationService
         .setAgentSessionId(conversationId, sessionId)
         .catch(
           swallow(this.logger, `persist agent session for ${conversationId}`)
         );
     };
+  }
 
-    this.logger.log(
-      `run starting ${safeLogJson({
-        runId,
-        conversationId,
-        workspaceId: placement.workspaceId,
-        agentType,
-        runtimeType,
-        isolationScope: sandbox?.isolationScope,
-      })}`
-    );
+  private async createRun(input: {
+    runId: string;
+    conversationId: string;
+    workspaceId: string;
+    agentType: string;
+    runtimeType: string;
+    isolationScope?: string;
+    userMessageId?: string;
+    userId: string;
+    stream: RunStream;
+  }): Promise<boolean> {
+    const {
+      runId,
+      conversationId,
+      workspaceId,
+      agentType,
+      runtimeType,
+      isolationScope,
+      userMessageId,
+      userId,
+      stream,
+    } = input;
 
-    // Create Run record
     try {
       await this.runRepository.create({
         id: runId,
@@ -267,10 +428,10 @@ export class RunService {
           this.runEvents.runCreated({
             runId,
             conversationId,
-            workspaceId: placement.workspaceId,
+            workspaceId,
             agentType,
             runtimeType,
-            isolationScope: sandbox?.isolationScope,
+            isolationScope,
           })
         )
         .catch(swallow(this.logger, `record run created for run ${runId}`));
@@ -296,6 +457,7 @@ export class RunService {
             swallow(this.logger, `record message accepted for run ${runId}`)
           );
       }
+      return true;
     } catch (err) {
       this.logger.warn(
         `create run record failed ${safeLogJson({
@@ -304,18 +466,34 @@ export class RunService {
           ...errorLogFields(err),
         })}`
       );
-      if (!res.writableEnded) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        res.write(
-          `data: ${JSON.stringify({ type: "RUN_ERROR", threadId: conversationId, runId, message: errorMsg })}\n\n`
-        );
-        res.end();
-      }
-      return;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      stream.writeError({ threadId: conversationId, runId, message: errorMsg });
+      stream.end();
+      return false;
     }
+  }
 
-    // Start worker through the Run-layer execution boundary.
-    let runtimeHandle: WorkerExecutionHandle;
+  private async startWorker(input: {
+    runId: string;
+    conversationId: string;
+    runtimeType: string;
+    isolationScope?: string;
+    sandboxEngineType?: string;
+    runConfig: RunConfig;
+    runtimeTarget: RuntimeTarget;
+    stream: RunStream;
+  }): Promise<WorkerExecutionHandle | null> {
+    const {
+      runId,
+      conversationId,
+      runtimeType,
+      isolationScope,
+      sandboxEngineType,
+      runConfig,
+      runtimeTarget,
+      stream,
+    } = input;
+
     try {
       this.runEvents
         .append(
@@ -323,14 +501,14 @@ export class RunService {
             runId,
             status: "starting",
             runtimeType,
-            isolationScope: sandbox?.isolationScope,
-            sandboxEngineType: sandbox?.sandboxEngineType,
+            isolationScope,
+            sandboxEngineType,
           })
         )
         .catch(
           swallow(this.logger, `record runtime starting for run ${runId}`)
         );
-      runtimeHandle = this.runDriver.start({
+      return this.runDriver.start({
         runConfig,
         runtimeTarget,
         onRuntimeInstanceIdReady: (runtimeInstanceId) => {
@@ -388,17 +566,21 @@ export class RunService {
             `set conversation active run status to error for run ${runId}`
           )
         );
-      if (!res.writableEnded) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        res.write(
-          `data: ${JSON.stringify({ type: "RUN_ERROR", threadId: conversationId, runId, message: "启动 worker 失败: " + errorMsg })}\n\n`
-        );
-        res.end();
-      }
-      return;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      stream.writeError({
+        threadId: conversationId,
+        runId,
+        message: "启动 worker 失败: " + errorMsg,
+      });
+      stream.end();
+      return null;
     }
+  }
 
-    // Persist runtime handle for orphan recovery after a service restart.
+  private async saveRuntime(
+    runId: string,
+    runtimeHandle: WorkerExecutionHandle
+  ): Promise<void> {
     if (runtimeHandle.runtimeInstanceId) {
       await this.runRepository
         .updateRuntimeHandle(
@@ -420,11 +602,36 @@ export class RunService {
         )
         .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
     }
+  }
 
-    // Register with ActiveRunRegistry
+  private registerRun(input: {
+    runId: string;
+    conversationId: string;
+    runtimeHandle: WorkerExecutionHandle;
+    stream: RunStream;
+    aggregator: AssistantMessageAggregator;
+    runConfig: RunConfig;
+    agentType: string;
+    saveRun: SaveRun;
+    onAgentSessionId: (sessionId: string) => void;
+    res: Response;
+  }): void {
+    const {
+      runId,
+      conversationId,
+      runtimeHandle,
+      stream,
+      aggregator,
+      runConfig,
+      agentType,
+      saveRun,
+      onAgentSessionId,
+      res,
+    } = input;
+
     this.activeRuns.register(runId, {
       runtimeHandle,
-      res,
+      stream,
       aggregator,
       conversationId,
       runId,
@@ -436,18 +643,19 @@ export class RunService {
       onAgentSessionId,
     });
 
-    // SSE disconnect: null out the response ref (don't cancel the run)
-    res.on("close", () => {
+    // SSE disconnect: detach the response (don't cancel the run)
+    stream.onClose(() => {
       const handle = this.activeRuns.get(runId);
       if (handle) {
-        handle.res = null;
+        handle.stream.detach(res);
       }
     });
+
     this.logger.log(
       `run registered ${safeLogJson({
         runId,
         conversationId,
-        runtimeType,
+        runtimeType: runtimeHandle.runtimeType,
         runtimeInstanceId: runtimeHandle.runtimeInstanceId,
       })}`
     );
@@ -475,7 +683,7 @@ export class RunService {
 
   /**
    * 刷新网页后续接一个进行中的 run：把新的 SSE response 接到活跃 run 的 handle 上，
-   * 以「累积快照」模式推送（streamingSnapshot=true）。前端 ThreadHistoryAdapter.resume
+   * 以「累积快照」模式推送。前端 ThreadHistoryAdapter.resume
    * 直接 yield 这些快照，实现刷新后实时续接。
    *
    * 处理三种情况：
@@ -485,10 +693,6 @@ export class RunService {
    *    让前端 resume 流正常收尾，不卡在 running。
    */
   async resumeStream(conversationId: string, res: Response): Promise<void> {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
@@ -497,132 +701,38 @@ export class RunService {
 
     // run 已结束 / 无内存 handle：发终态快照收尾
     if (!handle) {
-      this.writeSnapshot(res, {
+      const stream = new RunStream(res);
+      stream.writeSnapshot({
         content: [],
         status: { type: "complete", reason: "unknown" },
       });
-      if (!res.writableEnded) res.end();
+      stream.end();
       return;
     }
 
     // 等待审批的 run 首版不续接 stream（前端走正常 load 显示历史 + 审批 UI）
     if (activeRunRecord?.status === "requires_action") {
-      res.status(409);
-      if (!res.writableEnded) res.end();
+      const stream = new RunStream(res);
+      stream.setStatus(409);
+      stream.end();
       return;
     }
 
+    // 接管 SSE 连接：原连接（刷新前）已断，单订阅直接替换
+    // 守卫：若旧连接尚未关闭（close 事件未触发的 race condition），主动 end 防连接泄漏
+    handle.stream.replace(res, "snapshots");
+
     // 补发当前累积快照（resume 流的起点，含已输出的全部内容）
     const initial = handle.aggregator.build(false, "streaming");
-    this.writeSnapshot(res, this.toRunResult(initial));
+    handle.stream.writeSnapshot(this.toRunResult(initial));
 
-    // 接管 SSE 连接：原连接（刷新前）已断，单订阅直接替换
-    // 守卫：若旧 res 尚未关闭（close 事件未触发的 race condition），主动 end 防连接泄漏
-    const oldRes = handle.res;
-    if (oldRes && !oldRes.writableEnded) {
-      oldRes.end();
-    }
-    handle.res = res;
-    handle.streamingSnapshot = true;
-    res.on("close", () => {
+    handle.stream.onClose(() => {
       // 连接断开只清引用，不取消 run（与正常 run 的 res.on close 一致）
       const current = this.activeRuns.get(handle.runId);
-      if (current && current.res === res) {
-        current.res = null;
-        current.streamingSnapshot = false;
+      if (current?.stream.isAttachedTo(res)) {
+        current.stream.detach(res);
       }
     });
-  }
-
-  private async resolveRunWorkspace(workspaceId: string): Promise<RunWorkspace> {
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id: workspaceId, deletedAt: null },
-      include: { directory: true, user: { select: { username: true } } },
-    });
-    if (!workspace) {
-      throw new NotFoundException(`Workspace ${workspaceId} not found`);
-    }
-    if (!workspace.directory?.rootPath) {
-      throw new BadRequestException("工作空间必须关联目录才能运行 agent");
-    }
-    return {
-      workspaceId: workspace.id,
-      workspaceRootPath: workspace.directory.rootPath,
-      runtimeType: workspace.runtimeType ?? undefined,
-      isolationScope: workspace.isolationScope,
-      sandboxEngine: workspace.sandboxEngine,
-      username: workspace.user.username,
-    };
-  }
-
-  private assembleRunConfig(params: {
-    agentProviderConfig: AgentProviderConfig;
-    placement: RuntimePlacement;
-    workspaceId: string;
-    runId: string;
-    conversationId: string;
-    input: unknown;
-  }): RunConfig {
-    const {
-      agentProviderConfig,
-      placement,
-      workspaceId,
-      runId,
-      conversationId,
-      input,
-    } = params;
-    const logPaths = this.buildRuntimeLogPaths(placement, conversationId);
-
-    return {
-      runId,
-      conversationId,
-      workspaceId,
-      runtimePath: placement.runtimePath,
-      env: {},
-      input,
-      agentProviderConfig,
-      agentEventTrace: buildAgentEventTraceConfig({
-        runId,
-        conversationId,
-        workspaceId,
-        agentType: agentProviderConfig.agentType,
-        ...logPaths,
-      }),
-      workerLogFilePath: logPaths.workerRuntimeFilePath,
-    };
-  }
-
-  private buildRuntimeLogPaths(
-    placement: RuntimePlacement,
-    conversationId: string
-  ): RuntimeLogPaths {
-    const logDir = this.configService.getRuntimeLogDir();
-    const conversationFileName = safePathPart(conversationId);
-    const rawFileName = `${conversationFileName}.raw.jsonl`;
-    const aguiFileName = `${conversationFileName}.agui.jsonl`;
-    const workerFileName = `${conversationFileName}.worker.log`;
-    const isSandbox = placement.runtimeType === "sandbox";
-
-    return {
-      logDir,
-      rawFilePath: join(logDir, rawFileName),
-      rawRuntimeFilePath: isSandbox
-        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, rawFileName)
-        : join(logDir, rawFileName),
-      aguiFilePath: join(logDir, aguiFileName),
-      workerRuntimeFilePath: isSandbox
-        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, workerFileName)
-        : join(logDir, workerFileName),
-    };
-  }
-
-  /** 把 aggregator.build() 的快照转成 ChatModelRunResult 形态并写成 SSE。 */
-  private writeSnapshot(
-    res: Response,
-    result: { content: unknown[]; status: unknown; metadata?: unknown }
-  ): void {
-    if (res.writableEnded) return;
-    res.write(`data: ${JSON.stringify(result)}\n\n`);
   }
 
   private toRunResult(snap: {
@@ -696,10 +806,8 @@ export class RunService {
     this.runDriver.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
-      if (handle.res && !handle.res.writableEnded) {
-        handle.res.end();
-      }
-      handle.res = null;
+      handle.stream.end();
+      handle.stream.detach();
     }
     return true;
   }

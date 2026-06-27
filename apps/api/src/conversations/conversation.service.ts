@@ -313,15 +313,16 @@ export class ConversationService {
   async setActiveRunStatus(
     conversationId: string,
     activeRunStatus: "idle" | "running" | "error"
-  ) {
+  ): Promise<boolean> {
     const where =
       activeRunStatus === "running"
         ? { id: conversationId, activeRunStatus: { in: ["idle", "error"] } }
         : { id: conversationId };
-    return this.prisma.conversation.updateMany({
+    const result = await this.prisma.conversation.updateMany({
       where,
       data: { activeRunStatus, pendingUserAction: null },
     });
+    return result.count > 0;
   }
 
   async setPendingUserAction(

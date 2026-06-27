@@ -5,11 +5,23 @@ import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
 import type { ConfigService } from "../../config/config.service";
+import { RunStream } from "./run-stream";
 
 function makeConfig(): ConfigService {
   return {
     getRunTimeoutSeconds: () => 60,
   } as ConfigService;
+}
+
+function makeRes() {
+  return {
+    setHeader: vi.fn(),
+    write: vi.fn(),
+    end: vi.fn(),
+    writableEnded: false,
+    on: vi.fn(),
+    status: vi.fn(),
+  } as any;
 }
 
 function makeHandle(overrides: Partial<RunHandle> = {}): RunHandle {
@@ -20,7 +32,7 @@ function makeHandle(overrides: Partial<RunHandle> = {}): RunHandle {
       runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },
-    res: null,
+    stream: new RunStream(makeRes()),
     aggregator: { build: vi.fn() } as never,
     conversationId: "conversation-1",
     runId: "run-1",
@@ -90,8 +102,8 @@ describe("RunStatusService", () => {
       activeRun: { id: "run-1" },
       registry,
     });
-    const res = { write: vi.fn(), end: vi.fn(), writableEnded: false };
-    const handle = makeHandle({ res: res as never });
+    const res = makeRes();
+    const handle = makeHandle({ stream: new RunStream(res) });
 
     await handler.apply({
       runId: "run-1",

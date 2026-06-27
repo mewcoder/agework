@@ -187,7 +187,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
       const handle = this.activeRuns.get(runId);
 
       // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
-      // 必须在 saveRun/res.write 等可能抛异常的操作之前设置，
+      // 必须在 saveRun/stream write 等可能抛异常的操作之前设置，
       // 否则异常会跳过 completedRuns.set，导致终态 guard 失效。
       if (isTerminal && !this.completedRuns.has(runId)) {
         const timer = setTimeout(
@@ -328,10 +328,10 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     if (evt.type === "RUN_CANCELLED") return;
 
     // Write to SSE
-    // resume 续接模式（streamingSnapshot）下不转发原始事件，
+    // resume 续接模式下不转发原始事件，
     // 累积快照在上方节流点统一推送，终态快照由 handleRunStatus 推送。
-    if (handle.res && !handle.res.writableEnded && !handle.streamingSnapshot) {
-      handle.res.write(`data: ${JSON.stringify(event)}\n\n`);
+    if (!handle.stream.isSnapshotMode) {
+      handle.stream.writeEvent(event);
     }
 
     // RUN_FINISHED 携带 adapter 上报的 token usage（Claude/Codex 字段名不同），
@@ -348,21 +348,19 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
 
   /**
    * resume 续接模式下，把当前 aggregator 累积快照以 ChatModelRunResult 形态
-   * 推给 SSE 连接。仅在 streamingSnapshot=true 且连接存活时推送。
+   * 推给 SSE 连接。仅在快照模式且连接存活时推送。
    */
   private writeSnapshotToHandle(handle: RunHandle): void {
-    if (!handle.streamingSnapshot || !handle.res || handle.res.writableEnded) {
+    if (!handle.stream.isSnapshotMode) {
       return;
     }
     const snap = handle.aggregator.build(false, "streaming");
     if (snap.content.length === 0) return;
-    handle.res.write(
-      `data: ${JSON.stringify({
-        content: snap.content,
-        status: snap.status,
-        ...(snap.metadata ? { metadata: snap.metadata } : {}),
-      })}\n\n`
-    );
+    handle.stream.writeSnapshot({
+      content: snap.content,
+      status: snap.status,
+      ...(snap.metadata ? { metadata: snap.metadata } : {}),
+    });
   }
 
   private async handleSdkRawEvent(runId: string, event: unknown) {

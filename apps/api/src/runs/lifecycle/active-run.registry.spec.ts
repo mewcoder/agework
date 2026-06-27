@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ActiveRunRegistry, type RunHandle } from "./active-run.registry";
 import type { ConfigService } from "../../config/config.service";
+import { RunStream } from "./run-stream";
 
 function makeConfig(timeoutSeconds = 60): ConfigService {
   return {
@@ -16,7 +17,14 @@ function makeHandle(runId = "run-1"): RunHandle {
       runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },
-    res: null,
+    stream: new RunStream({
+      setHeader: vi.fn(),
+      write: vi.fn(),
+      end: vi.fn(),
+      writableEnded: false,
+      on: vi.fn(),
+      status: vi.fn(),
+    } as any),
     aggregator: {} as any,
     conversationId: "conversation-1",
     runId,

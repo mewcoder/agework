@@ -9,11 +9,30 @@ import { RunEventService } from "../events/run-event.service";
 import { RunStatusService } from "../lifecycle/run-status.service";
 import type { ConfigService } from "../../config/config.service";
 import type { RunDriver } from "./run-driver";
+import { RunStream } from "../lifecycle/run-stream";
 
 function makeConfig(): ConfigService {
   return {
     getRunTimeoutSeconds: () => 60,
   } as ConfigService;
+}
+
+function makeRes() {
+  return {
+    setHeader: vi.fn(),
+    write: vi.fn(),
+    end: vi.fn(),
+    writableEnded: false,
+    on: vi.fn(),
+    status: vi.fn(),
+  } as any;
+}
+
+function makeStream(
+  res = makeRes(),
+  mode: "events" | "snapshots" = "events"
+) {
+  return new RunStream(res, mode);
 }
 
 describe("RunEnvelopeProcessor", () => {
@@ -201,7 +220,7 @@ describe("RunEnvelopeProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       agentEventTrace: traceConfig,
-      res: null,
+      stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
       saveRun: vi.fn(),
@@ -231,7 +250,7 @@ describe("RunEnvelopeProcessor", () => {
   });
 
   it("should not forward MESSAGES_SNAPSHOT events to the SSE response", async () => {
-    const res = { write: vi.fn(), writableEnded: false } as any;
+    const res = makeRes();
     activeRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
@@ -243,7 +262,7 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      res,
+      stream: makeStream(res),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
@@ -264,8 +283,8 @@ describe("RunEnvelopeProcessor", () => {
     });
   });
 
-  it("streamingSnapshot=true 推送累积快照而非原始事件", async () => {
-    const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
+  it("snapshot stream 推送累积快照而非原始事件", async () => {
+    const res = makeRes();
     activeRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
@@ -277,11 +296,10 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      res,
+      stream: makeStream(res, "snapshots"),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
-      streamingSnapshot: true,
     });
 
     // RUN_STARTED + 文本开始 + 内容 + 结束
@@ -336,8 +354,8 @@ describe("RunEnvelopeProcessor", () => {
     );
   });
 
-  it("streamingSnapshot=false 走原始事件转发（回归）", async () => {
-    const res = { write: vi.fn(), writableEnded: false, end: vi.fn() } as any;
+  it("event stream 走原始事件转发（回归）", async () => {
+    const res = makeRes();
     activeRuns.register("run-2", {
       runtimeHandle: {
         runId: "run-2",
@@ -349,11 +367,10 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-2",
       workspaceId: "ws-1",
       agentType: "claude",
-      res,
+      stream: makeStream(res),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
       saveRun: vi.fn(),
-      // streamingSnapshot 默认 false
     });
 
     await runEnvelopeProcessor.publish({
@@ -383,7 +400,7 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      res: null,
+      stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
       saveRun: vi.fn(),
@@ -433,7 +450,7 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      res: null,
+      stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
       saveRun: vi.fn(),
@@ -482,7 +499,7 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      res: null,
+      stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
       saveRun: vi.fn(),
@@ -525,7 +542,7 @@ describe("RunEnvelopeProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       agentEventTrace: traceConfig,
-      res: null,
+      stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
       saveRun: vi.fn(),

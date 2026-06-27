@@ -150,7 +150,7 @@ describe("RunService", () => {
     };
     mockConversationService = {
       attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
-      setActiveRunStatus: vi.fn().mockResolvedValue({ count: 1 }),
+      setActiveRunStatus: vi.fn().mockResolvedValue(true),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       upsertMessage: vi.fn().mockResolvedValue(undefined),
       setAgentSessionId: vi.fn().mockResolvedValue(undefined),
@@ -244,7 +244,7 @@ describe("RunService", () => {
           workspaceId: "ws-1",
           agentType: "claude",
           agentEventTrace: AGENT_EVENT_TRACE,
-          res,
+          stream: expect.objectContaining({}),
         })
       );
       expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
