@@ -1,16 +1,16 @@
-import type { Envelope } from "./envelope";
+import type { RunChannelMessage } from "./run-channel-message";
 import type { CommandPayload } from "./channel";
 
-export type { Envelope } from "./envelope";
+export type { RunChannelMessage } from "./run-channel-message";
 
-/** 构造下一个 command envelope 并递增 seq 计数器。
+/** 构造下一个 command message 并递增 seq 计数器。
  *  @param seqOwnerId - runId（Local 模式）或 ownerId（Docker 模式），用于 seq 计数器分区。 */
-export function nextCommandEnvelope(
+export function nextCommandMessage(
   commandSeqs: Map<string, number>,
   seqOwnerId: string,
   runId: string,
   payload: CommandPayload
-): Envelope<CommandPayload> {
+): RunChannelMessage<CommandPayload> {
   const seq = (commandSeqs.get(seqOwnerId) ?? 0) + 1;
   commandSeqs.set(seqOwnerId, seq);
   return {
@@ -52,6 +52,7 @@ export type {
   CustomAgentProviderConfig,
   AgentProviderConfig,
   CommandPayload,
+  CommandResultPayload,
   CommandTracePayload,
   UpstreamMessage,
   Unsubscribe,
@@ -65,3 +66,21 @@ export type {
   SandboxRuntimePlacement,
   SandboxPlacementInfo,
 } from "./channel";
+export type {
+  RpcBatch,
+  RpcError,
+  RpcErrorResponse,
+  RpcId,
+  RpcMessage,
+  RpcMeta,
+  RpcNotification,
+  RpcRequest,
+  RpcResponse,
+  RpcSuccessResponse,
+  RunConfigRpcNotification,
+  WorkerCommandMethod,
+  WorkerCommandResult,
+  WorkerCommandRpcRequest,
+  WorkerEventMethod,
+  WorkerEventRpcNotification,
+} from "./rpc";

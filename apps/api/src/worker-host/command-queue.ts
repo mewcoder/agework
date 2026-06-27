@@ -1,11 +1,11 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { Envelope, CommandPayload } from "@agework/shared/protocol";
+import type { RunChannelMessage, CommandPayload } from "@agework/shared/protocol";
 import type { CommandSentRecorder } from "./command-sent-recorder.port";
 import { errorLogFields, safeLogJson } from "../common/logging";
 
 type OwnerWaiter = {
   afterSeq: number;
-  resolve: (commands: Envelope<CommandPayload>[]) => void;
+  resolve: (commands: RunChannelMessage<CommandPayload>[]) => void;
   timer: ReturnType<typeof setTimeout>;
 };
 
@@ -23,7 +23,7 @@ export class WorkerCommandQueue {
   /** ownerId 级队列——持久容器通过 ownerId 轮询命令。 */
   private readonly ownerQueues = new Map<
     string,
-    Envelope<CommandPayload>[]
+    RunChannelMessage<CommandPayload>[]
   >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
   private recorder!: CommandSentRecorder;
@@ -35,22 +35,22 @@ export class WorkerCommandQueue {
   /** 按 ownerId 推送命令（持久容器场景）。 */
   pushByOwnerId(
     ownerId: string,
-    envelope: Envelope<CommandPayload>
+    message: RunChannelMessage<CommandPayload>
   ): void {
     let queue = this.ownerQueues.get(ownerId);
     if (!queue) {
       queue = [];
       this.ownerQueues.set(ownerId, queue);
     }
-    queue.push(envelope);
+    queue.push(message);
     this.resolveOwnerWaiters(ownerId);
-    this.recordEnqueued(envelope.runId, envelope);
+    this.recordEnqueued(message.runId, message);
     this.logger.debug(
       `push owner command ${safeLogJson({
         ownerId,
-        runId: envelope.runId,
-        seq: envelope.seq,
-        type: envelope.payload.type,
+        runId: message.runId,
+        seq: message.seq,
+        type: message.payload.type,
         queueSize: queue.length,
       })}`
     );
@@ -60,7 +60,7 @@ export class WorkerCommandQueue {
     ownerId: string,
     afterSeq: number,
     timeoutMs: number
-  ): Promise<Envelope<CommandPayload>[]> {
+  ): Promise<RunChannelMessage<CommandPayload>[]> {
     const commands = this.pollByOwnerId(ownerId, afterSeq);
     if (commands.length > 0 || timeoutMs <= 0) {
       return Promise.resolve(commands);
@@ -85,7 +85,7 @@ export class WorkerCommandQueue {
   pollByOwnerId(
     ownerId: string,
     afterSeq: number
-  ): Envelope<CommandPayload>[] {
+  ): RunChannelMessage<CommandPayload>[] {
     const queue = this.ownerQueues.get(ownerId);
     if (!queue) return [];
     // TODO: 当前假设每个 ownerId 只有一个 worker 轮询（单 worker per owner）。
@@ -109,10 +109,10 @@ export class WorkerCommandQueue {
   /** command 入队即记一条 sent trace，commandId 供 worker 上行的 received/handled/failed 回连。 */
   private recordEnqueued(
     runId: string,
-    envelope: Envelope<CommandPayload>
+    message: RunChannelMessage<CommandPayload>
   ): void {
     if (!runId) return;
-    const payload = envelope.payload;
+    const payload = message.payload;
     this.recorder
       .recordCommandSent({
         runId,

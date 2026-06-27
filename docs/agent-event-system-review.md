@@ -30,7 +30,7 @@
 Claude/Codex SDK
   -> adapter raw trace
   -> adapter 转 AG-UI events
-  -> worker envelope(seq)
+  -> worker message(seq)
   -> API RuntimeEventProcessor
      -> SSE: 原始 AG-UI events 给 live UI
      -> RuntimeMessageAggregator: assistant-ui message snapshot
@@ -57,7 +57,7 @@ TOOL_CALL_START
 | --- | --- | --- |
 | adapter 转换 | `packages/adapters/src/claude/base/adapter.ts` | Claude SDK 输出转 AG-UI |
 | adapter 转换 | `packages/adapters/src/codex/base/adapter.ts` | Codex SDK 输出转 AG-UI |
-| worker 单 run | `apps/worker/src/main.ts` | adapter event 转 upstream envelope |
+| worker 单 run | `apps/worker/src/main.ts` | adapter event 转 upstream message |
 | worker persistent | `apps/worker/src/persistent-http-client.ts` | persistent worker 上报事件，按 runId 串行化 |
 | API event processor | `apps/api/src/runtime/core/runtime-event-processor.ts` | seq 去重、转发 SSE、聚合、诊断入库 |
 | message 聚合 | `apps/api/src/runtime/core/runtime-message-aggregator.ts` | AG-UI events 聚合为 assistant-ui message |
@@ -130,7 +130,7 @@ TOOL_CALL_START
 问题：
 
 - 需要 `AGEWORK_AGENT_EVENT_TRACE_ENABLED` 开启。
-- agui JSONL 没有统一写入 transport envelope seq。
+- agui JSONL 没有统一写入 transport message seq。
 - 管理端没有直接按 run 展示完整 trace。
 - DB `RunEvent.payloadRef` 没有成为 trace 文件索引入口。
 
@@ -182,7 +182,7 @@ AgeWork 自己定义完整事件日志，作为事实源。
 | `conversationId` | conversation ID |
 | `workspaceId` | workspace ID |
 | `agentType` | `claude` / `codex` |
-| `seq` | transport envelope seq，按 run 单调递增 |
+| `seq` | transport message seq，按 run 单调递增 |
 | `source` | `sdk` / `adapter` / `agui` / `runtime` / `control` / `worker` |
 | `eventType` | 事件类型 |
 | `level` | `debug` / `info` / `warn` / `error` |
@@ -291,7 +291,7 @@ type ToolProcessItem = {
 
 1. 扩展 `RunEvent` 或新增 `RunTraceEvent`。
 2. 统一记录 `seq`、`source`、`eventType`、`messageId`、`toolCallId`、`payloadRef`。
-3. API 收到 upstream envelope 后，先写 canonical index，再做 SSE 转发和 projection。
+3. API 收到 upstream message 后，先写 canonical index，再做 SSE 转发和 projection。
 4. agui JSONL 写入时带上 envelope seq。
 5. 管理端 run detail 支持分页加载完整事件，不只取前 200 条。
 

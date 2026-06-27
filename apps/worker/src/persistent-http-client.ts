@@ -1,9 +1,17 @@
 import type {
   RunConfig,
   CommandPayload,
-  Envelope,
+  CommandResultPayload,
+  RunChannelMessage,
   UpstreamMessage,
+  WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
+import {
+  commandResultMessageToRpcResponse,
+  isWorkerCommandRpcRequest,
+  rpcRequestToCommandMessage,
+  upstreamMessageToRpcNotification,
+} from "@agework/shared/protocol/rpc";
 import { errorDetails, workerLog } from "./worker-log.js";
 
 /**
@@ -49,7 +57,7 @@ export class PersistentHttpClient {
     return { Authorization: `Bearer ${this.accessKey}` };
   }
 
-  async pollCommands(waitMs = 0): Promise<Envelope<CommandPayload>[]> {
+  async pollCommands(waitMs = 0): Promise<RunChannelMessage<CommandPayload>[]> {
     const commandsPath = `/worker/owners/${this.ownerId}/commands`;
     const params = new URLSearchParams({ afterSeq: String(this.commandSeq) });
     if (waitMs > 0) {
@@ -86,14 +94,17 @@ export class PersistentHttpClient {
       return [];
     }
 
-    const data = (await res.json()) as { commands: Envelope<CommandPayload>[] };
-    if (data.commands.length > 0) {
+    const data = (await res.json()) as {
+      messages?: WorkerCommandRpcRequest[];
+    };
+    const commands = normalizeCommandPollResponse(data);
+    if (commands.length > 0) {
       this.emptyPolls = 0;
       workerLog("command poll received commands", {
         ownerId: this.ownerId,
         afterSeq: this.commandSeq,
-        count: data.commands.length,
-        commands: data.commands.map((command) => ({
+        count: commands.length,
+        commands: commands.map((command) => ({
           seq: command.seq,
           runId: command.runId,
           type: command.payload.type,
@@ -110,12 +121,12 @@ export class PersistentHttpClient {
         }, "debug");
       }
     }
-    for (const command of data.commands) {
+    for (const command of commands) {
       if (command.seq > this.commandSeq) {
         this.commandSeq = command.seq;
       }
     }
-    return data.commands;
+    return commands;
   }
 
   async fetchRunConfig(runId: string): Promise<RunConfig> {
@@ -160,15 +171,15 @@ export class PersistentHttpClient {
 
   private async doEmit(runId: string, msg: UpstreamMessage): Promise<void> {
     const url = `${this.apiBase}/worker/runs/${runId}/events`;
-    const envelope = {
+    const message = {
       ...msg,
       runId,
       seq: this.nextEventSeq(runId),
       ts: new Date().toISOString(),
     };
-    const body = JSON.stringify(envelope);
-    const summary = summarizeUpstreamMessage(envelope);
-    if (shouldLogEmit(envelope)) {
+    const body = JSON.stringify(encodeUpstreamMessageForHttp(message));
+    const summary = summarizeUpstreamMessage(message);
+    if (shouldLogEmit(message)) {
       workerLog("emit event", summary, "debug");
     }
     let lastError: Error | undefined;
@@ -276,6 +287,23 @@ function summarizeUpstreamMessage(msg: UpstreamMessage) {
     payloadType: typeof payload?.type === "string" ? payload.type : undefined,
     status: typeof payload?.status === "string" ? payload.status : undefined,
   };
+}
+
+function normalizeCommandPollResponse(data: {
+  messages?: WorkerCommandRpcRequest[];
+}): RunChannelMessage<CommandPayload>[] {
+  return (data.messages ?? [])
+    .filter(isWorkerCommandRpcRequest)
+    .map(rpcRequestToCommandMessage);
+}
+
+function encodeUpstreamMessageForHttp(msg: UpstreamMessage) {
+  if (msg.type === "command.result") {
+    return commandResultMessageToRpcResponse(
+      msg as RunChannelMessage<CommandResultPayload>
+    );
+  }
+  return upstreamMessageToRpcNotification(msg);
 }
 
 function shouldLogEmit(msg: UpstreamMessage): boolean {

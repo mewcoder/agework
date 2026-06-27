@@ -54,6 +54,7 @@ const AGENT_EVENT_TRACE = {
   rawFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
   rawRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
   aguiFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
+  aguiRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
   maxFileMb: 5,
   runId: "run-1",
   conversationId: "conversation-1",

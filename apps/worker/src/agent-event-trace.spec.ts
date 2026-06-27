@@ -6,7 +6,7 @@ import type { UpstreamMessage } from "@agework/shared/protocol";
 import { AgentEventTraceWriter } from "./agent-event-trace";
 
 describe("AgentEventTraceWriter", () => {
-  it("emits redacted raw SDK trace envelopes", () => {
+  it("emits redacted raw SDK trace messages", () => {
     const emit = vi.fn<(msg: UpstreamMessage) => void>();
     const writer = new AgentEventTraceWriter(
       {
@@ -93,6 +93,50 @@ describe("AgentEventTraceWriter", () => {
         conversationId: "conversation-1",
       });
       expect(line.payload.payload.authorization).toBe("[redacted]");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("writes AG-UI trace directly when runtime file path is available", () => {
+    const dir = mkdtempSync(join(tmpdir(), "agework-agent-agui-"));
+    const filePath = join(dir, "conversation-1.agui.jsonl");
+    const emit = vi.fn<(msg: UpstreamMessage) => void>();
+    const writer = new AgentEventTraceWriter(
+      {
+        enabled: true,
+        rawFilePath: join(dir, "conversation-1.raw.jsonl"),
+        aguiFilePath: filePath,
+        aguiRuntimeFilePath: filePath,
+        maxFileMb: 1,
+        runId: "run-1",
+        conversationId: "conversation-1",
+        workspaceId: "ws-1",
+        agentType: "codex",
+      },
+      emit
+    );
+
+    try {
+      writer.writeAgui({
+        type: "TEXT_MESSAGE_CONTENT",
+        delta: "hello",
+        authorization: "Bearer secret",
+      });
+
+      expect(emit).not.toHaveBeenCalled();
+      const line = JSON.parse(readFileSync(filePath, "utf8").trim());
+      expect(line).toMatchObject({
+        source: "agui.event",
+        name: "TEXT_MESSAGE_CONTENT",
+        runId: "run-1",
+        conversationId: "conversation-1",
+        payload: {
+          type: "TEXT_MESSAGE_CONTENT",
+          delta: "hello",
+          authorization: "[redacted]",
+        },
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

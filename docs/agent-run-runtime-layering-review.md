@@ -49,7 +49,7 @@ AgentService -> RunService -> RuntimeService -> RuntimeProvider -> Worker
 
 - 不创建 Run 记录
 - 不管理 SSE
-- 不处理 worker envelope
+- 不处理 worker message
 - 不组装完整 `RunConfig`
 - 不碰 runtime placement
 - 不 import runtime providers
@@ -68,7 +68,7 @@ AgentService -> RunService -> RuntimeService -> RuntimeProvider -> Worker
 - 组装 `RunConfig`
 - 调 `RuntimeService.startWorker`
 - stop / resume stream / approval reply
-- 处理 worker envelope
+- 处理 worker message
 - 更新 run status
 - 聚合 assistant message
 - 写 RunEvent / raw log
@@ -157,11 +157,11 @@ worker 事件回流，本轮保持现状，不改 transport：
 ```text
 apps/worker
   -> Runtime internal API / IPC
-    -> RunEnvelopeProcessor
+    -> WorkerEventProcessor
       -> RunRepository / RunMessageAggregator / RunEventRecorder / SSE
 ```
 
-说明：这条回流现在是 `runtime provider/internal -> RunEnvelopeProcessor`。在一个 Nest module / 组合 module 内，它不会制造 Nest module 循环。第一轮先不动它，避免引入高风险行为变化。
+说明：这条回流现在是 `runtime provider/internal -> WorkerEventProcessor`。在一个 Nest module / 组合 module 内，它不会制造 Nest module 循环。第一轮先不动它，避免引入高风险行为变化。
 
 ## 4. 目标目录结构
 
@@ -186,7 +186,7 @@ apps/api/src/
     title.service.ts             # 原 agent/title.service；标题由 RunService.start 触发
 
     execution/
-      run-envelope.processor.ts
+      worker-event.processor.ts
       run-execution-status.handler.ts
       run-lifecycle.policy.ts
       run-message.aggregator.ts
@@ -285,7 +285,7 @@ class RunService {
 
 **入站管线组件（与 RunService 平级，不塞进 RunService）**：
 
-- `RunEnvelopeProcessor`
+- `WorkerEventProcessor`
 - `RunExecutionStatusHandler`
 - `RawEventLogWriter`
 
@@ -347,7 +347,7 @@ runtime 可 import:
   config service
   runtime 自己的 providers/resources/internal
 
-runtime 第一轮允许内部 provider/internal 调用 runs/execution/run-envelope.processor
+runtime 第一轮允许内部 provider/internal 调用 runs/execution/worker-event.processor
   这是现有事件回流路径，暂不改 transport
 
 worker 不可 import:
@@ -432,9 +432,9 @@ runs/run-config.assembler.ts
    调 RuntimeService.startWorker
 ```
 
-完成后，外部模块只依赖 `RunService`，不再 deep import `RunRunner` / `RunActiveStore` / `RunEnvelopeProcessor`。
+完成后，外部模块只依赖 `RunService`，不再 deep import `RunRunner` / `RunActiveStore` / `WorkerEventProcessor`。
 
-**保护（别顺手把入站也搬进来）**：`RunService.start` 只承接**出站启动编排**（上面列的两部分）。**不要接管 `RunEnvelopeProcessor.publish` 这条入站路径**——worker event 回流仍由 `provider/internal controller → RunEnvelopeProcessor` 不变。吸收的是"怎么把 run 起起来"，不是"怎么处理回流事件"。
+**保护（别顺手把入站也搬进来）**：`RunService.start` 只承接**出站启动编排**（上面列的两部分）。**不要接管 `WorkerEventProcessor.publish` 这条入站路径**——worker event 回流仍由 `provider/internal controller → WorkerEventProcessor` 不变。吸收的是"怎么把 run 起起来"，不是"怎么处理回流事件"。
 
 ### Step E — 收薄 Agent 层
 

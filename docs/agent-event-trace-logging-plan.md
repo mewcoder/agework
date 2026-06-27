@@ -199,7 +199,7 @@ type AgentTraceRecord = {
 
 字段原则：
 
-- `seq` 使用 transport envelope seq；control seq 和 upstream seq 要通过 `direction` 区分。
+- `seq` 使用 transport message seq；control seq 和 upstream seq 要通过 `direction` 区分。
 - 大 payload 走 `payloadRef`，DB 只存摘要和短预览。
 - `messageId/toolCallId/commandId` 是排查关键字段，必须从 AG-UI/control payload 中提取。
 - 所有 API/worker 日志都尽量带 `eventId` 或至少带 `runId + seq + source + eventType`。

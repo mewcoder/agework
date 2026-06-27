@@ -1,16 +1,7 @@
 import type { Subscription } from "rxjs";
 import type { AgentType } from "@agework/shared";
-
-type MinimalAdapter = {
-  run(input: unknown): {
-    subscribe(o: {
-      next: (e: unknown) => void;
-      complete: () => void;
-      error: (e: Error) => void;
-    }): Subscription;
-  };
-  interrupt(aguiThreadId?: string): Promise<void>;
-};
+import type { CommandPayload } from "@agework/shared/protocol";
+import type { AgentDriver, AgentRunInput } from "./agent-driver.js";
 
 type StatusPayload =
   | { status: "finished" }
@@ -27,44 +18,44 @@ type StatusReporter = (
  * Persistent worker 内按 agentType 路由的多 run 路由器。
  *
  * 同一 workspace 下的持久容器会承接多个会话，这些会话可能分属不同 agentType
- * （claude / codex）。每个 agentType 拥有独立的 adapter 实例（注入各自的
- * apiKey/model/baseUrl），run/interrupt 按 runId 关联的 agentType 路由到正确
- * adapter，避免跨 agentType 复用单例 adapter 导致配置串台。
+ * （claude / codex）。每个 agentType 拥有独立的 driver 实例（注入各自的
+ * apiKey/model/baseUrl），run/cancel 按 runId 关联的 agentType 路由到正确
+ * driver，避免跨 agentType 复用单例 driver 导致配置串台。
  */
 export class RunRouter {
   private readonly runs = new Map<string, ActiveRun>();
   private readonly cancelled = new Set<string>();
   private readonly terminalOverrides = new Map<string, StatusPayload>();
   private readonly terminalReports = new Map<string, Promise<void>>();
-  private readonly adapters = new Map<AgentType, MinimalAdapter>();
+  private readonly drivers = new Map<AgentType, AgentDriver>();
 
   constructor(
     private readonly emit: (runId: string, event: unknown) => void,
     private readonly reportStatus: StatusReporter
   ) {}
 
-  /** 注册某 agentType 的 adapter。首个该 agentType 的 run 到达前必须注册。 */
-  setAdapter(agentType: AgentType, adapter: MinimalAdapter): void {
-    this.adapters.set(agentType, adapter);
+  /** 注册某 agentType 的 driver。首个该 agentType 的 run 到达前必须注册。 */
+  setDriver(agentType: AgentType, driver: AgentDriver): void {
+    this.drivers.set(agentType, driver);
   }
 
   startRun(
     runId: string,
     agentType: AgentType,
-    input: { threadId: string } & Record<string, unknown>
+    input: AgentRunInput
   ): void {
     if (this.runs.has(runId)) return; // 去重
-    const adapter = this.adapters.get(agentType);
-    if (!adapter) {
-      // 不应发生：main 在 startRun 前已 ensureAdapter。守卫以防遗漏。
+    const driver = this.drivers.get(agentType);
+    if (!driver) {
+      // 不应发生：main 在 startRun 前已 ensureDriver。守卫以防遗漏。
       this.reportStatus(runId, {
         status: "error",
-        error: `no adapter registered for agentType ${agentType}`,
+        error: `no driver registered for agentType ${agentType}`,
       });
       return;
     }
-    const aguiThreadId = input.threadId;
-    const sub = adapter.run(input).subscribe({
+    const aguiThreadId = input.aguiThreadId;
+    const sub = driver.run(input).subscribe({
       next: (event) => this.emit(runId, event),
       complete: () => {
         this.finishRun(runId, { status: "finished" });
@@ -82,8 +73,28 @@ export class RunRouter {
 
     this.cancelled.add(runId);
     // 以 run 记录的 threadId 为准，避免过期 command 携带的 threadId 误伤新 run。
-    await this.adapters.get(run.agentType)?.interrupt(run.aguiThreadId);
+    await this.drivers.get(run.agentType)?.cancel(run.aguiThreadId);
     return true;
+  }
+
+  async interruptRun(runId: string): Promise<boolean> {
+    const run = this.runs.get(runId);
+    if (!run) return false;
+
+    await this.drivers.get(run.agentType)?.interrupt(run.aguiThreadId);
+    return true;
+  }
+
+  async resolveControl(
+    runId: string,
+    command: CommandPayload
+  ): Promise<boolean> {
+    const run = this.runs.get(runId);
+    if (!run) return false;
+
+    const driver = this.drivers.get(run.agentType);
+    if (!driver) return false;
+    return Boolean(await driver.resolveControl(command));
   }
 
   activeRuns(): Array<{ runId: string; agentType: AgentType; aguiThreadId: string }> {
@@ -105,15 +116,15 @@ export class RunRouter {
       );
     }
 
-    const pendingInterrupts: Promise<void>[] = [];
+    const pendingCancels: Promise<void>[] = [];
     for (const [runId, run] of entries) {
       if (!this.runs.has(runId)) continue;
       run.sub.unsubscribe();
-      pendingInterrupts.push(this.interruptRun(run));
+      pendingCancels.push(this.cancelActiveRun(run));
       this.drop(runId);
     }
 
-    await Promise.allSettled([...pendingReports, ...pendingInterrupts]);
+    await Promise.allSettled([...pendingReports, ...pendingCancels]);
   }
 
   has(runId: string): boolean {
@@ -167,11 +178,9 @@ export class RunRouter {
     }
   }
 
-  private interruptRun(run: ActiveRun): Promise<void> {
+  private cancelActiveRun(run: ActiveRun): Promise<void> {
     try {
-      return Promise.resolve(
-        this.adapters.get(run.agentType)?.interrupt(run.aguiThreadId)
-      );
+      return Promise.resolve(this.drivers.get(run.agentType)?.cancel(run.aguiThreadId));
     } catch (error) {
       return Promise.reject(error);
     }

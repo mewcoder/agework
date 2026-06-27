@@ -21,7 +21,10 @@ export class AgentEventTraceWriter {
 
   get enabled(): boolean {
     return Boolean(
-      this.config?.enabled && (this.emit || this.config.rawRuntimeFilePath)
+      this.config?.enabled &&
+        (this.emit ||
+          this.config.rawRuntimeFilePath ||
+          this.config.aguiRuntimeFilePath)
     );
   }
 
@@ -62,18 +65,35 @@ export class AgentEventTraceWriter {
     });
   }
 
+  writeAgui(event: unknown): void {
+    if (!this.enabled || !this.config?.aguiRuntimeFilePath) return;
+    this.writeLogFile(
+      this.config.aguiRuntimeFilePath,
+      "agui.event",
+      aguiLogEntry(this.config, event)
+    );
+  }
+
   private writeRawFile(
     filePath: string,
     trace: AgentEventTracePayload
+  ): boolean {
+    return this.writeLogFile(filePath, "sdk.raw", rawLogEntry(this.config!, trace));
+  }
+
+  private writeLogFile(
+    filePath: string,
+    source: "sdk.raw" | "agui.event",
+    entry: Record<string, unknown>
   ): boolean {
     if (this.truncated.has(filePath)) return true;
     try {
       mkdirSync(dirname(filePath), { recursive: true });
       if (this.isOverLimit(filePath)) {
-        this.writeTruncated(filePath);
+        this.writeTruncated(filePath, source);
         return true;
       }
-      appendFileSync(filePath, `${JSON.stringify(rawLogEntry(this.config!, trace))}\n`);
+      appendFileSync(filePath, `${JSON.stringify(entry)}\n`);
       return true;
     } catch {
       // Raw trace must never break agent execution.
@@ -87,14 +107,14 @@ export class AgentEventTraceWriter {
     return statSync(filePath).size >= maxFileMb * 1024 * 1024;
   }
 
-  private writeTruncated(filePath: string): void {
+  private writeTruncated(filePath: string, source: "sdk.raw" | "agui.event"): void {
     if (!this.config || this.truncated.has(filePath)) return;
     this.truncated.add(filePath);
     appendFileSync(
       filePath,
       `${JSON.stringify({
         ts: new Date().toISOString(),
-        source: "sdk.raw",
+        source,
         name: "trace.truncated",
         runId: this.config.runId,
         conversationId: this.config.conversationId,
@@ -191,4 +211,28 @@ function rawLogEntry(
       ...(trace.payload !== undefined ? { payload: trace.payload } : {}),
     },
   };
+}
+
+function aguiLogEntry(
+  config: AgentEventTraceConfig,
+  event: unknown
+): Record<string, unknown> {
+  return {
+    ts: new Date().toISOString(),
+    source: "agui.event",
+    name: aguiEventName(event),
+    runId: config.runId,
+    conversationId: config.conversationId,
+    workspaceId: config.workspaceId,
+    agentType: config.agentType,
+    payload: redact(event),
+  };
+}
+
+function aguiEventName(event: unknown): string {
+  if (event && typeof event === "object" && "type" in event) {
+    const type = (event as { type?: unknown }).type;
+    if (typeof type === "string") return type;
+  }
+  return "unknown";
 }

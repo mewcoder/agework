@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkerEventReceiverAdapter } from "./worker-event-receiver.adapter";
-import type { RunEnvelopeProcessor } from "./run-envelope.processor";
+import type { WorkerEventProcessor } from "./worker-event.processor";
 import { RunEventService } from "../events/run-event.service";
 import type { ActiveRunRegistry } from "../lifecycle/active-run.registry";
 import type { RunDriver } from "./run-driver";
@@ -36,7 +36,7 @@ function makeReceiver(opts: {
 
   return {
     receiver: new WorkerEventReceiverAdapter(
-      processor as unknown as RunEnvelopeProcessor,
+      processor as unknown as WorkerEventProcessor,
       runEvents,
       activeRuns as ActiveRunRegistry,
       runDriver as RunDriver
@@ -49,11 +49,11 @@ function makeReceiver(opts: {
 }
 
 describe("WorkerEventReceiverAdapter", () => {
-  it("sendEvent() delegates envelope to processor", async () => {
+  it("sendEvent() delegates message to processor", async () => {
     const { receiver, processor } = makeReceiver();
-    const envelope = { runId: "run-1", seq: 1 } as never;
-    await receiver.sendEvent("run-1", envelope);
-    expect(processor.publish).toHaveBeenCalledWith(envelope);
+    const message = { runId: "run-1", seq: 1 } as never;
+    await receiver.sendEvent("run-1", message);
+    expect(processor.publish).toHaveBeenCalledWith(message);
   });
 
   it("notifyWorkerError() skips when run already terminal/finalizing", async () => {
@@ -107,16 +107,16 @@ describe("WorkerEventReceiverAdapter", () => {
   it("sendEvent() accepts HTTP event", async () => {
     const { receiver, processor } = makeReceiver({ handle: activeHandle });
 
-    const envelope = {
+    const message = {
       runId: "run-1",
       seq: 1,
       type: "agui.event",
       payload: {},
       ts: new Date().toISOString(),
     };
-    await receiver.sendEvent("run-1", envelope);
+    await receiver.sendEvent("run-1", message);
 
-    expect(processor.publish).toHaveBeenCalledWith(envelope);
+    expect(processor.publish).toHaveBeenCalledWith(message);
   });
 
   it("sendEvent() cleans up via RunDriver on terminal status", async () => {

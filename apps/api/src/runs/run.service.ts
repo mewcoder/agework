@@ -280,6 +280,9 @@ export class RunService {
         ? posix.join(CONTAINER_RUNTIME_LOG_DIR, rawFileName)
         : join(logDir, rawFileName),
       aguiFilePath: join(logDir, aguiFileName),
+      aguiRuntimeFilePath: isSandbox
+        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, aguiFileName)
+        : join(logDir, aguiFileName),
       workerRuntimeFilePath: isSandbox
         ? posix.join(CONTAINER_RUNTIME_LOG_DIR, workerFileName)
         : join(logDir, workerFileName),
@@ -818,6 +821,7 @@ type RuntimeLogPaths = {
   rawFilePath: string;
   rawRuntimeFilePath: string;
   aguiFilePath: string;
+  aguiRuntimeFilePath: string;
   workerRuntimeFilePath: string;
 };
 
@@ -833,6 +837,7 @@ function buildAgentEventTraceConfig(input: {
   rawFilePath: string;
   rawRuntimeFilePath: string;
   aguiFilePath: string;
+  aguiRuntimeFilePath: string;
 }) {
   const enabled = isTruthy(process.env[EnvKey.AGENT_EVENT_TRACE_ENABLED]);
   const maxFileMb = parsePositiveInt(
@@ -846,6 +851,7 @@ function buildAgentEventTraceConfig(input: {
     rawFilePath: enabled ? input.rawFilePath : undefined,
     rawRuntimeFilePath: enabled ? input.rawRuntimeFilePath : undefined,
     aguiFilePath: enabled ? input.aguiFilePath : undefined,
+    aguiRuntimeFilePath: enabled ? input.aguiRuntimeFilePath : undefined,
     maxFileMb,
     runId: input.runId,
     conversationId: input.conversationId,

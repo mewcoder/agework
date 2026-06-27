@@ -9,7 +9,18 @@ describe("WorkerCommandController", () => {
         pollByOwnerId: vi
           .fn()
           .mockReturnValue([
-            { seq: 1, runId: "run-1", payload: { type: "cancel" } },
+            {
+              seq: 1,
+              runId: "run-1",
+              type: "command",
+              payload: {
+                type: "cancel",
+                commandId: "cmd-1",
+                runId: "run-1",
+                conversationId: "conv-1",
+              },
+              ts: "2026-06-27T00:00:00.000Z",
+            },
           ]),
       };
 
@@ -21,7 +32,22 @@ describe("WorkerCommandController", () => {
 
       expect(commandQueue.pollByOwnerId).toHaveBeenCalledWith("owner-1", 3);
       expect(result).toEqual({
-        commands: [{ seq: 1, runId: "run-1", payload: { type: "cancel" } }],
+        messages: [
+          {
+            jsonrpc: "2.0",
+            id: "cmd-1",
+            method: "run.cancel",
+            params: {
+              runId: "run-1",
+              conversationId: "conv-1",
+            },
+            meta: {
+              runId: "run-1",
+              seq: 1,
+              ts: "2026-06-27T00:00:00.000Z",
+            },
+          },
+        ],
       });
     });
 
@@ -58,7 +84,18 @@ describe("WorkerCommandController", () => {
         waitForOwnerId: vi
           .fn()
           .mockResolvedValue([
-            { seq: 2, runId: "run-2", payload: { type: "user_message" } },
+            {
+              seq: 2,
+              runId: "run-2",
+              type: "command",
+              payload: {
+                type: "user_message",
+                commandId: "cmd-2",
+                runId: "run-2",
+                input: {},
+              },
+              ts: "2026-06-27T00:00:00.000Z",
+            },
           ]),
       };
 
@@ -73,7 +110,11 @@ describe("WorkerCommandController", () => {
         1,
         25000
       );
-      expect(result.commands).toHaveLength(1);
+      expect(result.messages).toHaveLength(1);
+      expect(result.messages[0]).toMatchObject({
+        id: "cmd-2",
+        method: "run.start",
+      });
     });
   });
 

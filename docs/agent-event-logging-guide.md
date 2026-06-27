@@ -64,8 +64,8 @@ GET /api/v1/admin/runs/query?id=<runId>
 重点看 `RuntimeEventProcessor` 打的几类日志，现在都带 `runId/seq/source/eventType`：
 
 ```text
-publish envelope {"runId":"...","seq":3,"lastSeq":2,"type":"agui.event","payload":{...}}
-drop duplicate envelope {"runId":"...","seq":2,"lastSeq":2,"source":"runtime","eventType":"agui.event"}
+publish message {"runId":"...","seq":3,"lastSeq":2,"type":"agui.event","payload":{...}}
+drop duplicate message {"runId":"...","seq":2,"lastSeq":2,"source":"runtime","eventType":"agui.event"}
 seq gap detected {"runId":"...","expected":4,"got":6,"source":"runtime","eventType":"agui.event"}
 run status {"runId":"...","status":"finished"}
 ```
@@ -140,7 +140,7 @@ cat ~/.agework/logs/runtime/<conversationId>.worker.log | jq 'select(.eventType 
 
 1. 管理端时间线看这个 run 最后落在哪个 `eventType`，`run.status.*` 是不是按预期推进。
 2. 如果时间线里有 `worker.seq_gap` 或卡在某个 `agui.*` 事件不动，去 worker JSONL 按 `runId` 过滤，看 worker 是否真的发出了后续事件、有没有 `emit.retry`/`emit.failed`。
-3. 如果 worker 日志显示发出去了但管理端没收到，去 API 控制台搜这个 `runId`，看有没有 `drop duplicate envelope` 或异常报错。
+3. 如果 worker 日志显示发出去了但管理端没收到，去 API 控制台搜这个 `runId`，看有没有 `drop duplicate message` 或异常报错。
 4. 需要还原某条工具调用的具体参数/结果原文，开 `AGEWORK_AGENT_EVENT_TRACE_ENABLED` 后从 `.agui.jsonl` 里按 `toolCallId` 找。
 
 **怀疑事件丢失/乱序：**

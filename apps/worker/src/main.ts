@@ -1,36 +1,25 @@
-import {
-  ClaudeAgentAdapter,
-  CodexAgentAdapter,
-  resolveQuestion,
-  cancelQuestion,
-} from "@agework/adapters";
 import type {
-  AgentType,
-  AgentTraceEvent,
-  AgentTraceSink,
   CommandPayload,
-  Envelope,
+  RunChannelMessage,
   RunConfig,
   RunStatusPayload,
   AGUIEvent,
+  CommandResultPayload,
   RuntimeChannel,
 } from "@agework/shared/protocol";
+import { CommandLoop } from "./command-loop.js";
 import { IpcChannel } from "./ipc-channel.js";
 import { PersistentHttpClient } from "./persistent-http-client.js";
-import { RunRouter } from "./run-router.js";
+import { PersistentRunManager } from "./persistent-run-manager.js";
 import {
   errorDetails,
-  registerWorkerRunLog,
   setWorkerLogContext,
   setWorkerLogFilePath,
-  unregisterWorkerRunLog,
   workerLog,
 } from "./worker-log.js";
-import {
-  AgentEventTraceRegistry,
-  AgentEventTraceWriter,
-} from "./agent-event-trace.js";
-import { resolveAgentCliPaths } from "./agent-cli-paths.js";
+import { AgentEventTraceWriter } from "./agent-event-trace.js";
+import { createAdapterAgentDriver } from "./adapter-agent-driver.js";
+import { toAgentRunInput } from "./agent-driver.js";
 
 const COMMAND_LONG_POLL_MS = 25_000;
 const COMMAND_EMPTY_RETRY_DELAY_MS = 1_000;
@@ -73,10 +62,14 @@ async function runSingle() {
     void transport.emit(msg);
   });
 
-  // Construct adapter based on config.agentProviderConfig.agentType
-  const adapter = createAdapter(config, trace.sink(), (_threadId, payload) => {
-    void emitStatus(transport, runId, payload);
-  });
+  // Construct driver based on config.agentProviderConfig.agentType.
+  const driver = createAdapterAgentDriver(
+    config,
+    trace.sink(),
+    (_threadId, payload) => {
+      void emitStatus(transport, runId, payload);
+    }
+  );
 
   // Emit "running" status
   await emitStatus(transport, runId, { status: "running" });
@@ -88,8 +81,8 @@ async function runSingle() {
   let finalizePromise: Promise<void> | undefined;
 
   // Subscribe to command messages
-  transport.subscribeCommands((envelope: Envelope<CommandPayload>) => {
-    const command = envelope.payload;
+  transport.subscribeCommands((message: RunChannelMessage<CommandPayload>) => {
+    const command = message.payload;
     if (processedCommands.has(command.commandId)) return;
     processedCommands.add(command.commandId);
     workerLog("single worker received command", {
@@ -103,17 +96,36 @@ async function runSingle() {
     switch (command.type) {
       case "cancel":
         stopRequested = true;
-        adapter.interrupt();
-        cancelQuestion(conversationId);
+        void driver.cancel(conversationId).catch((err) => {
+          const error = String(err);
+          emitCommandTrace(transport, runId, "failed", command, error);
+        });
         emitCommandTrace(transport, runId, "handled", command);
+        emitCommandResult(transport, runId, command, "ok");
         break;
       case "interrupt":
-        adapter.interrupt();
+        void driver.interrupt().catch((err) => {
+          const error = String(err);
+          emitCommandTrace(transport, runId, "failed", command, error);
+        });
         emitCommandTrace(transport, runId, "handled", command);
+        emitCommandResult(transport, runId, command, "ok");
         break;
       case "approval_resolved":
-        resolveQuestion(command.conversationId, command.answers);
-        emitCommandTrace(transport, runId, "handled", command);
+        void Promise.resolve(driver.resolveControl(command)).then((resolved) => {
+          if (resolved) {
+            emitCommandTrace(transport, runId, "handled", command);
+            emitCommandResult(transport, runId, command, "ok");
+          } else {
+            const error = "no pending control matched";
+            emitCommandTrace(transport, runId, "failed", command, error);
+            emitCommandResult(transport, runId, command, "error", error);
+          }
+        }).catch((err) => {
+          const error = String(err);
+          emitCommandTrace(transport, runId, "failed", command, error);
+          emitCommandResult(transport, runId, command, "error", error);
+        });
         break;
       case "user_message":
         // 仅 persistent 模式处理；single 模式每个 run 独立 worker，无复用
@@ -121,9 +133,10 @@ async function runSingle() {
     }
   });
 
-  // Run the adapter
-  adapter.run(config.input as Parameters<typeof adapter.run>[0]).subscribe({
+  // Run the driver
+  driver.run(toAgentRunInput(config.input, conversationId)).subscribe({
     next: (event: unknown) => {
+      trace.writeAgui(event);
       transport
         .emit({
           runId,
@@ -168,7 +181,7 @@ async function runSingle() {
     forceExitTimer.unref();
 
     try {
-      await adapter.interrupt();
+      await driver.interrupt();
     } catch (err) {
       workerLog("single worker interrupt before exit failed", {
         runId,
@@ -220,66 +233,22 @@ async function runSingle() {
   }
 }
 
-type Adapter = ClaudeAgentAdapter | CodexAgentAdapter;
-
 async function runPersistent() {
   const client = new PersistentHttpClient();
-  // 按 agentType 缓存 adapter：同一持久容器可能承接分属 claude / codex 的多个会话，
-  // 各自注入不同的 apiKey/model/baseUrl，必须独立实例，不可跨 agentType 复用。
-  const adapters = new Map<AgentType, Adapter>();
-  const conversationIdToRun = new Map<string, string>();
-  // 反向索引，run 完成时 O(1) 定位要删除的 conversationId，避免线性扫描
-  const runToConversationId = new Map<string, string>();
-  const traces = new AgentEventTraceRegistry();
-  traces.setEmitter((runId, msg) => {
-    client.emit(runId, msg).catch((err) => {
-      workerLog("emit trace failed", { runId, ...errorDetails(err) }, "error");
-    });
-  });
+  const runManager = new PersistentRunManager(client);
+  const commandLoop = new CommandLoop(
+    client,
+    (command) => runManager.handle(command),
+    {
+      waitMs: COMMAND_LONG_POLL_MS,
+      emptyRetryDelayMs: COMMAND_EMPTY_RETRY_DELAY_MS,
+    }
+  );
   workerLog("persistent worker started", {
     ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
     runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
   });
 
-  const mux = new RunRouter(
-    (runId, event) => {
-      client.emit(runId, { runId, seq: 0, type: "agui.event", payload: event as AGUIEvent, ts: "" }).catch((err) => {
-        workerLog("emit agui event failed", { runId, ...errorDetails(err) }, "error");
-      });
-    },
-    (runId, payload) => {
-      workerLog("multiplexed run completed", {
-        runId,
-        status: payload.status,
-        ...("error" in payload ? { error: payload.error } : {}),
-      }, payload.status === "error" ? "error" : "info");
-      return client
-        .emit(runId, { runId, seq: 0, type: "run.status", payload: payload as RunStatusPayload, ts: "" })
-        .catch((err) => {
-          workerLog("failed to emit terminal run status", {
-            runId,
-            status: payload.status,
-            source: "worker",
-            eventType: "status.terminal_failed",
-            ...errorDetails(err),
-          }, "error");
-        })
-        .finally(() => {
-          const conversationId = runToConversationId.get(runId);
-          if (conversationId) {
-            runToConversationId.delete(runId);
-            conversationIdToRun.delete(conversationId);
-          }
-          traces.delete(runId);
-          unregisterWorkerRunLog(runId);
-          client.cleanup(runId);
-        });
-    }
-  );
-
-  const processedCommands = new Set<string>();
-  let pollIterations = 0;
-  let shuttingDown = false;
   let shutdownPromise: Promise<void> | undefined;
 
   const requestShutdown = (signal: NodeJS.Signals) => {
@@ -294,238 +263,25 @@ async function runPersistent() {
   process.once("SIGTERM", requestShutdown);
   process.once("SIGINT", requestShutdown);
 
-  for (;;) {
-    if (shuttingDown) break;
-    const commands = await client.pollCommands(COMMAND_LONG_POLL_MS);
-    if (shuttingDown) break;
-    // 每 100 轮清理一次已处理命令集合，防止长期运行时内存泄漏
-    // （pollCommands 基于 afterSeq 去重，processedCommands 仅作防御性检查）
-    if (++pollIterations >= 100) {
-      processedCommands.clear();
-      pollIterations = 0;
-    }
-    for (const envelope of commands) {
-      if (shuttingDown) break;
-      const command = envelope.payload;
-      if (processedCommands.has(command.commandId)) continue;
-      processedCommands.add(command.commandId);
-
-      if (command.type === "user_message") {
-        workerLog("processing user_message command", {
-          runId: command.runId,
-          commandId: command.commandId,
-        });
-        emitPersistentCommandTrace(client, command.runId, "received", command);
-        let config: RunConfig;
-        try {
-          config = await client.fetchRunConfig(command.runId);
-        } catch (err) {
-          workerLog("failed to fetch run config", {
-            runId: command.runId,
-            ...errorDetails(err),
-          }, "error");
-          emitPersistentCommandTrace(client, command.runId, "failed", command, String(err));
-          client.emit(command.runId, {
-            runId: command.runId, seq: 0, type: "run.status",
-            payload: { status: "error", error: `Failed to fetch run config: ${String(err)}` },
-            ts: new Date().toISOString(),
-          }).catch((emitErr) => {
-            workerLog("emit run config failure status failed", { runId: command.runId, ...errorDetails(emitErr) }, "error");
-          });
-          continue;
-        }
-        registerWorkerRunLog({
-          runId: config.runId,
-          conversationId: config.conversationId,
-          filePath: config.workerLogFilePath,
-        });
-        workerLog("persistent run config loaded", {
-          runId: config.runId,
-          conversationId: config.conversationId,
-          workspaceId: config.workspaceId,
-          agentType: config.agentProviderConfig.agentType,
-          runtimePath: config.runtimePath,
-          agentProviderSource: config.agentProviderConfig.source,
-        });
-        traces.create(config.agentEventTrace);
-        const agentType = config.agentProviderConfig.agentType as AgentType;
-        if (!adapters.has(agentType)) {
-          workerLog("creating adapter", {
-            runId: command.runId,
-            agentType: config.agentProviderConfig.agentType,
-            agentProviderSource: config.agentProviderConfig.source,
-            runtimePath: config.runtimePath,
-          });
-          const adapter = createAdapter(config, createRegistryTraceSink(traces), (aguiThreadId, payload) => {
-            // AG-UI 边界：adapter 回调的 threadId 值即 AgeWork conversationId
-            const runId = conversationIdToRun.get(aguiThreadId);
-            if (runId) {
-              client.emit(runId, { runId, seq: 0, type: "run.status", payload, ts: "" }).catch((err) => {
-                workerLog("emit adapter status failed", { runId, ...errorDetails(err) }, "error");
-              });
-            }
-            else workerLog("adapter status callback had no run mapping", {
-              aguiThreadId,
-              status: payload.status,
-            }, "warn");
-          });
-          adapters.set(agentType, adapter);
-          mux.setAdapter(agentType, adapter);
-        }
-        conversationIdToRun.set(config.conversationId, command.runId);
-        runToConversationId.set(command.runId, config.conversationId);
-        workerLog("starting multiplexed run", {
-          runId: command.runId,
-          conversationId: config.conversationId,
-        });
-        mux.startRun(command.runId, agentType, config.input as { threadId: string } & Record<string, unknown>);
-        emitPersistentCommandTrace(client, command.runId, "handled", command);
-      } else if (command.type === "cancel") {
-        workerLog("processing cancel command", {
-          runId: command.runId,
-          conversationId: command.conversationId,
-        });
-        emitPersistentCommandTrace(client, command.runId, "received", command);
-        if (command.runId && command.conversationId) {
-          const hasActiveRun = mux.has(command.runId);
-          if (hasActiveRun) {
-            cancelQuestion(command.conversationId);
-          }
-          void mux.cancelRun(command.runId, command.conversationId).then((cancelled) => {
-            emitPersistentCommandTrace(
-              client,
-              command.runId,
-              cancelled ? "handled" : "failed",
-              command,
-              cancelled ? undefined : "no active run matched"
-            );
-            if (!cancelled) {
-              workerLog("cancel command did not match an active run", {
-                runId: command.runId,
-                conversationId: command.conversationId,
-              }, "warn");
-            }
-          }).catch((err) => {
-            emitPersistentCommandTrace(client, command.runId, "failed", command, String(err));
-            workerLog("cancel command failed", {
-              runId: command.runId,
-              conversationId: command.conversationId,
-              ...errorDetails(err),
-            }, "error");
-          });
-        } else {
-          emitPersistentCommandTrace(client, command.runId, "failed", command, "missing runId or conversationId");
-          workerLog("cancel command missing runId or conversationId", {
-            runId: command.runId,
-            conversationId: command.conversationId,
-          }, "warn");
-        }
-      } else if (command.type === "approval_resolved") {
-        workerLog("processing approval_resolved command", {
-          conversationId: command.conversationId,
-          answerKeys: Object.keys(command.answers ?? {}),
-        });
-        const resolvedRunId = conversationIdToRun.get(command.conversationId);
-        if (resolvedRunId) {
-          emitPersistentCommandTrace(client, resolvedRunId, "received", command);
-        }
-        resolveQuestion(command.conversationId, command.answers);
-        if (resolvedRunId) {
-          emitPersistentCommandTrace(client, resolvedRunId, "handled", command);
-        }
-      }
-    }
-    if (commands.length === 0) {
-      await sleep(COMMAND_EMPTY_RETRY_DELAY_MS);
-    }
-  }
+  await commandLoop.run();
 
   async function shutdown(signal: NodeJS.Signals) {
-    shuttingDown = true;
-
-    const activeRuns = mux.activeRuns();
-    workerLog("persistent worker received shutdown signal", {
-      signal,
-      activeRuns: activeRuns.map((run) => ({
-        runId: run.runId,
-        agentType: run.agentType,
-        aguiThreadId: run.aguiThreadId,
-      })),
-    }, activeRuns.length > 0 ? "warn" : "info");
-
-    for (const run of activeRuns) {
-      cancelQuestion(run.aguiThreadId);
-    }
+    commandLoop.stop();
 
     const forceExitTimer = setTimeout(() => {
       workerLog("persistent worker shutdown grace period exceeded", {
         signal,
-        activeRunCount: mux.size(),
+        activeRunCount: runManager.size(),
       }, "error");
       process.exit(1);
     }, SHUTDOWN_GRACE_MS);
     forceExitTimer.unref();
 
-    await mux.shutdownAll({
-      status: "error",
-      error: `worker received ${signal}`,
-    });
+    await runManager.shutdown(signal);
 
     clearTimeout(forceExitTimer);
     process.exit(0);
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function createAdapter(
-  config: RunConfig,
-  trace: AgentTraceSink | undefined,
-  emitRunStatusForAguiThread: (aguiThreadId: string, payload: RunStatusPayload) => void
-) {
-  const { agentProviderConfig, runtimePath } = config;
-  const { claudeExecutablePath, codexExecutablePath } = resolveAgentCliPaths(process.env);
-
-  const pendingActionSink = (event: {
-    threadId: string;
-    pendingAction: "question" | null;
-  }) => {
-    const payload: RunStatusPayload = event.pendingAction
-      ? { status: "requires_action", pendingAction: event.pendingAction }
-      : { status: "running", pendingAction: null };
-    // AG-UI 边界：event.threadId 值即 AgeWork conversationId。
-    emitRunStatusForAguiThread(event.threadId, payload);
-  };
-
-  // 系统配置不带任何配置字段；自定义配置透传 baseUrl/apiKey/model/extraConfig 给两个 adapter。
-  const credentials = agentProviderConfig.source === "system"
-    ? {}
-    : {
-        apiKey: agentProviderConfig.apiKey,
-        model: agentProviderConfig.model,
-        baseUrl: agentProviderConfig.baseUrl,
-        extraConfig: agentProviderConfig.extraConfig,
-      };
-
-  if (agentProviderConfig.agentType === "claude") {
-    return new ClaudeAgentAdapter({
-      ...credentials,
-      cwd: runtimePath,
-      isEnvironmentConfig: agentProviderConfig.source === "system",
-      pendingActionSink,
-      trace,
-      ...(claudeExecutablePath ? { pathToClaudeCodeExecutable: claudeExecutablePath } : {}),
-    });
-  }
-
-  return new CodexAgentAdapter({
-    ...credentials,
-    cwd: runtimePath,
-    trace,
-    ...(codexExecutablePath ? { codexPathOverride: codexExecutablePath } : {}),
-  });
 }
 
 function emitStatus(
@@ -566,48 +322,27 @@ function emitCommandTrace(
     .catch(() => {});
 }
 
-/** persistent worker 版：用 client.emit(runId, msg) 上报命令 trace。 */
-function emitPersistentCommandTrace(
-  client: PersistentHttpClient,
+function emitCommandResult(
+  transport: RuntimeChannel,
   runId: string,
-  phase: "received" | "handled" | "failed",
   command: CommandPayload,
+  status: CommandResultPayload["status"],
   error?: string
 ) {
-  void client
-    .emit(runId, {
+  transport
+    .emit({
       runId,
       seq: 0,
-      type: "command.trace",
+      type: "command.result",
       payload: {
-        phase,
         commandId: command.commandId,
         commandType: command.type,
+        status,
         ...(error ? { error } : {}),
       },
       ts: "",
     })
     .catch(() => {});
-}
-
-function createRegistryTraceSink(
-  traces: AgentEventTraceRegistry
-): AgentTraceSink {
-  return (event: AgentTraceEvent) => {
-    const runId = traceEventRunId(event);
-    if (!runId) return;
-    traces.get(runId)?.writeSdkRaw(event);
-  };
-}
-
-function traceEventRunId(event: AgentTraceEvent): string | undefined {
-  if (event.runId) return event.runId;
-  const payload = event.payload;
-  if (payload && typeof payload === "object" && "runId" in payload) {
-    const runId = (payload as { runId?: unknown }).runId;
-    if (typeof runId === "string") return runId;
-  }
-  return undefined;
 }
 
 main().catch((err) => {

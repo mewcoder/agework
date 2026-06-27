@@ -681,7 +681,7 @@ V0/V1 两套并存（V0 是历史协议，V1 是 agent-server 新协议）。
 | Agent step | `AbstractAgent.run(input) → Observable<AG-UI Event>` |
 | Workspace 抽象 | `RuntimeProvider`（local / sandbox） |
 | ACP session resume | adapter `rememberSession` + TTL/LRU |
-| Envelope 有序投递 | `Envelope{runId,seq,ts}` + 去重 + 顺序校验 |
+| Envelope 有序投递 | `RunChannelMessage{runId,seq,ts}` + 去重 + 顺序校验 |
 | Approval / confirmation | `pendingUserAction` + `approval_resolved` control |
 | 心跳 / 孤儿恢复 | `heartbeat` + `HeartbeatWatchdog` + `RuntimeResource` |
 

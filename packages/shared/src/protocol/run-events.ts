@@ -17,6 +17,7 @@ export type CoreRunEventType =
   | "permission.resolved"
   | "command.sent"
   | "command.handled"
+  | "command.result"
   | "command.failed"
   | "system.issue";
 

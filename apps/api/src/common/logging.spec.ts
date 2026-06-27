@@ -3,7 +3,7 @@ import {
   errorLogFields,
   safeLogJson,
   redactLogValue,
-  summarizeEnvelopePayload,
+  summarizeMessagePayload,
   resolveNestLogLevels,
 } from "./logging";
 
@@ -83,10 +83,10 @@ describe("redactLogValue", () => {
   });
 });
 
-describe("summarizeEnvelopePayload", () => {
+describe("summarizeMessagePayload", () => {
   it("extracts known fields from object payload", () => {
     expect(
-      summarizeEnvelopePayload({
+      summarizeMessagePayload({
         type: "run.status",
         status: "running",
         name: "test",
@@ -102,9 +102,9 @@ describe("summarizeEnvelopePayload", () => {
   });
 
   it("wraps non-object payload", () => {
-    expect(summarizeEnvelopePayload("hello")).toEqual({ value: "hello" });
-    expect(summarizeEnvelopePayload(null)).toEqual({ value: "null" });
-    expect(summarizeEnvelopePayload(42)).toEqual({ value: "42" });
+    expect(summarizeMessagePayload("hello")).toEqual({ value: "hello" });
+    expect(summarizeMessagePayload(null)).toEqual({ value: "null" });
+    expect(summarizeMessagePayload(42)).toEqual({ value: "42" });
   });
 });
 

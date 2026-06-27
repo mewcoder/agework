@@ -1,7 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type {
-  Envelope,
+  RunChannelMessage,
   RunStatusPayload,
+  CommandResultPayload,
   CommandTracePayload,
   RecordRunEventInput,
   RunUsage,
@@ -19,7 +20,7 @@ import { swallow } from "../../common/swallow";
 import {
   errorLogFields,
   safeLogJson,
-  summarizeEnvelopePayload,
+  summarizeMessagePayload,
 } from "../../common/logging";
 import { AgentEventTraceWriter } from "../events/agent-event-trace.writer";
 import { RunEventService } from "../events/run-event.service";
@@ -31,8 +32,8 @@ const CHUNK_SAVE_INTERVAL = 20;
 const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
-export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
-  private readonly logger = new Logger(RunEnvelopeProcessor.name);
+export class WorkerEventProcessor implements RunTimeoutErrorSink {
+  private readonly logger = new Logger(WorkerEventProcessor.name);
   private readonly lastSeqMap = new Map<string, number>();
   private readonly chunkCounters = new Map<string, number>();
   /** 防止同一 run 被并发处理多次终态 */
@@ -50,13 +51,13 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     private readonly runDriver: RunDriver
   ) {}
 
-  async publish(envelope: Envelope<unknown>): Promise<void> {
-    const { runId, seq } = envelope;
+  async publish(message: RunChannelMessage<unknown>): Promise<void> {
+    const { runId, seq } = message;
     if (
-      envelope.type === "run.status" &&
+      message.type === "run.status" &&
       this.shouldIgnoreRunStatus(
         runId,
-        envelope.payload as RunStatusPayload
+        message.payload as RunStatusPayload
       )
     ) {
       return;
@@ -64,24 +65,24 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
 
     const lastSeq = this.lastSeqMap.get(runId) ?? 0;
     this.logger.debug(
-      `publish envelope ${safeLogJson({
+      `publish message ${safeLogJson({
         runId,
         seq,
         lastSeq,
-        type: envelope.type,
-        payload: summarizeEnvelopePayload(envelope.payload),
+        type: message.type,
+        payload: summarizeMessagePayload(message.payload),
       })}`
     );
 
     // Dedup: drop if seq <= lastSeq
     if (seq <= lastSeq) {
       this.logger.warn(
-        `drop duplicate envelope ${safeLogJson({
+        `drop duplicate message ${safeLogJson({
           runId,
           seq,
           lastSeq,
           origin: "worker",
-          type: envelope.type,
+          type: message.type,
         })}`
       );
       return;
@@ -94,7 +95,7 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
           expected,
           got: seq,
           origin: "worker",
-          type: envelope.type,
+          type: message.type,
         })}`
       );
       // gap 只 warn 不可在管理端追溯；落一条摘要事件，使其在 run detail 中可见。
@@ -103,27 +104,33 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
           runId,
           expected,
           got: seq,
-          envelopeType: envelope.type,
+          messageType: message.type,
         }),
         `record worker seq gap for run ${runId}`
       );
     }
     this.lastSeqMap.set(runId, seq);
 
-    switch (envelope.type) {
+    switch (message.type) {
       case "run.status":
-        await this.handleRunStatus(runId, envelope.payload as RunStatusPayload);
+        await this.handleRunStatus(runId, message.payload as RunStatusPayload);
         break;
       case "agui.event":
-        await this.handleAgUiEvent(runId, envelope.payload);
+        await this.handleAgUiEvent(runId, message.payload);
         break;
       case "sdk.raw":
-        await this.handleSdkRawEvent(runId, envelope.payload);
+        await this.handleSdkRawEvent(runId, message.payload);
         break;
       case "command.trace":
         this.recordCommandTraceEvent(
           runId,
-          envelope.payload as CommandTracePayload
+          message.payload as CommandTracePayload
+        );
+        break;
+      case "command.result":
+        this.recordCommandResultEvent(
+          runId,
+          message.payload as CommandResultPayload
         );
         break;
     }
@@ -255,7 +262,9 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
       );
     }
     this.recordAgUiTraceEvent(runId, eventType, evt);
-    this.eventTraceWriter.writeAgui(handle.agentEventTrace, event);
+    if (!handle.agentEventTrace?.aguiRuntimeFilePath) {
+      this.eventTraceWriter.writeAgui(handle.agentEventTrace, event);
+    }
     handle.aggregator.handle(evt as { type: string; [key: string]: unknown });
 
     // Chunk-based save throttle（兼 resume 快照推送节流）
@@ -417,6 +426,16 @@ export class RunEnvelopeProcessor implements RunTimeoutErrorSink {
     this.recordRunEvent(
       this.runEvents.fromCommandTrace(runId, payload),
       `record command trace for run ${runId}`
+    );
+  }
+
+  private recordCommandResultEvent(
+    runId: string,
+    payload: CommandResultPayload
+  ): void {
+    this.recordRunEvent(
+      this.runEvents.fromCommandResult(runId, payload),
+      `record command result for run ${runId}`
     );
   }
 

@@ -328,7 +328,7 @@ refs
 
 ### 5.5 为什么 `runSeq` 和 `transportSeq` 分开
 
-当前 `seq` 来自 worker envelope。它只能表达上行/下行 transport 顺序，不能覆盖 API 内部事件，例如：
+当前 `seq` 来自 worker message。它只能表达上行/下行 transport 顺序，不能覆盖 API 内部事件，例如：
 
 - `run.created`
 - `runtime.status_changed`
@@ -340,7 +340,7 @@ refs
 
 ```text
 runSeq       = AgeWork event log order, all RunEvent records have it
-transportSeq = transport envelope seq, only Raw JSONL transport records have it
+transportSeq = transport message seq, only Raw JSONL transport records have it
 ```
 
 ---
@@ -651,7 +651,7 @@ runs/{runId}/raw/system.jsonl
 | 某次 tool call 的完整原始过程 | `runId + chainId=toolCallId` |
 | 某条 message 的 stream/chunk | `runId + targetType=message + targetId=messageId` |
 | 某个 control command 的 worker 回执 | `runId + chainId=commandId` |
-| 某个 transport envelope 的原文 | `runId ` |
+| 某个 transport message 的原文 | `runId ` |
 | 一段时间内的 SDK 原始事件 | `runId + channel=sdk + rawSeq range` |
 
 只有在两个场景才需要额外做“精确定位优化”：
@@ -678,7 +678,7 @@ runs/{runId}/raw/system.jsonl
 | `RunEventRecorder` | 应用服务，统一校验、脱敏、分配 `runSeq`、落库 |
 | `RunEventStore` | driven port，负责持久化 `RunEvent` |
 | `RawJsonlWriter` | driven adapter/port，负责原始流水 |
-| `RunEventNormalizer` | adapter，把 AG-UI/SDK/worker envelope 转成 `RunFact` |
+| `RunEventNormalizer` | adapter，把 AG-UI/SDK/worker message 转成 `RunFact` |
 
 实现形态：
 
@@ -863,7 +863,7 @@ User submits message
 ### 12.1 上行 AG-UI event
 
 ```text
-Envelope(type="agui.event"=N)
+RunChannelMessage(type="agui.event"=N)
   -> RawJsonlWriter.appendAgui(event) when raw AG-UI retention is enabled
   -> RunEventNormalizer.toFacts(event)
        only emits normalized key facts:
@@ -877,7 +877,7 @@ Envelope(type="agui.event"=N)
 ### 12.2 上行 SDK raw
 
 ```text
-Envelope(type="sdk.raw"=N)
+RunChannelMessage(type="sdk.raw"=N)
   -> RawJsonlWriter.appendSdk(data)
   -> if error or important boundary, RunEventRecorder.append({
        type: "system.issue",
@@ -894,7 +894,7 @@ Envelope(type="sdk.raw"=N)
 ### 12.3 Run status
 
 ```text
-Envelope(type="run.status"=N)
+RunChannelMessage(type="run.status"=N)
   -> RunEventRecorder.append({
        type: "run.status_changed",
        origin: "worker",
@@ -1205,7 +1205,7 @@ Claude/Codex SDK
       v
 Adapter / Worker
       |
-      | Envelope(runId, type, data)
+      | RunChannelMessage(runId, type, data)
       v
 RuntimeEventProcessor
       |

@@ -1,4 +1,4 @@
-import type { Envelope } from "@agework/shared/protocol";
+import type { RunChannelMessage } from "@agework/shared/protocol";
 
 /**
  * runtime 侧 run 事件/通知出口：runtime provider 把 worker 上行事件转发给 run，
@@ -10,7 +10,7 @@ import type { Envelope } from "@agework/shared/protocol";
  */
 export interface RunEventReceiver {
   /** 转发上行 event（local 模式 IPC 入口；sandbox 模式直走 worker-host）。 */
-  sendEvent(runId: string, envelope: Envelope<unknown>): Promise<void>;
+  sendEvent(runId: string, message: RunChannelMessage<unknown>): Promise<void>;
   /**
    * 通知 run：worker 异常（进程崩溃 / 心跳超时 / sandbox 创建失败等）。
    * run 自行判断当前状态并决定是否转为 error 终态。

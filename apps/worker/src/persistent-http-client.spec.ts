@@ -17,7 +17,24 @@ describe("PersistentHttpClient", () => {
   it("polls the workspace commands endpoint with afterSeq", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ commands: [{ seq: 3, payload: { type: "user_message", runId: "run-1" } }] }),
+      json: async () => ({
+        messages: [
+          {
+            jsonrpc: "2.0",
+            id: "cmd-3",
+            method: "run.start",
+            params: {
+              runId: "run-1",
+              input: { text: "hi" },
+            },
+            meta: {
+              runId: "run-1",
+              seq: 3,
+              ts: "2026-06-27T00:00:00.000Z",
+            },
+          },
+        ],
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
@@ -28,11 +45,65 @@ describe("PersistentHttpClient", () => {
       "http://api/worker/owners/ws-1/commands?afterSeq=0",
       expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
     );
-    expect(commands[0].payload).toMatchObject({ type: "user_message", runId: "run-1" });
+    expect(commands[0].payload).toMatchObject({
+      type: "user_message",
+      commandId: "cmd-3",
+      runId: "run-1",
+      input: { text: "hi" },
+    });
     // 下一次 poll 用更新后的 afterSeq
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
       "http://api/worker/owners/ws-1/commands?afterSeq=3",
+      expect.anything()
+    );
+  });
+
+  it("accepts JSON-RPC messages from the command poll endpoint", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        messages: [
+          {
+            jsonrpc: "2.0",
+            id: "cmd-1",
+            method: "run.cancel",
+            params: {
+              runId: "run-1",
+              conversationId: "conv-1",
+            },
+            meta: {
+              runId: "run-1",
+              seq: 4,
+              ts: "2026-06-27T00:00:00.000Z",
+            },
+          },
+        ],
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new PersistentHttpClient();
+
+    const commands = await client.pollCommands();
+
+    expect(commands).toEqual([
+      {
+        runId: "run-1",
+        seq: 4,
+        type: "command",
+        payload: {
+          type: "cancel",
+          commandId: "cmd-1",
+          runId: "run-1",
+          conversationId: "conv-1",
+        },
+        ts: "2026-06-27T00:00:00.000Z",
+      },
+    ]);
+
+    await client.pollCommands();
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      "http://api/worker/owners/ws-1/commands?afterSeq=4",
       expect.anything()
     );
   });
@@ -57,7 +128,7 @@ describe("PersistentHttpClient", () => {
   it("adds waitMs when long-polling commands", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ commands: [] }),
+      json: async () => ({ messages: [] }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new PersistentHttpClient();
@@ -87,6 +158,54 @@ describe("PersistentHttpClient", () => {
       "http://api/worker/runs/run-1/events",
       expect.objectContaining({ method: "POST" })
     );
+    expect(
+      JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string)
+    ).toMatchObject({
+      jsonrpc: "2.0",
+      method: "run.aguiEvent",
+      params: {
+        runId: "run-1",
+        event: { type: "RAW", event: {} },
+      },
+      meta: {
+        runId: "run-1",
+        seq: 1,
+      },
+    });
+  });
+
+  it("emits command results as JSON-RPC responses", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new PersistentHttpClient();
+
+    await client.emit("run-1", {
+      runId: "run-1",
+      seq: 0,
+      type: "command.result",
+      payload: {
+        commandId: "cmd-1",
+        commandType: "cancel",
+        status: "ok",
+      },
+      ts: "",
+    } as unknown as UpstreamMessage);
+
+    expect(
+      JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string)
+    ).toMatchObject({
+      jsonrpc: "2.0",
+      id: "cmd-1",
+      result: {
+        ok: true,
+        runId: "run-1",
+        commandType: "cancel",
+      },
+      meta: {
+        runId: "run-1",
+        seq: 1,
+      },
+    });
   });
 
   it("retries emit on transient network failure", async () => {
@@ -184,15 +303,15 @@ describe("PersistentHttpClient", () => {
       runId: "run-1", seq: 0, type: "agui.event", payload: { type: "RAW" }, ts: "",
     } as unknown as UpstreamMessage;
     const seqInLastCall = () =>
-      (fetchMock.mock.lastCall?.[1]?.body as string | undefined)?.match(/"seq":(\d+)/)?.[1];
+      JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string).meta.seq;
 
     await client.emit("run-1", msg); // seq 1
     await client.emit("run-1", msg); // seq 2
-    expect(seqInLastCall()).toBe("2");
+    expect(seqInLastCall()).toBe(2);
 
     client.cleanup("run-1");
 
     await client.emit("run-1", msg); // seq 重新从 1 开始
-    expect(seqInLastCall()).toBe("1");
+    expect(seqInLastCall()).toBe(1);
   });
 });

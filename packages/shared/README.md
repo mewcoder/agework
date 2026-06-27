@@ -7,7 +7,7 @@
 | 入口 | 内容 | 允许的消费者 |
 | --- | --- | --- |
 | `@agework/shared` | 三端共享字面量类型（AgentType、RunStatus） | web / api / worker / adapters |
-| `@agework/shared/protocol` | api↔worker 运行时协议（Envelope、RuntimeTransport 等） | api / worker / adapters |
+| `@agework/shared/protocol` | api↔worker 运行时协议（JSON-RPC、RunChannelMessage、RuntimeChannel 等） | api / worker / adapters |
 | `@agework/shared/api` | web↔api HTTP wire 契约（请求/响应形状） | web / api |
 
 ## 为什么必须纯类型

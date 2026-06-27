@@ -3,7 +3,7 @@ import { Module, OnModuleInit } from "@nestjs/common";
 // core
 import { RunRepository } from "./run.repository";
 import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
-import { RunEnvelopeProcessor } from "./worker/run-envelope.processor";
+import { WorkerEventProcessor } from "./worker/worker-event.processor";
 import { RunStatusService } from "./lifecycle/run-status.service";
 import { AgentEventTraceWriter } from "./events/agent-event-trace.writer";
 import { RunEventRepository } from "./events/run-event.repository";
@@ -44,7 +44,7 @@ import { ModelProviderModule } from "../model-providers/model-provider.module";
   providers: [
     RunRepository,
     ActiveRunRegistry,
-    RunEnvelopeProcessor,
+    WorkerEventProcessor,
     AgentEventTraceWriter,
     RunEventRepository,
     RunEventService,
@@ -66,7 +66,7 @@ export class RunsModule implements OnModuleInit {
     private readonly accessService: WorkerAccessService,
     private readonly workerUpstream: WorkerUpstreamRegistry,
     private readonly activeRuns: ActiveRunRegistry,
-    private readonly runEnvelopeProcessor: RunEnvelopeProcessor,
+    private readonly workerEventProcessor: WorkerEventProcessor,
     private readonly workerEvents: WorkerEventReceiverAdapter
   ) {}
 
@@ -77,7 +77,7 @@ export class RunsModule implements OnModuleInit {
     this.providerRegistry.setAccessPort(this.accessService);
     this.commandQueue.setCommandSentRecorder(this.workerEvents);
     this.workerUpstream.setReceiver(this.workerEvents);
-    this.activeRuns.setTimeoutErrorSink(this.runEnvelopeProcessor);
+    this.activeRuns.setTimeoutErrorSink(this.workerEventProcessor);
     await this.runRecovery.recoverOrphanRuns();
   }
 }

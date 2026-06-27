@@ -5,6 +5,7 @@
   "exports": {
     ".": "./src/common/index.ts",
     "./protocol": "./src/protocol/index.ts",
+    "./protocol/rpc": "./src/protocol/rpc.ts",
     "./api": "./src/api/index.ts"
   },
   "scripts": {

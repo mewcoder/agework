@@ -1,4 +1,5 @@
-import type { Envelope } from "./envelope";
+import { describe, expect, it } from "vitest";
+import type { RunChannelMessage } from "./run-channel-message";
 import type {
   RunConfig,
   RuntimeChannel,
@@ -31,7 +32,7 @@ describe("RuntimeChannel contract", () => {
 
   it("a RuntimeChannel implementation can fetch config, emit upstream messages and subscribe commands", async () => {
     const sent: UpstreamMessage[] = [];
-    let commandHandler: ((c: Envelope<CommandPayload>) => void) | undefined;
+    let commandHandler: ((c: RunChannelMessage<CommandPayload>) => void) | undefined;
 
     const transport: RuntimeChannel = {
       fetchRunConfig: () =>

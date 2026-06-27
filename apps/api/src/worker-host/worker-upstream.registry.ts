@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
-import type { Envelope } from "@agework/shared/protocol";
+import type { RunChannelMessage } from "@agework/shared/protocol";
 
 /**
  * worker 上行事件的接收端：worker 经 HTTP `POST /worker/runs/:id/events`
- * 上报的 envelope（run.status / agui.event / sdk.raw）需要喂给拥有 run
+ * 上报的 message（run.status / agui.event / sdk.raw）需要喂给拥有 run
  * 生命周期的一方（run 层）。由 run 在启动时注册实现，从而保持 worker-host → run 零依赖。
  */
 export interface WorkerUpstreamReceiver {
-  sendEvent(runId: string, envelope: Envelope): Promise<void>;
+  sendEvent(runId: string, message: RunChannelMessage): Promise<void>;
 }
 
 /**
@@ -22,9 +22,9 @@ export class WorkerUpstreamRegistry {
     this.receiver = receiver;
   }
 
-  sendEvent(runId: string, envelope: Envelope): Promise<void> {
+  sendEvent(runId: string, message: RunChannelMessage): Promise<void> {
     return this.receiver
-      ? this.receiver.sendEvent(runId, envelope)
+      ? this.receiver.sendEvent(runId, message)
       : Promise.resolve();
   }
 }

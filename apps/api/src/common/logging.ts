@@ -27,7 +27,7 @@ export function redactLogValue(value: unknown): unknown {
   return redactValue(value, "", new WeakSet<object>());
 }
 
-export function summarizeEnvelopePayload(payload: unknown): Record<string, unknown> {
+export function summarizeMessagePayload(payload: unknown): Record<string, unknown> {
   if (!payload || typeof payload !== "object") {
     return { value: String(payload) };
   }

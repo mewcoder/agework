@@ -1,45 +1,57 @@
 import { it, expect, vi } from "vitest";
 import { Observable } from "rxjs";
 import { RunRouter } from "./run-router";
+import type { AgentRunInput } from "./agent-driver";
 
-function fakeAdapter() {
+function runInput(threadId: string): AgentRunInput {
+  return {
+    aguiThreadId: threadId,
+    payload: { threadId },
+  };
+}
+
+function fakeDriver() {
   const subjects = new Map<string, { next: (e: unknown) => void; complete: () => void; error: (e: Error) => void }>();
   const interrupt = vi.fn().mockResolvedValue(undefined);
-  const adapter = {
-    run: (input: any) =>
+  const cancel = vi.fn().mockResolvedValue(undefined);
+  const resolveControl = vi.fn().mockReturnValue(false);
+  const driver = {
+    run: (input: AgentRunInput) =>
       new Observable((sub) => {
-        subjects.set(input.threadId, {
+        subjects.set(input.aguiThreadId, {
           next: (e) => sub.next(e),
           complete: () => sub.complete(),
           error: (e) => sub.error(e),
         });
       }),
     interrupt,
+    cancel,
+    resolveControl,
   };
-  return { adapter, subjects, interrupt };
+  return { driver, subjects, interrupt, cancel, resolveControl };
 }
 
 it("emits events tagged with the run's runId", () => {
-  const { adapter, subjects } = fakeAdapter();
+  const { driver, subjects } = fakeDriver();
   const emit = vi.fn();
   const status = vi.fn();
   const mux = new RunRouter(emit, status);
-  mux.setAdapter("claude", adapter as never);
+  mux.setDriver("claude", driver as never);
 
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
+  mux.startRun("run-1", "claude", runInput("t-1"));
   subjects.get("t-1")!.next({ type: "X" });
 
   expect(emit).toHaveBeenCalledWith("run-1", { type: "X" });
 });
 
 it("runs two AG-UI threads concurrently and isolates their events", () => {
-  const { adapter, subjects } = fakeAdapter();
+  const { driver, subjects } = fakeDriver();
   const emit = vi.fn();
   const mux = new RunRouter(emit, vi.fn());
-  mux.setAdapter("claude", adapter as never);
+  mux.setDriver("claude", driver as never);
 
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
-  mux.startRun("run-2", "claude", { threadId: "t-2" });
+  mux.startRun("run-1", "claude", runInput("t-1"));
+  mux.startRun("run-2", "claude", runInput("t-2"));
   subjects.get("t-2")!.next({ type: "B" });
   subjects.get("t-1")!.next({ type: "A" });
 
@@ -49,82 +61,116 @@ it("runs two AG-UI threads concurrently and isolates their events", () => {
 });
 
 it("reports finished and drops the run on complete", () => {
-  const { adapter, subjects } = fakeAdapter();
+  const { driver, subjects } = fakeDriver();
   const status = vi.fn();
   const mux = new RunRouter(vi.fn(), status);
-  mux.setAdapter("claude", adapter as never);
+  mux.setDriver("claude", driver as never);
 
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
+  mux.startRun("run-1", "claude", runInput("t-1"));
   subjects.get("t-1")!.complete();
 
   expect(status).toHaveBeenCalledWith("run-1", { status: "finished" });
   expect(mux.has("run-1")).toBe(false);
 });
 
-it("cancelRun interrupts only that thread", async () => {
-  const { adapter, interrupt } = fakeAdapter();
+it("cancelRun cancels only that thread", async () => {
+  const { driver, cancel } = fakeDriver();
   const mux = new RunRouter(vi.fn(), vi.fn());
-  mux.setAdapter("claude", adapter as never);
+  mux.setDriver("claude", driver as never);
 
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
+  mux.startRun("run-1", "claude", runInput("t-1"));
   await mux.cancelRun("run-1", "t-1");
+
+  expect(cancel).toHaveBeenCalledWith("t-1");
+});
+
+it("interruptRun interrupts only that thread", async () => {
+  const { driver, interrupt } = fakeDriver();
+  const mux = new RunRouter(vi.fn(), vi.fn());
+  mux.setDriver("claude", driver as never);
+
+  mux.startRun("run-1", "claude", runInput("t-1"));
+  await mux.interruptRun("run-1");
 
   expect(interrupt).toHaveBeenCalledWith("t-1");
 });
 
-it("routes each run to its own agentType adapter", async () => {
-  const claude = fakeAdapter();
-  const codex = fakeAdapter();
+it("routes each run to its own agentType driver", async () => {
+  const claude = fakeDriver();
+  const codex = fakeDriver();
   const emit = vi.fn();
   const mux = new RunRouter(emit, vi.fn());
-  mux.setAdapter("claude", claude.adapter as never);
-  mux.setAdapter("codex", codex.adapter as never);
+  mux.setDriver("claude", claude.driver as never);
+  mux.setDriver("codex", codex.driver as never);
 
-  mux.startRun("run-c", "claude", { threadId: "t-c" });
-  mux.startRun("run-x", "codex", { threadId: "t-x" });
+  mux.startRun("run-c", "claude", runInput("t-c"));
+  mux.startRun("run-x", "codex", runInput("t-x"));
 
-  // claude run 的事件只来自 claude adapter
+  // claude run 的事件只来自 claude driver
   claude.subjects.get("t-c")!.next({ type: "from-claude" });
   codex.subjects.get("t-x")!.next({ type: "from-codex" });
 
   expect(emit).toHaveBeenCalledWith("run-c", { type: "from-claude" });
   expect(emit).toHaveBeenCalledWith("run-x", { type: "from-codex" });
 
-  // 取消 codex run 只打断 codex adapter，不碰 claude
+  // 取消 codex run 只打断 codex driver，不碰 claude
   await mux.cancelRun("run-x", "t-x");
-  expect(codex.interrupt).toHaveBeenCalledWith("t-x");
-  expect(claude.interrupt).not.toHaveBeenCalled();
+  expect(codex.cancel).toHaveBeenCalledWith("t-x");
+  expect(claude.cancel).not.toHaveBeenCalled();
 });
 
 it("does not broadcast cancel when the run is unknown", async () => {
-  const claude = fakeAdapter();
-  const codex = fakeAdapter();
+  const claude = fakeDriver();
+  const codex = fakeDriver();
   const mux = new RunRouter(vi.fn(), vi.fn());
-  mux.setAdapter("claude", claude.adapter as never);
-  mux.setAdapter("codex", codex.adapter as never);
+  mux.setDriver("claude", claude.driver as never);
+  mux.setDriver("codex", codex.driver as never);
 
   const cancelled = await mux.cancelRun("missing-run", "t-x");
 
   expect(cancelled).toBe(false);
-  expect(claude.interrupt).not.toHaveBeenCalled();
-  expect(codex.interrupt).not.toHaveBeenCalled();
+  expect(claude.cancel).not.toHaveBeenCalled();
+  expect(codex.cancel).not.toHaveBeenCalled();
 });
 
-it("shutdownAll interrupts active runs and reports the supplied terminal status", async () => {
-  const claude = fakeAdapter();
-  const codex = fakeAdapter();
+it("routes control resolution to the run's driver", async () => {
+  const claude = fakeDriver();
+  const codex = fakeDriver();
+  codex.resolveControl.mockReturnValue(true);
+  const mux = new RunRouter(vi.fn(), vi.fn());
+  mux.setDriver("claude", claude.driver as never);
+  mux.setDriver("codex", codex.driver as never);
+
+  mux.startRun("run-c", "claude", runInput("t-c"));
+  mux.startRun("run-x", "codex", runInput("t-x"));
+
+  const command = {
+    type: "approval_resolved",
+    commandId: "cmd-1",
+    conversationId: "t-x",
+    answers: {},
+  } as const;
+
+  await expect(mux.resolveControl("run-x", command)).resolves.toBe(true);
+  expect(codex.resolveControl).toHaveBeenCalledWith(command);
+  expect(claude.resolveControl).not.toHaveBeenCalled();
+});
+
+it("shutdownAll cancels active runs and reports the supplied terminal status", async () => {
+  const claude = fakeDriver();
+  const codex = fakeDriver();
   const status = vi.fn();
   const mux = new RunRouter(vi.fn(), status);
-  mux.setAdapter("claude", claude.adapter as never);
-  mux.setAdapter("codex", codex.adapter as never);
+  mux.setDriver("claude", claude.driver as never);
+  mux.setDriver("codex", codex.driver as never);
 
-  mux.startRun("run-c", "claude", { threadId: "t-c" });
-  mux.startRun("run-x", "codex", { threadId: "t-x" });
+  mux.startRun("run-c", "claude", runInput("t-c"));
+  mux.startRun("run-x", "codex", runInput("t-x"));
 
   await mux.shutdownAll({ status: "error", error: "worker received SIGTERM" });
 
-  expect(claude.interrupt).toHaveBeenCalledWith("t-c");
-  expect(codex.interrupt).toHaveBeenCalledWith("t-x");
+  expect(claude.cancel).toHaveBeenCalledWith("t-c");
+  expect(codex.cancel).toHaveBeenCalledWith("t-x");
   expect(status).toHaveBeenCalledWith("run-c", {
     status: "error",
     error: "worker received SIGTERM",
@@ -136,17 +182,19 @@ it("shutdownAll interrupts active runs and reports the supplied terminal status"
   expect(mux.size()).toBe(0);
 });
 
-it("shutdownAll waits for async terminal report started by interrupt completion", async () => {
+it("shutdownAll waits for async terminal report started by cancel completion", async () => {
   let completeRun: (() => void) | undefined;
-  const interrupt = vi.fn().mockImplementation(async () => {
+  const cancel = vi.fn().mockImplementation(async () => {
     completeRun?.();
   });
-  const adapter = {
+  const driver = {
     run: () =>
       new Observable((sub) => {
         completeRun = () => sub.complete();
       }),
-    interrupt,
+    interrupt: vi.fn().mockResolvedValue(undefined),
+    cancel,
+    resolveControl: vi.fn().mockReturnValue(false),
   };
   let resolveReport: (() => void) | undefined;
   const status = vi.fn(
@@ -156,8 +204,8 @@ it("shutdownAll waits for async terminal report started by interrupt completion"
       })
   );
   const mux = new RunRouter(vi.fn(), status);
-  mux.setAdapter("claude", adapter as never);
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
+  mux.setDriver("claude", driver as never);
+  mux.startRun("run-1", "claude", runInput("t-1"));
 
   let shutdownSettled = false;
   const shutdown = mux
@@ -181,19 +229,21 @@ it("shutdownAll waits for async terminal report started by interrupt completion"
   expect(mux.size()).toBe(0);
 });
 
-it("shutdownAll starts terminal reporting before waiting for a stuck interrupt", async () => {
-  const interrupt = vi.fn(
+it("shutdownAll starts terminal reporting before waiting for a stuck cancel", async () => {
+  const cancel = vi.fn(
     () =>
       new Promise<void>(() => {
         // never settles
       })
   );
-  const adapter = {
+  const driver = {
     run: () =>
       new Observable(() => {
         // keep the run active
       }),
-    interrupt,
+    interrupt: vi.fn().mockResolvedValue(undefined),
+    cancel,
+    resolveControl: vi.fn().mockReturnValue(false),
   };
   let resolveReport: (() => void) | undefined;
   const status = vi.fn(
@@ -203,8 +253,8 @@ it("shutdownAll starts terminal reporting before waiting for a stuck interrupt",
       })
   );
   const mux = new RunRouter(vi.fn(), status);
-  mux.setAdapter("claude", adapter as never);
-  mux.startRun("run-1", "claude", { threadId: "t-1" });
+  mux.setDriver("claude", driver as never);
+  mux.startRun("run-1", "claude", runInput("t-1"));
 
   let shutdownSettled = false;
   void mux
@@ -219,7 +269,7 @@ it("shutdownAll starts terminal reporting before waiting for a stuck interrupt",
     status: "error",
     error: "worker received SIGTERM",
   });
-  expect(interrupt).toHaveBeenCalledWith("t-1");
+  expect(cancel).toHaveBeenCalledWith("t-1");
   expect(shutdownSettled).toBe(false);
 
   resolveReport?.();
@@ -229,11 +279,11 @@ it("shutdownAll starts terminal reporting before waiting for a stuck interrupt",
   expect(mux.size()).toBe(0);
 });
 
-it("reports error when no adapter registered for agentType", () => {
+it("reports error when no driver registered for agentType", () => {
   const status = vi.fn();
   const mux = new RunRouter(vi.fn(), status);
 
-  mux.startRun("run-1", "codex", { threadId: "t-1" });
+  mux.startRun("run-1", "codex", runInput("t-1"));
 
   expect(status).toHaveBeenCalledWith("run-1", {
     status: "error",

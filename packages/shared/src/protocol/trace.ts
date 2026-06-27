@@ -23,6 +23,7 @@ export type AgentEventTraceConfig = {
   rawFilePath?: string;
   rawRuntimeFilePath?: string;
   aguiFilePath?: string;
+  aguiRuntimeFilePath?: string;
   maxFileMb?: number;
   runId: string;
   conversationId: string;

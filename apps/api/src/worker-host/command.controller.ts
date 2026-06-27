@@ -6,7 +6,8 @@ import {
   Query,
   UseGuards,
 } from "@nestjs/common";
-import type { Envelope } from "@agework/shared/protocol";
+import type { WorkerCommandRpcRequest } from "@agework/shared/protocol";
+import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
@@ -32,14 +33,16 @@ export class WorkerCommandController {
   /**
    * GET /worker/owners/:ownerId/commands?afterSeq=N
    * 持久容器的 worker 按 ownerId 轮询下行命令，
-   * 每条 envelope 携带 runId，worker 据此分发到对应的并行 run。
+   * 每条 JSON-RPC request 的 meta/params 携带 runId，worker 据此分发到对应的并行 run。
    */
   @Get(":ownerId/commands")
   async pollCommands(
     @Param("ownerId") ownerId: string,
     @Query("afterSeq") afterSeq?: string,
     @Query("waitMs") waitMs?: string
-  ): Promise<{ commands: Envelope[] }> {
+  ): Promise<{
+    messages: WorkerCommandRpcRequest[];
+  }> {
     const parsed = afterSeq ? parseInt(afterSeq, 10) : 0;
     const seq = Number.isFinite(parsed) ? parsed : 0;
     const wait = parseCommandWaitMs(waitMs);
@@ -61,7 +64,7 @@ export class WorkerCommandController {
         })}`
       );
     }
-    return { commands };
+    return { messages: commands.map(commandMessageToRpcRequest) };
   }
 }
 

@@ -12,7 +12,7 @@ AgeWork 当前数据流(基于代码核对):
 ```
 Adapter(Claude SDK / Codex SDK)
   └─ 产出 AG-UI BaseEvent(TEXT_MESSAGE_*、TOOL_CALL_*、RUN_*、STATE_*、REASONING_*、CUSTOM)
-       ↓ worker-host / peer channel(Envelope 包 agui.event)
+       ↓ worker-host / peer channel(RPC run.aguiEvent)
 API(NestJS:runs / conversations)
   └─ POST /conversations/agent/run → SSE 下行;GET /resume 断线重连
        ↓
@@ -24,7 +24,7 @@ Web(@assistant-ui/react-ag-ui,本仓库维护)
 
 - AG-UI 在此是**「后端 → 浏览器」的单向 UI 事件流**。
 - 人在回路(HITL)是**旁路**接上去的:adapter 用 `canUseTool` / AskUserQuestion 挂起 → 发 CUSTOM 事件 + 置 `requires_action` → 浏览器另开 `POST /conversations/agent/reply` 回传答案(`agent.controller.ts:37`),不走下行流。
-- 自定义深度能力:`AskUserQuestion`(多问题 + custom responseSchema)、per-thread 权限串行队列、`pendingAction` / run status、raw trace(`raw-event-log.writer`、`run-envelope.processor`)、ModelProvider 注入(baseUrl / key)。
+- 自定义深度能力:`AskUserQuestion`(多问题 + custom responseSchema)、per-thread 权限串行队列、`pendingAction` / run status、raw trace(`raw-event-log.writer`、`worker-event.processor`)、ModelProvider 注入(baseUrl / key)。
 
 ---
 

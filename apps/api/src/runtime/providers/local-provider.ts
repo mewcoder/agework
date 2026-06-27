@@ -3,13 +3,23 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import {
-  nextCommandEnvelope,
+  nextCommandMessage,
   type RunConfig,
   type WorkerExecutionHandle,
   type WorkerExecutionStartInput,
   type CommandPayload,
-  type Envelope,
+  type RunChannelMessage,
+  type RpcResponse,
+  type WorkerCommandResult,
 } from "@agework/shared/protocol";
+import {
+  commandMessageToRpcRequest,
+  isWorkerCommandResultRpcResponse,
+  isWorkerEventRpcNotification,
+  rpcNotificationToUpstreamMessage,
+  rpcResponseToCommandResultMessage,
+  runConfigMessageToRpcNotification,
+} from "@agework/shared/protocol/rpc";
 import type { RunEventReceiver } from "./run-event-receiver.port";
 import type {
   WorkerExecutionProvider,
@@ -98,23 +108,32 @@ export class LocalRuntimeProvider
     this.commandSeqs.set(runId, 0);
 
     // Send run config as first message
-    const configEnvelope: Envelope<RunConfig> = {
+    const configMessage: RunChannelMessage<RunConfig> = {
       runId,
       seq: 0,
       type: "run.config",
       payload: runConfig,
       ts: new Date().toISOString(),
     };
-    child.send(configEnvelope);
+    child.send(runConfigMessageToRpcNotification(configMessage));
 
-    // Forward upstream messages to RunEnvelopeProcessor
+    // Forward upstream messages to WorkerEventProcessor
     child.on("message", (msg: unknown) => {
-      const envelope = msg as Envelope<unknown>;
-      this.receiver.sendEvent(runId, envelope).catch((err) => {
+      const message = normalizeWorkerIpcMessage(msg, runId);
+      if (!message) {
         this.logger.warn(
-          `worker envelope receive failed ${safeLogJson({
+          `worker ipc message ignored ${safeLogJson({
             runId,
-            type: envelope.type,
+            reason: "invalid_message",
+          })}`
+        );
+        return;
+      }
+      this.receiver.sendEvent(runId, message).catch((err) => {
+        this.logger.warn(
+          `worker message receive failed ${safeLogJson({
+            runId,
+            type: message.type,
             ...errorLogFields(err),
           })}`
         );
@@ -165,7 +184,7 @@ export class LocalRuntimeProvider
       return;
     }
 
-    const envelope = nextCommandEnvelope(
+    const message = nextCommandMessage(
       this.commandSeqs,
       handle.runId,
       handle.runId,
@@ -186,7 +205,7 @@ export class LocalRuntimeProvider
           })}`
         );
       });
-    state.child.send(envelope);
+    state.child.send(commandMessageToRpcRequest(message));
   }
 
   cancel(handle: WorkerExecutionHandle): void {
@@ -242,4 +261,20 @@ export class LocalRuntimeProvider
       // ESRCH: process already gone
     }
   }
+}
+
+function normalizeWorkerIpcMessage(
+  message: unknown,
+  fallbackRunId: string
+): RunChannelMessage<unknown> | undefined {
+  if (isWorkerEventRpcNotification(message)) {
+    return rpcNotificationToUpstreamMessage(message);
+  }
+  if (isWorkerCommandResultRpcResponse(message)) {
+    return rpcResponseToCommandResultMessage(
+      message as RpcResponse<WorkerCommandResult>,
+      { runId: fallbackRunId }
+    );
+  }
+  return undefined;
 }

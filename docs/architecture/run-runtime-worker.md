@@ -118,13 +118,13 @@ Worker
 RunEventReceiver
     |
     v
-RunEnvelopeProcessor
+WorkerEventProcessor
     |
     v
 RunEvent / message aggregation / DB / SSE
 ```
 
-事件横切能力应挂在 `RunEventReceiver -> RunEnvelopeProcessor` 后面,不要塞进 RuntimeProvider。
+事件横切能力应挂在 `RunEventReceiver -> WorkerEventProcessor` 后面,不要塞进 RuntimeProvider。
 
 ### 1.3 控制下发
 
@@ -436,7 +436,7 @@ AgeWork 后续补这些能力时,应挂在:
 ```text
 Worker emits events
   -> RunEventReceiver
-  -> RunEnvelopeProcessor
+  -> WorkerEventProcessor
   -> hooks / stuck detector / callbacks / persistence / SSE
 ```
 
@@ -570,7 +570,7 @@ P2 context condenser
 
 ```text
 RunEventReceiver
-  -> RunEnvelopeProcessor
+  -> WorkerEventProcessor
   -> cross-cutting processors
   -> DB / SSE / callbacks
 ```
@@ -874,6 +874,6 @@ AG-UI / run.status / heartbeat out
 
 还需要在后续实际开发中保持:
 
-- 每次修改 `RunEventReceiver` / `RunEnvelopeProcessor` 后补事件流测试。
+- 每次修改 `RunEventReceiver` / `WorkerEventProcessor` 后补事件流测试。
 - 每次修改 sandbox lifecycle 后补 resource/session 分层测试。
 - 每次修改 shared protocol 后跑 API 和 shared typecheck。

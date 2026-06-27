@@ -22,7 +22,7 @@ function makeCallHandler<T>(data: T): CallHandler<T> {
 }
 
 describe("ResponseInterceptor", () => {
-  it("wraps response in {code, data, message} envelope", async () => {
+  it("wraps response in {code, data, message} message", async () => {
     const interceptor = makeInterceptor(false);
     const result = await lastValueFrom(
       interceptor.intercept(makeContext(), makeCallHandler({ foo: "bar" }))

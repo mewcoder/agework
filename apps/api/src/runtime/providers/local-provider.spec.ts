@@ -93,7 +93,7 @@ describe("LocalRuntimeProvider", () => {
     expect(provider.getHandle("nonexistent")).toBeUndefined();
   });
 
-  it("startWorkerExecution forks a local worker and sends the run config", () => {
+  it("startWorkerExecution forks a local worker and sends the run config as RPC", () => {
     const runConfig = makeRunConfig();
     const runtimeTarget = makeRuntimeTarget();
 
@@ -106,10 +106,16 @@ describe("LocalRuntimeProvider", () => {
       expect(childProcessMock.fork).toHaveBeenCalled();
       expect(childProcessMock.child.send).toHaveBeenCalledWith(
         expect.objectContaining({
-          runId: "run-1",
-          seq: 0,
-          type: "run.config",
-          payload: runConfig,
+          jsonrpc: "2.0",
+          method: "run.config",
+          params: {
+            runId: "run-1",
+            config: runConfig,
+          },
+          meta: expect.objectContaining({
+            runId: "run-1",
+            seq: 0,
+          }),
         })
       );
       expect(provider.getHandle("run-1")).toBe(handle);
@@ -128,6 +134,100 @@ describe("LocalRuntimeProvider", () => {
       "LocalRuntimeProvider cannot start worker for runtime type: sandbox"
     );
     expect(childProcessMock.fork).not.toHaveBeenCalled();
+  });
+
+  it("sendCommand sends JSON-RPC requests over IPC", () => {
+    const handle = provider.startWorkerExecution({
+      runtimeTarget: makeRuntimeTarget(),
+      runConfig: makeRunConfig(),
+    });
+    childProcessMock.child.send.mockClear();
+
+    provider.sendCommand(handle, {
+      type: "interrupt",
+      commandId: "cmd-1",
+    });
+
+    expect(childProcessMock.child.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: "2.0",
+        id: "cmd-1",
+        method: "run.interrupt",
+        params: { runId: "run-1" },
+        meta: expect.objectContaining({
+          runId: "run-1",
+          seq: 1,
+        }),
+      })
+    );
+  });
+
+  it("normalizes worker RPC notifications and responses before forwarding", () => {
+    const sendEvent = vi.fn().mockResolvedValue(undefined);
+    provider.setRunEventReceiver({
+      sendEvent,
+      notifyWorkerError: vi.fn().mockResolvedValue(undefined),
+      notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
+      recordCommandSent: vi.fn().mockResolvedValue(undefined),
+    });
+    provider.startWorkerExecution({
+      runtimeTarget: makeRuntimeTarget(),
+      runConfig: makeRunConfig(),
+    });
+    const messageHandler = childProcessMock.child.on.mock.calls.find(
+      ([event]) => event === "message"
+    )?.[1] as ((message: unknown) => void) | undefined;
+    expect(messageHandler).toBeTypeOf("function");
+
+    messageHandler?.({
+      jsonrpc: "2.0",
+      method: "run.status",
+      params: {
+        runId: "run-1",
+        status: { status: "running" },
+      },
+      meta: {
+        runId: "run-1",
+        seq: 1,
+        ts: "2026-06-27T00:00:00.000Z",
+      },
+    });
+    messageHandler?.({
+      jsonrpc: "2.0",
+      id: "cmd-1",
+      result: {
+        ok: true,
+        commandType: "cancel",
+      },
+      meta: {
+        runId: "run-1",
+        seq: 2,
+        ts: "2026-06-27T00:00:01.000Z",
+      },
+    });
+
+    expect(sendEvent).toHaveBeenNthCalledWith(
+      1,
+      "run-1",
+      expect.objectContaining({
+        type: "run.status",
+        seq: 1,
+        payload: { status: "running" },
+      })
+    );
+    expect(sendEvent).toHaveBeenNthCalledWith(
+      2,
+      "run-1",
+      expect.objectContaining({
+        type: "command.result",
+        seq: 2,
+        payload: {
+          commandId: "cmd-1",
+          commandType: "cancel",
+          status: "ok",
+        },
+      })
+    );
   });
 
   it("terminateExecution sends SIGTERM to the local worker and clears state", () => {

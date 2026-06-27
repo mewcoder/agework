@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { WorkerCommandQueue } from "./command-queue";
-import type { Envelope, CommandPayload } from "@agework/shared/protocol";
+import type { RunChannelMessage, CommandPayload } from "@agework/shared/protocol";
 
 describe("WorkerCommandQueue", () => {
   let queue: WorkerCommandQueue;
@@ -22,7 +22,7 @@ describe("WorkerCommandQueue", () => {
   });
 
   it("should push and poll owner commands", () => {
-    const envelope: Envelope<CommandPayload> = {
+    const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
       type: "command",
@@ -35,14 +35,14 @@ describe("WorkerCommandQueue", () => {
       ts: new Date().toISOString(),
     };
 
-    queue.pushByOwnerId("owner-1", envelope);
+    queue.pushByOwnerId("owner-1", message);
     const result = queue.pollByOwnerId("owner-1", 0);
     expect(result).toHaveLength(1);
     expect(result[0].seq).toBe(1);
   });
 
   it("should only return owner commands after given seq", () => {
-    const e1: Envelope<CommandPayload> = {
+    const e1: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
       type: "command",
@@ -54,7 +54,7 @@ describe("WorkerCommandQueue", () => {
       },
       ts: "",
     };
-    const e2: Envelope<CommandPayload> = {
+    const e2: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 2,
       type: "command",
@@ -76,7 +76,7 @@ describe("WorkerCommandQueue", () => {
   });
 
   it("should cleanup an owner's queue", () => {
-    const envelope: Envelope<CommandPayload> = {
+    const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
       type: "command",
@@ -88,14 +88,14 @@ describe("WorkerCommandQueue", () => {
       },
       ts: "",
     };
-    queue.pushByOwnerId("owner-1", envelope);
+    queue.pushByOwnerId("owner-1", message);
     queue.cleanupByOwnerId("owner-1");
     expect(queue.pollByOwnerId("owner-1", 0)).toEqual([]);
   });
 
   it("should resolve an owner waiter when a matching command is pushed", async () => {
     const pending = queue.waitForOwnerId("owner-1", 0, 1_000);
-    const envelope: Envelope<CommandPayload> = {
+    const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
       type: "command",
@@ -108,9 +108,9 @@ describe("WorkerCommandQueue", () => {
       ts: "",
     };
 
-    queue.pushByOwnerId("owner-1", envelope);
+    queue.pushByOwnerId("owner-1", message);
 
-    await expect(pending).resolves.toEqual([envelope]);
+    await expect(pending).resolves.toEqual([message]);
   });
 
   it("should resolve an owner waiter with empty commands on timeout", async () => {

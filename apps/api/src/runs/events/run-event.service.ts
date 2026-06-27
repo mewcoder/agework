@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type {
+  CommandResultPayload,
   CommandTracePayload,
   RecordRunEventInput,
   RunEventData,
@@ -250,6 +251,34 @@ export class RunEventService {
     };
   }
 
+  commandResult(input: {
+    runId: string;
+    commandId: string;
+    commandType: string;
+    status: "ok" | "error";
+    error?: string;
+  }): RecordRunEventInput {
+    return {
+      runId: input.runId,
+      eventKey: `command:${input.commandId}:result`,
+      type: "command.result",
+      origin: "worker",
+      targetType: "command",
+      targetId: input.commandId,
+      chainId: input.commandId,
+      refs: { commandId: input.commandId },
+      summary:
+        input.status === "ok"
+          ? `${input.commandType} ok`
+          : input.error ?? `${input.commandType} error`,
+      data: compactData({
+        commandType: input.commandType,
+        status: input.status,
+        error: input.error,
+      }),
+    };
+  }
+
   messageStarted(input: {
     runId: string;
     messageId?: string;
@@ -391,7 +420,7 @@ export class RunEventService {
     runId: string;
     expected: number;
     got: number;
-    envelopeType: string;
+    messageType: string;
   }): RecordRunEventInput {
     return this.systemIssue({
       runId: input.runId,
@@ -402,7 +431,7 @@ export class RunEventService {
       data: {
         expected: input.expected,
         got: input.got,
-        envelopeType: input.envelopeType,
+        messageType: input.messageType,
       },
     });
   }
@@ -545,6 +574,19 @@ export class RunEventService {
           commandType: payload.commandType,
           phase: payload.phase,
         });
+  }
+
+  fromCommandResult(
+    runId: string,
+    payload: CommandResultPayload
+  ): RecordRunEventInput {
+    return this.commandResult({
+      runId,
+      commandId: payload.commandId,
+      commandType: payload.commandType,
+      status: payload.status,
+      error: payload.error,
+    });
   }
 
   private withRunLock<T>(runId: string, fn: () => Promise<T>): Promise<T> {

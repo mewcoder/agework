@@ -217,11 +217,25 @@ describe("RunEventService normalizers", () => {
     });
 
     expect(
+      service.fromCommandResult("run-1", {
+        commandId: "cmd-1",
+        commandType: "cancel",
+        status: "ok",
+      })
+    ).toMatchObject({
+      type: "command.result",
+      targetType: "command",
+      targetId: "cmd-1",
+      chainId: "cmd-1",
+      data: { commandType: "cancel", status: "ok" },
+    });
+
+    expect(
       service.fromWorkerSeqGap({
         runId: "run-1",
         expected: 2,
         got: 4,
-        envelopeType: "agui.event",
+        messageType: "agui.event",
       })
     ).toMatchObject({
       type: "system.issue",
@@ -232,7 +246,7 @@ describe("RunEventService normalizers", () => {
         severity: "warn",
         expected: 2,
         got: 4,
-        envelopeType: "agui.event",
+        messageType: "agui.event",
       },
     });
   });

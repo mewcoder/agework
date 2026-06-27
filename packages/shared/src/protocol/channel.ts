@@ -1,6 +1,6 @@
 import type { BaseEvent } from "@ag-ui/core";
 import type { AgentType, PendingAction, RunStatus } from "../common";
-import type { Envelope } from "./envelope";
+import type { RunChannelMessage } from "./run-channel-message";
 import type { AgentEventTraceConfig, AgentEventTracePayload } from "./trace";
 
 export type { AgentType, RunStatus };
@@ -18,7 +18,7 @@ export type RunStatusPayload = {
 
 /**
  * 一次 run 的 token 用量，在 API 侧从 `RUN_FINISHED.result` 归一化得到。
- * Claude / Codex 两个 adapter 上报的字段名不同，由 API 侧 RunEnvelopeProcessor 统一到这里。
+ * Claude / Codex 两个 adapter 上报的字段名不同，由 API 侧 WorkerEventProcessor 统一到这里。
  */
 export interface RunUsage {
   inputTokens: number;
@@ -89,7 +89,7 @@ export type AgentProviderConfig =
 /** 控制面 → worker 的下行命令消息。 */
 export type CommandPayload =
   | { type: "cancel"; commandId: string; runId: string; conversationId: string }
-  | { type: "interrupt"; commandId: string }
+  | { type: "interrupt"; commandId: string; runId?: string }
   | {
       type: "approval_resolved";
       commandId: string;
@@ -121,24 +121,37 @@ export type CommandTracePayload = {
   error?: string;
 };
 
-/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `artifact.ref` / `command.trace`）。 */
+/**
+ * worker → 控制面的正式命令处理结果。
+ * `command.trace` 继续作为 timeline/diagnostics；业务闭环看 `command.result`。
+ */
+export type CommandResultPayload = {
+  commandId: string;
+  commandType: CommandPayload["type"];
+  status: "ok" | "error";
+  error?: string;
+};
+
+/** worker → 控制面的上行消息集合（`run.status` / `agui.event` / `sdk.raw` / `artifact.ref` / `command.trace` / `command.result`）。 */
 export type UpstreamMessage =
-  | Envelope<RunStatusPayload>
-  | Envelope<AGUIEvent>
-  | Envelope<AgentEventTracePayload>
-  | Envelope<ArtifactRefPayload>
-  | Envelope<CommandTracePayload>;
+  | RunChannelMessage<RunStatusPayload>
+  | RunChannelMessage<AGUIEvent>
+  | RunChannelMessage<AgentEventTracePayload>
+  | RunChannelMessage<ArtifactRefPayload>
+  | RunChannelMessage<CommandTracePayload>
+  | RunChannelMessage<CommandResultPayload>;
 
 export type Unsubscribe = () => void;
 
 /**
  * 单 run worker 依赖的通信接口，由 `IpcChannel`（process.send/on('message')）实现。
- * 持久容器 worker 不走此接口，改用 `PersistentHttpClient`（按 runId 参数化的 HTTP 收发）。
+ * 持久容器 worker 不走此接口；下行命令由 owner-scoped command loop 拉取，
+ * 上行事件和 run config 由 run-scoped HTTP client 按 runId 参数化收发。
  */
 export interface RuntimeChannel {
   fetchRunConfig(): Promise<RunConfig>;
   emit(msg: UpstreamMessage): Promise<void>;
-  subscribeCommands(cb: (command: Envelope<CommandPayload>) => void): Unsubscribe;
+  subscribeCommands(cb: (command: RunChannelMessage<CommandPayload>) => void): Unsubscribe;
   close(): Promise<void>;
 }
 

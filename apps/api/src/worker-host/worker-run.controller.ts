@@ -6,9 +6,21 @@ import {
   Body,
   UseGuards,
   NotFoundException,
+  BadRequestException,
   Logger,
 } from "@nestjs/common";
-import type { Envelope, RunConfig } from "@agework/shared/protocol";
+import type {
+  RpcResponse,
+  RunChannelMessage,
+  RunConfig,
+  WorkerCommandResult,
+} from "@agework/shared/protocol";
+import {
+  isWorkerCommandResultRpcResponse,
+  isWorkerEventRpcNotification,
+  rpcNotificationToUpstreamMessage,
+  rpcResponseToCommandResultMessage,
+} from "@agework/shared/protocol/rpc";
 import { Public } from "../auth/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
@@ -68,9 +80,53 @@ export class WorkerRunController {
   @Post(":runId/events")
   async postEvent(
     @Param("runId") runId: string,
-    @Body() envelope: Envelope
+    @Body() body: unknown
   ): Promise<{ ok: boolean }> {
-    await this.upstream.sendEvent(runId, envelope);
+    const events = normalizeWorkerEventPostBody(body, runId);
+    if (!events || events.length === 0) {
+      throw new BadRequestException("Invalid worker event body");
+    }
+    if (events.some((event) => event.runId !== runId)) {
+      throw new BadRequestException("Worker event runId mismatch");
+    }
+    for (const event of events) {
+      await this.upstream.sendEvent(runId, event);
+    }
     return { ok: true };
   }
+}
+
+function normalizeWorkerEventPostBody(
+  body: unknown,
+  routeRunId?: string
+): RunChannelMessage[] | undefined {
+  if (Array.isArray(body)) {
+    if (body.length === 0) return undefined;
+    const events: RunChannelMessage[] = [];
+    for (const message of body) {
+      const normalized = normalizeWorkerEventPostItem(message, routeRunId);
+      if (!normalized) return undefined;
+      events.push(normalized);
+    }
+    return events;
+  }
+
+  const event = normalizeWorkerEventPostItem(body, routeRunId);
+  return event ? [event] : undefined;
+}
+
+function normalizeWorkerEventPostItem(
+  body: unknown,
+  routeRunId?: string
+): RunChannelMessage | undefined {
+  if (isWorkerEventRpcNotification(body)) {
+    return rpcNotificationToUpstreamMessage(body);
+  }
+  if (isWorkerCommandResultRpcResponse(body)) {
+    return rpcResponseToCommandResultMessage(
+      body as RpcResponse<WorkerCommandResult>,
+      { runId: routeRunId }
+    );
+  }
+  return undefined;
 }

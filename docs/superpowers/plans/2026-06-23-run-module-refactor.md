@@ -37,7 +37,7 @@ AgentController.run (agent.controller.ts:25)
 
 ### 入站链路(worker 回流,本次不动,仅供参照)
 ```
-RuntimeInternalController.postEvent → RunEnvelopeProcessor.publish
+RuntimeInternalController.postEvent → WorkerEventProcessor.publish
   → handleRunStatus → decideRunStatusUpdate(纯策略) → RunExecutionStatusHandler.apply
   → handleAgUiEvent → aggregator.handle / saveRun / res.write
 ```
@@ -141,7 +141,7 @@ class RunService {
 - `agent.module.ts` → providers 用 `AgentSpecBuilder` 替 `AgentRunConfigBuilder`。
 - `runtime.module.ts` → providers 注册名 `RunService`;**exports 收窄**为 `RunService`(+ admin/其他模块确有依赖的最小集),移除 `RunRunner`、`RuntimePlacementPolicy` 等对 agent 的暴露。
 
-**保持不变**:`run-envelope.processor.ts`、`run-execution-status.handler.ts`、`run-lifecycle.policy.ts`、`run-message.aggregator.ts`、`run-active.store.ts`、`run-event-*`、`providers/**`、`internal/**`、`admin/**`。
+**保持不变**:`worker-event.processor.ts`、`run-execution-status.handler.ts`、`run-lifecycle.policy.ts`、`run-message.aggregator.ts`、`run-active.store.ts`、`run-event-*`、`providers/**`、`internal/**`、`admin/**`。
 
 ---
 
@@ -369,7 +369,7 @@ git commit -m "refactor(api): narrow RuntimeModule exports to RunService facade"
 - **事件审计订阅化**:`RunEventRecorder.append(...).catch(swallow)` 散落 12 处(病灶之外的"分散感"来源)。改成领域事件订阅者是更大的一次重构,单独立项。
 - **provider / sandbox-engine 重构**:`providers/**` 保持原样。
 - **RunMessageAggregator 内部**:不动其聚合逻辑。
-- **入站链路**:`RunEnvelopeProcessor` / `RunExecutionStatusHandler` / `RunLifecyclePolicy` 不动。
+- **入站链路**:`WorkerEventProcessor` / `RunExecutionStatusHandler` / `RunLifecyclePolicy` 不动。
 - **跨进程协议(`packages/shared/protocol`)**:不动。
 
 ## 风险与回滚

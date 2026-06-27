@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RunEnvelopeProcessor } from "./run-envelope.processor";
+import { WorkerEventProcessor } from "./worker-event.processor";
 import { RunRepository } from "../run.repository";
 import { ActiveRunRegistry } from "../lifecycle/active-run.registry";
 import { ConversationService } from "../../conversations/conversation.service";
@@ -35,8 +35,8 @@ function makeStream(
   return new RunStream(res, mode);
 }
 
-describe("RunEnvelopeProcessor", () => {
-  let runEnvelopeProcessor: RunEnvelopeProcessor;
+describe("WorkerEventProcessor", () => {
+  let workerEventProcessor: WorkerEventProcessor;
   let activeRuns: ActiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
   let mockConversationService: Partial<ConversationService>;
@@ -76,7 +76,7 @@ describe("RunEnvelopeProcessor", () => {
       mockConversationService as ConversationService,
       activeRuns
     );
-    runEnvelopeProcessor = new RunEnvelopeProcessor(
+    workerEventProcessor = new WorkerEventProcessor(
       mockRunRepository as RunRepository,
       activeRuns,
       mockConversationService as ConversationService,
@@ -88,11 +88,11 @@ describe("RunEnvelopeProcessor", () => {
   });
 
   it("should be defined", () => {
-    expect(runEnvelopeProcessor).toBeDefined();
+    expect(workerEventProcessor).toBeDefined();
   });
 
-  it("should deduplicate envelopes by seq", async () => {
-    const envelope = {
+  it("should deduplicate messages by seq", async () => {
+    const message = {
       runId: "run-1",
       seq: 1,
       type: "run.status" as const,
@@ -101,9 +101,9 @@ describe("RunEnvelopeProcessor", () => {
     };
 
     // First publish
-    await runEnvelopeProcessor.publish(envelope);
+    await workerEventProcessor.publish(message);
     // Second with same seq should be dropped
-    await runEnvelopeProcessor.publish(envelope);
+    await workerEventProcessor.publish(message);
 
     // markRunning should only be called once
     expect(mockRunRepository.markRunning).toHaveBeenCalledTimes(1);
@@ -113,8 +113,33 @@ describe("RunEnvelopeProcessor", () => {
     );
   });
 
+  it("records command result events", async () => {
+    await workerEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "command.result",
+      payload: {
+        commandId: "cmd-1",
+        commandType: "cancel",
+        status: "ok",
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command.result",
+        targetId: "cmd-1",
+        data: expect.objectContaining({
+          commandType: "cancel",
+          status: "ok",
+        }),
+      })
+    );
+  });
+
   it("forceErrorStatus marks the run as error and bypasses seq dedup", async () => {
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 5,
       type: "run.status" as const,
@@ -122,7 +147,7 @@ describe("RunEnvelopeProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    await runEnvelopeProcessor.forceErrorStatus("run-1", "run timeout");
+    await workerEventProcessor.forceErrorStatus("run-1", "run timeout");
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
@@ -138,7 +163,7 @@ describe("RunEnvelopeProcessor", () => {
       conversationId: "conversation-1",
     };
 
-    await runEnvelopeProcessor.markRunTimedOut("run-1", runtimeHandle);
+    await workerEventProcessor.markRunTimedOut("run-1", runtimeHandle);
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
@@ -156,7 +181,7 @@ describe("RunEnvelopeProcessor", () => {
       .mockRejectedValue(new Error("SQLITE_BUSY"));
 
     await expect(
-      runEnvelopeProcessor.publish({
+      workerEventProcessor.publish({
         runId: "run-1",
         seq: 1,
         type: "run.status" as const,
@@ -169,7 +194,7 @@ describe("RunEnvelopeProcessor", () => {
   });
 
   it("ignores late run statuses after a terminal status", async () => {
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "run.status" as const,
@@ -182,7 +207,7 @@ describe("RunEnvelopeProcessor", () => {
     (mockRunRepository.markRunning as ReturnType<typeof vi.fn>).mockClear();
     (mockRunEvents.append as ReturnType<typeof vi.fn>).mockClear();
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 2,
       type: "run.status" as const,
@@ -227,7 +252,7 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     await expect(
-      runEnvelopeProcessor.publish({
+      workerEventProcessor.publish({
         runId: "run-1",
         seq: 1,
         type: "agui.event" as const,
@@ -249,6 +274,48 @@ describe("RunEnvelopeProcessor", () => {
     );
   });
 
+  it("skips API AG-UI trace writes when worker has a runtime trace path", async () => {
+    const aggregator = { handle: vi.fn() };
+    const traceConfig = {
+      enabled: true,
+      rawFilePath: "/tmp/conversation-1.raw.jsonl",
+      aguiFilePath: "/tmp/conversation-1.agui.jsonl",
+      aguiRuntimeFilePath: "/tmp/conversation-1.agui.jsonl",
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+    };
+    activeRuns.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      agentEventTrace: traceConfig,
+      stream: makeStream(),
+      aggregator: aggregator as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await workerEventProcessor.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event",
+      payload: { type: "RUN_STARTED" },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockEventTraceWriter.writeAgui).not.toHaveBeenCalled();
+    expect(aggregator.handle).toHaveBeenCalledWith({ type: "RUN_STARTED" });
+  });
+
   it("should not forward MESSAGES_SNAPSHOT events to the SSE response", async () => {
     const res = makeRes();
     activeRuns.register("run-1", {
@@ -268,7 +335,7 @@ describe("RunEnvelopeProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -303,14 +370,14 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     // RUN_STARTED + 文本开始 + 内容 + 结束
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event",
       payload: { type: "RUN_STARTED", runId: "run-1" },
       ts: "",
     });
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 2,
       type: "agui.event",
@@ -321,7 +388,7 @@ describe("RunEnvelopeProcessor", () => {
       },
       ts: "",
     });
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 3,
       type: "agui.event",
@@ -332,7 +399,7 @@ describe("RunEnvelopeProcessor", () => {
       },
       ts: "",
     });
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 4,
       type: "agui.event",
@@ -373,7 +440,7 @@ describe("RunEnvelopeProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-2",
       seq: 1,
       type: "agui.event",
@@ -406,7 +473,7 @@ describe("RunEnvelopeProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -456,7 +523,7 @@ describe("RunEnvelopeProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -505,7 +572,7 @@ describe("RunEnvelopeProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -549,7 +616,7 @@ describe("RunEnvelopeProcessor", () => {
     });
 
     const payload = { name: "sdk.claude.output", payload: { value: "ok" } };
-    await runEnvelopeProcessor.publish({
+    await workerEventProcessor.publish({
       runId: "run-1",
       seq: 1,
       type: "sdk.raw" as const,

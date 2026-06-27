@@ -3,9 +3,18 @@ import type {
   RunConfig,
   UpstreamMessage,
   CommandPayload,
-  Envelope,
+  CommandResultPayload,
+  RunChannelMessage,
   Unsubscribe,
 } from "@agework/shared/protocol";
+import {
+  commandResultMessageToRpcResponse,
+  isRunConfigRpcNotification,
+  isWorkerCommandRpcRequest,
+  rpcNotificationToRunConfigMessage,
+  rpcRequestToCommandMessage,
+  upstreamMessageToRpcNotification,
+} from "@agework/shared/protocol/rpc";
 import { errorDetails, workerLog } from "./worker-log.js";
 
 const CONFIG_TIMEOUT_MS = 10_000;
@@ -34,10 +43,11 @@ export class IpcChannel implements RuntimeChannel {
       }, CONFIG_TIMEOUT_MS);
 
       const handler = (msg: unknown) => {
-        if (isEnvelope(msg) && msg.type === "run.config") {
+        const config = runConfigFromIpcMessage(msg);
+        if (config) {
           clearTimeout(timer);
           process.removeListener("message", handler);
-          resolve(msg.payload as RunConfig);
+          resolve(config);
         }
       };
       process.on("message", handler);
@@ -45,20 +55,21 @@ export class IpcChannel implements RuntimeChannel {
   }
 
   async emit(msg: UpstreamMessage): Promise<void> {
-    const envelope = {
+    const message = {
       ...msg,
       runId: this.runId,
       seq: ++this.seq,
       ts: new Date().toISOString(),
     };
+    const wireMessage = encodeUpstreamMessageForIpc(message);
     return new Promise<void>((resolve, reject) => {
-      process.send!(envelope, (err: Error | null) => {
+      process.send!(wireMessage, (err: Error | null) => {
         if (err) {
           // IPC channel 没有重试机制，发送失败即事件丢失，必须 error 级可见。
           workerLog("ipc emit failed", {
             runId: this.runId,
-            seq: envelope.seq,
-            type: envelope.type,
+            seq: message.seq,
+            type: message.type,
             source: "worker",
             eventType: "emit.failed",
             ...errorDetails(err),
@@ -70,11 +81,12 @@ export class IpcChannel implements RuntimeChannel {
   }
 
   subscribeCommands(
-    cb: (command: Envelope<CommandPayload>) => void
+    cb: (command: RunChannelMessage<CommandPayload>) => void
   ): Unsubscribe {
     const handler = (msg: unknown) => {
-      if (isEnvelope(msg) && msg.type === "command") {
-        cb(msg as Envelope<CommandPayload>);
+      const command = commandFromIpcMessage(msg);
+      if (command) {
+        cb(command);
       }
     };
     process.on("message", handler);
@@ -90,11 +102,27 @@ export class IpcChannel implements RuntimeChannel {
   }
 }
 
-function isEnvelope(msg: unknown): msg is Envelope {
-  return (
-    typeof msg === "object" &&
-    msg !== null &&
-    "type" in msg &&
-    typeof (msg as Record<string, unknown>).type === "string"
-  );
+function runConfigFromIpcMessage(msg: unknown): RunConfig | undefined {
+  if (isRunConfigRpcNotification(msg)) {
+    return rpcNotificationToRunConfigMessage(msg).payload;
+  }
+  return undefined;
+}
+
+function commandFromIpcMessage(
+  msg: unknown
+): RunChannelMessage<CommandPayload> | undefined {
+  if (isWorkerCommandRpcRequest(msg)) {
+    return rpcRequestToCommandMessage(msg);
+  }
+  return undefined;
+}
+
+function encodeUpstreamMessageForIpc(msg: UpstreamMessage) {
+  if (msg.type === "command.result") {
+    return commandResultMessageToRpcResponse(
+      msg as RunChannelMessage<CommandResultPayload>
+    );
+  }
+  return upstreamMessageToRpcNotification(msg);
 }
