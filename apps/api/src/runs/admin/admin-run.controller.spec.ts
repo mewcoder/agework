@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AdminRunController, parseMulti } from "./admin-run.controller";
 import type { RunRepository } from "../run.repository";
-import type { RunEventQuery } from "./run-event.query";
+import type { RunEventQuery } from "../../run-events/run-event.query";
 
 function makeController() {
   const runRepository = {

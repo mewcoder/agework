@@ -5,13 +5,13 @@ import type {
   RuntimeTarget,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
-import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
-import { RunDriver } from "./run-driver";
+import { ExecutionService } from "./execution.service";
+import { RunExecutorRegistry } from "./executor.registry";
 
-function makeProvider() {
+function makeExecutor() {
   return {
     type: "local",
-    startWorkerExecution: vi.fn(),
+    start: vi.fn(),
     sendCommand: vi.fn(),
     cancel: vi.fn(),
     terminateExecution: vi.fn(),
@@ -19,10 +19,10 @@ function makeProvider() {
   };
 }
 
-function makeRegistry(provider: ReturnType<typeof makeProvider>) {
+function makeRegistry(executor: ReturnType<typeof makeExecutor>) {
   return {
-    resolve: vi.fn().mockReturnValue(provider),
-  } as unknown as RuntimeProviderRegistry;
+    resolve: vi.fn().mockReturnValue(executor),
+  } as unknown as RunExecutorRegistry;
 }
 
 const handle: WorkerExecutionHandle = {
@@ -32,12 +32,12 @@ const handle: WorkerExecutionHandle = {
   conversationId: "conversation-1",
 };
 
-describe("RunDriver", () => {
-  it("resolves the provider by runtimeType and starts worker execution", () => {
-    const provider = makeProvider();
-    provider.startWorkerExecution.mockReturnValue(handle);
-    const registry = makeRegistry(provider);
-    const driver = new RunDriver(registry);
+describe("ExecutionService", () => {
+  it("resolves the executor by runtimeType and starts worker execution", () => {
+    const executor = makeExecutor();
+    executor.start.mockReturnValue(handle);
+    const registry = makeRegistry(executor);
+    const service = new ExecutionService(registry);
 
     const runConfig = { runId: "run-1" } as RunConfig;
     const runtimeTarget = {
@@ -50,14 +50,14 @@ describe("RunDriver", () => {
     } as RuntimeTarget;
     const onReady = vi.fn();
 
-    const result = driver.start({
+    const result = service.start({
       runConfig,
       runtimeTarget,
       onRuntimeInstanceIdReady: onReady,
     });
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
-    expect(provider.startWorkerExecution).toHaveBeenCalledWith({
+    expect(executor.start).toHaveBeenCalledWith({
       runConfig,
       runtimeTarget,
       onRuntimeInstanceIdReady: onReady,
@@ -66,9 +66,9 @@ describe("RunDriver", () => {
   });
 
   it("dispatches command / cancel / terminate / cleanup by handle.runtimeType (stateless)", () => {
-    const provider = makeProvider();
-    const registry = makeRegistry(provider);
-    const driver = new RunDriver(registry);
+    const executor = makeExecutor();
+    const registry = makeRegistry(executor);
+    const service = new ExecutionService(registry);
     const command = {
       type: "approval_resolved",
       commandId: "command-1",
@@ -76,18 +76,18 @@ describe("RunDriver", () => {
       answers: {},
     } as CommandPayload;
 
-    driver.sendCommand(handle, command);
-    driver.cancel(handle);
-    driver.terminateExecution(handle, "run timeout");
-    driver.cleanup(handle);
+    service.sendCommand(handle, command);
+    service.cancel(handle);
+    service.terminateExecution(handle, "run timeout");
+    service.cleanup(handle);
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
-    expect(provider.sendCommand).toHaveBeenCalledWith(handle, command);
-    expect(provider.cancel).toHaveBeenCalledWith(handle);
-    expect(provider.terminateExecution).toHaveBeenCalledWith(
+    expect(executor.sendCommand).toHaveBeenCalledWith(handle, command);
+    expect(executor.cancel).toHaveBeenCalledWith(handle);
+    expect(executor.terminateExecution).toHaveBeenCalledWith(
       "run-1",
       "run timeout"
     );
-    expect(provider.cleanup).toHaveBeenCalledWith("run-1");
+    expect(executor.cleanup).toHaveBeenCalledWith("run-1");
   });
 });

@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
-import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
+import { LiveRunRegistry } from "./live-runs/live-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunDriver } from "./worker/run-driver";
+import { ExecutionService } from "./execution/execution.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
-import { RunEventService } from "./events/run-event.service";
+import { RunEventService } from "../run-events/run-event.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
@@ -77,9 +77,9 @@ function makeWorkspace(overrides: Record<string, unknown> = {}) {
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
-  let mockActiveRunRegistry: Partial<ActiveRunRegistry>;
+  let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockRuntimeService: Partial<RuntimeService>;
-  let mockRunDriver: Partial<RunDriver>;
+  let mockExecutionService: Partial<ExecutionService>;
   let mockConversationService: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockTitleService: Partial<TitleService>;
@@ -129,7 +129,7 @@ describe("RunService", () => {
       markCancelled: vi.fn().mockResolvedValue(undefined),
       updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
-    mockActiveRunRegistry = {
+    mockLiveRunRegistry = {
       register: vi.fn(),
       unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
@@ -139,7 +139,7 @@ describe("RunService", () => {
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
     };
-    mockRunDriver = {
+    mockExecutionService = {
       start: vi.fn().mockReturnValue({
         runId: "run-1",
         runtimeType: "local",
@@ -182,9 +182,9 @@ describe("RunService", () => {
 
     service = new RunService(
       mockRunRepository as RunRepository,
-      mockActiveRunRegistry as ActiveRunRegistry,
+      mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeService as RuntimeService,
-      mockRunDriver as RunDriver,
+      mockExecutionService as ExecutionService,
       mockConversationService as ConversationService,
       mockRunEvents,
       mockTitleService as TitleService,
@@ -211,7 +211,7 @@ describe("RunService", () => {
         agentType: "claude",
         runtimeType: "local",
       });
-      expect(mockRunDriver.start).toHaveBeenCalledWith(
+      expect(mockExecutionService.start).toHaveBeenCalledWith(
         expect.objectContaining({
           runConfig: expect.objectContaining({ runId: "run-1" }),
           runtimeTarget: expect.objectContaining({
@@ -220,7 +220,7 @@ describe("RunService", () => {
           }),
         })
       );
-      expect(mockRunDriver.start).toHaveBeenCalledWith(
+      expect(mockExecutionService.start).toHaveBeenCalledWith(
         expect.objectContaining({
           runConfig: expect.objectContaining({
             runId: "run-1",
@@ -237,7 +237,7 @@ describe("RunService", () => {
           }),
         })
       );
-      expect(mockActiveRunRegistry.register).toHaveBeenCalledWith(
+      expect(mockLiveRunRegistry.register).toHaveBeenCalledWith(
         "run-1",
         expect.objectContaining({
           runId: "run-1",
@@ -254,7 +254,7 @@ describe("RunService", () => {
         "1:token"
       );
       const registered = (
-        mockActiveRunRegistry.register as ReturnType<typeof vi.fn>
+        mockLiveRunRegistry.register as ReturnType<typeof vi.fn>
       ).mock.calls[0][1];
       expect(typeof registered.saveRun).toBe("function");
       expect(typeof registered.onAgentSessionId).toBe("function");
@@ -328,8 +328,8 @@ describe("RunService", () => {
 
       await service.start(makeStartInput({ res }));
 
-      expect(mockRunDriver.start).toHaveBeenCalled();
-      expect(mockActiveRunRegistry.register).toHaveBeenCalled();
+      expect(mockExecutionService.start).toHaveBeenCalled();
+      expect(mockLiveRunRegistry.register).toHaveBeenCalled();
       expect(mockRunRepository.markError).not.toHaveBeenCalled();
       expect(res.write).not.toHaveBeenCalled();
     });
@@ -339,7 +339,7 @@ describe("RunService", () => {
       mockRuntimeService.resolveRuntimeTarget = vi
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
-      mockRunDriver.start = vi
+      mockExecutionService.start = vi
         .fn()
         .mockImplementation(({ onRuntimeInstanceIdReady }) => {
           const handle = {
@@ -363,7 +363,7 @@ describe("RunService", () => {
         "sandbox",
         "container-abc"
       );
-      expect(mockRunDriver.start).toHaveBeenCalledWith(
+      expect(mockExecutionService.start).toHaveBeenCalledWith(
         expect.objectContaining({
           runConfig: expect.objectContaining({
             runtimePath: "/workspace",
@@ -377,14 +377,14 @@ describe("RunService", () => {
     });
 
     it("rolls back on worker start failure", async () => {
-      mockRunDriver.start = vi.fn().mockImplementation(() => {
+      mockExecutionService.start = vi.fn().mockImplementation(() => {
         throw new Error("spawn failed");
       });
       const res = makeRes();
 
       await service.start(makeStartInput({ res }));
 
-      expect(mockActiveRunRegistry.register).not.toHaveBeenCalled();
+      expect(mockLiveRunRegistry.register).not.toHaveBeenCalled();
       expect(mockRunRepository.markError).toHaveBeenCalledWith(
         "run-1",
         "Failed to start worker"
@@ -408,7 +408,7 @@ describe("RunService", () => {
       ).rejects.toThrow();
     });
 
-    it("should send approval control through worker execution when an active handle exists", async () => {
+    it("should send approval control through worker execution when an live handle exists", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1" });
@@ -420,11 +420,11 @@ describe("RunService", () => {
           conversationId: "conversation-1",
         },
       };
-      mockActiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
 
       await service.resolveApproval("conversation-1", { decision: "yes" });
 
-      expect(mockRunDriver.sendCommand).toHaveBeenCalledWith(
+      expect(mockExecutionService.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
         expect.objectContaining({
           type: "approval_resolved",
@@ -436,11 +436,11 @@ describe("RunService", () => {
   });
 
   describe("stop()", () => {
-    it("should mark cancelled and return false when no active handle but run record exists", async () => {
+    it("should mark cancelled and return false when no live handle but run record exists", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1" });
-      mockActiveRunRegistry.get = vi.fn().mockReturnValue(undefined);
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(undefined);
 
       const hadHandle = await service.stop("conversation-1");
 
@@ -448,7 +448,7 @@ describe("RunService", () => {
       expect(hadHandle).toBe(false);
     });
 
-    it("should cancel and return true when an active handle exists", async () => {
+    it("should cancel and return true when an live handle exists", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1" });
@@ -461,12 +461,12 @@ describe("RunService", () => {
         },
         stopRequested: false,
       };
-      mockActiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
 
       const hadHandle = await service.stop("conversation-1");
 
       expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
-      expect(mockRunDriver.cancel).toHaveBeenCalledWith(
+      expect(mockExecutionService.cancel).toHaveBeenCalledWith(
         handle.runtimeHandle
       );
       expect(hadHandle).toBe(true);
@@ -501,7 +501,7 @@ describe("RunService", () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1", status: "requires_action" });
-      mockActiveRunRegistry.get = vi.fn().mockReturnValue({ runId: "run-1" });
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue({ runId: "run-1" });
       const res = {
         setHeader: vi.fn(),
         write: vi.fn(),

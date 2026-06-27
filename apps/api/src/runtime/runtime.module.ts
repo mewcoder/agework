@@ -6,10 +6,10 @@ import { RuntimeInstanceLifecycleUseCase } from "./instances/lifecycle.use-case"
 import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener";
 
 // providers
-import { LocalRuntimeProvider } from "./providers/local-provider";
+import { LocalRuntimeInstanceManager } from "./providers/local-runtime-instance.manager";
 import { DockerSandboxEngine } from "./sandbox/docker-engine";
 import { OpenSandboxEngine } from "./sandbox/opensandbox-engine";
-import { SandboxRuntimeProvider } from "./sandbox/sandbox-provider";
+import { SandboxRuntimeInstanceManager } from "./sandbox/sandbox-runtime-instance.manager";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import {
   OpenSandboxClient,
@@ -32,9 +32,8 @@ import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 import { ConfigService } from "../config/config.service";
 
 /**
- * Runtime 领域：执行环境（provider / sandbox engine / placement）、workspace runtime
- * 资源生命周期。对 worker-host 零依赖：run 事件、命令通道、鉴权通道、心跳 sink 均
- * 为 runtime 定义的 port，由 run 层在启动时注入实现（见 RunsModule）。
+ * Runtime 领域：运行环境 placement、sandbox engine、workspace runtime resource
+ * 生命周期。它不启动 worker、不处理 run command；per-run execution 在 runs 模块。
  */
 @Module({
   controllers: [AdminRuntimeController],
@@ -44,7 +43,7 @@ import { ConfigService } from "../config/config.service";
     RuntimeInstanceLifecycleUseCase,
     RuntimeInstanceLifecycleListener,
     // providers
-    LocalRuntimeProvider,
+    LocalRuntimeInstanceManager,
     DockerSandboxEngine,
     {
       provide: OPENSANDBOX_CLIENT,
@@ -59,17 +58,18 @@ import { ConfigService } from "../config/config.service";
       inject: [DockerSandboxEngine, OpenSandboxEngine],
     },
     SandboxRuntimeInstanceService,
-    SandboxRuntimeProvider,
+    SandboxRuntimeInstanceManager,
     {
       provide: RUNTIME_PROVIDERS,
       useFactory: (...providers: RuntimeProvider[]) => providers,
-      inject: [LocalRuntimeProvider, SandboxRuntimeProvider],
+      inject: [LocalRuntimeInstanceManager, SandboxRuntimeInstanceManager],
     },
     RuntimeProviderRegistry,
     RuntimeService,
   ],
   exports: [
     WorkspaceRuntimeInstanceRepository,
+    SandboxRuntimeInstanceService,
     RuntimeService,
     RuntimeProviderRegistry,
     RuntimeInstanceLifecycleUseCase,

@@ -2,8 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { RunStatusPayload } from "@agework/shared/protocol";
 import { ConversationService } from "../../conversations/conversation.service";
 import { swallow } from "../../common/swallow";
-import type { RunHandle } from "./active-run.registry";
-import { ActiveRunRegistry } from "./active-run.registry";
+import type { LiveRunHandle } from "../live-runs/live-run.registry";
+import { LiveRunRegistry } from "../live-runs/live-run.registry";
 import type {
   RunStatusEffect,
   RunStatusPersistenceAction,
@@ -17,14 +17,14 @@ export class RunStatusService {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
-    private readonly activeRuns: ActiveRunRegistry
+    private readonly liveRuns: LiveRunRegistry
   ) {}
 
   async apply(input: {
     runId: string;
     payload: RunStatusPayload;
     effect: RunStatusEffect;
-    handle: RunHandle | undefined;
+    handle: LiveRunHandle | undefined;
   }): Promise<void> {
     const { runId, payload, effect, handle } = input;
 
@@ -91,7 +91,7 @@ export class RunStatusService {
     runId: string,
     payload: RunStatusPayload,
     effect: RunStatusEffect,
-    handle: RunHandle
+    handle: LiveRunHandle
   ): Promise<void> {
     await this.updateConversationTerminalStatus(runId, effect, handle);
     try {
@@ -101,14 +101,14 @@ export class RunStatusService {
       );
       this.writeTerminalSse(runId, payload, effect, handle);
     } finally {
-      this.activeRuns.unregister(runId);
+      this.liveRuns.unregister(runId);
     }
   }
 
   private async updateConversationTerminalStatus(
     runId: string,
     effect: RunStatusEffect,
-    handle: RunHandle
+    handle: LiveRunHandle
   ): Promise<void> {
     if (!effect.terminalConversationStatus) return;
 
@@ -147,12 +147,14 @@ export class RunStatusService {
     runId: string,
     payload: RunStatusPayload,
     effect: RunStatusEffect,
-    handle: RunHandle
+    handle: LiveRunHandle
   ): void {
     if (handle.stream.isSnapshotMode) {
+      const incompleteReason =
+        handle.stopReason ?? effect.terminalIncompleteReason;
       const finalSnap = handle.aggregator.build(
         effect.terminalMessageComplete === true,
-        effect.terminalIncompleteReason
+        incompleteReason
       );
       handle.stream.writeSnapshot({
         content: finalSnap.content,

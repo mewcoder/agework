@@ -20,11 +20,10 @@ import {
   rpcResponseToCommandResultMessage,
   runConfigMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import type { RunEventReceiver } from "./run-event-receiver.port";
 import type {
-  WorkerExecutionProvider,
-  RuntimeInstanceManager,
-} from "./provider-contracts";
+  RunEventReceiver,
+  RunExecutor,
+} from "./executor";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -44,18 +43,15 @@ const WORKER_MAIN = require.resolve("@agework/worker");
 const TSX_CLI = require.resolve("tsx/cli");
 
 /**
- * Local runtime provider：one run = one child process，无容器、无跨 run 复用。
+ * Local run executor：one run = one child process，无容器、无跨 run 复用。
  *
- * 因此 local 不写 RuntimeTarget / WorkspaceRuntime 表——没有持久容器要登记，
+ * 因此 local 不写 RuntimeTarget / WorkspaceRuntime 表——没有持久容器要登记。
  * runtimeInstanceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
- * （sandbox 才需要这两张表记录持久容器的存活与复用关系。）
  */
 @Injectable()
-export class LocalRuntimeProvider
-  implements WorkerExecutionProvider, RuntimeInstanceManager
-{
+export class LocalRunExecutor implements RunExecutor {
   readonly type = "local" as const;
-  private readonly logger = new Logger(LocalRuntimeProvider.name);
+  private readonly logger = new Logger(LocalRunExecutor.name);
   private readonly states = new Map<string, LocalRunState>();
   private readonly commandSeqs = new Map<string, number>();
   private receiver!: RunEventReceiver;
@@ -64,13 +60,11 @@ export class LocalRuntimeProvider
     this.receiver = receiver;
   }
 
-  startWorkerExecution(
-    input: WorkerExecutionStartInput
-  ): WorkerExecutionHandle {
+  start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
     const { runConfig, runtimeTarget } = input;
     if (runtimeTarget.runtimeType !== this.type) {
       throw new Error(
-        `LocalRuntimeProvider cannot start worker for runtime type: ${runtimeTarget.runtimeType}`
+        `LocalRunExecutor cannot start worker for runtime type: ${runtimeTarget.runtimeType}`
       );
     }
     const startToken = randomUUID();
@@ -118,7 +112,7 @@ export class LocalRuntimeProvider
     };
     child.send(runConfigMessageToRpcNotification(configMessage));
 
-    // Forward upstream messages to WorkerEventProcessor
+    // Forward upstream messages to WorkerEventsService
     child.on("message", (msg: unknown) => {
       const message = normalizeWorkerIpcMessage(msg, runId);
       if (!message) {
@@ -217,7 +211,7 @@ export class LocalRuntimeProvider
     return this.states.get(runId)?.handle;
   }
 
-  /** Run 终态后清理（也由 RuntimeProvider 接口的统一清理路径调用，幂等）。 */
+  /** Run 终态后清理，幂等。 */
   cleanup(runId: string): void {
     this.states.delete(runId);
     this.commandSeqs.delete(runId);
@@ -252,7 +246,7 @@ export class LocalRuntimeProvider
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
-  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
+  async recoverOrphanExecution(runtimeInstanceId: string): Promise<void> {
     const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
     if (!Number.isInteger(pid)) return;

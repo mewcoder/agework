@@ -16,6 +16,7 @@ function makeService() {
   const access = {
     registerRun: vi.fn(),
     revokeAccess: vi.fn(),
+    revokeOwner: vi.fn(),
   };
   const commandQueue = {
     pushByOwnerId: vi.fn(),
@@ -92,5 +93,6 @@ describe("WorkerCommandDispatcher", () => {
     expect(configStore.unregister).toHaveBeenCalledWith("run-1");
     expect(access.revokeAccess).toHaveBeenCalledWith("run-1");
     expect(commandQueue.cleanupByOwnerId).toHaveBeenCalledWith("owner-1");
+    expect(access.revokeOwner).toHaveBeenCalledWith("owner-1");
   });
 });

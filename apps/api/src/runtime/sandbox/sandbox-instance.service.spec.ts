@@ -74,14 +74,12 @@ function makeService(engine = makeEngine()) {
   const access = {
     issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
     issueRuntimeInstanceKey: vi.fn(),
-    revokeOwner: vi.fn(),
   };
   const service = new SandboxRuntimeInstanceService(
     config as never,
     workspaceRuntimeService as never,
     [engine]
   );
-  service.setAccessPort(access as never);
   return { service, engine, config, workspaceRuntimeService, access };
 }
 
@@ -98,8 +96,26 @@ function makeStartInput(placement = makePlacement()) {
   };
 }
 
-function makeCallbacks() {
+function makeOwnerAccessKeyIssuer(access: {
+  issueOwnerKey: (ownerId: string) => string;
+}) {
   return {
+    issueOwnerAccessKey: (ownerId: string) => access.issueOwnerKey(ownerId),
+  };
+}
+
+function makeCallbacks(access?: {
+  issueRuntimeInstanceKey: (
+    runtimeInstanceId: string,
+    ownerId: string
+  ) => string;
+}) {
+  return {
+    registerRuntimeInstanceAccess: vi.fn(
+      (runtimeInstanceId: string, ownerId: string) => {
+        access?.issueRuntimeInstanceKey(runtimeInstanceId, ownerId);
+      }
+    ),
     forceCancelled: vi.fn(),
     publishWorkerError: vi.fn(),
     cleanupByOwnerId: vi.fn(),
@@ -125,7 +141,10 @@ describe("SandboxRuntimeInstanceService", () => {
     const { service, access } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
 
-    const ownerState = service.ensureOwnerState(context);
+    const ownerState = service.ensureOwnerState(
+      context,
+      makeOwnerAccessKeyIssuer(access)
+    );
 
     expect(context).toMatchObject({
       runId: "run-1",
@@ -146,14 +165,18 @@ describe("SandboxRuntimeInstanceService", () => {
   it("starts a runtime resource and records WorkspaceRuntime when ready", async () => {
     const { service, engine, workspaceRuntimeService, access } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const ownerState = service.ensureOwnerState(context);
+    const ownerState = service.ensureOwnerState(
+      context,
+      makeOwnerAccessKeyIssuer(access)
+    );
     ownerState.activeRuns.set("run-1", "conversation-1");
     const handle = service.createRunHandle(context);
     const onReady = vi.fn();
+    const callbacks = makeCallbacks(access);
 
     service.attachOrStartRuntimeInstance(
       { context, ownerState, handle, onRuntimeInstanceIdReady: onReady },
-      makeCallbacks()
+      callbacks
     );
     await flushPromises();
 
@@ -195,9 +218,12 @@ describe("SandboxRuntimeInstanceService", () => {
           resolveGetOrCreate = resolve;
         })
     );
-    const { service } = makeService(engine);
+    const { service, access } = makeService(engine);
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const ownerState = service.ensureOwnerState(context);
+    const ownerState = service.ensureOwnerState(
+      context,
+      makeOwnerAccessKeyIssuer(access)
+    );
     ownerState.activeRuns.set("run-1", "conversation-1");
     const callbacks = makeCallbacks();
     service.markCancelledBeforeReady("run-1");
@@ -218,9 +244,12 @@ describe("SandboxRuntimeInstanceService", () => {
   });
 
   it("stops and marks a runtime resource after idle cleanup timeout", async () => {
-    const { service, engine, workspaceRuntimeService } = makeService();
+    const { service, engine, workspaceRuntimeService, access } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const ownerState = service.ensureOwnerState(context);
+    const ownerState = service.ensureOwnerState(
+      context,
+      makeOwnerAccessKeyIssuer(access)
+    );
     ownerState.activeRuns.set("run-1", "conversation-1");
     service.attachOrStartRuntimeInstance(
       { context, ownerState, handle: service.createRunHandle(context) },
@@ -242,7 +271,10 @@ describe("SandboxRuntimeInstanceService", () => {
   it("shutdownRuntimeInstance stops active resource and cleans workspace state", async () => {
     const { service, engine, access, workspaceRuntimeService } = makeService();
     const context = service.resolveWorkerExecutionContext(makeStartInput());
-    const ownerState = service.ensureOwnerState(context);
+    const ownerState = service.ensureOwnerState(
+      context,
+      makeOwnerAccessKeyIssuer(access)
+    );
     ownerState.activeRuns.set("run-1", "conversation-1");
     service.attachOrStartRuntimeInstance(
       { context, ownerState, handle: service.createRunHandle(context) },
@@ -254,7 +286,6 @@ describe("SandboxRuntimeInstanceService", () => {
     service.shutdownRuntimeInstance("ws-1", callbacks);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
-    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
     expect(callbacks.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
     expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",

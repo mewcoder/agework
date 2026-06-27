@@ -17,9 +17,9 @@ import type {
 } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { RunRepository } from "./run.repository";
-import { ActiveRunRegistry } from "./lifecycle/active-run.registry";
+import { LiveRunRegistry } from "./live-runs/live-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunDriver } from "./worker/run-driver";
+import { ExecutionService } from "./execution/execution.service";
 import { ConversationService } from "../conversations/conversation.service";
 import { TitleService } from "../conversations/title.service";
 import {
@@ -31,11 +31,11 @@ import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
 import { EnvKey } from "../config/env-key";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
-import { RunEventService, compactData } from "./events/run-event.service";
+import { RunEventService, compactData } from "../run-events/run-event.service";
 import type { StartRunInput } from "./run-service.types";
 import { PrismaService } from "../prisma/prisma.service";
 import { safePathPart } from "../common/safe-path";
-import { RunStream } from "./lifecycle/run-stream";
+import { RunStream } from "./streaming/run-stream";
 
 const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
@@ -59,9 +59,9 @@ export class RunService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly activeRuns: ActiveRunRegistry,
+    private readonly liveRuns: LiveRunRegistry,
     private readonly runtimeService: RuntimeService,
-    private readonly runDriver: RunDriver,
+    private readonly executionService: ExecutionService,
     private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly titleService: TitleService,
@@ -511,7 +511,7 @@ export class RunService {
         .catch(
           swallow(this.logger, `record runtime starting for run ${runId}`)
         );
-      return this.runDriver.start({
+      return this.executionService.start({
         runConfig,
         runtimeTarget,
         onRuntimeInstanceIdReady: (runtimeInstanceId) => {
@@ -632,7 +632,7 @@ export class RunService {
       res,
     } = input;
 
-    this.activeRuns.register(runId, {
+    this.liveRuns.register(runId, {
       runtimeHandle,
       stream,
       aggregator,
@@ -648,7 +648,7 @@ export class RunService {
 
     // SSE disconnect: detach the response (don't cancel the run)
     stream.onClose(() => {
-      const handle = this.activeRuns.get(runId);
+      const handle = this.liveRuns.get(runId);
       if (handle) {
         handle.stream.detach(res);
       }
@@ -670,13 +670,13 @@ export class RunService {
   ): Promise<void> {
     const activeRun =
       await this.runRepository.findActiveByConversationId(conversationId);
-    const handle = activeRun ? this.activeRuns.get(activeRun.id) : undefined;
+    const handle = activeRun ? this.liveRuns.get(activeRun.id) : undefined;
     if (!handle) {
       throw new NotFoundException(
         `No active run for conversation: ${conversationId}`
       );
     }
-    this.runDriver.sendCommand(handle.runtimeHandle, {
+    this.executionService.sendCommand(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
@@ -699,7 +699,7 @@ export class RunService {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
-      ? this.activeRuns.get(activeRunRecord.id)
+      ? this.liveRuns.get(activeRunRecord.id)
       : undefined;
 
     // run 已结束 / 无内存 handle：发终态快照收尾
@@ -731,7 +731,7 @@ export class RunService {
 
     handle.stream.onClose(() => {
       // 连接断开只清引用，不取消 run（与正常 run 的 res.on close 一致）
-      const current = this.activeRuns.get(handle.runId);
+      const current = this.liveRuns.get(handle.runId);
       if (current?.stream.isAttachedTo(res)) {
         current.stream.detach(res);
       }
@@ -762,7 +762,7 @@ export class RunService {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
-      ? this.activeRuns.get(activeRunRecord.id)
+      ? this.liveRuns.get(activeRunRecord.id)
       : undefined;
     if (!handle) {
       // No in-memory handle — clean up stale state
@@ -806,7 +806,7 @@ export class RunService {
           )
         );
     }
-    this.runDriver.cancel(handle.runtimeHandle);
+    this.executionService.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       handle.stream.end();

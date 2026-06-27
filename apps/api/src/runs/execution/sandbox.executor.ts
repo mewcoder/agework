@@ -7,52 +7,38 @@ import type {
 } from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import { safeLogJson } from "../../common/logging";
-import type { RunEventReceiver } from "../providers/run-event-receiver.port";
-import type { CommandPort } from "../providers/command-port";
-import type { AccessPort } from "../providers/access-port";
 import type {
-  WorkerExecutionProvider,
-  RuntimeInstanceManager,
-} from "../providers/provider-contracts";
+  RunEventReceiver,
+  RunExecutor,
+} from "./executor";
+import { WorkerCommandDispatcher } from "../../worker-host/command-dispatcher.service";
+import { WorkerAccessService } from "../../worker-host/access.service";
 import {
   SandboxRuntimeInstanceService,
   type SandboxRuntimeInstanceCallbacks,
   type SandboxWorkerExecutionContext,
-} from "./sandbox-instance.service";
+} from "../../runtime/sandbox/sandbox-instance.service";
 
 @Injectable()
-export class SandboxRuntimeProvider
-  implements WorkerExecutionProvider, RuntimeInstanceManager
-{
+export class SandboxRunExecutor implements RunExecutor {
   readonly type = "sandbox" as const;
-  private readonly logger = new Logger(SandboxRuntimeProvider.name);
+  private readonly logger = new Logger(SandboxRunExecutor.name);
   private receiver!: RunEventReceiver;
-  private commands!: CommandPort;
 
   constructor(
-    private readonly runtimeInstances: SandboxRuntimeInstanceService
+    private readonly runtimeInstances: SandboxRuntimeInstanceService,
+    private readonly commands: WorkerCommandDispatcher,
+    private readonly access: WorkerAccessService
   ) {}
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
     this.receiver = receiver;
   }
 
-  /** 由 run 层注入命令通道（worker-host 的 dispatcher），使 runtime 不直接依赖 worker-host。 */
-  setCommandPort(commands: CommandPort): void {
-    this.commands = commands;
-  }
-
-  /** 由 run 层注入鉴权通道（worker-host 的 access service），转发给 instance service。 */
-  setAccessPort(access: AccessPort): void {
-    this.runtimeInstances.setAccessPort(access);
-  }
-
-  startWorkerExecution(
-    input: WorkerExecutionStartInput
-  ): WorkerExecutionHandle {
+  start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
     if (input.runtimeTarget.runtimeType !== this.type) {
       throw new Error(
-        `SandboxRuntimeProvider cannot start worker for runtime type: ${input.runtimeTarget.runtimeType}`
+        `SandboxRunExecutor cannot start worker for runtime type: ${input.runtimeTarget.runtimeType}`
       );
     }
 
@@ -61,10 +47,12 @@ export class SandboxRuntimeProvider
     this.logWorkerExecutionStart(context);
 
     const handle = this.runtimeInstances.createRunHandle(context);
-    const ownerState = this.runtimeInstances.ensureOwnerState(context);
+    const ownerState = this.runtimeInstances.ensureOwnerState(context, {
+      issueOwnerAccessKey: (ownerId) =>
+        this.access.issueOwnerKey(ownerId),
+    });
 
-    // provider 同时持有 resource 与 session，故由它写 ownerState 的 activeRuns，
-    // dispatcher 不再触碰 sandbox 容器状态。
+    // Run executor 负责把 run 绑定到 runtime owner，并打开 worker-host session。
     ownerState.activeRuns.set(context.runId, context.runConfig.conversationId);
     this.commands.openSession({
       runId: context.runId,
@@ -127,13 +115,7 @@ export class SandboxRuntimeProvider
     return this.runtimeInstances.getHandle(runId);
   }
 
-  shutdownRuntimeInstance(ownerId: string): void {
-    this.runtimeInstances.shutdownRuntimeInstance(ownerId, {
-      cleanupByOwnerId: (key) => this.commands.cleanupByOwnerId(key),
-    });
-  }
-
-  recoverOrphan(runtimeInstanceId: string): Promise<void> {
+  recoverOrphanExecution(runtimeInstanceId: string): Promise<void> {
     return this.runtimeInstances.recoverOrphan(runtimeInstanceId);
   }
 
@@ -173,6 +155,8 @@ export class SandboxRuntimeProvider
           .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
       cleanupByOwnerId: (ownerId) =>
         this.commands.cleanupByOwnerId(ownerId),
+      registerRuntimeInstanceAccess: (runtimeInstanceId, ownerId) =>
+        this.access.issueRuntimeInstanceKey(runtimeInstanceId, ownerId),
     };
   }
 }

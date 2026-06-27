@@ -9,7 +9,7 @@ import type {
 } from "../assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
-import type { RunStream } from "./run-stream";
+import type { RunStream } from "../streaming/run-stream";
 
 export interface RunTimeoutErrorSink {
   markRunTimedOut(
@@ -18,7 +18,7 @@ export interface RunTimeoutErrorSink {
   ): Promise<void>;
 }
 
-export type RunHandle = {
+export type LiveRunHandle = {
   runtimeHandle: WorkerExecutionHandle;
   stream: RunStream;
   aggregator: AssistantMessageAggregator;
@@ -37,9 +37,9 @@ export type RunHandle = {
 };
 
 @Injectable()
-export class ActiveRunRegistry {
-  private readonly logger = new Logger(ActiveRunRegistry.name);
-  private readonly handles = new Map<string, RunHandle>();
+export class LiveRunRegistry {
+  private readonly logger = new Logger(LiveRunRegistry.name);
+  private readonly handles = new Map<string, LiveRunHandle>();
   private readonly timeoutTimers = new Map<string, NodeJS.Timeout>();
   private timeoutErrorSink?: RunTimeoutErrorSink;
 
@@ -49,7 +49,7 @@ export class ActiveRunRegistry {
     this.timeoutErrorSink = sink;
   }
 
-  register(runId: string, handle: RunHandle): void {
+  register(runId: string, handle: LiveRunHandle): void {
     this.clearRunTimeout(runId);
     this.handles.set(runId, handle);
     this.startTimeout(runId);
@@ -60,7 +60,7 @@ export class ActiveRunRegistry {
     this.handles.delete(runId);
   }
 
-  get(runId: string): RunHandle | undefined {
+  get(runId: string): LiveRunHandle | undefined {
     return this.handles.get(runId);
   }
 

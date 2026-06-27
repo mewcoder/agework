@@ -10,8 +10,8 @@ import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
 /**
  * Runtime 层对上层的门面：只负责运行环境——解析 runtime resource、管理 resource 生命周期
- * （shutdown）。它不拥有「执行」：worker 的启动与 per-run control 由 Run 层的
- * RunDriver 驱动 provider 完成。
+ * （shutdown）。它不拥有「执行」：run execution 的启动与 per-run control 由 runs 层的
+ * ExecutionService 分发给 run executor。
  */
 @Injectable()
 export class RuntimeService {

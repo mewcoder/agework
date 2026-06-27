@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ActiveRunRegistry, type RunHandle } from "./active-run.registry";
+import { LiveRunRegistry, type LiveRunHandle } from "./live-run.registry";
 import type { ConfigService } from "../../config/config.service";
-import { RunStream } from "./run-stream";
+import { RunStream } from "../streaming/run-stream";
 
 function makeConfig(timeoutSeconds = 60): ConfigService {
   return {
@@ -9,7 +9,7 @@ function makeConfig(timeoutSeconds = 60): ConfigService {
   } as ConfigService;
 }
 
-function makeHandle(runId = "run-1"): RunHandle {
+function makeHandle(runId = "run-1"): LiveRunHandle {
   return {
     runtimeHandle: {
       runId,
@@ -35,13 +35,13 @@ function makeHandle(runId = "run-1"): RunHandle {
   };
 }
 
-describe("ActiveRunRegistry", () => {
+describe("LiveRunRegistry", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
 
   it("registers, retrieves and unregisters a run handle", () => {
-    const registry = new ActiveRunRegistry(makeConfig());
+    const registry = new LiveRunRegistry(makeConfig());
     const handle = makeHandle();
 
     registry.register("run-1", handle);
@@ -52,14 +52,14 @@ describe("ActiveRunRegistry", () => {
   });
 
   it("returns undefined for an unknown run id", () => {
-    const registry = new ActiveRunRegistry(makeConfig());
+    const registry = new LiveRunRegistry(makeConfig());
     expect(registry.get("missing")).toBeUndefined();
   });
 
   it("forces a run error after the configured timeout", async () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
-    const registry = new ActiveRunRegistry(makeConfig(1));
+    const registry = new LiveRunRegistry(makeConfig(1));
     registry.setTimeoutErrorSink({ markRunTimedOut });
 
     const handle = makeHandle();
@@ -76,7 +76,7 @@ describe("ActiveRunRegistry", () => {
   it("clears the timeout when a run is unregistered", async () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
-    const registry = new ActiveRunRegistry(makeConfig(1));
+    const registry = new LiveRunRegistry(makeConfig(1));
     registry.setTimeoutErrorSink({ markRunTimedOut });
 
     registry.register("run-1", makeHandle());

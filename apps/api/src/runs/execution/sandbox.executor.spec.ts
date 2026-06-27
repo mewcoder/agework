@@ -1,8 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { SandboxRuntimeProvider } from "./sandbox-provider";
-import { SandboxRuntimeInstanceService } from "./sandbox-instance.service";
+import { SandboxRunExecutor } from "./sandbox.executor";
+import { SandboxRuntimeInstanceService } from "../../runtime/sandbox/sandbox-instance.service";
 import { WorkerCommandDispatcher } from "../../worker-host/command-dispatcher.service";
-import type { SandboxEngine, SandboxRuntime } from "./sandbox-engine";
+import type {
+  SandboxEngine,
+  SandboxRuntime,
+} from "../../runtime/sandbox/sandbox-engine";
 import type {
   IsolationScope,
   RuntimePlacement,
@@ -74,15 +77,17 @@ function makeProvider(engineOverride?: SandboxEngine) {
     workspaceRuntimeService as never,
     [engine]
   );
-  runtimeInstances.setAccessPort(access as never);
   const workerSessions = new WorkerCommandDispatcher(
     configStore as never,
     access as never,
     commandQueue as never
   );
-  const provider = new SandboxRuntimeProvider(runtimeInstances);
+  const provider = new SandboxRunExecutor(
+    runtimeInstances,
+    workerSessions,
+    access as never
+  );
   provider.setRunEventReceiver(eventProcessor as never);
-  provider.setCommandPort(workerSessions);
 
   return {
     provider,
@@ -138,11 +143,11 @@ function makeRuntimeTarget(
 }
 
 function startProvider(
-  provider: SandboxRuntimeProvider,
+  provider: SandboxRunExecutor,
   runConfig = baseRun,
   placement = makePlacement()
 ) {
-  return provider.startWorkerExecution({
+  return provider.start({
     runtimeTarget: {
       ...placement,
       ownerId:
@@ -157,7 +162,7 @@ function startProvider(
 
 // ── Provider contract tests ─────────────────────────────────────────
 
-describe("SandboxRuntimeProvider — provider contracts", () => {
+describe("SandboxRunExecutor — executor contract", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -165,16 +170,16 @@ describe("SandboxRuntimeProvider — provider contracts", () => {
     vi.useRealTimers();
   });
 
-  it("startWorkerExecution fails fast when the runtime resource is not sandbox", () => {
+  it("start fails fast when the runtime resource is not sandbox", () => {
     const { provider, engine } = makeProvider();
 
     expect(() =>
-      provider.startWorkerExecution({
+      provider.start({
         runtimeTarget: makeRuntimeTarget({ runtimeType: "local" }),
         runConfig: baseRun as never,
       })
     ).toThrow(
-      "SandboxRuntimeProvider cannot start worker for runtime type: local"
+      "SandboxRunExecutor cannot start worker for runtime type: local"
     );
     expect(engine.getOrCreate).not.toHaveBeenCalled();
   });
@@ -182,7 +187,7 @@ describe("SandboxRuntimeProvider — provider contracts", () => {
 
 // ── Workspace-scoped tests ───────────────────────────────────────────
 
-describe("SandboxRuntimeProvider — workspace scope", () => {
+describe("SandboxRunExecutor — workspace scope", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -282,12 +287,13 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     expect(commandQueue.pushByOwnerId).toHaveBeenCalledTimes(2);
   });
 
-  it("reports error when engine.getOrCreate fails", async () => {
+  it("reports error and cleans worker session when engine.getOrCreate fails", async () => {
     const engine = makeMockEngine("docker");
     (engine.getOrCreate as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error("engine unavailable")
     );
-    const { provider, eventProcessor } = makeProvider(engine);
+    const { provider, eventProcessor, commandQueue, access } =
+      makeProvider(engine);
 
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
@@ -296,6 +302,8 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
       "run-1",
       expect.stringContaining("engine unavailable")
     );
+    expect(commandQueue.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
+    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
   });
 
   it("cancel does not stop the sandbox", async () => {
@@ -360,16 +368,6 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
-  it("shutdownRuntimeInstance stops sandbox via engine and revokes workspace key", async () => {
-    const { provider, engine, access } = makeProvider();
-    startProvider(provider);
-    await vi.runOnlyPendingTimersAsync();
-
-    provider.shutdownRuntimeInstance("ws-1");
-    expect(engine.stop).toHaveBeenCalled();
-    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
-  });
-
   it("getHandle returns handle with runtimeType=sandbox", async () => {
     const { provider } = makeProvider();
     startProvider(provider);
@@ -399,7 +397,7 @@ describe("SandboxRuntimeProvider — workspace scope", () => {
 
 // ── User-scoped tests ────────────────────────────────────────────────
 
-describe("SandboxRuntimeProvider — user scope", () => {
+describe("SandboxRunExecutor — user scope", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -469,29 +467,11 @@ describe("SandboxRuntimeProvider — user scope", () => {
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
   });
 
-  it("shutdownRuntimeInstance for user scope tears down the shared user sandbox", async () => {
-    const { provider, engine, workspaceRuntimeService } = makeProvider();
-
-    startProvider(
-      provider,
-      { ...baseRun, runId: "run-1", workspaceId: "ws-1" },
-      userPlacement
-    );
-    await vi.runOnlyPendingTimersAsync();
-    provider.shutdownRuntimeInstance("user-1");
-
-    expect(engine.stop).toHaveBeenCalled();
-    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
-      "sandbox",
-      "user",
-      "user-1"
-    );
-  });
 });
 
 // ── Idle stop tests ──────────────────────────────────────────────────
 
-describe("SandboxRuntimeProvider — idle stop", () => {
+describe("SandboxRunExecutor — idle stop", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -634,10 +614,10 @@ describe("SandboxRuntimeProvider — idle stop", () => {
 
 // ── recoverOrphan tests ──────────────────────────────────────────────
 
-describe("SandboxRuntimeProvider.recoverOrphan", () => {
+describe("SandboxRunExecutor.recoverOrphanExecution", () => {
   it("delegates to engine.recoverOrphan", async () => {
     const { provider, engine } = makeProvider();
-    await provider.recoverOrphan("resource-abc");
+    await provider.recoverOrphanExecution("resource-abc");
     expect(engine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
   });
 });

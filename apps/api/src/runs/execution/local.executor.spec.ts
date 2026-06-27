@@ -4,7 +4,7 @@ import type {
   RunConfig,
   RuntimeTarget,
 } from "@agework/shared/protocol";
-import { LocalRuntimeProvider } from "./local-provider";
+import { LocalRunExecutor } from "./local.executor";
 
 const childProcessMock = vi.hoisted(() => {
   const child = {
@@ -60,8 +60,8 @@ function makeRuntimeTarget(
   } as RuntimeTarget;
 }
 
-describe("LocalRuntimeProvider", () => {
-  let provider: LocalRuntimeProvider;
+describe("LocalRunExecutor", () => {
+  let provider: LocalRunExecutor;
 
   beforeEach(() => {
     childProcessMock.fork.mockClear();
@@ -72,7 +72,7 @@ describe("LocalRuntimeProvider", () => {
     childProcessMock.child.kill.mockClear();
     childProcessMock.child.killed = false;
 
-    provider = new LocalRuntimeProvider();
+    provider = new LocalRunExecutor();
     provider.setRunEventReceiver({
       sendEvent: vi.fn().mockResolvedValue(undefined),
       notifyWorkerError: vi.fn().mockResolvedValue(undefined),
@@ -93,11 +93,11 @@ describe("LocalRuntimeProvider", () => {
     expect(provider.getHandle("nonexistent")).toBeUndefined();
   });
 
-  it("startWorkerExecution forks a local worker and sends the run config as RPC", () => {
+  it("start forks a local worker and sends the run config as RPC", () => {
     const runConfig = makeRunConfig();
     const runtimeTarget = makeRuntimeTarget();
 
-    const handle = provider.startWorkerExecution({
+    const handle = provider.start({
       runtimeTarget,
       runConfig,
     });
@@ -124,20 +124,20 @@ describe("LocalRuntimeProvider", () => {
     }
   });
 
-  it("startWorkerExecution fails fast when the runtime resource is not local", () => {
+  it("start fails fast when the runtime resource is not local", () => {
     expect(() =>
-      provider.startWorkerExecution({
+      provider.start({
         runtimeTarget: makeRuntimeTarget({ runtimeType: "sandbox" }),
         runConfig: makeRunConfig(),
       })
     ).toThrow(
-      "LocalRuntimeProvider cannot start worker for runtime type: sandbox"
+      "LocalRunExecutor cannot start worker for runtime type: sandbox"
     );
     expect(childProcessMock.fork).not.toHaveBeenCalled();
   });
 
   it("sendCommand sends JSON-RPC requests over IPC", () => {
-    const handle = provider.startWorkerExecution({
+    const handle = provider.start({
       runtimeTarget: makeRuntimeTarget(),
       runConfig: makeRunConfig(),
     });
@@ -170,7 +170,7 @@ describe("LocalRuntimeProvider", () => {
       notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
       recordCommandSent: vi.fn().mockResolvedValue(undefined),
     });
-    provider.startWorkerExecution({
+    provider.start({
       runtimeTarget: makeRuntimeTarget(),
       runConfig: makeRunConfig(),
     });
@@ -231,7 +231,7 @@ describe("LocalRuntimeProvider", () => {
   });
 
   it("terminateExecution sends SIGTERM to the local worker and clears state", () => {
-    const handle = provider.startWorkerExecution({
+    const handle = provider.start({
       runtimeTarget: makeRuntimeTarget(),
       runConfig: makeRunConfig(),
     });
@@ -247,11 +247,11 @@ describe("LocalRuntimeProvider", () => {
     expect(childProcessMock.child.send).toHaveBeenCalledTimes(1);
   });
 
-  describe("recoverOrphan()", () => {
+  describe("recoverOrphanExecution()", () => {
     it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
-      await provider.recoverOrphan("12345:some-token");
+      await provider.recoverOrphanExecution("12345:some-token");
 
       expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
     });
@@ -259,7 +259,7 @@ describe("LocalRuntimeProvider", () => {
     it("does nothing for a malformed runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
-      await provider.recoverOrphan("not-a-valid-runtime-id");
+      await provider.recoverOrphanExecution("not-a-valid-runtime-id");
 
       expect(killSpy).not.toHaveBeenCalled();
     });
@@ -270,7 +270,7 @@ describe("LocalRuntimeProvider", () => {
       });
 
       await expect(
-        provider.recoverOrphan("12345:some-token")
+        provider.recoverOrphanExecution("12345:some-token")
       ).resolves.toBeUndefined();
     });
   });

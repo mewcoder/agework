@@ -12,7 +12,6 @@ import {
   CONTAINER_RUNTIME_LOG_DIR,
   DEFAULT_WORKER_IMAGE,
 } from "../../config/defaults";
-import type { AccessPort } from "../providers/access-port";
 import { WorkspaceRuntimeInstanceRepository } from "../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../common/swallow";
 import {
@@ -59,7 +58,15 @@ export type SandboxRuntimeInstanceAttachment = {
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };
 
+export type SandboxOwnerAccessKeyIssuer = {
+  issueOwnerAccessKey(ownerId: string): string;
+};
+
 export type SandboxRuntimeInstanceCallbacks = {
+  registerRuntimeInstanceAccess(
+    runtimeInstanceId: string,
+    ownerId: string
+  ): void;
   forceCancelled(runId: string): void;
   publishWorkerError(runId: string, error: string): void;
   cleanupByOwnerId(ownerId: string): void;
@@ -75,7 +82,6 @@ export class SandboxRuntimeInstanceService {
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
   private readonly idleWatchdog = new IdleWatchdog();
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
-  private access!: AccessPort;
 
   constructor(
     private readonly configService: ConfigService,
@@ -83,11 +89,6 @@ export class SandboxRuntimeInstanceService {
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));
-  }
-
-  /** 由 run 层经 provider 注入鉴权通道（worker-host 的 access service）。 */
-  setAccessPort(access: AccessPort): void {
-    this.access = access;
   }
 
   resolveWorkerExecutionContext(
@@ -124,11 +125,12 @@ export class SandboxRuntimeInstanceService {
   }
 
   ensureOwnerState(
-    context: SandboxWorkerExecutionContext
+    context: SandboxWorkerExecutionContext,
+    accessKeys: SandboxOwnerAccessKeyIssuer
   ): SandboxOwnerState {
     let ownerState = this.ownerStates.get(context.ownerId);
     if (!ownerState) {
-      const accessKey = this.access.issueOwnerKey(
+      const accessKey = accessKeys.issueOwnerAccessKey(
         context.ownerId
       );
       ownerState = {
@@ -148,7 +150,7 @@ export class SandboxRuntimeInstanceService {
       !this.pendingSandboxes.has(context.ownerId) &&
       !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      ownerState.accessKey = this.access.issueOwnerKey(
+      ownerState.accessKey = accessKeys.issueOwnerAccessKey(
         context.ownerId
       );
       ownerState.engineType = context.engineType;
@@ -246,7 +248,6 @@ export class SandboxRuntimeInstanceService {
           )
         );
     }
-    this.access.revokeOwner(ownerId);
     callbacks.cleanupByOwnerId(ownerId);
     this.ownerStates.delete(ownerId);
     this.pendingSandboxes.delete(ownerId);
@@ -327,6 +328,7 @@ export class SandboxRuntimeInstanceService {
       context,
       context.engine,
       engineInput,
+      callbacks,
       resumeRuntimeInstanceId
     );
     this.pendingSandboxes.set(context.ownerId, runtimePromise);
@@ -450,7 +452,6 @@ export class SandboxRuntimeInstanceService {
 
     this.ownerStates.delete(context.ownerId);
     callbacks.cleanupByOwnerId(context.ownerId);
-    this.access.revokeOwner(context.ownerId);
   }
 
   private forceCancelledStartingRuns(
@@ -473,12 +474,19 @@ export class SandboxRuntimeInstanceService {
     context: SandboxWorkerExecutionContext,
     engine: SandboxEngine,
     input: SandboxStartInput,
+    callbacks: Pick<
+      SandboxRuntimeInstanceCallbacks,
+      "registerRuntimeInstanceAccess"
+    >,
     resumeRuntimeInstanceId?: string
   ): Promise<SandboxRuntime> {
     if (resumeRuntimeInstanceId && engine.resume) {
       try {
         const runtime = await engine.resume(resumeRuntimeInstanceId, input);
-        this.registerRuntimeInstanceAccess(context, runtime.runtimeInstanceId);
+        callbacks.registerRuntimeInstanceAccess(
+          runtime.runtimeInstanceId,
+          context.ownerId
+        );
         await engine.startWorker(runtime, input);
         return runtime;
       } catch (err) {
@@ -492,7 +500,10 @@ export class SandboxRuntimeInstanceService {
     }
 
     const runtime = await engine.getOrCreate(input);
-    this.registerRuntimeInstanceAccess(context, runtime.runtimeInstanceId);
+    callbacks.registerRuntimeInstanceAccess(
+      runtime.runtimeInstanceId,
+      context.ownerId
+    );
     await engine.startWorker(runtime, input);
     return runtime;
   }
@@ -569,15 +580,5 @@ export class SandboxRuntimeInstanceService {
       throw new Error(`Unknown sandbox engine: ${engineType}`);
     }
     return engine;
-  }
-
-  private registerRuntimeInstanceAccess(
-    context: SandboxWorkerExecutionContext,
-    runtimeInstanceId: string
-  ): void {
-    this.access.issueRuntimeInstanceKey(
-      runtimeInstanceId,
-      context.ownerId
-    );
   }
 }

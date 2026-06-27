@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "../run.repository";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
+import { RunExecutorRegistry } from "../execution/executor.registry";
 import { ConversationService } from "../../conversations/conversation.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { swallow } from "../../common/swallow";
@@ -11,7 +12,7 @@ import {
 
 /**
  * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
- * 让对应 provider 清理底层进程/容器，并将 run/thread 状态标记为 error。
+ * 让对应 run executor 清理底层进程/容器，并将 run/thread 状态标记为 error。
  */
 @Injectable()
 export class RunRecoveryService {
@@ -20,6 +21,7 @@ export class RunRecoveryService {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
+    private readonly runExecutors: RunExecutorRegistry,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly prisma: PrismaService
   ) {}
@@ -36,7 +38,7 @@ export class RunRecoveryService {
 
         for (const run of activeRuns) {
           if (run.runtimeInstanceId) {
-            const provider = this.runtimeProviderRegistry.resolve(
+            const executor = this.runExecutors.resolve(
               run.runtimeType
             );
 
@@ -47,11 +49,11 @@ export class RunRecoveryService {
               await this.shouldRecoverOrphanRuntime(
                 run.runtimeInstanceId,
                 run.runtimeType
-              );
+            );
             if (shouldRecoverOrphan) {
-              await provider
-                .recoverOrphan(run.runtimeInstanceId)
-                .catch(swallow(this.logger, `recover orphan run ${run.id}`));
+              await Promise.resolve(
+                executor.recoverOrphanExecution?.(run.runtimeInstanceId)
+              ).catch(swallow(this.logger, `recover orphan run ${run.id}`));
             } else {
               this.logger.log(
                 `Skipping recoverOrphan for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`
@@ -83,11 +85,9 @@ export class RunRecoveryService {
   }
 
   /**
-   * Determine whether we should call provider.recoverOrphan() for a given run.
-   * Returns false when the run's runtimeInstanceId belongs to a user-isolated
-   * RuntimeTarget — destroying a shared user runtime would be destructive.
-   * Returns true when no RuntimeTarget exists (legacy data) or when the
-   * resource is not user-isolated.
+   * Decide whether run-level orphan execution cleanup is allowed.
+   * User-isolated RuntimeTarget resources can be shared across workspaces, so
+   * destroying one because a single run is orphaned would be destructive.
    */
   private async shouldRecoverOrphanRuntime(
     runtimeInstanceId: string,

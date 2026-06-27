@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../../prisma/prisma.service", () => ({
+vi.mock("../prisma/prisma.service", () => ({
   PrismaService: class PrismaService {},
 }));
 

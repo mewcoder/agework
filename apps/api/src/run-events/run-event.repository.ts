@@ -6,9 +6,9 @@ import type {
   RunEventRecord,
   RunEventRefs,
 } from "@agework/shared/protocol";
-import type { Prisma, RunEvent } from "../../../generated/prisma/client.js";
-import { PrismaService } from "../../prisma/prisma.service";
-import { redactLogValue } from "../../common/logging";
+import type { Prisma, RunEvent } from "../../generated/prisma/client.js";
+import { PrismaService } from "../prisma/prisma.service";
+import { redactLogValue } from "../common/logging";
 
 const MAX_SUMMARY_LENGTH = 500;
 const MAX_DATA_JSON_LENGTH = 8_000;

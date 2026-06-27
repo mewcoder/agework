@@ -1,7 +1,7 @@
 import { Controller, Get, Query } from "@nestjs/common";
 import { Roles } from "../../auth/roles.decorator";
 import { RunRepository } from "../run.repository";
-import { RunEventQuery } from "./run-event.query";
+import { RunEventQuery } from "../../run-events/run-event.query";
 
 @Controller("admin/runs")
 @Roles("admin")

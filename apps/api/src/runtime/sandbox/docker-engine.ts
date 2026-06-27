@@ -42,7 +42,7 @@ export class DockerSandboxEngine implements SandboxEngine {
       args.push("--label", `${key}=${value}`);
     }
 
-    // 传入的 env（由 SandboxRuntimeProvider 构造）
+    // 传入的 env（由 SandboxRunExecutor 构造）
     for (const [key, value] of Object.entries(env)) {
       args.push("-e", `${key}=${value}`);
     }

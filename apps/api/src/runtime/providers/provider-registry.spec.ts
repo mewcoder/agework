@@ -1,18 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { RuntimeProviderRegistry } from "./provider-registry";
-import type { SandboxRuntimeProvider } from "../sandbox/sandbox-provider";
-import type { LocalRuntimeProvider } from "./local-provider";
+import type { RuntimeProvider } from "./provider-contracts";
 
 describe("RuntimeProviderRegistry", () => {
   let registry: RuntimeProviderRegistry;
-  let mockLocalProvider: LocalRuntimeProvider;
-  let mockSandboxProvider: SandboxRuntimeProvider;
+  let mockLocalProvider: RuntimeProvider;
+  let mockSandboxProvider: RuntimeProvider;
 
   beforeEach(() => {
-    mockLocalProvider = { type: "local" as const } as LocalRuntimeProvider;
+    mockLocalProvider = {
+      type: "local" as const,
+      recoverOrphan: async () => undefined,
+    };
     mockSandboxProvider = {
       type: "sandbox" as const,
-    } as SandboxRuntimeProvider;
+      recoverOrphan: async () => undefined,
+    };
     registry = new RuntimeProviderRegistry([
       mockLocalProvider,
       mockSandboxProvider,

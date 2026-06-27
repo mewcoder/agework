@@ -3,6 +3,7 @@ import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import { ConversationService } from "../../conversations/conversation.service";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
+import { RunExecutorRegistry } from "../execution/executor.registry";
 
 function makePrisma() {
   return {
@@ -20,8 +21,8 @@ function makePrisma() {
 }
 
 describe("RunRecoveryService.recoverOrphanRuns", () => {
-  it("recovers orphan runs via the matching provider's recoverOrphan, based on runtimeType", async () => {
-    const recoverOrphan = vi.fn().mockResolvedValue(undefined);
+  it("recovers orphan runs via the matching run executor, based on runtimeType", async () => {
+    const recoverOrphanExecution = vi.fn().mockResolvedValue(undefined);
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
@@ -36,21 +37,25 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
     const mockConversationService: Partial<ConversationService> = {
       setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const mockProviderRegistry: Partial<RuntimeProviderRegistry> = {
-      resolve: vi.fn().mockReturnValue({ recoverOrphan }),
+    const mockRunExecutors: Partial<RunExecutorRegistry> = {
+      resolve: vi.fn().mockReturnValue({ recoverOrphanExecution }),
+    };
+    const mockRuntimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
+      resolve: vi.fn(),
     };
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
-      mockProviderRegistry as RuntimeProviderRegistry,
+      mockRunExecutors as RunExecutorRegistry,
+      mockRuntimeProviderRegistry as RuntimeProviderRegistry,
       makePrisma() as never
     );
 
     await service.recoverOrphanRuns();
 
-    expect(mockProviderRegistry.resolve).toHaveBeenCalledWith("docker");
-    expect(recoverOrphan).toHaveBeenCalledWith("container-abc");
+    expect(mockRunExecutors.resolve).toHaveBeenCalledWith("docker");
+    expect(recoverOrphanExecution).toHaveBeenCalledWith("container-abc");
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -76,20 +81,24 @@ describe("RunRecoveryService.recoverOrphanRuns", () => {
     const mockConversationService: Partial<ConversationService> = {
       setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const mockProviderRegistry: Partial<RuntimeProviderRegistry> = {
+    const mockRunExecutors: Partial<RunExecutorRegistry> = {
+      resolve: vi.fn(),
+    };
+    const mockRuntimeProviderRegistry: Partial<RuntimeProviderRegistry> = {
       resolve: vi.fn(),
     };
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
-      mockProviderRegistry as RuntimeProviderRegistry,
+      mockRunExecutors as RunExecutorRegistry,
+      mockRuntimeProviderRegistry as RuntimeProviderRegistry,
       makePrisma() as never
     );
 
     await service.recoverOrphanRuns();
 
-    expect(mockProviderRegistry.resolve).not.toHaveBeenCalled();
+    expect(mockRunExecutors.resolve).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -106,6 +115,9 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
     const mockConversationService: Partial<ConversationService> = {};
     const mockProviderRegistry: Partial<RuntimeProviderRegistry> = {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
+    };
+    const mockRunExecutors: Partial<RunExecutorRegistry> = {
+      resolve: vi.fn(),
     };
     const prisma = makePrisma();
     prisma.runtimeInstance.findMany.mockResolvedValue([
@@ -128,6 +140,7 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
+      mockRunExecutors as RunExecutorRegistry,
       mockProviderRegistry as RuntimeProviderRegistry,
       prisma as never
     );
@@ -170,6 +183,9 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
     const mockProviderRegistry: Partial<RuntimeProviderRegistry> = {
       resolve: vi.fn().mockReturnValue({ recoverOrphan }),
     };
+    const mockRunExecutors: Partial<RunExecutorRegistry> = {
+      resolve: vi.fn(),
+    };
     const prisma = makePrisma();
     prisma.runtimeInstance.findMany.mockResolvedValue([
       {
@@ -184,6 +200,7 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
+      mockRunExecutors as RunExecutorRegistry,
       mockProviderRegistry as RuntimeProviderRegistry,
       prisma as never
     );

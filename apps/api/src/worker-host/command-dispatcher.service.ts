@@ -14,8 +14,8 @@ import { WorkerCommandQueue } from "./command-queue";
  * 维护 command seq 计数器，并把命令塞入 command queue。不持有 runtime 实例状态，
  * 所有入参均为原始值，便于在 worker-host 层独立存在。
  *
- * 方法签名与 runtime 侧 CommandPort 结构兼容——由 run 层在启动时把本 dispatcher
- * 作为 CommandPort 注入给 sandbox provider，使 runtime 不直接依赖 worker-host。
+ * SandboxRunExecutor 调用它打开/清理 owner 会话；runtime 层不直接依赖
+ * worker-host，也不负责签发或撤销 worker access key。
  */
 @Injectable()
 export class WorkerCommandDispatcher {
@@ -66,6 +66,6 @@ export class WorkerCommandDispatcher {
   cleanupByOwnerId(ownerId: string): void {
     this.commandQueue.cleanupByOwnerId(ownerId);
     this.commandSeqs.delete(ownerId);
+    this.runtimeAccess.revokeOwner(ownerId);
   }
 }
-

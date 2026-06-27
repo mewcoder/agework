@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { WorkerEventProcessor } from "./worker-event.processor";
+import { WorkerEventsService } from "./worker-events.service";
 import { RunRepository } from "../run.repository";
-import { ActiveRunRegistry } from "../lifecycle/active-run.registry";
+import { LiveRunRegistry } from "../live-runs/live-run.registry";
 import { ConversationService } from "../../conversations/conversation.service";
 import { AssistantMessageAggregator } from "../assistant-message.aggregator";
-import { AgentEventTraceWriter } from "../events/agent-event-trace.writer";
-import { RunEventService } from "../events/run-event.service";
-import { RunStatusService } from "../lifecycle/run-status.service";
+import { RunEventService } from "../../run-events/run-event.service";
+import { RunStatusService } from "../status/run-status.service";
 import type { ConfigService } from "../../config/config.service";
-import type { RunDriver } from "./run-driver";
-import { RunStream } from "../lifecycle/run-stream";
+import type { ExecutionService } from "../execution/execution.service";
+import { RunStream } from "../streaming/run-stream";
+import { WorkerAgUiEventHandler } from "./handlers/agui-event.handler";
+import { WorkerRunEventRecorder } from "./run-event.recorder";
 
 function makeConfig(): ConfigService {
   return {
@@ -35,14 +36,13 @@ function makeStream(
   return new RunStream(res, mode);
 }
 
-describe("WorkerEventProcessor", () => {
-  let workerEventProcessor: WorkerEventProcessor;
-  let activeRuns: ActiveRunRegistry;
+describe("WorkerEventsService", () => {
+  let workerEventsService: WorkerEventsService;
+  let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
   let mockConversationService: Partial<ConversationService>;
-  let mockEventTraceWriter: Partial<AgentEventTraceWriter>;
   let mockRunEvents: RunEventService;
-  let mockRunDriver: Partial<RunDriver>;
+  let mockExecutionService: Partial<ExecutionService>;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -59,36 +59,129 @@ describe("WorkerEventProcessor", () => {
       setPendingUserAction: vi.fn().mockResolvedValue(undefined),
       setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    mockEventTraceWriter = {
-      writeRaw: vi.fn(),
-      writeAgui: vi.fn(),
-    };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
-    mockRunDriver = {
+    mockExecutionService = {
+      cleanup: vi.fn(),
       terminateExecution: vi.fn(),
     };
 
-    activeRuns = new ActiveRunRegistry(makeConfig());
+    liveRuns = new LiveRunRegistry(makeConfig());
     const runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
       mockConversationService as ConversationService,
-      activeRuns
+      liveRuns
     );
-    workerEventProcessor = new WorkerEventProcessor(
+    const eventRecorder = new WorkerRunEventRecorder(mockRunEvents);
+    const aguiEvents = new WorkerAgUiEventHandler(
       mockRunRepository as RunRepository,
-      activeRuns,
+      liveRuns,
       mockConversationService as ConversationService,
-      mockEventTraceWriter as AgentEventTraceWriter,
+      eventRecorder
+    );
+    workerEventsService = new WorkerEventsService(
+      liveRuns,
       mockRunEvents,
+      eventRecorder,
       runStatusService,
-      mockRunDriver as RunDriver
+      mockExecutionService as ExecutionService,
+      aguiEvents
     );
   });
 
   it("should be defined", () => {
-    expect(workerEventProcessor).toBeDefined();
+    expect(workerEventsService).toBeDefined();
+  });
+
+  it("sendEvent delegates to publish", async () => {
+    const publish = vi
+      .spyOn(workerEventsService, "publish")
+      .mockResolvedValue(undefined);
+    const message = {
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {},
+      ts: new Date().toISOString(),
+    };
+
+    await workerEventsService.sendEvent("run-1", message);
+
+    expect(publish).toHaveBeenCalledWith(message);
+  });
+
+  it("sendEvent cleans up execution on terminal run status", async () => {
+    const runtimeHandle = {
+      runId: "run-1",
+      runtimeType: "local",
+      runtimeInstanceId: "1:token",
+      conversationId: "conversation-1",
+    };
+    liveRuns.register("run-1", {
+      runtimeHandle,
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    await workerEventsService.sendEvent("run-1", {
+      runId: "run-1",
+      seq: 1,
+      type: "run.status",
+      payload: { status: "finished" },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockExecutionService.cleanup).toHaveBeenCalledWith(runtimeHandle);
+  });
+
+  it("notifyWorkerError skips when run already terminal/finalizing", async () => {
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(true);
+    const forceErrorStatus = vi.spyOn(workerEventsService, "forceErrorStatus");
+
+    await workerEventsService.notifyWorkerError("run-1", "crashed");
+
+    expect(forceErrorStatus).not.toHaveBeenCalled();
+  });
+
+  it("notifyWorkerError forces error status when run not terminal", async () => {
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(false);
+    const forceErrorStatus = vi
+      .spyOn(workerEventsService, "forceErrorStatus")
+      .mockResolvedValue(undefined);
+
+    await workerEventsService.notifyWorkerError("run-1", "crashed");
+
+    expect(forceErrorStatus).toHaveBeenCalledWith("run-1", "crashed");
+  });
+
+  it("notifyCancelledBeforeReady forces cancelled when run not terminal", async () => {
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(false);
+    const forceCancelledStatus = vi
+      .spyOn(workerEventsService, "forceCancelledStatus")
+      .mockResolvedValue(undefined);
+
+    await workerEventsService.notifyCancelledBeforeReady("run-1");
+
+    expect(forceCancelledStatus).toHaveBeenCalledWith("run-1");
+  });
+
+  it("recordCommandSent records via run event service", async () => {
+    await workerEventsService.recordCommandSent({
+      runId: "run-1",
+      commandId: "cmd-1",
+      commandType: "cancel",
+    });
+
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "command.sent" })
+    );
   });
 
   it("should deduplicate messages by seq", async () => {
@@ -101,9 +194,9 @@ describe("WorkerEventProcessor", () => {
     };
 
     // First publish
-    await workerEventProcessor.publish(message);
+    await workerEventsService.publish(message);
     // Second with same seq should be dropped
-    await workerEventProcessor.publish(message);
+    await workerEventsService.publish(message);
 
     // markRunning should only be called once
     expect(mockRunRepository.markRunning).toHaveBeenCalledTimes(1);
@@ -114,7 +207,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("records command result events", async () => {
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "command.result",
@@ -139,7 +232,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("forceErrorStatus marks the run as error and bypasses seq dedup", async () => {
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 5,
       type: "run.status" as const,
@@ -147,7 +240,7 @@ describe("WorkerEventProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    await workerEventProcessor.forceErrorStatus("run-1", "run timeout");
+    await workerEventsService.forceErrorStatus("run-1", "run timeout");
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
@@ -163,13 +256,13 @@ describe("WorkerEventProcessor", () => {
       conversationId: "conversation-1",
     };
 
-    await workerEventProcessor.markRunTimedOut("run-1", runtimeHandle);
+    await workerEventsService.markRunTimedOut("run-1", runtimeHandle);
 
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "run timeout"
     );
-    expect(mockRunDriver.terminateExecution).toHaveBeenCalledWith(
+    expect(mockExecutionService.terminateExecution).toHaveBeenCalledWith(
       runtimeHandle,
       "run timeout"
     );
@@ -181,7 +274,7 @@ describe("WorkerEventProcessor", () => {
       .mockRejectedValue(new Error("SQLITE_BUSY"));
 
     await expect(
-      workerEventProcessor.publish({
+      workerEventsService.publish({
         runId: "run-1",
         seq: 1,
         type: "run.status" as const,
@@ -194,7 +287,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("ignores late run statuses after a terminal status", async () => {
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "run.status" as const,
@@ -207,7 +300,7 @@ describe("WorkerEventProcessor", () => {
     (mockRunRepository.markRunning as ReturnType<typeof vi.fn>).mockClear();
     (mockRunEvents.append as ReturnType<typeof vi.fn>).mockClear();
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 2,
       type: "run.status" as const,
@@ -224,16 +317,7 @@ describe("WorkerEventProcessor", () => {
       .fn()
       .mockRejectedValue(new Error("SQLITE_BUSY"));
     const aggregator = { handle: vi.fn() };
-    const traceConfig = {
-      enabled: true,
-      rawFilePath: "/tmp/conversation-1.raw.jsonl",
-      aguiFilePath: "/tmp/conversation-1.agui.jsonl",
-      runId: "run-1",
-      conversationId: "conversation-1",
-      workspaceId: "ws-1",
-      agentType: "claude",
-    };
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -244,7 +328,6 @@ describe("WorkerEventProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      agentEventTrace: traceConfig,
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
@@ -252,7 +335,7 @@ describe("WorkerEventProcessor", () => {
     });
 
     await expect(
-      workerEventProcessor.publish({
+      workerEventsService.publish({
         runId: "run-1",
         seq: 1,
         type: "agui.event" as const,
@@ -265,16 +348,12 @@ describe("WorkerEventProcessor", () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(mockEventTraceWriter.writeAgui).toHaveBeenCalledWith(
-      traceConfig,
-      expect.objectContaining({ type: "TOOL_CALL_START" })
-    );
     expect(aggregator.handle).toHaveBeenCalledWith(
       expect.objectContaining({ type: "TOOL_CALL_START" })
     );
   });
 
-  it("skips API AG-UI trace writes when worker has a runtime trace path", async () => {
+  it("processes AG-UI events when the worker owns runtime trace files", async () => {
     const aggregator = { handle: vi.fn() };
     const traceConfig = {
       enabled: true,
@@ -286,7 +365,7 @@ describe("WorkerEventProcessor", () => {
       workspaceId: "ws-1",
       agentType: "claude",
     };
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -304,7 +383,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event",
@@ -312,13 +391,12 @@ describe("WorkerEventProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockEventTraceWriter.writeAgui).not.toHaveBeenCalled();
     expect(aggregator.handle).toHaveBeenCalledWith({ type: "RUN_STARTED" });
   });
 
   it("should not forward MESSAGES_SNAPSHOT events to the SSE response", async () => {
     const res = makeRes();
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -335,7 +413,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -344,15 +422,11 @@ describe("WorkerEventProcessor", () => {
     });
 
     expect(res.write).not.toHaveBeenCalled();
-    expect(mockEventTraceWriter.writeAgui).toHaveBeenCalledWith(undefined, {
-      type: "MESSAGES_SNAPSHOT",
-      messages: [],
-    });
   });
 
   it("snapshot stream 推送累积快照而非原始事件", async () => {
     const res = makeRes();
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -370,14 +444,14 @@ describe("WorkerEventProcessor", () => {
     });
 
     // RUN_STARTED + 文本开始 + 内容 + 结束
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event",
       payload: { type: "RUN_STARTED", runId: "run-1" },
       ts: "",
     });
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 2,
       type: "agui.event",
@@ -388,7 +462,7 @@ describe("WorkerEventProcessor", () => {
       },
       ts: "",
     });
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 3,
       type: "agui.event",
@@ -399,7 +473,7 @@ describe("WorkerEventProcessor", () => {
       },
       ts: "",
     });
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 4,
       type: "agui.event",
@@ -423,7 +497,7 @@ describe("WorkerEventProcessor", () => {
 
   it("event stream 走原始事件转发（回归）", async () => {
     const res = makeRes();
-    activeRuns.register("run-2", {
+    liveRuns.register("run-2", {
       runtimeHandle: {
         runId: "run-2",
         runtimeType: "local",
@@ -440,7 +514,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-2",
       seq: 1,
       type: "agui.event",
@@ -456,7 +530,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("records failed tool results as tool.failed events", async () => {
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -473,7 +547,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -506,7 +580,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("records normalized usage from RUN_FINISHED results", async () => {
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -523,7 +597,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -555,7 +629,7 @@ describe("WorkerEventProcessor", () => {
   });
 
   it("skips usage persistence when RUN_FINISHED has no usable usage fields", async () => {
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -572,7 +646,7 @@ describe("WorkerEventProcessor", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventProcessor.publish({
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "agui.event" as const,
@@ -586,18 +660,9 @@ describe("WorkerEventProcessor", () => {
     expect(mockRunRepository.recordUsage).not.toHaveBeenCalled();
   });
 
-  it("writes raw SDK events without forwarding them to the aggregator", async () => {
+  it("records raw SDK error events without forwarding them to the aggregator", async () => {
     const aggregator = { handle: vi.fn() };
-    const traceConfig = {
-      enabled: true,
-      rawFilePath: "/tmp/conversation-1.raw.jsonl",
-      aguiFilePath: "/tmp/conversation-1.agui.jsonl",
-      runId: "run-1",
-      conversationId: "conversation-1",
-      workspaceId: "ws-1",
-      agentType: "claude",
-    };
-    activeRuns.register("run-1", {
+    liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
         runtimeType: "local",
@@ -608,15 +673,18 @@ describe("WorkerEventProcessor", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      agentEventTrace: traceConfig,
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
       saveRun: vi.fn(),
     });
 
-    const payload = { name: "sdk.claude.output", payload: { value: "ok" } };
-    await workerEventProcessor.publish({
+    const payload = {
+      name: "sdk.claude.error",
+      threadId: "conversation-1",
+      payload: { value: "boom" },
+    };
+    await workerEventsService.publish({
       runId: "run-1",
       seq: 1,
       type: "sdk.raw" as const,
@@ -624,9 +692,15 @@ describe("WorkerEventProcessor", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockEventTraceWriter.writeRaw).toHaveBeenCalledWith(
-      traceConfig,
-      payload
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "system.issue",
+        origin: "agent",
+        data: expect.objectContaining({
+          providerEventName: "sdk.claude.error",
+          threadId: "conversation-1",
+        }),
+      })
     );
     expect(aggregator.handle).not.toHaveBeenCalled();
   });

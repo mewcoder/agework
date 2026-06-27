@@ -10,7 +10,7 @@ import type {
   RunEventTargetType,
   RunStatusPayload,
 } from "@agework/shared/protocol";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRepository } from "./run-event.repository";
 
 type RunEventBase = {

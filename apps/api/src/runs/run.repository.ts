@@ -9,7 +9,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import {
   ACTIVE_RUN_STATUSES,
   RUNNING_MUTABLE_STATUSES,
-} from "./lifecycle/run-status.policy";
+} from "./status/run-status.policy";
 
 @Injectable()
 export class RunRepository {
