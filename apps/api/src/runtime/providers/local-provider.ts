@@ -79,6 +79,7 @@ export class LocalRuntimeProvider
     const child = fork(TSX_CLI, [WORKER_MAIN], {
       env: {
         ...process.env,
+        AGEWORK_WORKER_KEEP_ALIVE: "false",
         AGEWORK_WORKER_CHANNEL: "ipc",
         AGEWORK_WORKER_RUN_ID: runId,
         AGEWORK_WORKER_RUN_START_TOKEN: startToken,

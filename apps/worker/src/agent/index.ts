@@ -10,16 +10,39 @@ import type {
   RunConfig,
   RunStatusPayload,
 } from "@agework/shared/protocol";
-import { resolveAgentCliPaths } from "./agent-cli-paths.js";
-import type {
-  AgentDriver,
-  AgentRunInput,
-  DriverEventStream,
-} from "./agent-driver.js";
+import type { Subscription } from "rxjs";
 
 type Adapter = ClaudeAgentAdapter | CodexAgentAdapter;
 
-class AdapterAgentDriver implements AgentDriver {
+export type AgentRunPayload = { threadId: string } & Record<string, unknown>;
+
+export type AgentRunInput = {
+  aguiThreadId: string;
+  payload: AgentRunPayload;
+};
+
+export type DriverEventStream = {
+  subscribe(o: {
+    next: (event: unknown) => void;
+    complete: () => void;
+    error: (error: Error) => void;
+  }): Subscription;
+};
+
+export type AgentDriver = {
+  run(input: AgentRunInput): DriverEventStream;
+  interrupt(aguiThreadId?: string): Promise<void>;
+  cancel(aguiThreadId?: string): Promise<void>;
+  resolveControl(command: CommandPayload): boolean | Promise<boolean>;
+  shutdown?(): Promise<void>;
+};
+
+type CliPaths = {
+  claudeExecutablePath?: string;
+  codexExecutablePath?: string;
+};
+
+class AdapterDriver implements AgentDriver {
   constructor(private readonly adapter: Adapter) {}
 
   run(input: AgentRunInput): DriverEventStream {
@@ -43,7 +66,7 @@ class AdapterAgentDriver implements AgentDriver {
   }
 }
 
-export function createAdapterAgentDriver(
+export function createAgentDriver(
   config: RunConfig,
   trace: AgentTraceSink | undefined,
   emitRunStatusForAguiThread: (
@@ -52,8 +75,9 @@ export function createAdapterAgentDriver(
   ) => void
 ): AgentDriver {
   const { agentProviderConfig, runtimePath } = config;
-  const { claudeExecutablePath, codexExecutablePath } =
-    resolveAgentCliPaths(process.env);
+  const { claudeExecutablePath, codexExecutablePath } = resolveCliPaths(
+    process.env
+  );
 
   const pendingActionSink = (event: {
     threadId: string;
@@ -77,7 +101,7 @@ export function createAdapterAgentDriver(
         };
 
   if (agentProviderConfig.agentType === "claude") {
-    return new AdapterAgentDriver(
+    return new AdapterDriver(
       new ClaudeAgentAdapter({
         ...credentials,
         cwd: runtimePath,
@@ -91,7 +115,7 @@ export function createAdapterAgentDriver(
     );
   }
 
-  return new AdapterAgentDriver(
+  return new AdapterDriver(
     new CodexAgentAdapter({
       ...credentials,
       cwd: runtimePath,
@@ -99,4 +123,34 @@ export function createAdapterAgentDriver(
       ...(codexExecutablePath ? { codexPathOverride: codexExecutablePath } : {}),
     })
   );
+}
+
+export function toAgentRunInput(
+  input: unknown,
+  fallbackAguiThreadId: string
+): AgentRunInput {
+  const payload =
+    input && typeof input === "object" && !Array.isArray(input)
+      ? ({ ...(input as Record<string, unknown>) } as AgentRunPayload)
+      : ({ input } as unknown as AgentRunPayload);
+  const threadId =
+    typeof payload.threadId === "string" && payload.threadId.length > 0
+      ? payload.threadId
+      : fallbackAguiThreadId;
+
+  return {
+    aguiThreadId: threadId,
+    payload: {
+      ...payload,
+      threadId,
+    },
+  };
+}
+
+export function resolveCliPaths(
+  env: Record<string, string | undefined>
+): CliPaths {
+  const claudeExecutablePath = env.AGEWORK_CLAUDE_CLI_PATH?.trim() || undefined;
+  const codexExecutablePath = env.AGEWORK_CODEX_CLI_PATH?.trim() || undefined;
+  return { claudeExecutablePath, codexExecutablePath };
 }

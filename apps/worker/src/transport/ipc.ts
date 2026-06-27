@@ -15,7 +15,7 @@ import {
   rpcRequestToCommandMessage,
   upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import { errorDetails, workerLog } from "./worker-log.js";
+import { errorDetails, workerLog } from "../logs/worker.js";
 
 const CONFIG_TIMEOUT_MS = 10_000;
 
@@ -24,13 +24,13 @@ const CONFIG_TIMEOUT_MS = 10_000;
  * 通过 Node.js IPC channel（process.send / process.on("message")）
  * 与父进程（API）通信。
  */
-export class IpcChannel implements RuntimeChannel {
+export class IpcTransport implements RuntimeChannel {
   private seq = 0;
   private readonly runId: string;
 
   constructor() {
     if (!process.send) {
-      throw new Error("IpcChannel requires process to be forked with IPC");
+      throw new Error("IpcTransport requires process to be forked with IPC");
     }
     this.runId = process.env.AGEWORK_WORKER_RUN_ID ?? "";
   }

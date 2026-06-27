@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { UpstreamMessage } from "@agework/shared/protocol";
-import { PersistentHttpClient } from "./persistent-http-client";
+import { HttpTransport } from "./http";
 
-describe("PersistentHttpClient", () => {
+describe("HttpTransport", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
     vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
@@ -37,7 +37,7 @@ describe("PersistentHttpClient", () => {
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     const commands = await client.pollCommands();
 
@@ -82,7 +82,7 @@ describe("PersistentHttpClient", () => {
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     const commands = await client.pollCommands();
 
@@ -114,7 +114,7 @@ describe("PersistentHttpClient", () => {
       json: async () => ({ config: { runId: "run-1", conversationId: "conversation-1", agentProviderConfig: { agentType: "claude", source: "custom" } } }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     const config = await client.fetchRunConfig("run-1");
 
@@ -131,7 +131,7 @@ describe("PersistentHttpClient", () => {
       json: async () => ({ messages: [] }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await client.pollCommands(25_000);
 
@@ -144,7 +144,7 @@ describe("PersistentHttpClient", () => {
   it("emits an event to the run's events endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -177,7 +177,7 @@ describe("PersistentHttpClient", () => {
   it("emits command results as JSON-RPC responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -214,7 +214,7 @@ describe("PersistentHttpClient", () => {
       .mockRejectedValueOnce(new TypeError("fetch failed"))
       .mockResolvedValueOnce({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -233,7 +233,7 @@ describe("PersistentHttpClient", () => {
       .mockResolvedValueOnce({ ok: false, status: 502 })
       .mockResolvedValueOnce({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -253,7 +253,7 @@ describe("PersistentHttpClient", () => {
       text: async () => "bad request",
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     await expect(
       client.emit("run-1", {
@@ -276,7 +276,7 @@ describe("PersistentHttpClient", () => {
       text: async () => "bad gateway",
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
 
     const emitPromise = client.emit("run-1", {
       runId: "run-1",
@@ -298,7 +298,7 @@ describe("PersistentHttpClient", () => {
   it("cleanup resets the per-run seq counter", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new PersistentHttpClient();
+    const client = new HttpTransport();
     const msg = {
       runId: "run-1", seq: 0, type: "agui.event", payload: { type: "RAW" }, ts: "",
     } as unknown as UpstreamMessage;

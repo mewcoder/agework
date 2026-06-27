@@ -42,6 +42,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     const sandbox = await this.client.createSandbox({
       image,
       env: {
+        AGEWORK_WORKER_KEEP_ALIVE: "true",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
         AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
@@ -141,6 +142,7 @@ export class OpenSandboxEngine implements SandboxEngine {
 
     try {
       const envs: Record<string, string> = {
+        AGEWORK_WORKER_KEEP_ALIVE: "true",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
@@ -156,7 +158,7 @@ export class OpenSandboxEngine implements SandboxEngine {
       });
 
       this.logger.log(
-        `Started persistent worker in sandbox ${sandbox.id.slice(0, 12)}`
+        `Started keep-alive worker in sandbox ${sandbox.id.slice(0, 12)}`
       );
     } catch (err) {
       this.logger.warn(

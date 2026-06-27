@@ -359,6 +359,7 @@ export class SandboxRuntimeInstanceService {
       apiBaseUrl: apiBase,
       accessKey,
       env: {
+        AGEWORK_WORKER_KEEP_ALIVE: "true",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBase,
         AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,

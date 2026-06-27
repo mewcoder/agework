@@ -12,16 +12,16 @@ import {
   rpcRequestToCommandMessage,
   upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import { errorDetails, workerLog } from "./worker-log.js";
+import { errorDetails, workerLog } from "../logs/worker.js";
 
 /**
- * 持久容器 worker 的 HTTP 客户端。
+ * Keep-alive worker 的 worker-host HTTP 客户端。
  * commands 轮询是 ownerId 级（`/worker/owners/:ownerId/commands`，
  * ownerId 由 env AGEWORK_WORKER_OWNER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
-export class PersistentHttpClient {
+export class HttpTransport {
   private readonly apiBase: string;
   private readonly ownerId: string;
   private readonly accessKey: string;
@@ -37,13 +37,13 @@ export class PersistentHttpClient {
     this.accessKey = process.env.AGEWORK_WORKER_RUNTIME_ACCESS_KEY ?? "";
 
     if (!this.ownerId) {
-      throw new Error("AGEWORK_WORKER_OWNER_ID is required for persistent worker");
+      throw new Error("AGEWORK_WORKER_OWNER_ID is required for keep-alive worker");
     }
     if (!this.accessKey) {
-      throw new Error("AGEWORK_WORKER_RUNTIME_ACCESS_KEY is required for persistent worker");
+      throw new Error("AGEWORK_WORKER_RUNTIME_ACCESS_KEY is required for keep-alive worker");
     }
 
-    workerLog("persistent http client initialized", {
+    workerLog("worker host http client initialized", {
       apiBase: this.apiBase,
       ownerId: this.ownerId,
       accessKeyPresent: Boolean(this.accessKey),
