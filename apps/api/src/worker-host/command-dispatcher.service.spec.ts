@@ -51,7 +51,6 @@ describe("WorkerCommandDispatcher", () => {
         payload: expect.objectContaining({
           type: "user_message",
           runId: "run-1",
-          input: { prompt: "hello" },
         }),
       })
     );

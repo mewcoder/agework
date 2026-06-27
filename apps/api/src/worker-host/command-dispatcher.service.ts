@@ -44,7 +44,6 @@ export class WorkerCommandDispatcher {
       type: "user_message",
       commandId: generateId(),
       runId: params.runId,
-      input: params.runConfig.input,
     });
   }
 

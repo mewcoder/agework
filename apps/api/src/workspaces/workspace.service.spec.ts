@@ -10,8 +10,9 @@ vi.mock("fs", () => ({
   statSync: vi.fn(() => ({ isDirectory: () => true })),
 }));
 
-vi.mock("../common/id-generator", () => ({
-  generateWorkspaceId: () => Promise.resolve("ws260614113047"),
+vi.mock("@agework/shared", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@agework/shared")>()),
+  generateId: () => "ws260614113047",
 }));
 
 import { join, resolve } from "path";

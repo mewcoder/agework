@@ -172,6 +172,48 @@ describe("RunRecoveryService.recoverOrphanContainers", () => {
     });
   });
 
+  it("marks legacy local runtime resources stopped without requiring a registered provider", async () => {
+    const mockRunRepository: Partial<RunRepository> = {
+      findAllActive: vi.fn().mockResolvedValue([]),
+    };
+    const mockRunConversation: Partial<RunConversationEffects> = {};
+    const mockExecutionService: Partial<ExecutionService> = {
+      cleanupInterruptedExecution: vi.fn(),
+    };
+    const prisma = makePrisma();
+    prisma.runtimeInstance.findMany.mockResolvedValue([
+      {
+        id: "rr-local",
+        runtimeType: "local",
+        isolationScope: "workspace",
+        ownerId: "ws-1",
+        runtimeInstanceId: "12345:token",
+      },
+    ]);
+
+    const service = new RunRecoveryService(
+      mockRunRepository as RunRepository,
+      mockRunConversation as RunConversationEffects,
+      mockExecutionService as ExecutionService,
+      new RuntimeProviderRegistry([]),
+      prisma as never
+    );
+
+    await service.recoverInterruptedRuns();
+
+    expect(prisma.runtimeInstance.update).toHaveBeenCalledWith({
+      where: { id: "rr-local" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          runtimeType: "local",
+          ownerId: "ws-1",
+          statusReason: "orphan_recovered",
+        }),
+      },
+    });
+  });
+
   it("skips user-scope runtime resources without stopping or marking them", async () => {
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
     const mockRunRepository: Partial<RunRepository> = {

@@ -7,7 +7,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import { isDevAuthDisabled } from "./dev-auth";
-import { extractBearerToken } from "./extract-bearer-token";
+import { extractBearerToken } from "../common/extract-bearer-token";
 import { IS_PUBLIC_KEY } from "./public.decorator";
 import type { JwtUser } from "./current-user.decorator";
 import { UserService } from "../users/user.service";

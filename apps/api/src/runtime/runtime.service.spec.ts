@@ -2,32 +2,33 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { ConfigService } from "../config/config.service";
+import type { RuntimeProvider } from "./providers/provider-contracts";
 
 describe("RuntimeService", () => {
   let configService: Partial<ConfigService>;
-  let providerRegistry: Partial<RuntimeProviderRegistry>;
-  let provider: {
-    type: string;
-    shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
-  };
+  let providerRegistry: RuntimeProviderRegistry;
+  let resolveSpy: ReturnType<typeof vi.spyOn>;
+  let sandboxProvider: RuntimeProvider;
+  let shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
   let service: RuntimeService;
 
   beforeEach(() => {
-    provider = {
-      type: "local",
-      shutdownRuntimeInstance: vi.fn(),
+    shutdownRuntimeInstance = vi.fn((_ownerId: string) => undefined);
+    sandboxProvider = {
+      type: "sandbox",
+      recoverOrphan: vi.fn(async (_runtimeInstanceId: string) => undefined),
+      shutdownRuntimeInstance: shutdownRuntimeInstance as (ownerId: string) => void,
     };
     configService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
       getSandboxEngine: vi.fn().mockReturnValue("docker"),
     };
-    providerRegistry = {
-      resolve: vi.fn().mockReturnValue(provider),
-    };
+    providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
+    resolveSpy = vi.spyOn(providerRegistry, "resolve");
     service = new RuntimeService(
       configService as ConfigService,
-      providerRegistry as RuntimeProviderRegistry
+      providerRegistry
     );
   });
 
@@ -46,7 +47,15 @@ describe("RuntimeService", () => {
 
   it("shutdownRuntimeInstance dispatches to the resolved provider by type", () => {
     service.shutdownRuntimeInstance("sandbox", "ws-1");
-    expect(providerRegistry.resolve).toHaveBeenCalledWith("sandbox");
-    expect(provider.shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
+    expect(resolveSpy).toHaveBeenCalledWith("sandbox");
+    expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("shutdownRuntimeInstance resolves local to the registry no-op provider", () => {
+    shutdownRuntimeInstance.mockClear();
+
+    service.shutdownRuntimeInstance("local", "ws-1");
+    expect(resolveSpy).toHaveBeenCalledWith("local");
+    expect(shutdownRuntimeInstance).not.toHaveBeenCalled();
   });
 });

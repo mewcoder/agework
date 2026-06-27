@@ -9,8 +9,7 @@ import { RunStatusService } from "../status/run-status.service";
 import type { ConfigService } from "../../config/config.service";
 import type { ExecutionService } from "../execution/execution.service";
 import { RunStream } from "../streaming/run-stream";
-import { WorkerAgUiEventHandler } from "./handlers/agui-event.handler";
-import { WorkerRunEventRecorder } from "./run-event.recorder";
+import { WorkerAgUiEventHandler } from "./agui-event.handler";
 
 function makeConfig(): ConfigService {
   return {
@@ -74,17 +73,14 @@ describe("WorkerEventsService", () => {
       mockRunConversation as RunConversationEffects,
       liveRuns
     );
-    const eventRecorder = new WorkerRunEventRecorder(mockRunEvents);
     const aguiEvents = new WorkerAgUiEventHandler(
       mockRunRepository as RunRepository,
       liveRuns,
-      mockRunConversation as RunConversationEffects,
-      eventRecorder
+      mockRunEvents
     );
     workerEventsService = new WorkerEventsService(
       liveRuns,
       mockRunEvents,
-      eventRecorder,
       runStatusService,
       mockExecutionService as ExecutionService,
       aguiEvents
@@ -351,6 +347,98 @@ describe("WorkerEventsService", () => {
 
     expect(aggregator.handle).toHaveBeenCalledWith(
       expect.objectContaining({ type: "TOOL_CALL_START" })
+    );
+  });
+
+  it("persists agent.sessionId only through the live run callback", async () => {
+    const onAgentSessionId = vi.fn((sessionId: string) => {
+      void mockRunConversation.saveAgentSessionId?.(
+        "conversation-1",
+        sessionId
+      );
+    });
+    liveRuns.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+      onAgentSessionId,
+    });
+
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {
+        type: "CUSTOM",
+        name: "agent.sessionId",
+        value: "session-1",
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(onAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
+    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledWith(
+      "conversation-1",
+      "session-1"
+    );
+  });
+
+  it("persists system:init session_id only through the live run callback", async () => {
+    const onAgentSessionId = vi.fn((sessionId: string) => {
+      void mockRunConversation.saveAgentSessionId?.(
+        "conversation-1",
+        sessionId
+      );
+    });
+    liveRuns.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+      onAgentSessionId,
+    });
+
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "agui.event" as const,
+      payload: {
+        type: "CUSTOM",
+        name: "system:init",
+        value: { session_id: "session-1" },
+      },
+      ts: new Date().toISOString(),
+    });
+
+    expect(onAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
+    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledWith(
+      "conversation-1",
+      "session-1"
     );
   });
 

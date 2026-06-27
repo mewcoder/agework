@@ -5,6 +5,7 @@ import { ConversationService } from "./conversation.service";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 import { UpdateConversationDto } from "./dto/update-conversation.dto";
 import { ConversationIdDto } from "./dto/conversation-id.dto";
+import { ConversationListQueryDto } from "./dto/conversation-list-query.dto";
 import { ConversationStatusQueryDto } from "./dto/conversation-status-query.dto";
 import { ConversationSearchQueryDto } from "./dto/conversation-search-query.dto";
 
@@ -15,11 +16,14 @@ export class ConversationController {
   @Get("list")
   list(
     @CurrentUser() user: JwtUser,
-    @Query("after") after?: string,
-    @Query("status") status?: string,
-    @Query("sort") sort?: string
+    @Query() query: ConversationListQueryDto
   ) {
-    return this.conversationService.list(user.userId, after, status, sort);
+    return this.conversationService.list(
+      user.userId,
+      query.after,
+      query.status,
+      query.sort
+    );
   }
 
   @Get("search")
@@ -46,8 +50,8 @@ export class ConversationController {
   }
 
   @Get("query")
-  findOne(@Query("id") id: string, @CurrentUser() user: JwtUser) {
-    return this.conversationService.findOne(user.userId, id);
+  findOne(@Query() query: ConversationIdDto, @CurrentUser() user: JwtUser) {
+    return this.conversationService.findOne(user.userId, query.id);
   }
 
   @Post("statuses/query")
@@ -88,9 +92,9 @@ export class ConversationController {
 
   @Get("messages/list")
   listMessages(
-    @Query("id") id: string,
+    @Query() query: ConversationIdDto,
     @CurrentUser() user: JwtUser
   ) {
-    return this.conversationService.listMessages(user.userId, id);
+    return this.conversationService.listMessages(user.userId, query.id);
   }
 }

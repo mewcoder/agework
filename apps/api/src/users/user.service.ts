@@ -27,7 +27,6 @@ import {
   UserDeletedEvent,
   UserDisabledEvent,
 } from "./user.events";
-import { generateUserId } from "../common/id-generator";
 import { PasswordHasherService } from "./password-hasher.service";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
@@ -123,7 +122,7 @@ export class UserService {
     const temporaryPassword = generateTemporaryPassword();
     const now = new Date();
     const passwordExpiresAt = new Date(now.getTime() + INITIAL_PASSWORD_TTL_MS);
-    const id = await generateUserId();
+    const id = generateId();
     const user = await this.prisma.user.create({
       data: {
         id,
@@ -376,7 +375,7 @@ export class UserService {
     }
 
     const now = new Date();
-    const id = await generateUserId();
+    const id = generateId();
     const user = await this.prisma.user.create({
       data: {
         id,

@@ -27,11 +27,11 @@ export class AgentController {
 
   @Get("resume")
   async resume(
-    @Query("id") conversationId: string,
+    @Query() query: AgentConversationIdDto,
     @Res() res: Response,
     @CurrentUser() user: JwtUser
   ) {
-    await this.agentService.resume(conversationId, res, user);
+    await this.agentService.resume(query.id, res, user);
   }
 
   @Post("reply")

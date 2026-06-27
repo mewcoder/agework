@@ -17,7 +17,6 @@ import {
   type RuntimeType,
   type SandboxEngineType,
 } from "../config/config.service";
-import { generateWorkspaceId } from "../common/id-generator";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -194,7 +193,7 @@ export class WorkspaceService {
       requestedIsolationScope,
       Boolean(requestedRootPath?.trim())
     );
-    const id = await generateWorkspaceId();
+    const id = generateId();
     const { rootPath, ownsDirectory } = await this.resolveCreateRootPath(
       userId,
       id,

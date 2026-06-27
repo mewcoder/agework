@@ -16,16 +16,17 @@ import {
 import type { RunExecutor } from "./execution/executor";
 import { LocalRunExecutor } from "./execution/local.executor";
 import { SandboxRunExecutor } from "./execution/sandbox.executor";
-import { WorkerAgUiEventHandler } from "./worker-events/handlers/agui-event.handler";
-import { WorkerRunEventRecorder } from "./worker-events/run-event.recorder";
+import { WorkerAgUiEventHandler } from "./worker-events/agui-event.handler";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
 // deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
+import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
 import { WorkerCommandQueue } from "../worker-host/command-queue";
+import { WorkerCommandDispatcher } from "../worker-host/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "../worker-host/worker-upstream.registry";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
@@ -62,7 +63,6 @@ import { RunEventsModule } from "../run-events/run-events.module";
     },
     RunExecutorRegistry,
     ExecutionService,
-    WorkerRunEventRecorder,
     WorkerAgUiEventHandler,
   ],
   exports: [RunService],
@@ -71,6 +71,8 @@ export class RunsModule implements OnModuleInit {
   constructor(
     private readonly runRecovery: RunRecoveryService,
     private readonly executionService: ExecutionService,
+    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
+    private readonly workerCommands: WorkerCommandDispatcher,
     private readonly commandQueue: WorkerCommandQueue,
     private readonly workerUpstream: WorkerUpstreamRegistry,
     private readonly liveRuns: LiveRunRegistry,
@@ -79,6 +81,11 @@ export class RunsModule implements OnModuleInit {
 
   async onModuleInit() {
     this.executionService.setRunEventReceiver(this.workerEvents);
+    this.runtimeProviderRegistry
+      .resolve("sandbox")
+      .setOwnerSessionCleanup?.((ownerId) =>
+        this.workerCommands.cleanupByOwnerId(ownerId)
+      );
     this.commandQueue.setCommandSentRecorder(this.workerEvents);
     this.workerUpstream.setReceiver(this.workerEvents);
     this.liveRuns.setTimeoutErrorSink(this.workerEvents);

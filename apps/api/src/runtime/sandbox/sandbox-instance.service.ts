@@ -5,7 +5,7 @@ import type {
   SandboxRuntimePlacement,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { isSandboxPlacement } from "../placement/runtime-resource";
+import { isSandboxPlacement } from "../runtime-resource";
 import { ConfigService } from "../../config/config.service";
 import {
   CONTAINER_RUNTIME_LOG_DIR,

@@ -1,4 +1,4 @@
-// 从 assistant-ui 消息 content（string / part 数组 / { role, content } 对象）提取纯文本
+// 从 assistant-ui 消息 content（string / part 数组 / { role, content } 对象）提取纯文本。
 export function extractText(content: unknown): string {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {

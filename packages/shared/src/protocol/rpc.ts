@@ -81,7 +81,6 @@ export type WorkerCommandMethod =
 
 export type RunStartParams = {
   runId: string;
-  input: unknown;
 };
 
 export type RunCancelParams = {
@@ -188,7 +187,7 @@ export function commandMessageToRpcRequest(
         jsonrpc: JSON_RPC_VERSION,
         id: command.commandId,
         method: "run.start",
-        params: { runId: command.runId, input: command.input },
+        params: { runId: command.runId },
         meta,
       };
     case "cancel":
@@ -248,7 +247,6 @@ export function rpcRequestToCommandPayload(
         type: "user_message",
         commandId,
         runId: request.params.runId,
-        input: request.params.input,
       };
     case "run.cancel":
       return {
@@ -610,7 +608,7 @@ function isRpcErrorObject(value: unknown): value is RpcError {
 }
 
 function isRunStartParams(value: unknown): value is RunStartParams {
-  return isRecord(value) && isNonEmptyString(value.runId) && "input" in value;
+  return isRecord(value) && isNonEmptyString(value.runId);
 }
 
 function isRunCancelParams(value: unknown): value is RunCancelParams {

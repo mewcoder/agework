@@ -85,6 +85,43 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
         where: { workspaceId: "ws-1" },
       });
     });
+
+    it("marks legacy local runtime resources stopped without a registered provider", async () => {
+      const findUnique = vi.fn().mockResolvedValue({
+        id: "wr-1",
+        workspaceId: "ws-1",
+        resource: makeResource({
+          runtimeType: "local",
+          runtimeInstanceId: "12345:token",
+        }),
+      });
+      const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
+      const update = vi.fn().mockResolvedValue({});
+      const service = new RuntimeInstanceLifecycleUseCase(
+        {
+          workspaceRuntimeInstance: { findUnique, deleteMany },
+          runtimeInstance: { update },
+        } as never,
+        new RuntimeProviderRegistry([])
+      );
+
+      await service.shutdownForWorkspace("ws-1");
+
+      expect(update).toHaveBeenCalledWith({
+        where: { id: "rr-1" },
+        data: {
+          status: "stopped",
+          metadata: expect.objectContaining({
+            runtimeType: "local",
+            ownerId: "ws-1",
+            statusReason: "owner_released",
+          }),
+        },
+      });
+      expect(deleteMany).toHaveBeenCalledWith({
+        where: { workspaceId: "ws-1" },
+      });
+    });
   });
 
   describe("shutdownForUser", () => {

@@ -3,7 +3,7 @@ import { Roles } from "../../auth/roles.decorator";
 import { ConfigService } from "../../config/config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeService } from "../runtime.service";
-import { RuntimeInstanceIdDto } from "./dto/runtime-instance-id.dto";
+import { RuntimeInstanceIdDto } from "./runtime-instance-id.dto";
 import {
   runtimeInstanceDiagnostics,
   runtimeInstanceMetadataJson,

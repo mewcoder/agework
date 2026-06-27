@@ -69,7 +69,6 @@ const userMessage: CommandPayload = {
   type: "user_message",
   commandId: "cmd-start",
   runId: "run-1",
-  input: { message: "hello" },
 };
 
 describe("RunnerManager", () => {

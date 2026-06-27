@@ -27,19 +27,6 @@ export function redactLogValue(value: unknown): unknown {
   return redactValue(value, "", new WeakSet<object>());
 }
 
-export function summarizeMessagePayload(payload: unknown): Record<string, unknown> {
-  if (!payload || typeof payload !== "object") {
-    return { value: String(payload) };
-  }
-  const record = payload as Record<string, unknown>;
-  return {
-    type: record.type,
-    status: record.status,
-    pendingAction: record.pendingAction,
-    name: record.name,
-  };
-}
-
 export function resolveNestLogLevels(): NestLogLevel[] {
   const raw = process.env.AGEWORK_LOG_LEVEL?.toLowerCase();
   if (raw === "debug") return ["error", "warn", "log", "debug"];

@@ -5,7 +5,7 @@ import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
   type RuntimeTargetDefaults,
-} from "./placement/runtime-resource";
+} from "./runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 
 /**

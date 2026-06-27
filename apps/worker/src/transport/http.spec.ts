@@ -25,7 +25,6 @@ describe("HttpTransport", () => {
             method: "run.start",
             params: {
               runId: "run-1",
-              input: { text: "hi" },
             },
             meta: {
               runId: "run-1",
@@ -49,7 +48,6 @@ describe("HttpTransport", () => {
       type: "user_message",
       commandId: "cmd-3",
       runId: "run-1",
-      input: { text: "hi" },
     });
     // 下一次 poll 用更新后的 afterSeq
     await client.pollCommands();

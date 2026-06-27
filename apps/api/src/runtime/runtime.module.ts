@@ -5,8 +5,6 @@ import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtim
 import { RuntimeInstanceLifecycleUseCase } from "./instances/lifecycle.use-case";
 import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener";
 
-// providers
-import { LocalRuntimeInstanceManager } from "./providers/local-runtime-instance.manager";
 import { DockerSandboxEngine } from "./sandbox/docker-engine";
 import { OpenSandboxEngine } from "./sandbox/opensandbox-engine";
 import { SandboxRuntimeInstanceManager } from "./sandbox/sandbox-runtime-instance.manager";
@@ -43,7 +41,6 @@ import { ConfigService } from "../config/config.service";
     RuntimeInstanceLifecycleUseCase,
     RuntimeInstanceLifecycleListener,
     // providers
-    LocalRuntimeInstanceManager,
     DockerSandboxEngine,
     {
       provide: OPENSANDBOX_CLIENT,
@@ -62,7 +59,7 @@ import { ConfigService } from "../config/config.service";
     {
       provide: RUNTIME_PROVIDERS,
       useFactory: (...providers: RuntimeProvider[]) => providers,
-      inject: [LocalRuntimeInstanceManager, SandboxRuntimeInstanceManager],
+      inject: [SandboxRuntimeInstanceManager],
     },
     RuntimeProviderRegistry,
     RuntimeService,

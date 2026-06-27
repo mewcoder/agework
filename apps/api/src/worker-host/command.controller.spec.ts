@@ -92,7 +92,6 @@ describe("WorkerCommandController", () => {
                 type: "user_message",
                 commandId: "cmd-2",
                 runId: "run-2",
-                input: {},
               },
               ts: "2026-06-27T00:00:00.000Z",
             },

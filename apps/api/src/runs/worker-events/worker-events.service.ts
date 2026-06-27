@@ -5,6 +5,7 @@ import type {
   CommandResultPayload,
   CommandTracePayload,
   WorkerExecutionHandle,
+  RecordRunEventInput,
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "../execution/executor";
 import type { WorkerUpstreamReceiver } from "../../worker-host/worker-upstream.registry";
@@ -15,16 +16,16 @@ import {
 import { ExecutionService } from "../execution/execution.service";
 import {
   safeLogJson,
-  summarizeMessagePayload,
 } from "../../common/logging";
+import { swallow } from "../../common/swallow";
+import { summarizeMessagePayload } from "./message-payload-summary";
 import {
   decideRunStatusUpdate,
   TERMINAL_RUN_STATUSES,
 } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
 import { RunEventService } from "../../run-events/run-event.service";
-import { WorkerAgUiEventHandler } from "./handlers/agui-event.handler";
-import { WorkerRunEventRecorder } from "./run-event.recorder";
+import { WorkerAgUiEventHandler } from "./agui-event.handler";
 
 /** 终态完成后保留记录的时长，用于阻止 exit handler 等延迟事件覆盖已终态 */
 const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
@@ -43,7 +44,6 @@ export class WorkerEventsService
   constructor(
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
-    private readonly eventRecorder: WorkerRunEventRecorder,
     private readonly runStatusService: RunStatusService,
     private readonly executionService: ExecutionService,
     private readonly aguiEvents: WorkerAgUiEventHandler
@@ -146,7 +146,7 @@ export class WorkerEventsService
         })}`
       );
       // gap 只 warn 不可在管理端追溯；落一条摘要事件，使其在 run detail 中可见。
-      this.eventRecorder.recordSeqGap({
+      this.recordSeqGap({
         runId,
         expected,
         got: seq,
@@ -163,16 +163,16 @@ export class WorkerEventsService
         await this.aguiEvents.handle(runId, message.payload);
         break;
       case "sdk.raw":
-        this.eventRecorder.recordSdkRaw(runId, message.payload);
+        this.recordSdkRaw(runId, message.payload);
         break;
       case "command.trace":
-        this.eventRecorder.recordCommandTrace(
+        this.recordCommandTrace(
           runId,
           message.payload as CommandTracePayload
         );
         break;
       case "command.result":
-        this.eventRecorder.recordCommandResult(
+        this.recordCommandResult(
           runId,
           message.payload as CommandResultPayload
         );
@@ -235,7 +235,7 @@ export class WorkerEventsService
     if (isTerminal) {
       this.finalizingRuns.add(runId);
     }
-    this.eventRecorder.recordRunStatus(runId, payload);
+    this.recordRunStatus(runId, payload);
 
     try {
       const handle = this.liveRuns.get(runId);
@@ -263,9 +263,63 @@ export class WorkerEventsService
         this.finalizingRuns.delete(runId);
         this.lastSeqMap.delete(runId);
         this.aguiEvents.clearRun(runId);
-        this.eventRecorder.forgetRun(runId);
+        this.runEvents.forgetRun(runId);
       }
     }
+  }
+
+  private recordSeqGap(input: {
+    runId: string;
+    expected: number;
+    got: number;
+    messageType: string;
+  }): void {
+    this.recordRunEvent(
+      this.runEvents.fromWorkerSeqGap(input),
+      `record worker seq gap for run ${input.runId}`
+    );
+  }
+
+  private recordRunStatus(runId: string, payload: RunStatusPayload): void {
+    this.recordRunEvent(
+      this.runEvents.fromRunStatusPayload(runId, payload),
+      `record run status event for run ${runId}`
+    );
+  }
+
+  private recordSdkRaw(runId: string, event: unknown): void {
+    this.recordRunEvent(
+      this.runEvents.fromSdkRawEvent(runId, event),
+      `record raw SDK error event for run ${runId}`
+    );
+  }
+
+  private recordCommandTrace(
+    runId: string,
+    payload: CommandTracePayload
+  ): void {
+    this.recordRunEvent(
+      this.runEvents.fromCommandTrace(runId, payload),
+      `record command trace for run ${runId}`
+    );
+  }
+
+  private recordCommandResult(
+    runId: string,
+    payload: CommandResultPayload
+  ): void {
+    this.recordRunEvent(
+      this.runEvents.fromCommandResult(runId, payload),
+      `record command result for run ${runId}`
+    );
+  }
+
+  private recordRunEvent(
+    event: RecordRunEventInput | undefined,
+    context: string
+  ): void {
+    if (!event) return;
+    this.runEvents.append(event).catch(swallow(this.logger, context));
   }
 
   private shouldIgnoreRunStatus(

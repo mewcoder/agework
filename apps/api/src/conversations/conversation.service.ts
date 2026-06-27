@@ -16,7 +16,7 @@ import type {
 } from "@agework/shared/api";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
-import { extractText } from "../common/message-text";
+import { extractText } from "./message-text";
 import { swallow } from "../common/swallow";
 import { TitleService } from "./title.service";
 

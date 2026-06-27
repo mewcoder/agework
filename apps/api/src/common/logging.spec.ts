@@ -3,7 +3,6 @@ import {
   errorLogFields,
   safeLogJson,
   redactLogValue,
-  summarizeMessagePayload,
   resolveNestLogLevels,
 } from "./logging";
 
@@ -80,31 +79,6 @@ describe("redactLogValue", () => {
     expect(redactLogValue({ user: { password: "pw" } })).toEqual({
       user: { password: "[redacted]" },
     });
-  });
-});
-
-describe("summarizeMessagePayload", () => {
-  it("extracts known fields from object payload", () => {
-    expect(
-      summarizeMessagePayload({
-        type: "run.status",
-        status: "running",
-        name: "test",
-        pendingAction: null,
-        extra: "ignored",
-      })
-    ).toEqual({
-      type: "run.status",
-      status: "running",
-      name: "test",
-      pendingAction: null,
-    });
-  });
-
-  it("wraps non-object payload", () => {
-    expect(summarizeMessagePayload("hello")).toEqual({ value: "hello" });
-    expect(summarizeMessagePayload(null)).toEqual({ value: "null" });
-    expect(summarizeMessagePayload(42)).toEqual({ value: "42" });
   });
 });
 

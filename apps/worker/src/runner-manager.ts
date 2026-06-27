@@ -1,12 +1,13 @@
 import { fork, type ChildProcess } from "node:child_process";
-import type {
-  CommandPayload,
-  RunChannelMessage,
-  RunConfig,
-  RunStatusPayload,
-  UpstreamMessage,
-  WorkerCommandResult,
-  RpcResponse,
+import {
+  nextCommandMessage,
+  type CommandPayload,
+  type RunChannelMessage,
+  type RunConfig,
+  type RunStatusPayload,
+  type UpstreamMessage,
+  type WorkerCommandResult,
+  type RpcResponse,
 } from "@agework/shared/protocol";
 import {
   commandMessageToRpcRequest,
@@ -454,23 +455,6 @@ export class RunnerManager {
       }, "error");
     }
   }
-}
-
-function nextCommandMessage(
-  commandSeqs: Map<string, number>,
-  seqOwnerId: string,
-  runId: string,
-  payload: CommandPayload
-): RunChannelMessage<CommandPayload> {
-  const seq = (commandSeqs.get(seqOwnerId) ?? 0) + 1;
-  commandSeqs.set(seqOwnerId, seq);
-  return {
-    runId,
-    seq,
-    type: "command",
-    payload,
-    ts: new Date().toISOString(),
-  };
 }
 
 function upstreamMessageFromRunner(

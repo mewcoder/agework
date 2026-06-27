@@ -101,8 +101,6 @@ export type CommandPayload =
       commandId: string;
       /** 本次 turn 的 runId（worker 用它来 emit 事件和上报状态）。 */
       runId: string;
-      /** 传给 adapter.run() 的完整 input（AG-UI RunAgentInput）。 */
-      input: unknown;
     };
 
 /**

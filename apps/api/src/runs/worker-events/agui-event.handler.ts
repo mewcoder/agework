@@ -1,14 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { RunUsage } from "@agework/shared/protocol";
-import { errorLogFields, safeLogJson } from "../../../common/logging";
-import { swallow } from "../../../common/swallow";
-import { RunRepository } from "../../run.repository";
-import { RunConversationEffects } from "../../conversation/run-conversation.effects";
+import type { RecordRunEventInput, RunUsage } from "@agework/shared/protocol";
+import { safeLogJson } from "../../common/logging";
+import { swallow } from "../../common/swallow";
+import { RunRepository } from "../run.repository";
 import {
   LiveRunRegistry,
   type LiveRunHandle,
-} from "../../live-runs/live-run.registry";
-import { WorkerRunEventRecorder } from "../run-event.recorder";
+} from "../live-runs/live-run.registry";
+import { RunEventService } from "../../run-events/run-event.service";
 
 const CHUNK_SAVE_INTERVAL = 20;
 
@@ -20,8 +19,7 @@ export class WorkerAgUiEventHandler {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly runConversation: RunConversationEffects,
-    private readonly eventRecorder: WorkerRunEventRecorder
+    private readonly runEvents: RunEventService
   ) {}
 
   async handle(runId: string, event: unknown): Promise<void> {
@@ -35,12 +33,12 @@ export class WorkerAgUiEventHandler {
 
     const evt = event as Record<string, unknown>;
     const eventType = typeof evt.type === "string" ? evt.type : "unknown";
-    if (this.eventRecorder.shouldLogAgUiEvent(eventType)) {
+    if (this.runEvents.shouldLogAgUiEvent(eventType)) {
       this.logger.debug(
         `forward AG-UI event ${safeLogJson({ runId, type: eventType })}`
       );
     }
-    this.eventRecorder.recordAgUi(runId, eventType, evt);
+    this.recordAgUi(runId, eventType, evt);
     handle.aggregator.handle(evt as { type: string; [key: string]: unknown });
 
     this.saveAndSnapshotOnMessageBoundary(runId, evt, handle);
@@ -64,6 +62,28 @@ export class WorkerAgUiEventHandler {
 
   clearRun(runId: string): void {
     this.chunkCounters.delete(runId);
+  }
+
+  private recordAgUi(
+    runId: string,
+    eventType: string,
+    event: Record<string, unknown>
+  ): void {
+    const events = this.runEvents.fromAgUiEvent(runId, eventType, event);
+    for (const runEvent of events) {
+      this.recordRunEvent(
+        runEvent,
+        `record AG-UI event ${eventType} for run ${runId}`
+      );
+    }
+  }
+
+  private recordRunEvent(
+    event: RecordRunEventInput | undefined,
+    context: string
+  ): void {
+    if (!event) return;
+    this.runEvents.append(event).catch(swallow(this.logger, context));
   }
 
   private saveAndSnapshotOnMessageBoundary(
@@ -105,7 +125,6 @@ export class WorkerAgUiEventHandler {
 
     if (evt.name === "agent.sessionId" && typeof evt.value === "string") {
       handle.onAgentSessionId?.(evt.value);
-      this.persistAgentSessionId(handle.conversationId, evt.value);
       return true;
     }
 
@@ -113,27 +132,10 @@ export class WorkerAgUiEventHandler {
       const value = evt.value as { session_id?: unknown } | undefined;
       if (typeof value?.session_id === "string") {
         handle.onAgentSessionId?.(value.session_id);
-        this.persistAgentSessionId(handle.conversationId, value.session_id);
       }
     }
 
     return false;
-  }
-
-  private persistAgentSessionId(
-    conversationId: string,
-    sessionId: string
-  ): void {
-    this.runConversation
-      .saveAgentSessionId(conversationId, sessionId)
-      .catch((err) =>
-        this.logger.warn(
-          `persist agent session id failed ${safeLogJson({
-            conversationId,
-            ...errorLogFields(err),
-          })}`
-        )
-      );
   }
 
   private writeSnapshotToHandle(handle: LiveRunHandle): void {
