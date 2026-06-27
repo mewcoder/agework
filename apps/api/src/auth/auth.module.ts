@@ -5,12 +5,12 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { RolesGuard } from "./roles.guard";
-import { PrismaModule } from "../prisma/prisma.module";
 import { getJwtSecret } from "../config/config.service";
+import { UserModule } from "../users/user.module";
 
 @Module({
   imports: [
-    PrismaModule,
+    UserModule,
     JwtModule.register({
       secret: getJwtSecret(),
       signOptions: { expiresIn: "7d" },

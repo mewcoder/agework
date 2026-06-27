@@ -3,8 +3,8 @@ vi.mock("../prisma/prisma.service", () => ({
 }));
 
 import { UserService } from "./user.service";
-import type { AuthService } from "../auth/auth.service";
 import type { JwtUser } from "../auth/current-user.decorator";
+import type { PasswordHasherService } from "./password-hasher.service";
 
 function makeUser(overrides?: Partial<Record<string, unknown>>) {
   return {
@@ -26,7 +26,7 @@ function makeUser(overrides?: Partial<Record<string, unknown>>) {
 
 function makeService(overrides?: {
   prisma?: Record<string, unknown>;
-  auth?: Partial<AuthService>;
+  hasher?: Partial<PasswordHasherService>;
 }) {
   const prisma = {
     user: {
@@ -39,19 +39,20 @@ function makeService(overrides?: {
     },
     ...overrides?.prisma,
   };
-  const auth: Partial<AuthService> = {
-    hashPassword: vi.fn().mockResolvedValue("hashed"),
-    ...overrides?.auth,
+  const hasher: Partial<PasswordHasherService> = {
+    hash: vi.fn().mockResolvedValue("hashed"),
+    compare: vi.fn().mockResolvedValue(false),
+    ...overrides?.hasher,
   };
   const events = { emit: vi.fn() };
   return {
     service: new UserService(
       prisma as never,
-      auth as AuthService,
+      hasher as PasswordHasherService,
       events as never
     ),
     prisma,
-    auth,
+    hasher,
     events,
   };
 }

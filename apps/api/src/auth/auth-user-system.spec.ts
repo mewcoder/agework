@@ -11,7 +11,8 @@ import type { JwtUser } from "./current-user.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { SystemInitService } from "../system/system-init.service";
 import { UserService } from "../users/user.service";
-import { SUPER_ADMIN_USERNAME } from "./user-credentials";
+import { SUPER_ADMIN_USERNAME } from "../users/user-credentials";
+import { PasswordHasherService } from "../users/password-hasher.service";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -195,24 +196,26 @@ function optionalString(value: unknown, fallback: string) {
 function makeServices() {
   const prisma = new MemoryPrisma();
   const jwt = new JwtService({ secret: "test-secret" });
-  const auth = new AuthService(prisma as unknown as PrismaService, jwt);
+  const passwordHasher = new PasswordHasherService();
+  const users = new UserService(
+    prisma as unknown as PrismaService,
+    passwordHasher,
+    {
+      emit: vi.fn(),
+    } as never
+  );
+  const auth = new AuthService(users, jwt);
   const systemInitialization = new SystemInitService(
-    prisma as unknown as PrismaService
+    prisma as unknown as PrismaService,
+    users
   );
-  const users = new UserService(prisma as unknown as PrismaService, auth, {
-    emit: vi.fn(),
-  } as never);
-  const guard = new JwtAuthGuard(
-    jwt,
-    new Reflector(),
-    prisma as unknown as PrismaService
-  );
+  const guard = new JwtAuthGuard(jwt, new Reflector(), users);
 
-  return { auth, guard, prisma, systemInitialization, users };
+  return { auth, guard, passwordHasher, prisma, systemInitialization, users };
 }
 
 async function seedSuperAdmin(
-  auth: AuthService,
+  passwordHasher: PasswordHasherService,
   prisma: MemoryPrisma,
   password = "AdminInitPass1"
 ) {
@@ -220,7 +223,7 @@ async function seedSuperAdmin(
     data: {
       id: "admin",
       username: SUPER_ADMIN_USERNAME,
-      passwordHash: await auth.hashPassword(password),
+      passwordHash: await passwordHasher.hash(password),
       role: "super_admin",
       status: "active",
       mustChangePassword: false,
@@ -574,8 +577,8 @@ describe("auth and user management security flows", () => {
   });
 
   it("prevents ordinary admins from managing admin and super admin accounts", async () => {
-    const { auth, prisma, users } = makeServices();
-    await seedSuperAdmin(auth, prisma);
+    const { auth, passwordHasher, prisma, users } = makeServices();
+    await seedSuperAdmin(passwordHasher, prisma);
     const manager = await users.create(superAdminUser(), "ops_admin", "admin");
     const root = await auth.login("admin", "AdminInitPass1");
 
@@ -588,9 +591,9 @@ describe("auth and user management security flows", () => {
   });
 
   it("uses the same password rules for super admin password changes", async () => {
-    const { auth, prisma } = makeServices();
+    const { auth, passwordHasher, prisma } = makeServices();
 
-    await seedSuperAdmin(auth, prisma);
+    await seedSuperAdmin(passwordHasher, prisma);
     const login = await auth.login("admin", "AdminInitPass1");
 
     await expect(

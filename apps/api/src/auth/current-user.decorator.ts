@@ -3,15 +3,9 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from "@nestjs/common";
+import type { UserSession } from "../users/user-session";
 
-export interface JwtUser {
-  userId: string;
-  username: string;
-  role: string;
-  status: string;
-  mustChangePassword: boolean;
-  sessionVersion: number;
-}
+export type JwtUser = UserSession;
 
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): JwtUser => {

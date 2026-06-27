@@ -1,21 +1,21 @@
-import { randomUUID } from "node:crypto";
 import {
   Injectable,
   Logger,
   OnApplicationBootstrap,
 } from "@nestjs/common";
-import * as bcrypt from "bcryptjs";
-import { generateId } from "@agework/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { isDevAuthDisabled } from "../auth/dev-auth";
-import { SUPER_ADMIN_USERNAME } from "../auth/user-credentials";
 import { SETTINGS_REGISTRY } from "../config/settings-registry";
+import { UserService } from "../users/user.service";
 
 @Injectable()
 export class SystemInitService implements OnApplicationBootstrap {
   private readonly logger = new Logger(SystemInitService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly users: UserService
+  ) {}
 
   async onApplicationBootstrap(): Promise<void> {
     await this.seedDefaultSystemSettings();
@@ -25,7 +25,7 @@ export class SystemInitService implements OnApplicationBootstrap {
     this.logger.warn(
       "开发登录验证已关闭: AGEWORK_DEV_AUTH_DISABLED=true，将自动使用真实 admin 超级管理员。"
     );
-    await this.ensureDevSuperAdmin();
+    await this.users.ensureDevSuperAdmin();
   }
 
   /** 为 SETTINGS_REGISTRY 中尚未写入数据库的配置项写入默认值，已有记录不覆盖。 */
@@ -44,51 +44,5 @@ export class SystemInitService implements OnApplicationBootstrap {
         },
       });
     }
-  }
-
-  private async ensureDevSuperAdmin() {
-    const existing = await this.prisma.user.findUnique({
-      where: { username: SUPER_ADMIN_USERNAME },
-      select: { id: true, deletedAt: true },
-    });
-
-    if (existing?.deletedAt) {
-      throw new Error(
-        "超级管理员固定用户名 admin 已被软删除账号占用，请先清理数据库"
-      );
-    }
-
-    const now = new Date();
-    const data = {
-      passwordHash: await bcrypt.hash(randomUUID(), 10),
-      role: "super_admin",
-      status: "active",
-      mustChangePassword: false,
-      passwordKind: "dev_auth_disabled",
-      passwordExpiresAt: null,
-      passwordUpdatedAt: now,
-      approvedAt: now,
-      failedLoginCount: 0,
-      lockedUntil: null,
-    };
-
-    if (existing) {
-      await this.prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          ...data,
-          sessionVersion: { increment: 1 },
-        },
-      });
-      return;
-    }
-
-    await this.prisma.user.create({
-      data: {
-        id: generateId(),
-        username: SUPER_ADMIN_USERNAME,
-        ...data,
-      },
-    });
   }
 }
