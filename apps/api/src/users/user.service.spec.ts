@@ -1,12 +1,12 @@
-vi.mock("../prisma/prisma.service", () => ({
-  PrismaService: class PrismaService {},
-}));
-
 import { UserService } from "./user.service";
-import type { JwtUser } from "../auth/current-user.decorator";
-import type { PasswordHasherService } from "./password-hasher.service";
+import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { PasswordHasherService } from "./credentials/password-hasher.service";
+import type {
+  UserRepository,
+  UserRecord,
+} from "./user.repository";
 
-function makeUser(overrides?: Partial<Record<string, unknown>>) {
+function makeUser(overrides?: Partial<Record<string, unknown>>): UserRecord {
   return {
     id: "user-1",
     username: "testuser",
@@ -20,24 +20,35 @@ function makeUser(overrides?: Partial<Record<string, unknown>>) {
     approvedById: null,
     lastLoginAt: null,
     createdAt: new Date(),
+    sessionVersion: 1,
     ...overrides,
-  };
+  } as UserRecord;
 }
 
 function makeService(overrides?: {
-  prisma?: Record<string, unknown>;
+  repo?: Record<string, unknown>;
   hasher?: Partial<PasswordHasherService>;
 }) {
-  const prisma = {
-    user: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findFirst: vi.fn().mockResolvedValue(null),
-      findUnique: vi.fn().mockResolvedValue(null),
-      create: vi.fn().mockResolvedValue(makeUser()),
-      update: vi.fn().mockResolvedValue(makeUser()),
-      count: vi.fn().mockResolvedValue(0),
-    },
-    ...overrides?.prisma,
+  const repo = {
+    list: vi.fn().mockResolvedValue({ list: [], total: 0 }),
+    findById: vi.fn().mockResolvedValue(null),
+    findIdByUsername: vi.fn().mockResolvedValue(null),
+    findCredentialByUsername: vi.fn().mockResolvedValue(null),
+    findCredentialByIdActive: vi.fn().mockResolvedValue(null),
+    findSessionUserById: vi.fn().mockResolvedValue(null),
+    findDevSuperAdminSessionUser: vi.fn().mockResolvedValue(null),
+    findSuperAdmins: vi.fn().mockResolvedValue([]),
+    findSuperAdminByUsername: vi.fn().mockResolvedValue(null),
+    create: vi.fn().mockResolvedValue(makeUser()),
+    approve: vi.fn().mockResolvedValue(makeUser()),
+    updateProfile: vi.fn().mockResolvedValue(makeUser()),
+    resetPassword: vi.fn().mockResolvedValue(makeUser()),
+    setPassword: vi.fn().mockResolvedValue(makeUser()),
+    recordFailedLogin: vi.fn().mockResolvedValue(undefined),
+    recordSuccessfulLogin: vi.fn().mockResolvedValue(undefined),
+    softDelete: vi.fn().mockResolvedValue(undefined),
+    syncDevSuperAdmin: vi.fn().mockResolvedValue(undefined),
+    ...overrides?.repo,
   };
   const hasher: Partial<PasswordHasherService> = {
     hash: vi.fn().mockResolvedValue("hashed"),
@@ -47,11 +58,11 @@ function makeService(overrides?: {
   const events = { emit: vi.fn() };
   return {
     service: new UserService(
-      prisma as never,
+      repo as unknown as UserRepository,
       hasher as PasswordHasherService,
       events as never
     ),
-    prisma,
+    repo,
     hasher,
     events,
   };
@@ -78,35 +89,34 @@ const admin: JwtUser = {
 describe("UserService", () => {
   describe("list()", () => {
     it("returns all non-deleted users for super_admin", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findMany.mockResolvedValue([
-        makeUser(),
-        makeUser({ id: "user-2" }),
-      ]);
+      const { service, repo } = makeService();
+      repo.list.mockResolvedValue({
+        list: [makeUser(), makeUser({ id: "user-2" })],
+        total: 2,
+      });
 
       const result = await service.list(superAdmin);
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { deletedAt: null } })
+      expect(repo.list).toHaveBeenCalledWith(
+        expect.objectContaining({ includeAllRoles: true })
       );
       expect(result.list).toHaveLength(2);
     });
 
     it("filters to role=user for non-super_admin operators", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findMany.mockResolvedValue([makeUser()]);
+      const { service, repo } = makeService();
+      repo.list.mockResolvedValue({ list: [makeUser()], total: 1 });
 
       await service.list(admin);
 
-      expect(prisma.user.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { deletedAt: null, role: "user" } })
+      expect(repo.list).toHaveBeenCalledWith(
+        expect.objectContaining({ includeAllRoles: false })
       );
     });
 
     it("returns paginated results when pagination is provided", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findMany.mockResolvedValue([makeUser()]);
-      prisma.user.count.mockResolvedValue(10);
+      const { service, repo } = makeService();
+      repo.list.mockResolvedValue({ list: [makeUser()], total: 10 });
 
       const result = await service.list(superAdmin, { take: 5, skip: 5 });
 
@@ -116,14 +126,14 @@ describe("UserService", () => {
 
   describe("create()", () => {
     it("creates a user with temporary password", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue(makeUser({ id: "new-1" }));
+      const { service, repo } = makeService();
+      repo.findIdByUsername.mockResolvedValue(null);
+      repo.create.mockResolvedValue(makeUser({ id: "new-1" }));
 
       const result = await service.create(superAdmin, "newuser", "user");
 
       expect(result.temporaryPassword).toEqual(expect.any(String));
-      expect(prisma.user.create).toHaveBeenCalled();
+      expect(repo.create).toHaveBeenCalled();
     });
 
     it("rejects creating super_admin role", async () => {
@@ -141,8 +151,8 @@ describe("UserService", () => {
     });
 
     it("rejects duplicate username", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo } = makeService();
+      repo.findIdByUsername.mockResolvedValue({ id: "existing-1" });
 
       await expect(service.create(superAdmin, "existing")).rejects.toThrow(
         "用户名 existing 已存在"
@@ -152,11 +162,11 @@ describe("UserService", () => {
 
   describe("approve()", () => {
     it("approves a pending user", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(
         makeUser({ status: "pending", role: "user" })
       );
-      prisma.user.update.mockResolvedValue(makeUser({ status: "active" }));
+      repo.approve.mockResolvedValue(makeUser({ status: "active" }));
 
       const result = await service.approve("user-1", superAdmin);
 
@@ -164,8 +174,8 @@ describe("UserService", () => {
     });
 
     it("rejects approving non-user roles", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser({ role: "admin" }));
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser({ role: "admin" }));
 
       await expect(service.approve("user-1", superAdmin)).rejects.toThrow(
         "只能审批普通用户注册"
@@ -173,8 +183,8 @@ describe("UserService", () => {
     });
 
     it("rejects approving non-pending users", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(
         makeUser({ status: "active", role: "user" })
       );
 
@@ -186,9 +196,9 @@ describe("UserService", () => {
 
   describe("update()", () => {
     it("updates user role", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
-      prisma.user.update.mockResolvedValue(makeUser({ role: "admin" }));
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
+      repo.updateProfile.mockResolvedValue(makeUser({ role: "admin" }));
 
       const result = await service.update(
         "user-1",
@@ -196,12 +206,15 @@ describe("UserService", () => {
         superAdmin
       );
 
+      expect(repo.updateProfile).toHaveBeenCalledWith("user-1", {
+        role: "admin",
+      });
       expect(result.role).toBe("admin");
     });
 
     it("rejects role change by non-super_admin", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
 
       await expect(
         service.update("user-1", { role: "admin" }, admin)
@@ -209,8 +222,8 @@ describe("UserService", () => {
     });
 
     it("rejects setting super_admin role", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
 
       await expect(
         service.update("user-1", { role: "super_admin" }, superAdmin)
@@ -218,8 +231,8 @@ describe("UserService", () => {
     });
 
     it("rejects setting status to pending", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
 
       await expect(
         service.update("user-1", { status: "pending" }, superAdmin)
@@ -227,9 +240,9 @@ describe("UserService", () => {
     });
 
     it("emits USER_DISABLED_EVENT when disabling a user", async () => {
-      const { service, prisma, events } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
-      prisma.user.update.mockResolvedValue(makeUser({ status: "disabled" }));
+      const { service, repo, events } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
+      repo.updateProfile.mockResolvedValue(makeUser({ status: "disabled" }));
 
       await service.update("user-1", { status: "disabled" }, superAdmin);
 
@@ -242,9 +255,9 @@ describe("UserService", () => {
 
   describe("resetPassword()", () => {
     it("resets password and returns temporary password", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
-      prisma.user.update.mockResolvedValue(
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
+      repo.resetPassword.mockResolvedValue(
         makeUser({ mustChangePassword: true, passwordKind: "temporary" })
       );
 
@@ -255,8 +268,8 @@ describe("UserService", () => {
     });
 
     it("prevents regular admin from resetting admin passwords", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser({ role: "admin" }));
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser({ role: "admin" }));
 
       await expect(service.resetPassword("user-1", admin)).rejects.toThrow(
         "普通管理员不能管理管理员账号"
@@ -266,17 +279,12 @@ describe("UserService", () => {
 
   describe("delete()", () => {
     it("soft-deletes a regular user and emits event", async () => {
-      const { service, prisma, events } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo, events } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
 
       await service.delete("user-1", superAdmin);
 
-      const updateCall = prisma.user.update.mock.calls[0]?.[0] as {
-        where: { id: string };
-        data: { deletedAt: Date };
-      };
-      expect(updateCall.where).toEqual({ id: "user-1" });
-      expect(updateCall.data.deletedAt).toBeInstanceOf(Date);
+      expect(repo.softDelete).toHaveBeenCalledWith("user-1");
       expect(events.emit).toHaveBeenCalledWith(
         "user.deleted",
         expect.objectContaining({ userId: "user-1" })
@@ -284,8 +292,8 @@ describe("UserService", () => {
     });
 
     it("prevents self-deletion", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser());
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
 
       await expect(
         service.delete(superAdmin.userId, superAdmin)
@@ -293,8 +301,8 @@ describe("UserService", () => {
     });
 
     it("prevents deleting admin accounts", async () => {
-      const { service, prisma } = makeService();
-      prisma.user.findFirst.mockResolvedValue(makeUser({ role: "admin" }));
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser({ role: "admin" }));
 
       await expect(service.delete("user-1", superAdmin)).rejects.toThrow(
         "管理员账号不能删除，只能停用"

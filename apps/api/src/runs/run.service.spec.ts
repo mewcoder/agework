@@ -12,7 +12,7 @@ import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { PrismaService } from "../prisma/prisma.service";
-import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
+import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
 

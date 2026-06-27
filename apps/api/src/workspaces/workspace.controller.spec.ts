@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkspaceController } from "./workspace.controller";
 import type { WorkspaceService } from "./workspace.service";
-import type { JwtUser } from "../auth/current-user.decorator";
+import type { JwtUser } from "../auth/decorators/current-user.decorator";
 
 function makeController(overrides?: { service?: Partial<WorkspaceService> }) {
   const service = {

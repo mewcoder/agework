@@ -3,7 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { ForbiddenException } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
 import { RolesGuard } from "./roles.guard";
-import type { JwtUser } from "./current-user.decorator";
+import type { JwtUser } from "../decorators/current-user.decorator";
 
 function makeContext(user?: JwtUser): ExecutionContext {
   const request = { user };

@@ -6,13 +6,16 @@ import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import type { ExecutionContext } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { JwtAuthGuard } from "./jwt-auth.guard";
-import type { JwtUser } from "./current-user.decorator";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import type { JwtUser } from "./decorators/current-user.decorator";
 import { PrismaService } from "../prisma/prisma.service";
-import { SystemInitService } from "../system/system-init.service";
+import { SystemInitService } from "../system/init/system-init.service";
 import { UserService } from "../users/user.service";
-import { SUPER_ADMIN_USERNAME } from "../users/user-credentials";
-import { PasswordHasherService } from "../users/password-hasher.service";
+import { UserRepository } from "../users/user.repository";
+import { SUPER_ADMIN_USERNAME } from "../users/credentials/user-credentials";
+import { PasswordHasherService } from "../users/credentials/password-hasher.service";
+import { ConfigService } from "../config/config.service";
+import { SystemSettingRepository } from "../config/system-setting.repository";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -197,21 +200,29 @@ function makeServices() {
   const prisma = new MemoryPrisma();
   const jwt = new JwtService({ secret: "test-secret" });
   const passwordHasher = new PasswordHasherService();
+  const configService = new ConfigService(
+    new SystemSettingRepository(prisma as unknown as PrismaService)
+  );
   const users = new UserService(
-    prisma as unknown as PrismaService,
+    new UserRepository(prisma as unknown as PrismaService),
     passwordHasher,
     {
       emit: vi.fn(),
     } as never
   );
-  const auth = new AuthService(users, jwt);
-  const systemInitialization = new SystemInitService(
-    prisma as unknown as PrismaService,
-    users
-  );
-  const guard = new JwtAuthGuard(jwt, new Reflector(), users);
+  const auth = new AuthService(users, jwt, configService);
+  const systemInitialization = new SystemInitService(users, configService);
+  const guard = new JwtAuthGuard(jwt, new Reflector(), users, configService);
 
-  return { auth, guard, passwordHasher, prisma, systemInitialization, users };
+  return {
+    auth,
+    guard,
+    passwordHasher,
+    prisma,
+    systemInitialization,
+    users,
+    configService,
+  };
 }
 
 async function seedSuperAdmin(

@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
 import { UserService } from "../users/user.service";
+import { ConfigService } from "../config/config.service";
 
 type TokenUser = {
   id: string;
@@ -13,11 +14,24 @@ type TokenUser = {
 export class AuthService {
   constructor(
     private readonly users: UserService,
-    private readonly jwtService: JwtService
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService
   ) {}
 
   isSetupRequired(): Promise<boolean> {
     return this.users.isSetupRequired();
+  }
+
+  async config() {
+    const authRequired = !this.configService.isDevAuthDisabled();
+    return {
+      authRequired,
+      appName: this.configService.getAppName(),
+      registrationMode: "approval",
+      setupRequired: authRequired
+        ? await this.users.isSetupRequired()
+        : false,
+    };
   }
 
   async setupSuperAdmin(newPassword: string) {

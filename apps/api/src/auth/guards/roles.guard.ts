@@ -5,8 +5,8 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
-import { ROLES_KEY } from "./roles.decorator";
-import type { JwtUser } from "./current-user.decorator";
+import { ROLES_KEY } from "../decorators/roles.decorator";
+import type { JwtUser } from "../decorators/current-user.decorator";
 
 type RequestWithUser = {
   user?: JwtUser;

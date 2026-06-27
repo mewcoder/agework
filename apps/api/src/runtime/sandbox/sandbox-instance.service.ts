@@ -10,7 +10,7 @@ import { ConfigService } from "../../config/config.service";
 import {
   CONTAINER_RUNTIME_LOG_DIR,
   DEFAULT_WORKER_IMAGE,
-} from "../../config/defaults";
+} from "../../config/registry/defaults";
 import { WorkspaceRuntimeInstanceRepository } from "../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../common/swallow";
 import {

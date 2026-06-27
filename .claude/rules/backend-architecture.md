@@ -21,6 +21,7 @@
 |---|---|
 | P0 | 禁止循环依赖;禁止用 `forwardRef` 掩盖边界问题 |
 | P0 | 禁止跨模块 reach 进内部文件;跨模块只调对方导出的 `Service` |
+| P0 | 触碰 feature module 时必须满足 root layout 白名单 |
 | P0 | 业务 Service 不直接注入 `PrismaService`;DB 访问走 Repository |
 | P0 | 禁止独立 mapper layer |
 | P1 | 外部输入必须经过 DTO / pipe / guard 等边界校验 |
@@ -66,6 +67,28 @@ runtime/
 - `types` / `events` / `dto/` 按需创建,不为凑齐而造空文件 / 空文件夹。
 - module root 只放门面文件、`dto/`、测试和子文件夹;不平铺内部业务实现文件。
 - feature 直接放 `apps/api/src/` 顶层,不要套 `src/modules/`。
+
+Root 白名单(强制):
+
+| root 项 | 允许条件 |
+|---|---|
+| `*.module.ts` | module 组合根 |
+| `*.service.ts` | 根 Service,唯一对外入口 |
+| `*.controller.ts` | feature 自己的 HTTP controller |
+| `*.repository.ts` | feature 自己的 persistence boundary |
+| `*.types.ts` | 后端跨模块契约类型 |
+| `*.events.ts` | domain event 类型 / 常量 |
+| `*.spec.ts` | 贴近 root 门面文件的测试 |
+| `dto/` | 外部输入 DTO |
+| 子能力目录 | internal provider / admin controller / guard / decorator / credential / session 等稳定子能力 |
+
+Delivery gate(强制执行):
+
+- 新增或修改 feature module 时,root layout compliance 是交付门槛。
+- 新增 / 修改的 root 文件必须命中上面的 root 白名单;否则必须放进按子能力命名的子目录。
+- 触碰已有 feature module 时,如果 root 已有内部实现文件,必须在同次改动中收进子目录;不要继续沿用“历史上就在 root”作为理由。
+- Auth 这类跨模块 TypeScript public API 也要进明确子目录:`decorators/` 放 `CurrentUser` / `Public` / `Roles` 等 decorator,`guards/` 放 `JwtAuthGuard` / `RolesGuard` 等 guard。它们可以被跨模块 import,但不允许平铺在 module root。
+- 如果确实无法在同次改动完成目录收口,必须在变更说明里明确列出未收口文件和原因;不能静默留下。
 
 ### 1.2 Internal 结构
 
@@ -126,7 +149,33 @@ export class FeatureModule {}
 - 禁止 export repository / internal provider / controller / DTO。
 - 跨模块需要类型时,使用对方公开的 `*.types.ts` 或 `@agework/shared`;禁止从 service 实现文件导出契约类型。
 
-### 1.4 跨模块结构约束
+### 1.4 Admin 边界
+
+Admin 是访问视角,不是业务 ownership。后端不要把各领域管理接口集中成一个横向 `AdminModule`;管理端 HTTP 入口必须仍归属对应 feature module。
+
+推荐结构:
+
+```text
+feature/
+├── feature.module.ts
+├── feature.service.ts
+├── feature.controller.ts
+└── admin/
+    └── admin-feature.controller.ts
+```
+
+规则:
+
+- Admin controller 放在业务 owner 的 `admin/` 子目录,并注册在该 feature module 的 `controllers`。
+- Admin URL 统一使用 `/admin/...` 前缀;权限边界统一使用 `@Roles("admin")` 或更高等级 guard / policy。
+- Admin controller 只处理 HTTP I/O,只能调用本 module 根 `Service` 或本 module 内允许 controller 调用的查询入口;禁止直接注入 Prisma / repository / internal provider。
+- Admin 查询需要跨领域信息时,由当前用例 owner 的根 `Service` 编排下层 module 导出的 `Service`;禁止从 admin controller reach 进其他 module 的 repository / internal 子目录。
+- 前端管理后台入口可以集中在 `apps/web/src/pages/admin`;共享 API 类型继续按业务领域放在 `@agework/shared` 的对应 `api/*` 文件中。
+- 只有真正跨领域的管理用例(如 admin overview、系统健康、审计日志)才允许新增独立 admin / operations feature module;该 module 只能编排其他 module 导出的根 `Service`,不得接管其他领域的数据 ownership。
+
+判断口诀:管理后台体验可以集中,业务所有权不要集中。
+
+### 1.5 跨模块结构约束
 
 允许:
 
@@ -143,7 +192,7 @@ export class FeatureModule {}
 - import 对方 service 实现文件里的类型。
 - 从文件路径 reach 进未 export 的 provider。
 
-### 1.5 Shared / Common 约定
+### 1.6 Shared / Common 约定
 
 | 位置 | 用途 |
 |---|---|
@@ -380,7 +429,9 @@ DDD / Hexagonal / Clean Architecture 重型套路:
 
 每次后端改动前后必须确认:
 
-- [ ] 模块根目录是否只有门面文件(module/service 必有,controller/repository 按职责)+ `dto/` + 子文件夹?
+- [ ] 触碰过的 feature module root 是否完全命中 root 白名单?
+- [ ] 新增 / 修改的 root 文件是否都属于 module/service/controller/repository/types/events/spec 或 `dto/`?否则是否已收进子能力目录?
+- [ ] Auth 这类 decorator / guard 是否放在 `decorators/` / `guards/`,而不是平铺在 root?
 - [ ] 有没有为“凑齐”造空文件 / 空文件夹?
 - [ ] 文件夹是否少而厚、按子能力命名?
 - [ ] 根 Service 是否只是公开入口 / 用例编排?
@@ -404,6 +455,7 @@ DDD / Hexagonal / Clean Architecture 重型套路:
 - Service = public API boundary + use-case orchestration role。
 - Repository = persistence boundary。
 - Module = isolation boundary。
+- Module root whitelist = delivery gate。
 - Internal provider = domain execution role + private capability owner。
 - DTO = external input validation boundary。
 - `*.types.ts` = backend cross-module contract。

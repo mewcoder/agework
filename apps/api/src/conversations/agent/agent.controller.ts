@@ -1,8 +1,8 @@
 import { Controller, Get, Post, Body, Query, Res } from "@nestjs/common";
 import type { Response } from "express";
 import { AgentService } from "./agent.service";
-import { CurrentUser } from "../../auth/current-user.decorator";
-import type { JwtUser } from "../../auth/current-user.decorator";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
 import { AgentRunRequestDto } from "./dto/agent-run.dto";
 import { getAgentOptions } from "./agent-options";

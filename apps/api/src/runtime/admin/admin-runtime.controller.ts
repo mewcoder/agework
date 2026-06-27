@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query, NotFoundException } from "@nestjs/common";
-import { Roles } from "../../auth/roles.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { ConfigService } from "../../config/config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeService } from "../runtime.service";

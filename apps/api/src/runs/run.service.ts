@@ -27,8 +27,8 @@ import {
   type IncompleteMessageReason,
 } from "./assistant-message.aggregator";
 import { ConfigService, type IsolationScope } from "../config/config.service";
-import { CONTAINER_RUNTIME_LOG_DIR } from "../config/defaults";
-import { EnvKey } from "../config/env-key";
+import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
+import { EnvKey } from "../config/registry/env-key";
 import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventService, compactData } from "../run-events/run-event.service";

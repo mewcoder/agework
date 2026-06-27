@@ -9,8 +9,7 @@ import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import type { UserRole } from "@agework/shared/api";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { PrismaService } from "../prisma/prisma.service";
-import type { UserSession } from "./user-session";
+import type { UserSession } from "./user.types";
 import {
   assertPasswordForLogin,
   assertPasswordForSet,
@@ -20,14 +19,22 @@ import {
   normalizeStatus,
   normalizeUsername,
   SUPER_ADMIN_USERNAME,
-} from "./user-credentials";
+} from "./credentials/user-credentials";
 import {
   USER_DELETED_EVENT,
   USER_DISABLED_EVENT,
   UserDeletedEvent,
   UserDisabledEvent,
 } from "./user.events";
-import { PasswordHasherService } from "./password-hasher.service";
+import { PasswordHasherService } from "./credentials/password-hasher.service";
+import {
+  UserRepository,
+  type CredentialUserRecord,
+  type SuperAdminIdentity,
+  type UserCreateData,
+  type UserRecord,
+  type UserSessionRecord,
+} from "./user.repository";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -36,70 +43,29 @@ const LOGIN_LOCK_MS = 15 * 60 * 1000;
 const SUPER_ADMIN_MAX_FAILED_LOGIN_COUNT = 3;
 const SUPER_ADMIN_LOGIN_LOCK_MS = 30 * 60 * 1000;
 
-type UserRecord = {
-  id: string;
-  username: string;
-  nickname: string | null;
-  role: string;
-  status: string;
-  mustChangePassword: boolean;
-  passwordKind: string;
-  passwordExpiresAt: Date | null;
-  approvedAt: Date | null;
-  approvedById: string | null;
-  lastLoginAt: Date | null;
-  createdAt: Date;
-  sessionVersion: number;
-};
-
-type CredentialUserRecord = UserRecord & {
-  passwordHash: string;
-  lockedUntil: Date | null;
-  failedLoginCount: number;
-};
-
-type SuperAdminIdentity = {
-  id: string;
-  username: string;
-};
-
 @Injectable()
 export class UserService {
   constructor(
-    private prisma: PrismaService,
+    private users: UserRepository,
     private passwordHasher: PasswordHasherService,
     private events: EventEmitter2
   ) {}
 
   async list(operator: UserSession, pagination?: { take: number; skip: number }) {
-    const where = {
-      deletedAt: null,
-      ...(operator.role === "super_admin" ? {} : { role: "user" }),
-    };
+    const { list, total } = await this.users.list({
+      includeAllRoles: operator.role === "super_admin",
+      take: pagination?.take,
+      skip: pagination?.skip,
+    });
     if (pagination) {
-      const [users, total] = await Promise.all([
-        this.prisma.user.findMany({
-          where,
-          orderBy: { createdAt: "asc" },
-          select: this.userSelect(),
-          take: pagination.take,
-          skip: pagination.skip,
-        }),
-        this.prisma.user.count({ where }),
-      ]);
       return {
-        list: users.map((user) => this.toUserDto(user)),
+        list: list.map((user) => this.toUserDto(user)),
         total,
         pageNo: pagination.skip / pagination.take + 1,
         pageSize: pagination.take,
       };
     }
-    const users = await this.prisma.user.findMany({
-      where,
-      orderBy: { createdAt: "asc" },
-      select: this.userSelect(),
-    });
-    return { list: users.map((user) => this.toUserDto(user)) };
+    return { list: list.map((user) => this.toUserDto(user)) };
   }
 
   async create(operator: UserSession, username: string, role = "user") {
@@ -112,9 +78,7 @@ export class UserService {
       throw new ForbiddenException("普通管理员只能创建普通用户");
     }
 
-    const existing = await this.prisma.user.findFirst({
-      where: { username: normalizedUsername },
-    });
+    const existing = await this.users.findIdByUsername(normalizedUsername);
     if (existing) {
       throw new BadRequestException(`用户名 ${normalizedUsername} 已存在`);
     }
@@ -122,23 +86,20 @@ export class UserService {
     const temporaryPassword = generateTemporaryPassword();
     const now = new Date();
     const passwordExpiresAt = new Date(now.getTime() + INITIAL_PASSWORD_TTL_MS);
-    const id = generateId();
-    const user = await this.prisma.user.create({
-      data: {
-        id,
-        username: normalizedUsername,
-        passwordHash: await this.passwordHasher.hash(temporaryPassword),
-        role: targetRole,
-        status: "active",
-        mustChangePassword: true,
-        passwordKind: "initial",
-        passwordExpiresAt,
-        passwordUpdatedAt: now,
-        approvedAt: now,
-        approvedById: this.operatorId(operator),
-      },
-      select: this.userSelect(),
-    });
+    const data: UserCreateData = {
+      id: generateId(),
+      username: normalizedUsername,
+      passwordHash: await this.passwordHasher.hash(temporaryPassword),
+      role: targetRole,
+      status: "active",
+      mustChangePassword: true,
+      passwordKind: "initial",
+      passwordExpiresAt,
+      passwordUpdatedAt: now,
+      approvedAt: now,
+      approvedById: this.operatorId(operator),
+    };
+    const user = await this.users.create(data);
     return {
       user: this.toUserDto(user),
       temporaryPassword,
@@ -156,16 +117,11 @@ export class UserService {
       throw new BadRequestException("用户不是待审批状态");
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        status: "active",
-        approvedAt: new Date(),
-        approvedById: this.operatorId(operator),
-        sessionVersion: { increment: 1 },
-      },
-      select: this.userSelect(),
-    });
+    const updated = await this.users.approve(
+      id,
+      new Date(),
+      this.operatorId(operator)
+    );
     return this.toUserDto(updated);
   }
 
@@ -177,7 +133,7 @@ export class UserService {
     const user = await this.getUserOrThrow(id);
     this.assertCanManage(operator, user, "update");
 
-    const updateData: Record<string, unknown> = {};
+    const patch: { role?: string; status?: string } = {};
     if (data.role !== undefined) {
       if (operator.role !== "super_admin") {
         throw new ForbiddenException("普通管理员不能调整角色");
@@ -186,23 +142,17 @@ export class UserService {
       if (role === "super_admin") {
         throw new BadRequestException("不能设置超级管理员角色");
       }
-      updateData.role = role;
-      updateData.sessionVersion = { increment: 1 };
+      patch.role = role;
     }
     if (data.status !== undefined) {
       const status = normalizeStatus(data.status);
       if (status === "pending") {
         throw new BadRequestException("不能通过更新接口设为待审批");
       }
-      updateData.status = status;
-      updateData.sessionVersion = { increment: 1 };
+      patch.status = status;
     }
 
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: this.userSelect(),
-    });
+    const updated = await this.users.updateProfile(id, patch);
 
     if (
       data.status !== undefined &&
@@ -221,21 +171,12 @@ export class UserService {
     const temporaryPassword = generateTemporaryPassword();
     const now = new Date();
     const passwordExpiresAt = new Date(now.getTime() + RESET_PASSWORD_TTL_MS);
-    const updated = await this.prisma.user.update({
-      where: { id },
-      data: {
-        passwordHash: await this.passwordHasher.hash(temporaryPassword),
-        passwordKind: "temporary",
-        passwordExpiresAt,
-        passwordResetAt: now,
-        passwordResetById: this.operatorId(operator),
-        passwordUpdatedAt: now,
-        mustChangePassword: true,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        sessionVersion: { increment: 1 },
-      },
-      select: this.userSelect(),
+    const updated = await this.users.resetPassword(id, {
+      passwordHash: await this.passwordHasher.hash(temporaryPassword),
+      passwordExpiresAt,
+      passwordResetAt: now,
+      passwordResetById: this.operatorId(operator),
+      passwordUpdatedAt: now,
     });
     return {
       user: this.toUserDto(updated),
@@ -254,23 +195,12 @@ export class UserService {
       throw new BadRequestException("管理员账号不能删除，只能停用");
     }
 
-    await this.prisma.user.update({
-      where: { id },
-      data: {
-        deletedAt: new Date(),
-        sessionVersion: { increment: 1 },
-      },
-    });
-
+    await this.users.softDelete(id);
     this.events.emit(USER_DELETED_EVENT, new UserDeletedEvent(id));
   }
 
   async isSetupRequired(): Promise<boolean> {
-    const superAdmins = await this.prisma.user.findMany({
-      where: { role: "super_admin", deletedAt: null },
-      select: { id: true, username: true },
-    });
-
+    const superAdmins = await this.users.findSuperAdmins();
     this.assertSingleFixedSuperAdmin(superAdmins);
     return superAdmins.length === 0;
   }
@@ -280,10 +210,9 @@ export class UserService {
       throw new BadRequestException("系统已初始化");
     }
 
-    const existing = await this.prisma.user.findUnique({
-      where: { username: SUPER_ADMIN_USERNAME },
-      select: { id: true, deletedAt: true },
-    });
+    const existing = await this.users.findSuperAdminByUsername(
+      SUPER_ADMIN_USERNAME
+    );
     if (existing) {
       throw new BadRequestException(
         existing.deletedAt
@@ -297,30 +226,26 @@ export class UserService {
       SUPER_ADMIN_USERNAME
     );
     const now = new Date();
-    const user = await this.prisma.user.create({
-      data: {
-        id: generateId(),
-        username: SUPER_ADMIN_USERNAME,
-        passwordHash: await this.passwordHasher.hash(password),
-        role: "super_admin",
-        status: "active",
-        mustChangePassword: false,
-        passwordKind: "user_set",
-        passwordExpiresAt: null,
-        passwordUpdatedAt: now,
-        approvedAt: now,
-      },
-      select: this.userSelect(),
+    const user = await this.users.create({
+      id: generateId(),
+      username: SUPER_ADMIN_USERNAME,
+      passwordHash: await this.passwordHasher.hash(password),
+      role: "super_admin",
+      status: "active",
+      mustChangePassword: false,
+      passwordKind: "user_set",
+      passwordExpiresAt: null,
+      passwordUpdatedAt: now,
+      approvedAt: now,
     });
 
     return this.toUserDto(user);
   }
 
   async ensureDevSuperAdmin(): Promise<void> {
-    const existing = await this.prisma.user.findUnique({
-      where: { username: SUPER_ADMIN_USERNAME },
-      select: { id: true, deletedAt: true },
-    });
+    const existing = await this.users.findSuperAdminByUsername(
+      SUPER_ADMIN_USERNAME
+    );
 
     if (existing?.deletedAt) {
       throw new Error(
@@ -329,65 +254,36 @@ export class UserService {
     }
 
     const now = new Date();
-    const data = {
-      passwordHash: await this.passwordHasher.hash(randomUUID()),
-      role: "super_admin",
-      status: "active",
-      mustChangePassword: false,
-      passwordKind: "dev_auth_disabled",
-      passwordExpiresAt: null,
-      passwordUpdatedAt: now,
-      approvedAt: now,
-      failedLoginCount: 0,
-      lockedUntil: null,
-    };
-
-    if (existing) {
-      await this.prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          ...data,
-          sessionVersion: { increment: 1 },
-        },
-      });
-      return;
-    }
-
-    await this.prisma.user.create({
-      data: {
-        id: generateId(),
-        username: SUPER_ADMIN_USERNAME,
-        ...data,
+    await this.users.syncDevSuperAdmin(
+      SUPER_ADMIN_USERNAME,
+      {
+        passwordHash: await this.passwordHasher.hash(randomUUID()),
+        passwordUpdatedAt: now,
+        approvedAt: now,
       },
-    });
+      existing
+    );
   }
 
   async register(username: string, password: string) {
     const normalizedUsername = normalizeUsername(username);
     const rawPassword = assertPasswordForSet(password, normalizedUsername);
 
-    const existing = await this.prisma.user.findFirst({
-      where: { username: normalizedUsername },
-      select: { id: true },
-    });
+    const existing = await this.users.findIdByUsername(normalizedUsername);
     if (existing) {
       throw new BadRequestException("注册失败，请稍后重试");
     }
 
     const now = new Date();
-    const id = generateId();
-    const user = await this.prisma.user.create({
-      data: {
-        id,
-        username: normalizedUsername,
-        passwordHash: await this.passwordHasher.hash(rawPassword),
-        role: "user",
-        status: "pending",
-        mustChangePassword: false,
-        passwordKind: "user_set",
-        passwordUpdatedAt: now,
-      },
-      select: this.userSelect(),
+    const user = await this.users.create({
+      id: generateId(),
+      username: normalizedUsername,
+      passwordHash: await this.passwordHasher.hash(rawPassword),
+      role: "user",
+      status: "pending",
+      mustChangePassword: false,
+      passwordKind: "user_set",
+      passwordUpdatedAt: now,
     });
     return this.toUserDto(user);
   }
@@ -397,10 +293,7 @@ export class UserService {
     const rawPassword = assertPasswordForLogin(password);
     const now = new Date();
 
-    const user = await this.prisma.user.findFirst({
-      where: { username: normalizedUsername, deletedAt: null },
-      select: this.credentialUserSelect(),
-    });
+    const user = await this.users.findCredentialByUsername(normalizedUsername);
     if (!user) {
       throw new UnauthorizedException("用户不存在");
     }
@@ -420,24 +313,12 @@ export class UserService {
 
     this.assertCanLogin(user, now);
 
-    const updated = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        failedLoginCount: 0,
-        lockedUntil: null,
-        lastLoginAt: now,
-      },
-      select: this.userSelect(),
-    });
-
+    const updated = await this.users.recordSuccessfulLogin(user.id, now);
     return this.toUserDto(updated);
   }
 
   async me(userId: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, deletedAt: null },
-      select: this.userSelect(),
-    });
+    const user = await this.users.findById(userId);
     if (!user) throw new UnauthorizedException();
     return this.toUserDto(user);
   }
@@ -447,10 +328,7 @@ export class UserService {
     currentPassword: string,
     newPassword: string
   ) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, status: "active", deletedAt: null },
-      select: this.credentialUserSelect(),
-    });
+    const user = await this.users.findCredentialByIdActive(userId);
     if (!user) throw new UnauthorizedException();
 
     const current = assertPasswordForLogin(currentPassword);
@@ -468,10 +346,7 @@ export class UserService {
   }
 
   async completePasswordChange(userId: string, newPassword: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, status: "active", deletedAt: null },
-      select: this.credentialUserSelect(),
-    });
+    const user = await this.users.findCredentialByIdActive(userId);
     if (!user) throw new UnauthorizedException();
     if (!user.mustChangePassword) {
       throw new BadRequestException("当前账号不需要强制修改密码");
@@ -489,31 +364,19 @@ export class UserService {
   }
 
   async findActiveSessionUser(userId: string): Promise<UserSession | null> {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, status: "active", deletedAt: null },
-      select: this.sessionUserSelect(),
-    });
+    const user = await this.users.findSessionUserById(userId);
     return user ? this.toUserSession(user) : null;
   }
 
   async findDevSuperAdminSessionUser(): Promise<UserSession | null> {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        username: SUPER_ADMIN_USERNAME,
-        role: "super_admin",
-        status: "active",
-        deletedAt: null,
-      },
-      select: this.sessionUserSelect(),
-    });
+    const user = await this.users.findDevSuperAdminSessionUser(
+      SUPER_ADMIN_USERNAME
+    );
     return user ? this.toUserSession(user) : null;
   }
 
   private async getUserOrThrow(id: string) {
-    const user = await this.prisma.user.findFirst({
-      where: { id, deletedAt: null },
-      select: this.userSelect(),
-    });
+    const user = await this.users.findById(id);
     if (!user) throw new NotFoundException(`User ${id} not found`);
     return user;
   }
@@ -574,33 +437,20 @@ export class UserService {
         : MAX_FAILED_LOGIN_COUNT;
     const loginLockMs =
       role === "super_admin" ? SUPER_ADMIN_LOGIN_LOCK_MS : LOGIN_LOCK_MS;
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        failedLoginCount: nextCount,
-        lockedUntil:
-          nextCount >= maxFailedLoginCount
-            ? new Date(Date.now() + loginLockMs)
-            : null,
-      },
-    });
+    await this.users.recordFailedLogin(
+      userId,
+      nextCount,
+      nextCount >= maxFailedLoginCount
+        ? new Date(Date.now() + loginLockMs)
+        : null
+    );
   }
 
   private async setUserPassword(userId: string, next: string) {
     const now = new Date();
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash: await this.passwordHasher.hash(next),
-        passwordKind: "user_set",
-        passwordExpiresAt: null,
-        passwordUpdatedAt: now,
-        mustChangePassword: false,
-        failedLoginCount: 0,
-        lockedUntil: null,
-        sessionVersion: { increment: 1 },
-      },
-      select: this.userSelect(),
+    const updated = await this.users.setPassword(userId, {
+      passwordHash: await this.passwordHasher.hash(next),
+      passwordUpdatedAt: now,
     });
     return this.toUserDto(updated);
   }
@@ -620,44 +470,6 @@ export class UserService {
 
   private operatorId(operator: UserSession) {
     return operator.userId;
-  }
-
-  private userSelect() {
-    return {
-      id: true,
-      username: true,
-      nickname: true,
-      role: true,
-      status: true,
-      mustChangePassword: true,
-      passwordKind: true,
-      passwordExpiresAt: true,
-      approvedAt: true,
-      approvedById: true,
-      lastLoginAt: true,
-      createdAt: true,
-      sessionVersion: true,
-    } as const;
-  }
-
-  private credentialUserSelect() {
-    return {
-      ...this.userSelect(),
-      passwordHash: true,
-      failedLoginCount: true,
-      lockedUntil: true,
-    } as const;
-  }
-
-  private sessionUserSelect() {
-    return {
-      id: true,
-      username: true,
-      role: true,
-      status: true,
-      mustChangePassword: true,
-      sessionVersion: true,
-    } as const;
   }
 
   private toUserDto(user: UserRecord) {
@@ -689,12 +501,3 @@ export class UserService {
     };
   }
 }
-
-type UserSessionRecord = {
-  id: string;
-  username: string;
-  role: string;
-  status: string;
-  mustChangePassword: boolean;
-  sessionVersion: number;
-};

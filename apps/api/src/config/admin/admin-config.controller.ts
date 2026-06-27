@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
-import { CurrentUser } from "../../auth/current-user.decorator";
-import { Roles } from "../../auth/roles.decorator";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { ConfigService } from "../config.service";
 import { ResetSettingDto } from "../dto/reset-setting.dto";
 import { SetSettingDto } from "../dto/set-setting.dto";

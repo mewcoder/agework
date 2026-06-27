@@ -1,22 +1,16 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
 import { AuthService } from "./auth.service";
-import { Public } from "./public.decorator";
-import { CurrentUser } from "./current-user.decorator";
-import type { JwtUser } from "./current-user.decorator";
-import { isDevAuthDisabled } from "./dev-auth";
+import { Public } from "./decorators/public.decorator";
+import { CurrentUser } from "./decorators/current-user.decorator";
+import type { JwtUser } from "./decorators/current-user.decorator";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { SetupDto } from "./dto/setup.dto";
 
-import { ConfigService } from "../config/config.service";
-
 @Controller("auth")
 export class AuthController {
-  constructor(
-    private authService: AuthService,
-    private configService: ConfigService
-  ) {}
+  constructor(private authService: AuthService) {}
 
   @Public()
   @Post("login")
@@ -62,15 +56,7 @@ export class AuthController {
 
   @Public()
   @Get("config")
-  async config() {
-    const authRequired = !isDevAuthDisabled();
-    return {
-      authRequired,
-      appName: this.configService.getAppName(),
-      registrationMode: "approval",
-      setupRequired: authRequired
-        ? await this.authService.isSetupRequired()
-        : false,
-    };
+  config() {
+    return this.authService.config();
   }
 }

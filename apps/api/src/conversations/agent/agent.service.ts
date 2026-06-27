@@ -6,7 +6,7 @@ import type {
   CustomAgentProviderConfig,
 } from "@agework/shared/protocol";
 import { ConversationService } from "../conversation.service";
-import type { JwtUser } from "../../auth/current-user.decorator";
+import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import { RunService } from "../../runs/run.service";
 import { safeLogJson } from "../../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";

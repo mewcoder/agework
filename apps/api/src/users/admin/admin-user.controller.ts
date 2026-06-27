@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
-import { CurrentUser } from "../../auth/current-user.decorator";
-import type { JwtUser } from "../../auth/current-user.decorator";
-import { Roles } from "../../auth/roles.decorator";
+import { CurrentUser } from "../../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../../auth/decorators/current-user.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserIdDto } from "../dto/user-id.dto";

@@ -21,7 +21,7 @@ import {
   rpcNotificationToUpstreamMessage,
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
-import { Public } from "../auth/public.decorator";
+import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
 import { WorkerConfigStore } from "./config-store";

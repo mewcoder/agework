@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
-import { Roles } from "../../auth/roles.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { UpdateWorkspaceDto } from "../dto/update-workspace.dto";
 import { WorkspaceService } from "../workspace.service";
 

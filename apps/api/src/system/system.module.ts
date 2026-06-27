@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { SystemController } from "./system.controller";
-import { SystemInitService } from "./system-init.service";
+import { SystemInitService } from "./init/system-init.service";
 import { SystemService } from "./system.service";
 import { UserModule } from "../users/user.module";
 
@@ -8,5 +8,6 @@ import { UserModule } from "../users/user.module";
   imports: [UserModule],
   controllers: [SystemController],
   providers: [SystemService, SystemInitService],
+  exports: [SystemService],
 })
 export class SystemModule {}

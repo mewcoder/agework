@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { mkdirSync } from "fs";
 import { join } from "path";
-import { PrismaService } from "../prisma/prisma.service";
+import { SystemSettingRepository } from "./system-setting.repository";
 import {
   AGEWORK_HOST_RUNTIME_LOG_DIR,
   AGEWORK_HOST_WORKSPACES_ROOT,
@@ -24,16 +24,16 @@ import {
   DEFAULT_ALLOWED_ISOLATION_SCOPES,
   DEFAULT_PORT,
   DEFAULT_SANDBOX_ENGINE,
-} from "./defaults";
-import { EnvKey } from "./env-key";
+} from "./registry/defaults";
+import { EnvKey } from "./registry/env-key";
 import {
   coerceSettingValue,
   getSettingDefinition,
   SETTINGS_REGISTRY,
   SettingKey,
-} from "./settings-registry";
+} from "./registry/settings-registry";
 
-export { DEV_JWT_SECRET } from "./defaults";
+export { DEV_JWT_SECRET } from "./registry/defaults";
 
 export type SettingSource = "db" | "env" | "default";
 
@@ -113,7 +113,7 @@ export class ConfigService implements OnModuleInit {
   private readonly workspace: string;
   private settingsCache = new Map<string, string>();
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(private readonly settings: SystemSettingRepository) {
     try {
       mkdirSync(AGEWORK_HOST_WORKSPACES_ROOT, { recursive: true });
       this.workspace = AGEWORK_HOST_WORKSPACES_ROOT;
@@ -126,8 +126,23 @@ export class ConfigService implements OnModuleInit {
   }
 
   async onModuleInit() {
-    const rows = await this.prisma.systemSetting.findMany();
+    const rows = await this.settings.loadAll();
     this.settingsCache = new Map(rows.map((row) => [row.key, row.value]));
+  }
+
+  /**
+   * 为 SETTINGS_REGISTRY 中尚未写入数据库的配置项写入默认值，已有记录不覆盖。
+   * env 覆盖值优先于代码级默认值。systemSetting 数据生命周期归本领域所有。
+   */
+  async seedDefaults(): Promise<void> {
+    for (const definition of SETTINGS_REGISTRY) {
+      const existing = await this.settings.findKey(definition.key);
+      if (existing) continue;
+      await this.settings.seedDefault(
+        definition.key,
+        process.env[definition.key] ?? definition.defaultValue
+      );
+    }
   }
 
   /** 集中读取 process.env，统一入口避免裸字符串散落各 getter。 */
@@ -153,6 +168,16 @@ export class ConfigService implements OnModuleInit {
 
   getAppName(): string {
     return this.getSetting(SettingKey.APP_NAME) || DEFAULT_APP_NAME;
+  }
+
+  /**
+   * 开发态是否关闭登录验证：仅 development（或未设置 NODE_ENV）且
+   * AGEWORK_DEV_AUTH_DISABLED=true 时启用，防止 staging/test 误绕过认证。
+   */
+  isDevAuthDisabled(): boolean {
+    const nodeEnv = process.env.NODE_ENV;
+    const isDev = !nodeEnv || nodeEnv === "development";
+    return isDev && this.getEnv(EnvKey.DEV_AUTH_DISABLED) === "true";
   }
 
   getUserWorkspace(username: string): string {
@@ -320,11 +345,7 @@ export class ConfigService implements OnModuleInit {
       throw new BadRequestException(`未知的系统设置项: ${key}`);
     }
     const value = coerceSettingValue(definition, rawValue);
-    await this.prisma.systemSetting.upsert({
-      where: { key },
-      create: { key, value, updatedBy: userId },
-      update: { value, updatedBy: userId },
-    });
+    await this.settings.upsert(key, value, userId);
     this.settingsCache.set(key, value);
   }
 
@@ -333,7 +354,7 @@ export class ConfigService implements OnModuleInit {
     if (!definition) {
       throw new BadRequestException(`未知的系统设置项: ${key}`);
     }
-    await this.prisma.systemSetting.deleteMany({ where: { key } });
+    await this.settings.deleteByKey(key);
     this.settingsCache.delete(key);
   }
 }

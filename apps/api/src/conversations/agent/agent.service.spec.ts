@@ -5,7 +5,7 @@ import { ConversationService } from "../conversation.service";
 import { RunService } from "../../runs/run.service";
 import { ModelProviderService } from "../../model-providers/model-provider.service";
 import type { Response } from "express";
-import type { JwtUser } from "../../auth/current-user.decorator";
+import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import type { AgentRunRequestDto as AgentRunRequestBody } from "./dto/agent-run.dto";
 
 describe("AgentService", () => {

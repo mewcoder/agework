@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import type { WorkerCommandRpcRequest } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
-import { Public } from "../auth/public.decorator";
+import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
 import { WorkerCommandQueue } from "./command-queue";

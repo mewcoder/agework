@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
-import { Roles } from "../../auth/roles.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { CreateModelProviderDto } from "../dto/create-model-provider.dto";
 import { ModelProviderIdDto } from "../dto/model-provider-id.dto";
 import { SetModelProviderEnabledDto } from "../dto/set-model-provider-enabled.dto";

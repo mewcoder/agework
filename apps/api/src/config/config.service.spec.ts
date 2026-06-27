@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { DEV_JWT_SECRET, getJwtSecret, ConfigService } from "./config.service";
+import { SystemSettingRepository } from "./system-setting.repository";
 
 function createService(rows: { key: string; value: string }[]) {
   const findMany = vi.fn().mockResolvedValue(rows);
   const upsert = vi.fn().mockResolvedValue(undefined);
   const deleteMany = vi.fn().mockResolvedValue(undefined);
-  const service = new ConfigService({
+  const repo = new SystemSettingRepository({
     systemSetting: { findMany, upsert, deleteMany },
   } as never);
+  const service = new ConfigService(repo);
   return { service, findMany, upsert, deleteMany };
 }
 
@@ -290,5 +292,63 @@ describe("ConfigService settings (DB > env > default)", () => {
         }),
       ])
     );
+  });
+});
+
+describe("ConfigService.isDevAuthDisabled", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+  const originalDevAuthDisabled = process.env.AGEWORK_DEV_AUTH_DISABLED;
+
+  afterEach(() => {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
+    if (originalDevAuthDisabled === undefined) {
+      delete process.env.AGEWORK_DEV_AUTH_DISABLED;
+    } else {
+      process.env.AGEWORK_DEV_AUTH_DISABLED = originalDevAuthDisabled;
+    }
+  });
+
+  function makeService() {
+    return createService([]).service;
+  }
+
+  it("returns true when NODE_ENV is development and flag is true", () => {
+    process.env.NODE_ENV = "development";
+    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
+    expect(makeService().isDevAuthDisabled()).toBe(true);
+  });
+
+  it("returns true when NODE_ENV is unset and flag is true", () => {
+    delete process.env.NODE_ENV;
+    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
+    expect(makeService().isDevAuthDisabled()).toBe(true);
+  });
+
+  it("returns false when NODE_ENV is production even if flag is true", () => {
+    process.env.NODE_ENV = "production";
+    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
+    expect(makeService().isDevAuthDisabled()).toBe(false);
+  });
+
+  it("returns false when NODE_ENV is test even if flag is true", () => {
+    process.env.NODE_ENV = "test";
+    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
+    expect(makeService().isDevAuthDisabled()).toBe(false);
+  });
+
+  it("returns false when flag is not true", () => {
+    process.env.NODE_ENV = "development";
+    process.env.AGEWORK_DEV_AUTH_DISABLED = "false";
+    expect(makeService().isDevAuthDisabled()).toBe(false);
+  });
+
+  it("returns false when flag is unset", () => {
+    process.env.NODE_ENV = "development";
+    delete process.env.AGEWORK_DEV_AUTH_DISABLED;
+    expect(makeService().isDevAuthDisabled()).toBe(false);
   });
 });

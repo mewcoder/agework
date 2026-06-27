@@ -1,5 +1,5 @@
 import { Controller, Get, Query } from "@nestjs/common";
-import { Roles } from "../../auth/roles.decorator";
+import { Roles } from "../../auth/decorators/roles.decorator";
 import { RunRepository } from "../run.repository";
 import { RunEventQuery } from "../../run-events/run-event.query";
 

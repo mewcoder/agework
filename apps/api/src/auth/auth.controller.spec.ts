@@ -1,12 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { AuthController } from "./auth.controller";
 import type { AuthService } from "./auth.service";
-import type { ConfigService } from "../config/config.service";
-import type { JwtUser } from "./current-user.decorator";
+import type { JwtUser } from "./decorators/current-user.decorator";
 
 function makeController(overrides?: {
   auth?: Partial<AuthService>;
-  config?: Partial<ConfigService>;
 }) {
   const auth = {
     login: vi.fn().mockResolvedValue({ token: "jwt", user: { id: "1" } }),
@@ -22,19 +20,17 @@ function makeController(overrides?: {
       .fn()
       .mockResolvedValue({ token: "jwt", user: { id: "1" } }),
     isSetupRequired: vi.fn().mockResolvedValue(false),
+    config: vi.fn().mockResolvedValue({
+      authRequired: true,
+      appName: "AgeWork",
+      registrationMode: "approval",
+      setupRequired: false,
+    }),
     ...overrides?.auth,
   };
-  const config = {
-    getAppName: vi.fn().mockReturnValue("AgeWork"),
-    ...overrides?.config,
-  };
   return {
-    controller: new AuthController(
-      auth as unknown as AuthService,
-      config as unknown as ConfigService
-    ),
+    controller: new AuthController(auth as unknown as AuthService),
     auth,
-    config,
   };
 }
 
@@ -107,17 +103,15 @@ describe("AuthController", () => {
   });
 
   describe("config()", () => {
-    it("returns app config with auth info", async () => {
-      const { controller, auth, config } = makeController();
+    it("delegates to authService.config", async () => {
+      const { controller, auth } = makeController();
       const result = await controller.config();
 
-      expect(config.getAppName).toHaveBeenCalled();
-      expect(auth.isSetupRequired).toHaveBeenCalled();
+      expect(auth.config).toHaveBeenCalled();
       expect(result).toMatchObject({
         appName: "AgeWork",
         registrationMode: "approval",
       });
-      expect(typeof result.authRequired).toBe("boolean");
     });
   });
 });

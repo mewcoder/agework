@@ -6,11 +6,11 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
-import { isDevAuthDisabled } from "./dev-auth";
-import { extractBearerToken } from "../common/extract-bearer-token";
-import { IS_PUBLIC_KEY } from "./public.decorator";
-import type { JwtUser } from "./current-user.decorator";
-import { UserService } from "../users/user.service";
+import { ConfigService } from "../../config/config.service";
+import { extractBearerToken } from "../../common/extract-bearer-token";
+import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
+import type { JwtUser } from "../decorators/current-user.decorator";
+import { UserService } from "../../users/user.service";
 
 type RequestWithUser = {
   headers: Record<string, string | string[] | undefined>;
@@ -26,7 +26,8 @@ export class JwtAuthGuard implements CanActivate {
   constructor(
     private jwtService: JwtService,
     private reflector: Reflector,
-    private users: UserService
+    private users: UserService,
+    private configService: ConfigService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -38,7 +39,7 @@ export class JwtAuthGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest<RequestWithUser>();
 
-    if (isDevAuthDisabled()) {
+    if (this.configService.isDevAuthDisabled()) {
       request.user = await this.loadDevAdminUser();
       return true;
     }

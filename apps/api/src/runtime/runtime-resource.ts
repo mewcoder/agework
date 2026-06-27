@@ -9,7 +9,7 @@ import type {
   IsolationScope,
   RuntimeType,
 } from "../config/config.service";
-import { CONTAINER_WORKSPACES_ROOT } from "../config/defaults";
+import { CONTAINER_WORKSPACES_ROOT } from "../config/registry/defaults";
 
 export type ResolveRuntimeTargetInput = {
   userId: string;

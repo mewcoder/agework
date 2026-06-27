@@ -1,5 +1,5 @@
 import { resolveApiBasePath } from "../../common/path.util";
-import { EnvKey } from "../../config/env-key";
+import { EnvKey } from "../../config/registry/env-key";
 
 /**
  * worker 容器访问宿主 API 的 base URL。
