@@ -8,6 +8,6 @@ import { TitleService } from "./title.service";
   imports: [ModelProviderModule],
   controllers: [ConversationController],
   providers: [ConversationService, TitleService],
-  exports: [ConversationService, TitleService],
+  exports: [ConversationService],
 })
 export class ConversationModule {}

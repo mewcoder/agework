@@ -28,18 +28,9 @@ const CUSTOM_PROVIDER = {
 
 function createService(
   options: {
-    messages?: Array<{ content: unknown }>;
     resolvedProvider?: unknown;
   } = {}
 ) {
-  const prisma = {
-    message: {
-      findMany: vi.fn().mockResolvedValue(options.messages ?? []),
-    },
-    conversation: {
-      update: vi.fn().mockResolvedValue({}),
-    },
-  };
   const modelProviderService = {
     resolveEnabledProvider: vi
       .fn()
@@ -47,9 +38,8 @@ function createService(
   };
 
   return {
-    prisma,
     modelProviderService,
-    service: new TitleService(prisma as never, modelProviderService as never),
+    service: new TitleService(modelProviderService as never),
   };
 }
 
@@ -67,22 +57,13 @@ describe("TitleService", () => {
     } as never);
   });
 
-  it("generates and saves a title for the first user message", async () => {
-    const { service, prisma, modelProviderService } = createService({
-      messages: [
-        {
-          content: {
-            role: "user",
-            content: [{ type: "text", text: "帮我重构参数校验" }],
-          },
-        },
-      ],
-    });
+  it("generates a normalized title from user text", async () => {
+    const { service, modelProviderService } = createService();
 
-    await service.generateIfNeeded({
-      conversationId: "conversation-1",
+    const title = await service.generateTitle({
       agentType: "claude",
       modelProviderId: "mp-1",
+      userText: "帮我重构参数校验",
     });
 
     expect(modelProviderService.resolveEnabledProvider).toHaveBeenCalledWith(
@@ -101,45 +82,35 @@ describe("TitleService", () => {
         temperature: 0,
       })
     );
-    expect(prisma.conversation.update).toHaveBeenCalledWith({
-      where: { id: "conversation-1" },
-      data: { title: "简洁标题" },
-    });
+    expect(title).toBe("简洁标题");
   });
 
-  it("skips title generation after the first user message", async () => {
-    const { service, prisma, modelProviderService } = createService({
-      messages: [
-        { content: { role: "user", content: "first" } },
-        { content: { role: "assistant", content: "reply" } },
-        { content: { role: "user", content: "second" } },
-      ],
-    });
+  it("skips title generation for empty user text", async () => {
+    const { service, modelProviderService } = createService();
 
-    await service.generateIfNeeded({
-      conversationId: "conversation-1",
+    const title = await service.generateTitle({
       agentType: "claude",
       modelProviderId: "mp-1",
+      userText: "   ",
     });
 
     expect(modelProviderService.resolveEnabledProvider).not.toHaveBeenCalled();
     expect(generateText).not.toHaveBeenCalled();
-    expect(prisma.conversation.update).not.toHaveBeenCalled();
+    expect(title).toBeNull();
   });
 
   it("keeps the fallback title for system providers", async () => {
-    const { service, prisma } = createService({
+    const { service } = createService({
       resolvedProvider: { source: "system" },
-      messages: [{ content: { role: "user", content: "hello" } }],
     });
 
-    await service.generateIfNeeded({
-      conversationId: "conversation-1",
+    const title = await service.generateTitle({
       agentType: "claude",
       modelProviderId: "system:claude",
+      userText: "hello",
     });
 
     expect(generateText).not.toHaveBeenCalled();
-    expect(prisma.conversation.update).not.toHaveBeenCalled();
+    expect(title).toBeNull();
   });
 });

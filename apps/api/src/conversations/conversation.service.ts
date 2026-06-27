@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { generateId, isAgentType, type AgentType } from "@agework/shared";
 import type {
@@ -17,6 +18,7 @@ import type { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
 import { extractText } from "../common/message-text";
 import { swallow } from "../common/swallow";
+import { TitleService } from "./title.service";
 
 export type AssistantUserMessage = {
   id?: unknown;
@@ -25,11 +27,24 @@ export type AssistantUserMessage = {
   content?: unknown;
 };
 
+function isStoredUserMessage(
+  content: unknown
+): content is { role: "user"; content: unknown } {
+  return (
+    content !== null &&
+    typeof content === "object" &&
+    (content as { role?: unknown }).role === "user"
+  );
+}
+
 @Injectable()
 export class ConversationService {
   private readonly logger = new Logger(ConversationService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Optional() private readonly titleService?: TitleService
+  ) {}
 
   private toConversationDto(c: {
     id: string;
@@ -279,6 +294,29 @@ export class ConversationService {
     });
   }
 
+  async generateTitleIfNeeded(input: {
+    conversationId: string;
+    agentType: AgentType;
+    modelProviderId?: string | null;
+  }): Promise<void> {
+    if (!this.titleService) return;
+
+    const userText = await this.findInitialUserText(input.conversationId);
+    if (!userText) return;
+
+    const title = await this.titleService.generateTitle({
+      agentType: input.agentType,
+      modelProviderId: input.modelProviderId,
+      userText,
+    });
+    if (!title) return;
+
+    await this.prisma.conversation.updateMany({
+      where: { id: input.conversationId, deletedAt: null },
+      data: { title },
+    });
+  }
+
   async update(
     userId: string,
     conversationId: string,
@@ -409,6 +447,29 @@ export class ConversationService {
       where: { id: conversationId, deletedAt: null },
       data: { title },
     });
+  }
+
+  private async findInitialUserText(
+    conversationId: string
+  ): Promise<string | null> {
+    const messages = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "asc" },
+      select: { content: true },
+    });
+    let userMessageCount = 0;
+    let firstUserText: string | null = null;
+
+    for (const m of messages) {
+      if (!isStoredUserMessage(m.content)) continue;
+      userMessageCount += 1;
+      if (userMessageCount > 1) return null;
+
+      const text = extractText(m.content.content).trim();
+      firstUserText = text || null;
+    }
+
+    return firstUserText;
   }
 
   async archive(userId: string, conversationId: string) {

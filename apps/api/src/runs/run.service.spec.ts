@@ -6,7 +6,7 @@ import { LiveRunRegistry } from "./live-runs/live-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
 import { ExecutionService } from "./execution/execution.service";
 import { ConversationService } from "../conversations/conversation.service";
-import { TitleService } from "../conversations/title.service";
+import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { RunEventService } from "../run-events/run-event.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
@@ -81,8 +81,8 @@ describe("RunService", () => {
   let mockRuntimeService: Partial<RuntimeService>;
   let mockExecutionService: Partial<ExecutionService>;
   let mockConversationService: Partial<ConversationService>;
+  let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
-  let mockTitleService: Partial<TitleService>;
   let mockConfigService: Partial<ConfigService>;
   let mockPrismaService: Partial<PrismaService>;
   let mockWorkspaceFindFirst: ReturnType<typeof vi.fn>;
@@ -151,18 +151,19 @@ describe("RunService", () => {
     };
     mockConversationService = {
       attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
-      setActiveRunStatus: vi.fn().mockResolvedValue(true),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       upsertMessage: vi.fn().mockResolvedValue(undefined),
-      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
+      generateTitleIfNeeded: vi.fn().mockResolvedValue(undefined),
       findOne: vi.fn().mockResolvedValue({}),
+    };
+    mockRunConversation = {
+      markRunning: vi.fn().mockResolvedValue(true),
+      markError: vi.fn().mockResolvedValue(true),
+      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
-    mockTitleService = {
-      generateIfNeeded: vi.fn().mockResolvedValue(undefined),
-    };
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
@@ -186,8 +187,8 @@ describe("RunService", () => {
       mockRuntimeService as RuntimeService,
       mockExecutionService as ExecutionService,
       mockConversationService as ConversationService,
+      mockRunConversation as RunConversationEffects,
       mockRunEvents,
-      mockTitleService as TitleService,
       mockConfigService as ConfigService,
       mockPrismaService as PrismaService
     );
@@ -262,9 +263,8 @@ describe("RunService", () => {
 
     it("marks the conversation running before starting", async () => {
       await service.start(makeStartInput());
-      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith(
-        "conversation-1",
-        "running"
+      expect(mockRunConversation.markRunning).toHaveBeenCalledWith(
+        "conversation-1"
       );
     });
 
@@ -278,7 +278,7 @@ describe("RunService", () => {
         "conversation-1",
         userMessage
       );
-      expect(mockTitleService.generateIfNeeded).toHaveBeenCalledWith({
+      expect(mockConversationService.generateTitleIfNeeded).toHaveBeenCalledWith({
         conversationId: "conversation-1",
         agentType: "claude",
         modelProviderId: "mp-1",
@@ -389,9 +389,8 @@ describe("RunService", () => {
         "run-1",
         "Failed to start worker"
       );
-      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith(
-        "conversation-1",
-        "error"
+      expect(mockRunConversation.markError).toHaveBeenCalledWith(
+        "conversation-1"
       );
       await Promise.resolve();
       expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");

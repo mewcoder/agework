@@ -95,6 +95,71 @@ describe("ConversationService", () => {
     });
   });
 
+  it("generates an AI title from the first stored user message", async () => {
+    const titleService = {
+      generateTitle: vi.fn().mockResolvedValue("重构参数校验"),
+    };
+    const findMany = vi.fn().mockResolvedValue([
+      {
+        content: {
+          role: "user",
+          content: [{ type: "text", text: "帮我重构参数校验" }],
+        },
+      },
+    ]);
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const service = new ConversationService(
+      {
+        message: { findMany },
+        conversation: { updateMany },
+      } as never,
+      titleService as never
+    );
+
+    await service.generateTitleIfNeeded({
+      conversationId: "conversation-1",
+      agentType: "claude",
+      modelProviderId: "mp-1",
+    });
+
+    expect(titleService.generateTitle).toHaveBeenCalledWith({
+      agentType: "claude",
+      modelProviderId: "mp-1",
+      userText: "帮我重构参数校验",
+    });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "conversation-1", deletedAt: null },
+      data: { title: "重构参数校验" },
+    });
+  });
+
+  it("skips AI title generation after multiple stored user messages", async () => {
+    const titleService = {
+      generateTitle: vi.fn().mockResolvedValue("不会生成"),
+    };
+    const service = new ConversationService(
+      {
+        message: {
+          findMany: vi.fn().mockResolvedValue([
+            { content: { role: "user", content: "first" } },
+            { content: { role: "assistant", content: "reply" } },
+            { content: { role: "user", content: "second" } },
+          ]),
+        },
+        conversation: { updateMany: vi.fn() },
+      } as never,
+      titleService as never
+    );
+
+    await service.generateTitleIfNeeded({
+      conversationId: "conversation-1",
+      agentType: "claude",
+      modelProviderId: "mp-1",
+    });
+
+    expect(titleService.generateTitle).not.toHaveBeenCalled();
+  });
+
   it("uses the previous message as parent when parent_id is missing", async () => {
     const upsert = vi.fn().mockResolvedValue(undefined);
     const service = new ConversationService({

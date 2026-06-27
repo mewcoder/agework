@@ -1,9 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { RunUsage } from "@agework/shared/protocol";
-import { ConversationService } from "../../../conversations/conversation.service";
 import { errorLogFields, safeLogJson } from "../../../common/logging";
 import { swallow } from "../../../common/swallow";
 import { RunRepository } from "../../run.repository";
+import { RunConversationEffects } from "../../conversation/run-conversation.effects";
 import {
   LiveRunRegistry,
   type LiveRunHandle,
@@ -20,7 +20,7 @@ export class WorkerAgUiEventHandler {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly conversationService: ConversationService,
+    private readonly runConversation: RunConversationEffects,
     private readonly eventRecorder: WorkerRunEventRecorder
   ) {}
 
@@ -124,8 +124,8 @@ export class WorkerAgUiEventHandler {
     conversationId: string,
     sessionId: string
   ): void {
-    this.conversationService
-      .setAgentSessionId(conversationId, sessionId)
+    this.runConversation
+      .saveAgentSessionId(conversationId, sessionId)
       .catch((err) =>
         this.logger.warn(
           `persist agent session id failed ${safeLogJson({

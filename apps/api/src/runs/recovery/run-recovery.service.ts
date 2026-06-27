@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "../run.repository";
 import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
-import { RunExecutorRegistry } from "../execution/executor.registry";
-import { ConversationService } from "../../conversations/conversation.service";
+import { ExecutionService } from "../execution/execution.service";
+import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { PrismaService } from "../../prisma/prisma.service";
 import { swallow } from "../../common/swallow";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../../runtime/instances/runtime-instance-metadata";
 
 /**
- * 服务重启后恢复孤儿 run：找到所有仍处于 active 状态的 run，
+ * 服务重启后恢复中断 run：找到所有仍处于 active 状态的 run，
  * 让对应 run executor 清理底层进程/容器，并将 run/thread 状态标记为 error。
  */
 @Injectable()
@@ -20,50 +20,46 @@ export class RunRecoveryService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly conversationService: ConversationService,
-    private readonly runExecutors: RunExecutorRegistry,
+    private readonly runConversation: RunConversationEffects,
+    private readonly executionService: ExecutionService,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly prisma: PrismaService
   ) {}
 
-  async recoverOrphanRuns(): Promise<void> {
+  async recoverInterruptedRuns(): Promise<void> {
     try {
       const activeRuns = await this.runRepository.findAllActive();
       if (activeRuns.length === 0) {
-        this.logger.log("No orphan runs found.");
+        this.logger.log("No interrupted active runs found.");
       } else {
         this.logger.warn(
-          `Found ${activeRuns.length} orphan run(s) — marking as error`
+          `Found ${activeRuns.length} interrupted active run(s) — marking as error`
         );
 
         for (const run of activeRuns) {
           if (run.runtimeInstanceId) {
-            const executor = this.runExecutors.resolve(
-              run.runtimeType
-            );
-
             // User-scope runtimes are shared across workspaces — destroying the
-            // container/sandbox because one run is orphaned would kill the others.
-            // Only call recoverOrphan when the runtime is NOT user-scoped.
-            const shouldRecoverOrphan =
-              await this.shouldRecoverOrphanRuntime(
+            // container/sandbox because one run was interrupted would kill the others.
+            // Only cleanup interrupted execution when the runtime is NOT user-scoped.
+            const shouldCleanupInterruptedRuntime =
+              await this.shouldCleanupInterruptedRuntimeResource(
                 run.runtimeInstanceId,
                 run.runtimeType
             );
-            if (shouldRecoverOrphan) {
-              await Promise.resolve(
-                executor.recoverOrphanExecution?.(run.runtimeInstanceId)
-              ).catch(swallow(this.logger, `recover orphan run ${run.id}`));
+            if (shouldCleanupInterruptedRuntime) {
+              await this.executionService
+                .cleanupInterruptedExecution(run.runtimeType, run.runtimeInstanceId)
+                .catch(swallow(this.logger, `cleanup interrupted run ${run.id}`));
             } else {
               this.logger.log(
-                `Skipping recoverOrphan for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`
+                `Skipping interrupted execution cleanup for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`
               );
             }
           }
 
           await this.runRepository.markError(run.id, "服务重启导致运行中断");
-          await this.conversationService
-            .setActiveRunStatus(run.conversationId, "error")
+          await this.runConversation
+            .markError(run.conversationId)
             .catch(
               swallow(
                 this.logger,
@@ -71,12 +67,12 @@ export class RunRecoveryService {
               )
             );
 
-          this.logger.log(`Marked orphan run ${run.id} as error`);
+          this.logger.log(`Marked interrupted run ${run.id} as error`);
         }
       }
     } catch (err) {
       this.logger.error(
-        `Failed to recover orphan runs: ${err instanceof Error ? err.message : String(err)}`
+        `Failed to cleanup interrupted runs: ${err instanceof Error ? err.message : String(err)}`
       );
     }
 
@@ -85,11 +81,11 @@ export class RunRecoveryService {
   }
 
   /**
-   * Decide whether run-level orphan execution cleanup is allowed.
+   * Decide whether run-level interrupted execution cleanup is allowed.
    * User-isolated RuntimeTarget resources can be shared across workspaces, so
-   * destroying one because a single run is orphaned would be destructive.
+   * destroying one because a single run was interrupted would be destructive.
    */
-  private async shouldRecoverOrphanRuntime(
+  private async shouldCleanupInterruptedRuntimeResource(
     runtimeInstanceId: string,
     runtimeType: string
   ): Promise<boolean> {
@@ -156,7 +152,7 @@ export class RunRecoveryService {
           .catch(
             swallow(
               this.logger,
-              `recover orphan runtime resource ${resource.runtimeInstanceId}`
+              `cleanup interrupted runtime resource ${resource.runtimeInstanceId}`
             )
           );
         await this.prisma.runtimeInstance.update({

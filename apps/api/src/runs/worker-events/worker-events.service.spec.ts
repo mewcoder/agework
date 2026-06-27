@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WorkerEventsService } from "./worker-events.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-runs/live-run.registry";
-import { ConversationService } from "../../conversations/conversation.service";
+import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { AssistantMessageAggregator } from "../assistant-message.aggregator";
 import { RunEventService } from "../../run-events/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
@@ -40,7 +40,7 @@ describe("WorkerEventsService", () => {
   let workerEventsService: WorkerEventsService;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
-  let mockConversationService: Partial<ConversationService>;
+  let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
   let mockExecutionService: Partial<ExecutionService>;
 
@@ -55,9 +55,10 @@ describe("WorkerEventsService", () => {
       recordUsage: vi.fn().mockResolvedValue(undefined),
     };
 
-    mockConversationService = {
+    mockRunConversation = {
       setPendingUserAction: vi.fn().mockResolvedValue(undefined),
       setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
+      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -70,14 +71,14 @@ describe("WorkerEventsService", () => {
     liveRuns = new LiveRunRegistry(makeConfig());
     const runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
-      mockConversationService as ConversationService,
+      mockRunConversation as RunConversationEffects,
       liveRuns
     );
     const eventRecorder = new WorkerRunEventRecorder(mockRunEvents);
     const aguiEvents = new WorkerAgUiEventHandler(
       mockRunRepository as RunRepository,
       liveRuns,
-      mockConversationService as ConversationService,
+      mockRunConversation as RunConversationEffects,
       eventRecorder
     );
     workerEventsService = new WorkerEventsService(

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { ConversationService } from "../../conversations/conversation.service";
 import {
   LiveRunRegistry,
   type LiveRunHandle,
 } from "../live-runs/live-run.registry";
+import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
@@ -61,18 +61,18 @@ function makeSubject(input?: {
       .fn()
       .mockResolvedValue(input?.activeRun ?? null),
   };
-  const conversationService = {
+  const runConversation = {
     setPendingUserAction: vi.fn().mockResolvedValue(undefined),
     setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
   };
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   return {
     runRepository,
-    conversationService,
+    runConversation,
     registry,
     handler: new RunStatusService(
       runRepository as unknown as RunRepository,
-      conversationService as unknown as ConversationService,
+      runConversation as unknown as RunConversationEffects,
       registry
     ),
   };
@@ -80,7 +80,7 @@ function makeSubject(input?: {
 
 describe("RunStatusService", () => {
   it("persists requires_action and saves a partial message snapshot", async () => {
-    const { handler, runRepository, conversationService } = makeSubject();
+    const { handler, runRepository, runConversation } = makeSubject();
     const handle = makeHandle();
 
     await handler.apply({
@@ -92,7 +92,7 @@ describe("RunStatusService", () => {
 
     expect(runRepository.markRequiresAction).toHaveBeenCalledWith("run-1");
     expect(handle.saveRun).toHaveBeenCalledWith(false);
-    expect(conversationService.setPendingUserAction).toHaveBeenCalledWith(
+    expect(runConversation.setPendingUserAction).toHaveBeenCalledWith(
       "conversation-1",
       "question"
     );
@@ -101,7 +101,7 @@ describe("RunStatusService", () => {
   it("applies error terminal effects and closes the SSE response", async () => {
     const registry = new LiveRunRegistry(makeConfig());
     const unregister = vi.spyOn(registry, "unregister");
-    const { handler, runRepository, conversationService } = makeSubject({
+    const { handler, runRepository, runConversation } = makeSubject({
       activeRun: { id: "run-1" },
       registry,
     });
@@ -116,7 +116,7 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markError).toHaveBeenCalledWith("run-1", "boom");
-    expect(conversationService.setActiveRunStatus).toHaveBeenCalledWith(
+    expect(runConversation.setActiveRunStatus).toHaveBeenCalledWith(
       "conversation-1",
       "error"
     );
@@ -129,7 +129,7 @@ describe("RunStatusService", () => {
   });
 
   it("does not overwrite conversation status when a newer run is active", async () => {
-    const { handler, conversationService } = makeSubject({
+    const { handler, runConversation } = makeSubject({
       activeRun: { id: "run-2" },
     });
     const handle = makeHandle();
@@ -141,7 +141,7 @@ describe("RunStatusService", () => {
       handle,
     });
 
-    expect(conversationService.setActiveRunStatus).not.toHaveBeenCalled();
+    expect(runConversation.setActiveRunStatus).not.toHaveBeenCalled();
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 

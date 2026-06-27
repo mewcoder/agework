@@ -4,8 +4,6 @@ import type { ProviderConfig } from "@agework/shared/api";
 import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { PrismaService } from "../prisma/prisma.service";
-import { extractText } from "../common/message-text";
 import { ModelProviderService } from "../model-providers/model-provider.service";
 import { normalizeBaseUrl } from "../model-providers/llm-client";
 
@@ -14,9 +12,9 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_TOKENS = 64;
 
 type GenerateTitleInput = {
-  conversationId: string;
   agentType: AgentType;
   modelProviderId?: string | null;
+  userText: string;
 };
 
 function titlePrompt(userText: string): string {
@@ -48,46 +46,20 @@ function firstConfiguredModel(providerConfig: ProviderConfig): string | null {
   return providerConfig.models.map((m) => m.trim()).find(Boolean) ?? null;
 }
 
-function isStoredUserMessage(
-  content: unknown
-): content is { role: "user"; content: unknown } {
-  return (
-    content !== null &&
-    typeof content === "object" &&
-    (content as { role?: unknown }).role === "user"
-  );
-}
-
 @Injectable()
 export class TitleService {
   constructor(
-    private readonly prisma: PrismaService,
     private readonly modelProviderService: ModelProviderService
   ) {}
 
-  async generateIfNeeded(input: GenerateTitleInput): Promise<void> {
-    const userText = await this.findInitialUserText(input.conversationId);
-    if (!userText) return;
+  async generateTitle(input: GenerateTitleInput): Promise<string | null> {
+    const userText = input.userText.trim();
+    if (!userText) return null;
 
-    const title = await this.generateTitle(
+    const model = await this.resolveTitleModel(
       input.agentType,
-      input.modelProviderId,
-      userText
+      input.modelProviderId
     );
-    if (!title) return;
-
-    await this.prisma.conversation.update({
-      where: { id: input.conversationId },
-      data: { title },
-    });
-  }
-
-  private async generateTitle(
-    agentType: AgentType,
-    modelProviderId: string | null | undefined,
-    userText: string
-  ): Promise<string | null> {
-    const model = await this.resolveTitleModel(agentType, modelProviderId);
     if (!model) return null;
 
     const { text } = await generateText({
@@ -131,28 +103,5 @@ export class TitleService {
       );
     }
     return createOpenAI({ apiKey, baseURL }).chat(modelId);
-  }
-
-  private async findInitialUserText(
-    conversationId: string
-  ): Promise<string | null> {
-    const messages = await this.prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "asc" },
-      select: { content: true },
-    });
-    let userMessageCount = 0;
-    let firstUserText: string | null = null;
-
-    for (const m of messages) {
-      if (!isStoredUserMessage(m.content)) continue;
-      userMessageCount += 1;
-      if (userMessageCount > 1) return null;
-
-      const text = extractText(m.content.content).trim();
-      firstUserText = text || null;
-    }
-
-    return firstUserText;
   }
 }

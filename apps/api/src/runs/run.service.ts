@@ -21,7 +21,7 @@ import { LiveRunRegistry } from "./live-runs/live-run.registry";
 import { RuntimeService } from "../runtime/runtime.service";
 import { ExecutionService } from "./execution/execution.service";
 import { ConversationService } from "../conversations/conversation.service";
-import { TitleService } from "../conversations/title.service";
+import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
@@ -63,8 +63,8 @@ export class RunService {
     private readonly runtimeService: RuntimeService,
     private readonly executionService: ExecutionService,
     private readonly conversationService: ConversationService,
+    private readonly runConversation: RunConversationEffects,
     private readonly runEvents: RunEventService,
-    private readonly titleService: TitleService,
     private readonly configService: ConfigService,
     private readonly prisma: PrismaService
   ) {}
@@ -296,10 +296,7 @@ export class RunService {
     interruptReason?: "user_steered";
   }): Promise<void> {
     const { conversationId, userId, runId, interruptReason } = input;
-    const activated = await this.conversationService.setActiveRunStatus(
-      conversationId,
-      "running"
-    );
+    const activated = await this.runConversation.markRunning(conversationId);
     if (activated) return;
 
     try {
@@ -343,8 +340,8 @@ export class RunService {
     if (!userMessage) return;
 
     await this.conversationService.saveUserMessage(conversationId, userMessage);
-    this.titleService
-      .generateIfNeeded({ conversationId, agentType, modelProviderId })
+    this.conversationService
+      .generateTitleIfNeeded({ conversationId, agentType, modelProviderId })
       .catch(
         swallow(this.logger, `generate title for conversation ${conversationId}`)
       );
@@ -388,8 +385,8 @@ export class RunService {
 
   private saveSession(conversationId: string): (sessionId: string) => void {
     return (sessionId) => {
-      this.conversationService
-        .setAgentSessionId(conversationId, sessionId)
+      this.runConversation
+        .saveAgentSessionId(conversationId, sessionId)
         .catch(
           swallow(this.logger, `persist agent session for ${conversationId}`)
         );
@@ -561,8 +558,8 @@ export class RunService {
           swallow(this.logger, `record runtime start failure for run ${runId}`)
         )
         .finally(() => this.runEvents.forgetRun(runId));
-      await this.conversationService
-        .setActiveRunStatus(conversationId, "error")
+      await this.runConversation
+        .markError(conversationId)
         .catch(
           swallow(
             this.logger,
