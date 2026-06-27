@@ -4,6 +4,8 @@
 
 一句话总纲:**这是「按领域切的模块化单体」,不是 DDD,也不要上 DDD。按角色分层,不按教条分层;每一层、每一个文件夹、每一个借来的 pattern,都得为本栈(NestJS + Prisma + 大量 agent 编辑)重新挣到存在理由,挣不到就砍。**
 
+> **这套有行业出处,不是自创**:竖切按领域 = **Modular Monolith**(Simon Brown)/ **Package by Feature**;按领域而非按层切 = **Vertical Slice Architecture**(Jimmy Bogard);`module/controller/service` + `imports/exports` 跨模块调 service = **NestJS 官方 feature module** 的标准用法;只向下、不成环 = **Acyclic Dependencies Principle**(Robert C. Martin);领域边界 + 唯一公开门 = **Strategic DDD / Bounded Context**(Eric Evans)。即:**保留 DDD 的战略边界,丢弃战术重型建模**(见末节「不要做」)。
+
 ## 何时适用
 
 - 新增 / 重构 feature module、controller、service、repository
@@ -23,15 +25,22 @@
 
 ## 模块骨架
 
-**根目录只放三件套 + repository + types(各自 spec 贴边);其余一律进文件夹。**
+**根目录只放领域的「门面文件」+ 子文件夹;内部辅助文件不平铺在根。** 哪些门面文件该有,按职责定,不是「凑齐」:
+
+- **`module` + `service`:每个领域必有。** module 是零逻辑组合根,service 是领域唯一对外的门。
+- **`controller`:对外暴露 HTTP 才有。**(runtime 不暴露 HTTP,根上就没有 controller。)
+- **`repository`:领域持有数据(表)才有。**(auth 不持表、把数据委托给 `UserService`,所以没有 repository。)
+- **`types` / `events` / `dto/`:按需,有就有、没有就不建。**
+
+各领域看起来**相似**(同一套门面槽位),但**不强求文件数量一致、不为凑齐而造空文件 / 空文件夹**。
 
 标准模块:
 
 ```
 users/
-├── users.module.ts          # 零逻辑,只组合
-├── users.controller.ts      # 瘦,只 HTTP I/O
-├── users.service.ts         # 领域唯一对外入口 + 编排
+├── user.module.ts           # 零逻辑,只组合
+├── user.controller.ts       # 瘦,只 HTTP I/O
+├── user.service.ts          # 领域唯一对外入口 + 编排
 ├── user.repository.ts       # 独占 Prisma 的 DB 访问
 ├── user.types.ts            # 跨边界类型(有才建)
 ├── *.spec.ts                # 贴各自源文件
@@ -53,11 +62,18 @@ runtime/
 
 规则:
 
-- **根目录一眼只有「三件套 + repository + types」**,内部辅助文件不许平铺在根。
+- **根目录一眼只有门面文件 + 子文件夹**(module/service 必有,controller/repository/types 按职责),内部辅助文件不许平铺在根。
 - **文件夹少而厚**:能合则合,宁可 3 个厚文件夹,不要 6 个薄文件夹;但也别为 1 个文件单建文件夹。
+- **子文件夹按子能力 / 子领域命名**(如 `credentials/`、`instances/`、`sandbox/`),让名字自解释;不用泛化的 `internal/` / `common/` / `utils/` 兜底。
 - **`module.ts` 零逻辑**,只组合 imports/providers/controllers/exports。
 - **`controller` 瘦**:解析 HTTP 输入、调 Service、返回结果,不写业务。
-- **文件名标明它是什么**,让文件名承担分类:结构后缀固定(`*.module/controller/service/repository/types/events/dto/spec`),且统一用**领域名前缀**(`user.service.ts` / `user.repository.ts` / `user.types.ts`),不要按某个 service 命名(别写成 `user-service.types.ts`);内部辅助文件用一个能说清职责的词收尾(`sandbox.executor.ts`、`provider.registry.ts` 这类是**自然长出来的,不是要背的清单**)。起不出这种名字就别抽文件,留在 owner Service 的 private method 里。
+- **文件名标明它是什么**,让文件名承担分类:目录名可按路由 / 集合用复数(`users/`),文件前缀统一用领域概念名并沿用现有模块约定(`user.service.ts` / `user.repository.ts` / `user.types.ts`;已有 `runs.module.ts` 这类历史命名先保持一致),不要按某个 service 命名(别写成 `user-service.types.ts`);结构后缀固定(`*.module/controller/service/repository/types/events/dto/spec`)。内部辅助文件用一个能说清职责的词收尾(`sandbox.executor.ts`、`provider.registry.ts` 这类是**自然长出来的,不是要背的清单**)。起不出这种名字就别抽文件,留在 owner Service 的 private method 里。
+
+**工具函数 / 转换函数放哪(非必要勿拆):**
+
+- **默认不拆**:工具函数先当 owner Service 的 `private` 方法 / 同文件局部函数,**满足一条才抽成独立文件**——被 ≥2 处真复用、或厚到自成可读单元、或是纯函数且值得精准单测。
+- **抽出来按「认不认识领域」决定位置**:认识某领域概念(读 user 字段 / 按 run 状态算…)、只该领域用 → **留模块内**(私有方法,厚了抽 `xxx-<职责>.ts` / 进子文件夹);不认识领域、纯通用且只后端用 → `apps/api/src/common/`;不认识领域、前后端都可能用 → `@agework/shared`(如 `message-text`、`generateId`)。
+- **行 → 响应 DTO 的转换放 Service 私有方法**(如 `toUserDto`),敏感字段在 Repository 用 `select`/`omit` 挡;**不要**为它建 `mapper.ts` / mapper 层。
 
 ## 子文件夹 vs 平级 module
 
@@ -94,6 +110,38 @@ export class RuntimeModule {}
 - **跨边界类型进 `*.types.ts` 或 `@agework/shared`**;禁止从 service 实现文件导出类型(被别人 import 的类型就是契约,搬进 `*.types.ts`)。
 - **防 God Service**:「Service 是唯一**对外**入口」必须配「**内部**按能力激进拆分」。单入口约束的是公开面,不是把逻辑堆进一个胖类。
 
+## 跨领域调用
+
+要用另一个领域的能力,**只调它导出的 `Service`,构造注入,只向下**:
+
+```ts
+// auth.module.ts —— Auth 在 Users 之上,导入 Users 的公开 module
+@Module({
+  imports: [UserModule],
+  providers: [AuthService],
+  exports: [AuthService],
+})
+export class AuthModule {}
+
+// auth.service.ts —— 只注入 Users 导出的公开 Service
+@Injectable()
+export class AuthService {
+  constructor(private readonly users: UserService) {}  // 注入对方公开 Service
+
+  login(u: string, p: string) {
+    return this.users.authenticate(u, p);               // 调它的公开方法
+  }
+}
+```
+
+- **同一个 `Service` 同时服务两类调用者**:自己的 `Controller`(HTTP)+ 上层领域的 `Service`(跨域)。**只有一个公开面、一条规则(向下、不成环),不拆「给 controller 的脸」和「给领域的脸」**;真分叉到一个类塞不下时再说,默认别预拆。
+- **只调对方 `Service`**,绝不 reach 进它的 `repository` / 子能力文件(那里有原始 / 敏感数据,且没有授权)。
+- **调之前自检一句:「对方会不会(直接或传递)反过来依赖我?」**
+  - 否 → 直接调,你就是它的上层,合法。
+  - 是 → 你在闭一个环,说明边界划错 / 方向反了,改用下面的拆环动作,**禁止 `forwardRef` 圆场**。
+- **「同级」不是预先贴的标签**:你调了 B,你就排在 B 之上。不存在「同级直连该不该」的问题,只存在「这次调用会不会成环」。
+- 两个领域要协作、又排不出谁在上时,拆环四选一:**① 定序**(多数「同级」其实有天然低者)/ **② 上提**——把协作上提到拥有该用例的更上层 Service,它向下调两边 / **③ 下沉**——把共享物抽成更低的 module,两边都向下调它 / **④ 事件**——若只是「通知已发生的事实」,用 domain event 断开依赖(见下节)。
+
 ## 依赖方向与事件
 
 ```ts
@@ -122,7 +170,7 @@ export class UserRepository {
 
 - **一律走 Repository,Service 不注入 `PrismaService`。** 理由:本仓库大量被 agent 编辑,「一律走仓储」是是非题(照模板不会判错),优于「有查询才上」的判断题(易判错、在不该碰 Prisma 处戳进去)。
 - **护栏**:Repository 可以薄;**禁止**叠 `interface IXxxRepository` + injection token + 实现类;**Repository per 领域,不 per 表**。
-- 多步写用 `prisma.$transaction(fn)`;留意并消除 N+1。
+- 多步写用 `prisma.$transaction(fn)`:Prisma 查询和 tx client 留在 Repository;Service 可编排用例,但不直接写 Prisma 查询。留意并消除 N+1。
 - 响应不泄敏字段:**默认在 Repository 用 `select` / `omit` 把 password hash / token / 审计列挡在源头**(别建 response-DTO mapper 层)。
 
 ## 输入校验
@@ -189,13 +237,14 @@ DDD / Hexagonal 重型套路(本工程是过程复杂度,不是富领域):
 
 - `src/modules/` 包壳 —— feature 直接放 `src/` 顶层。
 - `entities/` 文件夹 —— TypeORM-ism,Prisma 不写 entity 类,用 Prisma 类型 + `*.types.ts`。
-- 根目录平铺一堆内部文件 / 为 1 个文件单建文件夹 —— 见「模块骨架」:根只留三件套+repository+types,其余进少而厚的文件夹。
+- 根目录平铺一堆内部文件 / 为 1 个文件单建文件夹 —— 见「模块骨架」:根只留门面文件 + 子文件夹,其余进少而厚的文件夹。
 
 ## 自检清单
 
-- [ ] 模块根目录是不是只有「三件套 + repository + types」?其余都进文件夹了吗?
-- [ ] 文件夹是不是「少而厚」?有没有薄文件夹该合、或散文件该收进文件夹?
+- [ ] 模块根目录是不是只有门面文件(module/service 必有,controller/repository 按职责)+ 子文件夹?有没有为「凑齐」造空文件 / 空文件夹?
+- [ ] 文件夹是不是「少而厚」、按子能力命名?有没有薄文件夹该合、或散文件该收进文件夹?
 - [ ] 跨模块调用是不是只走对方公开 `Service`?有没有 reach 进别人内部?
+- [ ] 跨领域调用前,有没有确认对方不会(传递地)反过来依赖我(不成环)?
 - [ ] Service 有没有直接注入 `PrismaService`?(应走 Repository)
 - [ ] 有没有用事件去**命令**别的模块改状态?(应只通知事实)
 - [ ] 响应里会不会漏出敏感字段?

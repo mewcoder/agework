@@ -8,9 +8,9 @@
 
 相关文档：
 
-- [AgeWork Agent Event Log 设计](../agework-agent-event-protocol-design.md)
+- [AgeWork Agent Event Log 设计](./agework-agent-event-protocol-design.md)
 - [Assistant UI 数据层重构设计](./assistant-ui-data-layer-refactor-design.md)
-- [Agent 事件体系评审报告](../agent-event-system-review.md)
+- [Agent 事件体系评审报告](./agent-event-system-review.md)
 - [AG-UI 替换与 AgeWork Runtime 实施计划](./ag-ui-replacement-runtime-plan.md)
 
 ## 1. 结论

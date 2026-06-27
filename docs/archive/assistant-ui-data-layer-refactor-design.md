@@ -8,9 +8,9 @@
 
 相关背景：
 
-- [Agent 事件体系评审报告](../agent-event-system-review.md)
-- [Agent 事件追溯与日志体系改造计划](../agent-event-trace-logging-plan.md)
-- [AgeWork Agent Event Log 设计](../agework-agent-event-protocol-design.md)
+- [Agent 事件体系评审报告](./agent-event-system-review.md)
+- [Agent 事件追溯与日志体系改造计划](./agent-event-trace-logging-plan.md)
+- [AgeWork Agent Event Log 设计](./agework-agent-event-protocol-design.md)
 - [AgeWork Agent Runtime 可行性分析](./agework-agent-runtime-feasibility.md)
 - [AG-UI 替换与 AgeWork Runtime 实施计划](./ag-ui-replacement-runtime-plan.md)
 

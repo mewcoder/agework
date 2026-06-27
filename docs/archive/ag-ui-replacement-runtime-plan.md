@@ -9,9 +9,9 @@
 相关文档：
 
 - [AgeWork Agent Runtime 可行性分析](./agework-agent-runtime-feasibility.md)
-- [AgeWork Agent Event Log 设计](../agework-agent-event-protocol-design.md)
+- [AgeWork Agent Event Log 设计](./agework-agent-event-protocol-design.md)
 - [Assistant UI 数据层重构设计](./assistant-ui-data-layer-refactor-design.md)
-- [Agent 事件体系评审报告](../agent-event-system-review.md)
+- [Agent 事件体系评审报告](./agent-event-system-review.md)
 
 ## 1. 结论
 
