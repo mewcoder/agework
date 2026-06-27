@@ -205,6 +205,22 @@ describe("SandboxRunExecutor — workspace scope", () => {
     expect(handle.conversationId).toBe("conversation-1");
   });
 
+  it("updates handle runtimeInstanceId when reusing a ready runtime resource", async () => {
+    const { provider, engine } = makeProvider();
+    const firstHandle = startProvider(provider);
+    await vi.runOnlyPendingTimersAsync();
+
+    const secondHandle = startProvider(provider, {
+      ...baseRun,
+      runId: "run-2",
+      conversationId: "conversation-2",
+    });
+
+    expect(firstHandle.runtimeInstanceId).toBe("docker-resource-1");
+    expect(secondHandle.runtimeInstanceId).toBe("docker-resource-1");
+    expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
+  });
+
   it("delegates to engine.getOrCreate for the first run", async () => {
     const { provider, engine } = makeProvider();
     startProvider(provider);
@@ -591,7 +607,7 @@ describe("SandboxRunExecutor — idle stop", () => {
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
   });
 
-  it("does not start idle timer if activeRuns still has entries", async () => {
+  it("does not start idle timer while owner still has active run references", async () => {
     const { provider, engine, config } = makeProvider();
     config.getIdleTimeoutSeconds.mockReturnValue(5);
 

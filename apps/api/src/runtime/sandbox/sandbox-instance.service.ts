@@ -3,7 +3,6 @@ import type {
   IsolationScope,
   RuntimeTarget,
   SandboxRuntimePlacement,
-  WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { isSandboxPlacement } from "../placement/runtime-resource";
@@ -34,7 +33,7 @@ export type SandboxOwnerState = {
   /** 上次 idle/心跳超时释放时的容器 ID，供下次 start() resume；resume 成功或全新创建后清空。 */
   lastStoppedRuntimeInstanceId?: string;
   accessKey: string;
-  activeRuns: Map<string, string>;
+  activeRunCount: number;
   isolationScope: IsolationScope;
   engineType: SandboxEngineType;
 };
@@ -54,7 +53,6 @@ export type SandboxWorkerExecutionContext = {
 export type SandboxRuntimeInstanceAttachment = {
   context: SandboxWorkerExecutionContext;
   ownerState: SandboxOwnerState;
-  handle: WorkerExecutionHandle;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };
 
@@ -67,7 +65,7 @@ export type SandboxRuntimeInstanceCallbacks = {
     runtimeInstanceId: string,
     ownerId: string
   ): void;
-  forceCancelled(runId: string): void;
+  runtimeReady(runId: string, runtimeInstanceId: string): void;
   publishWorkerError(runId: string, error: string): void;
   cleanupByOwnerId(ownerId: string): void;
 };
@@ -77,8 +75,6 @@ export class SandboxRuntimeInstanceService {
   private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
   private readonly ownerStates = new Map<string, SandboxOwnerState>();
-  /** run 在 runtime 实例 ready 之前被取消的标记；ready 时消费并强制置 cancelled。 */
-  private readonly cancelledStartingRuns = new Set<string>();
   private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
   private readonly idleWatchdog = new IdleWatchdog();
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
@@ -115,15 +111,6 @@ export class SandboxRuntimeInstanceService {
     };
   }
 
-  createRunHandle(context: SandboxWorkerExecutionContext): WorkerExecutionHandle {
-    return {
-      runId: context.runId,
-      runtimeType: context.runtimeTarget.runtimeType,
-      runtimeInstanceId: "",
-      conversationId: context.runConfig.conversationId,
-    };
-  }
-
   ensureOwnerState(
     context: SandboxWorkerExecutionContext,
     accessKeys: SandboxOwnerAccessKeyIssuer
@@ -136,7 +123,7 @@ export class SandboxRuntimeInstanceService {
       ownerState = {
         runtimeInstanceId: "",
         accessKey,
-        activeRuns: new Map(),
+        activeRunCount: 0,
         isolationScope: context.isolationScope,
         engineType: context.engineType,
       };
@@ -160,13 +147,32 @@ export class SandboxRuntimeInstanceService {
     return ownerState;
   }
 
+  retainOwnerRun(ownerId: string): void {
+    const ownerState = this.ownerStates.get(ownerId);
+    if (!ownerState) return;
+    ownerState.activeRunCount += 1;
+    this.idleWatchdog.cancel(ownerId);
+  }
+
+  releaseOwnerRun(ownerId: string): void {
+    const state = this.ownerStates.get(ownerId);
+    if (!state) return;
+    state.activeRunCount = Math.max(0, state.activeRunCount - 1);
+    if (state.activeRunCount === 0 && state.runtimeInstanceId) {
+      const idleTimeoutMs = this.configService.getIdleTimeoutSeconds() * 1000;
+      this.idleWatchdog.start(ownerId, idleTimeoutMs, () =>
+        this.handleIdle(ownerId)
+      );
+    }
+  }
+
   attachOrStartRuntimeInstance(
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, ownerState } = attachment;
     if (ownerState.runtimeInstanceId) {
-      this.attachReadyRuntimeInstance(attachment);
+      this.attachReadyRuntimeInstance(attachment, callbacks);
       return;
     }
 
@@ -179,47 +185,8 @@ export class SandboxRuntimeInstanceService {
     this.startRuntimeInstanceForOwner(attachment, callbacks);
   }
 
-  findOwnerIdByRun(runId: string): string | undefined {
-    for (const [ownerId, state] of this.ownerStates) {
-      if (state.activeRuns.has(runId)) return ownerId;
-    }
-    return undefined;
-  }
-
   getOwnerState(ownerId: string): SandboxOwnerState | undefined {
     return this.ownerStates.get(ownerId);
-  }
-
-  /** runtime 实例 ready 之前收到的 cancel：登记标记，待 ready 时统一收尾。 */
-  markCancelledBeforeReady(runId: string): void {
-    this.cancelledStartingRuns.add(runId);
-  }
-
-  getHandle(runId: string): WorkerExecutionHandle | undefined {
-    const ownerId = this.findOwnerIdByRun(runId);
-    if (!ownerId) return undefined;
-    const state = this.ownerStates.get(ownerId);
-    if (!state) return undefined;
-    return {
-      runId,
-      runtimeType: "sandbox",
-      runtimeInstanceId: state.runtimeInstanceId,
-      conversationId: state.activeRuns.get(runId) ?? "",
-    };
-  }
-
-  cleanupRun(runId: string): void {
-    const ownerId = this.findOwnerIdByRun(runId);
-    if (!ownerId) return;
-
-    this.ownerStates.get(ownerId)?.activeRuns.delete(runId);
-    const state = this.ownerStates.get(ownerId);
-    if (state && state.activeRuns.size === 0 && state.runtimeInstanceId) {
-      const idleTimeoutMs = this.configService.getIdleTimeoutSeconds() * 1000;
-      this.idleWatchdog.start(ownerId, idleTimeoutMs, () =>
-        this.handleIdle(ownerId)
-      );
-    }
   }
 
   shutdownRuntimeInstance(
@@ -262,15 +229,17 @@ export class SandboxRuntimeInstanceService {
   }
 
   private attachReadyRuntimeInstance(
-    attachment: SandboxRuntimeInstanceAttachment
+    attachment: SandboxRuntimeInstanceAttachment,
+    callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, ownerState, handle } = attachment;
-    handle.runtimeInstanceId = ownerState.runtimeInstanceId;
+    const { context, ownerState, onRuntimeInstanceIdReady } = attachment;
     void this.recordWorkspaceRuntime(
       context.placement,
       context.ownerId,
       ownerState.runtimeInstanceId
     );
+    callbacks.runtimeReady(context.runId, ownerState.runtimeInstanceId);
+    onRuntimeInstanceIdReady?.(ownerState.runtimeInstanceId);
   }
 
   private attachPendingRuntimeInstance(
@@ -278,22 +247,15 @@ export class SandboxRuntimeInstanceService {
     runtimePromise: Promise<SandboxRuntime>,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, handle, onRuntimeInstanceIdReady } = attachment;
+    const { context, onRuntimeInstanceIdReady } = attachment;
     void runtimePromise
       .then((runtime) => {
-        if (this.consumeCancelledStartingRun(context.runId)) {
-          this.ownerStates
-            .get(context.ownerId)
-            ?.activeRuns.delete(context.runId);
-          callbacks.forceCancelled(context.runId);
-          return;
-        }
         void this.recordWorkspaceRuntime(
           context.placement,
           context.ownerId,
           runtime.runtimeInstanceId
         );
-        handle.runtimeInstanceId = runtime.runtimeInstanceId;
+        callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
         onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
       })
       .catch((err) => {
@@ -397,7 +359,7 @@ export class SandboxRuntimeInstanceService {
     runtime: SandboxRuntime,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, handle, onRuntimeInstanceIdReady } = attachment;
+    const { context, onRuntimeInstanceIdReady } = attachment;
     this.pendingSandboxes.delete(context.ownerId);
     const state = this.ownerStates.get(context.ownerId);
     if (!state) return;
@@ -408,7 +370,7 @@ export class SandboxRuntimeInstanceService {
         ownerId: context.ownerId,
         engine: runtime.engineType,
         resourceId: runtime.runtimeInstanceId.slice(0, 12),
-        activeRuns: state.activeRuns.size,
+        activeRunCount: state.activeRunCount,
       })}`
     );
 
@@ -418,12 +380,8 @@ export class SandboxRuntimeInstanceService {
       runtime.runtimeInstanceId
     );
 
-    this.forceCancelledStartingRuns(state, callbacks);
-
-    if (state.activeRuns.has(context.runId)) {
-      handle.runtimeInstanceId = runtime.runtimeInstanceId;
-      onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
-    }
+    callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
+    onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
   }
 
   private onRuntimeInstanceStartFailed(
@@ -445,29 +403,8 @@ export class SandboxRuntimeInstanceService {
       `sandbox create failed: ${String(err)}`
     );
 
-    const state = this.ownerStates.get(context.ownerId);
-    if (state) {
-      this.forceCancelledStartingRuns(state, callbacks);
-    }
-
     this.ownerStates.delete(context.ownerId);
     callbacks.cleanupByOwnerId(context.ownerId);
-  }
-
-  private forceCancelledStartingRuns(
-    state: SandboxOwnerState,
-    callbacks: SandboxRuntimeInstanceCallbacks
-  ): void {
-    for (const runId of state.activeRuns.keys()) {
-      if (this.consumeCancelledStartingRun(runId)) {
-        state.activeRuns.delete(runId);
-        callbacks.forceCancelled(runId);
-      }
-    }
-  }
-
-  private consumeCancelledStartingRun(runId: string): boolean {
-    return this.cancelledStartingRuns.delete(runId);
   }
 
   private async createSandbox(
@@ -511,7 +448,7 @@ export class SandboxRuntimeInstanceService {
   private handleIdle(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     if (!state || !state.runtimeInstanceId) return;
-    if (state.activeRuns.size > 0) return;
+    if (state.activeRunCount > 0) return;
 
     this.logger.log(
       `sandbox idle timeout ${safeLogJson({
@@ -531,7 +468,7 @@ export class SandboxRuntimeInstanceService {
 
   /**
    * 放弃对某个 runtime owner 当前容器/沙箱的引用：停止心跳与空闲计时、清空
-   * activeRuns 与 runtimeInstanceId（转存为 lastStoppedRuntimeInstanceId 供下次 resume），
+   * activeRunCount 与 runtimeInstanceId（转存为 lastStoppedRuntimeInstanceId 供下次 resume），
    * 并将 RuntimeTarget 标记为 stopped。access key 保留，供 resume 复用。
    * 不负责真正停止/删除容器——是否需要 engine.stop() 由调用方决定。
    */
@@ -540,7 +477,7 @@ export class SandboxRuntimeInstanceService {
     state: SandboxOwnerState
   ): void {
     this.idleWatchdog.cancel(ownerId);
-    state.activeRuns.clear();
+    state.activeRunCount = 0;
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
     state.runtimeInstanceId = "";
 

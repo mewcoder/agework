@@ -18,7 +18,7 @@ export function resolveDockerApiBase(
 }
 
 /**
- * 空闲 watchdog：当某个 scope 的 activeRuns 降为 0 后，
+ * 空闲 watchdog：当某个 owner 的 active run 引用数降为 0 后，
  * 等待 idleTimeoutSeconds 仍无新 run，则触发 onIdle 回调停止容器/sandbox。
  */
 export class IdleWatchdog {

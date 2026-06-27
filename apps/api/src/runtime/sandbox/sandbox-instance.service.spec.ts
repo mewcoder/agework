@@ -116,7 +116,7 @@ function makeCallbacks(access?: {
         access?.issueRuntimeInstanceKey(runtimeInstanceId, ownerId);
       }
     ),
-    forceCancelled: vi.fn(),
+    runtimeReady: vi.fn(),
     publishWorkerError: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
@@ -169,13 +169,12 @@ describe("SandboxRuntimeInstanceService", () => {
       context,
       makeOwnerAccessKeyIssuer(access)
     );
-    ownerState.activeRuns.set("run-1", "conversation-1");
-    const handle = service.createRunHandle(context);
+    service.retainOwnerRun(context.ownerId);
     const onReady = vi.fn();
     const callbacks = makeCallbacks(access);
 
     service.attachOrStartRuntimeInstance(
-      { context, ownerState, handle, onRuntimeInstanceIdReady: onReady },
+      { context, ownerState, onRuntimeInstanceIdReady: onReady },
       callbacks
     );
     await flushPromises();
@@ -193,7 +192,10 @@ describe("SandboxRuntimeInstanceService", () => {
       })
     );
     expect(engine.startWorker).toHaveBeenCalled();
-    expect(handle.runtimeInstanceId).toBe("docker-resource-1");
+    expect(callbacks.runtimeReady).toHaveBeenCalledWith(
+      "run-1",
+      "docker-resource-1"
+    );
     expect(onReady).toHaveBeenCalledWith("docker-resource-1");
     expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
       context.placement,
@@ -209,7 +211,7 @@ describe("SandboxRuntimeInstanceService", () => {
     ).toBeLessThan(vi.mocked(engine.startWorker).mock.invocationCallOrder[0]);
   });
 
-  it("publishes cancelled status for runs cancelled before runtime is ready", async () => {
+  it("notifies pending attachments when runtime becomes ready", async () => {
     const engine = makeEngine();
     let resolveGetOrCreate: (runtime: SandboxRuntime) => void;
     vi.mocked(engine.getOrCreate).mockImplementation(
@@ -224,12 +226,11 @@ describe("SandboxRuntimeInstanceService", () => {
       context,
       makeOwnerAccessKeyIssuer(access)
     );
-    ownerState.activeRuns.set("run-1", "conversation-1");
+    service.retainOwnerRun(context.ownerId);
     const callbacks = makeCallbacks();
-    service.markCancelledBeforeReady("run-1");
 
     service.attachOrStartRuntimeInstance(
-      { context, ownerState, handle: service.createRunHandle(context) },
+      { context, ownerState },
       callbacks
     );
     resolveGetOrCreate!({
@@ -239,8 +240,10 @@ describe("SandboxRuntimeInstanceService", () => {
     });
     await flushPromises();
 
-    expect(ownerState.activeRuns.has("run-1")).toBe(false);
-    expect(callbacks.forceCancelled).toHaveBeenCalledWith("run-1");
+    expect(callbacks.runtimeReady).toHaveBeenCalledWith(
+      "run-1",
+      "docker-resource-1"
+    );
   });
 
   it("stops and marks a runtime resource after idle cleanup timeout", async () => {
@@ -250,14 +253,14 @@ describe("SandboxRuntimeInstanceService", () => {
       context,
       makeOwnerAccessKeyIssuer(access)
     );
-    ownerState.activeRuns.set("run-1", "conversation-1");
+    service.retainOwnerRun(context.ownerId);
     service.attachOrStartRuntimeInstance(
-      { context, ownerState, handle: service.createRunHandle(context) },
+      { context, ownerState },
       makeCallbacks()
     );
     await flushPromises();
 
-    service.cleanupRun("run-1");
+    service.releaseOwnerRun(context.ownerId);
     await vi.advanceTimersByTimeAsync(5_500);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
@@ -275,9 +278,9 @@ describe("SandboxRuntimeInstanceService", () => {
       context,
       makeOwnerAccessKeyIssuer(access)
     );
-    ownerState.activeRuns.set("run-1", "conversation-1");
+    service.retainOwnerRun(context.ownerId);
     service.attachOrStartRuntimeInstance(
-      { context, ownerState, handle: service.createRunHandle(context) },
+      { context, ownerState },
       makeCallbacks()
     );
     await flushPromises();

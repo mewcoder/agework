@@ -19,10 +19,18 @@ import {
   type SandboxWorkerExecutionContext,
 } from "../../runtime/sandbox/sandbox-instance.service";
 
+type SandboxRunState = {
+  handle: WorkerExecutionHandle;
+  ownerId: string;
+  cancelledBeforeReady: boolean;
+  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
+};
+
 @Injectable()
 export class SandboxRunExecutor implements RunExecutor {
   readonly type = "sandbox" as const;
   private readonly logger = new Logger(SandboxRunExecutor.name);
+  private readonly states = new Map<string, SandboxRunState>();
   private receiver!: RunEventReceiver;
 
   constructor(
@@ -46,14 +54,20 @@ export class SandboxRunExecutor implements RunExecutor {
       this.runtimeInstances.resolveWorkerExecutionContext(input);
     this.logWorkerExecutionStart(context);
 
-    const handle = this.runtimeInstances.createRunHandle(context);
+    const handle = this.createRunHandle(context);
     const ownerState = this.runtimeInstances.ensureOwnerState(context, {
       issueOwnerAccessKey: (ownerId) =>
         this.access.issueOwnerKey(ownerId),
     });
 
     // Run executor 负责把 run 绑定到 runtime owner，并打开 worker-host session。
-    ownerState.activeRuns.set(context.runId, context.runConfig.conversationId);
+    this.states.set(context.runId, {
+      handle,
+      ownerId: context.ownerId,
+      cancelledBeforeReady: false,
+      onRuntimeInstanceIdReady: input.onRuntimeInstanceIdReady,
+    });
+    this.runtimeInstances.retainOwnerRun(context.ownerId);
     this.commands.openSession({
       runId: context.runId,
       ownerId: context.ownerId,
@@ -64,8 +78,6 @@ export class SandboxRunExecutor implements RunExecutor {
       {
         context,
         ownerState,
-        handle,
-        onRuntimeInstanceIdReady: input.onRuntimeInstanceIdReady,
       },
       this.runtimeInstanceCallbacks()
     );
@@ -74,8 +86,8 @@ export class SandboxRunExecutor implements RunExecutor {
   }
 
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
-    const ownerId = this.runtimeInstances.findOwnerIdByRun(handle.runId);
-    if (!ownerId) {
+    const state = this.states.get(handle.runId);
+    if (!state) {
       this.logger.warn(
         `sandbox send command dropped ${safeLogJson({
           runId: handle.runId,
@@ -85,20 +97,20 @@ export class SandboxRunExecutor implements RunExecutor {
       );
       return;
     }
-    this.commands.sendCommand(ownerId, handle.runId, command);
+    this.commands.sendCommand(state.ownerId, handle.runId, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    const ownerId = this.runtimeInstances.findOwnerIdByRun(handle.runId);
-    const ownerState = ownerId
-      ? this.runtimeInstances.getOwnerState(ownerId)
+    const state = this.states.get(handle.runId);
+    const ownerState = state
+      ? this.runtimeInstances.getOwnerState(state.ownerId)
       : undefined;
     if (!ownerState?.runtimeInstanceId) {
-      this.runtimeInstances.markCancelledBeforeReady(handle.runId);
+      if (state) state.cancelledBeforeReady = true;
       this.logger.debug(
         `sandbox cancel queued before ready ${safeLogJson({
           runId: handle.runId,
-          ownerId,
+          ownerId: state?.ownerId,
         })}`
       );
       return;
@@ -112,7 +124,7 @@ export class SandboxRunExecutor implements RunExecutor {
   }
 
   getHandle(runId: string): WorkerExecutionHandle | undefined {
-    return this.runtimeInstances.getHandle(runId);
+    return this.states.get(runId)?.handle;
   }
 
   recoverOrphanExecution(runtimeInstanceId: string): Promise<void> {
@@ -124,8 +136,51 @@ export class SandboxRunExecutor implements RunExecutor {
   }
 
   cleanup(runId: string): void {
-    this.runtimeInstances.cleanupRun(runId);
+    const state = this.states.get(runId);
+    if (state) {
+      this.states.delete(runId);
+      this.runtimeInstances.releaseOwnerRun(state.ownerId);
+    }
     this.commands.cleanupRun(runId);
+  }
+
+  private createRunHandle(
+    context: SandboxWorkerExecutionContext
+  ): WorkerExecutionHandle {
+    return {
+      runId: context.runId,
+      runtimeType: context.runtimeTarget.runtimeType,
+      runtimeInstanceId: "",
+      conversationId: context.runConfig.conversationId,
+    };
+  }
+
+  private markRuntimeReady(runId: string, runtimeInstanceId: string): void {
+    const state = this.states.get(runId);
+    if (!state) return;
+    if (state.cancelledBeforeReady) {
+      this.cleanup(runId);
+      this.receiver
+        .notifyCancelledBeforeReady(runId)
+        .catch(
+          swallow(
+            this.logger,
+            `notify cancelled before ready for run ${runId}`
+          )
+        );
+      return;
+    }
+
+    state.handle.runtimeInstanceId = runtimeInstanceId;
+    state.onRuntimeInstanceIdReady?.(runtimeInstanceId);
+  }
+
+  private cleanupByOwnerId(ownerId: string): void {
+    for (const [runId, state] of this.states) {
+      if (state.ownerId !== ownerId) continue;
+      this.states.delete(runId);
+    }
+    this.commands.cleanupByOwnerId(ownerId);
   }
 
   private logWorkerExecutionStart(
@@ -145,16 +200,14 @@ export class SandboxRunExecutor implements RunExecutor {
 
   private runtimeInstanceCallbacks(): SandboxRuntimeInstanceCallbacks {
     return {
-      forceCancelled: (runId) =>
-        this.receiver
-          .notifyCancelledBeforeReady(runId)
-          .catch(swallow(this.logger, `notify cancelled before ready for run ${runId}`)),
+      runtimeReady: (runId, runtimeInstanceId) =>
+        this.markRuntimeReady(runId, runtimeInstanceId),
       publishWorkerError: (runId, error) =>
         this.receiver
           .notifyWorkerError(runId, error)
           .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
       cleanupByOwnerId: (ownerId) =>
-        this.commands.cleanupByOwnerId(ownerId),
+        this.cleanupByOwnerId(ownerId),
       registerRuntimeInstanceAccess: (runtimeInstanceId, ownerId) =>
         this.access.issueRuntimeInstanceKey(runtimeInstanceId, ownerId),
     };
