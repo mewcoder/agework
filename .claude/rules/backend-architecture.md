@@ -1,251 +1,414 @@
-# 后端模块架构规范(apps/api)
+# `.rules` - Feature Module Architecture (apps/api)
 
-适用于 `apps/api`(NestJS 11 + Prisma)。这是后端的**理想目标态**,既给人看,也给编辑本仓库的 AI agent 当护栏。
+适用于 `apps/api`(NestJS 11 + Prisma)。这是后端的理想目标态,既给人看,也给编辑本仓库的 AI agent 当护栏。
 
-一句话总纲:**这是「按领域切的模块化单体」,不是 DDD,也不要上 DDD。按角色分层,不按教条分层;每一层、每一个文件夹、每一个借来的 pattern,都得为本栈(NestJS + Prisma + 大量 agent 编辑)重新挣到存在理由,挣不到就砍。**
+本文统一用 **Feature Module Architecture(竖切模块单体)** 描述本仓库目标架构。行业出处包括 Modular Monolith / Package by Feature / Vertical Slice Architecture / NestJS feature module / Acyclic Dependencies Principle;这些只作为出处,不引入 DDD / Clean Architecture 的目录或建模体系。
 
-> **这套有行业出处,不是自创**:竖切按领域 = **Modular Monolith**(Simon Brown)/ **Package by Feature**;按领域而非按层切 = **Vertical Slice Architecture**(Jimmy Bogard);`module/controller/service` + `imports/exports` 跨模块调 service = **NestJS 官方 feature module** 的标准用法;只向下、不成环 = **Acyclic Dependencies Principle**(Robert C. Martin);领域边界 + 唯一公开门 = **Strategic DDD / Bounded Context**(Eric Evans)。即:**保留 DDD 的战略边界,丢弃战术重型建模**(见末节「不要做」)。
+## 0. 总原则
 
-## 何时适用
+- 按业务领域划分 feature module。
+- Module = isolation boundary。
+- Service = public API boundary,也是该 module 唯一对外入口。
+- Repository = DB boundary,也是业务数据访问 Prisma 的唯一入口。
+- Internal provider = private capability owner,只服务本 module 内部稳定子能力。
+- Event = fact-only notification,只通知已发生事实。
+- Dependency = strictly downward or cross-service only。
+- 禁止 DDD / Clean Architecture 重型分层体系。
 
-- 新增 / 重构 feature module、controller、service、repository
-- 划模块边界、定模块间依赖
-- 加 DTO 校验、guard、interceptor、exception filter
-- 写后端单测
+规则冲突或时间不够时,按优先级从上到下执行。高优先级没满足,低优先级不要补救性绕开。
 
-## 总则:竖切为主
+| 优先级 | 必须守住的事 |
+|---|---|
+| P0 | 禁止循环依赖;禁止用 `forwardRef` 掩盖边界问题 |
+| P0 | 禁止跨模块 reach 进内部文件;跨模块只调对方导出的 `Service` |
+| P0 | 业务 Service 不直接注入 `PrismaService`;DB 访问走 Repository |
+| P0 | 禁止独立 mapper layer |
+| P1 | 外部输入必须经过 DTO / pipe / guard 等边界校验 |
+| P1 | Event 只通知已发生事实,不用 event 命令别的模块改状态 |
+| P2 | 文件命名、少而厚、工具函数位置等组织规则 |
 
-先问「属于哪个领域」(竖),再问「在领域里是什么角色」(横)。
+Override 原则:不确定时不要提升 module,不要拆新文件 / 新 provider / 新抽象。先留在现有 owner 内,直到边界、复用或复杂度证据足够明确。
 
-- 一个 module = 一个业务领域;`Service` 是该领域对外**唯一的门**。
-- 横向的 Controller / Service / Repository 只是领域**内部**角色,不是顶层组织原则。
-- 模块外只认领域的公开面,不认它内部怎么分层。
+## 1. 组织约束 (STRUCTURE)
 
-为什么不是 DDD:本工程的复杂度在异步编排 / 流式 / runtime 生命周期(过程复杂度),不在领域不变量。给过程复杂度套聚合 / 值对象 / 充血实体只是搬运复杂度。借 DDD 的轻量战术(domain event、repository、领域边界)即可,拒绝重型建模(见末节)。
-
-## 模块骨架
-
-**根目录只放领域的「门面文件」+ 子文件夹;内部辅助文件不平铺在根。** 哪些门面文件该有,按职责定,不是「凑齐」:
-
-- **`module` + `service`:每个领域必有。** module 是零逻辑组合根,service 是领域唯一对外的门。
-- **`controller`:对外暴露 HTTP 才有。**(runtime 不暴露 HTTP,根上就没有 controller。)
-- **`repository`:领域持有数据(表)才有。**(auth 不持表、把数据委托给 `UserService`,所以没有 repository。)
-- **`types` / `events` / `dto/`:按需,有就有、没有就不建。**
-
-各领域看起来**相似**(同一套门面槽位),但**不强求文件数量一致、不为凑齐而造空文件 / 空文件夹**。
+### 1.1 Feature Module 根结构
 
 标准模块:
 
-```
-users/
-├── user.module.ts           # 零逻辑,只组合
-├── user.controller.ts       # 瘦,只 HTTP I/O
-├── user.service.ts          # 领域唯一对外入口 + 编排
-├── user.repository.ts       # 独占 Prisma 的 DB 访问
-├── user.types.ts            # 跨边界类型(有才建)
-├── *.spec.ts                # 贴各自源文件
-└── dto/                     # 外部输入 + class-validator
+```text
+feature/
+├── feature.module.ts            # 必有,零逻辑组合根
+├── feature.service.ts           # 必有,唯一对外入口
+├── feature.controller.ts        # optional, only if exposes HTTP
+├── feature.repository.ts        # optional, only if owns persistence
+├── feature.types.ts             # optional, cross-boundary backend types
+├── feature.events.ts            # optional, domain event types/constants
+├── *.spec.ts                    # colocated tests
+└── dto/                         # optional, external input DTOs
 ```
 
-大模块(顶层不变,内部能力下沉到**少而厚**的文件夹):
+大模块:
 
-```
+```text
 runtime/
 ├── runtime.module.ts
-├── runtime.service.ts       # 领域唯一对外入口
-├── instances/               # 稳定子能力(实例生命周期)
-├── providers/               # 稳定子能力(各 runtime provider)
-└── sandbox/                 # 稳定子能力(sandbox 执行)
+├── runtime.service.ts           # public facade / use-case orchestration
+├── instances/                   # stable sub-capability
+├── providers/                   # stable sub-capability
+└── sandbox/                     # stable sub-capability
 ```
 
-(runtime 不对外暴露 HTTP、根上不持表,所以根只有 module + service;领域若有 HTTP / 自己的表,根上再加 `controller` / `repository` / `types`。)
+根结构规则:
 
-规则:
+- `module` + `service` 每个 feature module 必有。
+- `controller` 只有对外暴露 HTTP 时才有。
+- `repository` 只有本领域持有数据 / 表时才有。
+- `types` / `events` / `dto/` 按需创建,不为凑齐而造空文件 / 空文件夹。
+- module root 只放门面文件、`dto/`、测试和子文件夹;不平铺内部业务实现文件。
+- feature 直接放 `apps/api/src/` 顶层,不要套 `src/modules/`。
 
-- **根目录一眼只有门面文件 + 子文件夹**(module/service 必有,controller/repository/types 按职责),内部辅助文件不许平铺在根。
-- **文件夹少而厚**:能合则合,宁可 3 个厚文件夹,不要 6 个薄文件夹;但也别为 1 个文件单建文件夹。
-- **子文件夹按子能力 / 子领域命名**(如 `credentials/`、`instances/`、`sandbox/`),让名字自解释;不用泛化的 `internal/` / `common/` / `utils/` 兜底。
-- **`module.ts` 零逻辑**,只组合 imports/providers/controllers/exports。
-- **`controller` 瘦**:解析 HTTP 输入、调 Service、返回结果,不写业务。
-- **文件名标明它是什么**,让文件名承担分类:目录名可按路由 / 集合用复数(`users/`),文件前缀统一用领域概念名并沿用现有模块约定(`user.service.ts` / `user.repository.ts` / `user.types.ts`;已有 `runs.module.ts` 这类历史命名先保持一致),不要按某个 service 命名(别写成 `user-service.types.ts`);结构后缀固定(`*.module/controller/service/repository/types/events/dto/spec`)。内部辅助文件用一个能说清职责的词收尾(`sandbox.executor.ts`、`provider.registry.ts` 这类是**自然长出来的,不是要背的清单**)。起不出这种名字就别抽文件,留在 owner Service 的 private method 里。
+### 1.2 Internal 结构
 
-**工具函数 / 转换函数放哪(非必要勿拆):**
+Internal provider 用于拆分同一个 module 内部的复杂能力,不是新的公开层。
 
-- **默认不拆**:工具函数先当 owner Service 的 `private` 方法 / 同文件局部函数,**满足一条才抽成独立文件**——被 ≥2 处真复用、或厚到自成可读单元、或是纯函数且值得精准单测。
-- **抽出来按「认不认识领域」决定位置**:认识某领域概念(读 user 字段 / 按 run 状态算…)、只该领域用 → **留模块内**(私有方法,厚了抽 `xxx-<职责>.ts` / 进子文件夹);不认识领域、纯通用且只后端用 → `apps/api/src/common/`;不认识领域、前后端都可能用 → `@agework/shared`(如 `message-text`、`generateId`)。
-- **行 → 响应 DTO 的转换放 Service 私有方法**(如 `toUserDto`),敏感字段在 Repository 用 `select`/`omit` 挡;**不要**为它建 `mapper.ts` / mapper 层。
+```text
+feature/
+├── feature.module.ts
+├── feature.service.ts
+├── feature.repository.ts
+├── execution/
+│   └── execution.service.ts
+├── status/
+│   └── run-status.service.ts
+└── registry/
+    └── provider.registry.ts
+```
 
-## 子文件夹 vs 平级 module
+Internal provider 正式定义:
 
-子能力放进**父模块的子文件夹**,还是提升为**和父模块平级的根 module**?
+| 项 | 规则 |
+|---|---|
+| 是什么 | 同一个 feature module 内部的 Nest provider,承接一个稳定子能力,注册在本 module 的 `providers` |
+| 放哪里 | 放在按子能力命名的子文件夹,或少量贴近 owner 的文件;不平铺一堆内部实现到模块根 |
+| 谁能注入 | 默认由根 Service 注入;同一子能力内部可单向注入,但必须保持 acyclic,不能形成网状互调 |
+| 能依赖谁 | 可依赖本模块 Repository / 本模块 internal provider / 下层模块导出的 Service / EventEmitter |
+| 不能做什么 | 不能 export;不能被其他根 module import;不能被 controller 直接调用;不能只是给根 Service 包一层转发 |
+| 命名 | 优先用具体职责后缀如 `executor`、`registry`、`validator`;已有 `RunStatusService` 这类内部 service 可保留,但 `Service` 后缀不等于公开入口 |
 
-**两条必要条件**(都满足才考虑提升):
+内部调用图:
 
-1. **是独立领域或横切能力**——有自己的概念名,不是父模块的某个「阶段 / 动作 / 侧面」。
-2. **拆出去依赖不成环**——和父模块保持单向,不互相依赖(成环就别拆,更不许用 `forwardRef` 圆场)。
+```text
+Controller
+  ↓
+Root Feature Service
+  ↓
+Same-module internal provider
+  ↓
+Repository / lower module exported Service / domain event
+```
 
-**支撑信号**(有得越多越站得住,但都不是门槛):
+如果根 Service 出现大量无关 private method、构造注入过多、或一个文件同时承担多个稳定子能力,触发拆 internal provider 的 review。不要用方法数 / 行数当唯一硬阈值。
 
-- 拥有自己的表 / 独立持久化;
-- 被 ≥2 个模块依赖或明显可复用。
-
-> **module 不要求有表。** `auth`(认证)、`worker-host`(传输 / 集成层)都没有自己的表,但都是清晰的横切 / 集成领域,理应独立成 module。「有表」只是强信号,不是准入门槛。
-
-- ✅ 正例:`run-events` 和 `runs` 平级——独立概念(事件日志)+ 自己的表(`run-event.repository`)+ 被独立查询。
-- ❌ 反例:一个领域「生命周期」的各侧面(执行 / 状态 / 流式 / 恢复)共享同一份状态、彼此咬合,拆成平级 module 必然成环——留在父模块当子文件夹,乱了就「合文件夹」(少而厚),不是「拆模块」。
-
-## 模块边界
+### 1.3 Module 公开面
 
 ```ts
-// runtime.module.ts —— 公开面只有 RuntimeService,其余全是内部实现
 @Module({
-  providers: [RuntimeService, RuntimeProviderRegistry /* ...instances/sandbox 内部 */],
-  exports: [RuntimeService],
+  imports: [LowerModule],
+  providers: [FeatureService, FeatureRepository, InternalProvider],
+  controllers: [FeatureController],
+  exports: [FeatureService],
 })
-export class RuntimeModule {}
+export class FeatureModule {}
 ```
 
-- **`module.exports` 定义公开面**;没 export 的就是内部实现。默认只 export `Service`。
-- **禁止跨模块 reach 进内部文件**(repository / 子目录里的任何文件)。要什么,走对方公开 `Service`。
-- **跨边界类型进 `*.types.ts` 或 `@agework/shared`**;禁止从 service 实现文件导出类型(被别人 import 的类型就是契约,搬进 `*.types.ts`)。
-- **防 God Service**:「Service 是唯一**对外**入口」必须配「**内部**按能力激进拆分」。单入口约束的是公开面,不是把逻辑堆进一个胖类。
+- `module.exports` 定义公开面;没 export 的就是 internal implementation。
+- 默认只 export 根 `Service`。
+- 禁止 export repository / internal provider / controller / DTO。
+- 跨模块需要类型时,使用对方公开的 `*.types.ts` 或 `@agework/shared`;禁止从 service 实现文件导出契约类型。
 
-## 跨领域调用
+### 1.4 跨模块结构约束
 
-要用另一个领域的能力,**只调它导出的 `Service`,构造注入,只向下**:
+允许:
 
-```ts
-// auth.module.ts —— Auth 在 Users 之上,导入 Users 的公开 module
-@Module({
-  imports: [UserModule],
-  providers: [AuthService],
-  exports: [AuthService],
-})
-export class AuthModule {}
+- import 对方 module。
+- 注入对方 module 导出的根 `Service`。
+- import 对方公开 `*.types.ts` 中的后端契约类型。
+- import `@agework/shared` 的跨前后端共享类型 / 协议类型。
 
-// auth.service.ts —— 只注入 Users 导出的公开 Service
-@Injectable()
-export class AuthService {
-  constructor(private readonly users: UserService) {}  // 注入对方公开 Service
+禁止:
 
-  login(u: string, p: string) {
-    return this.users.authenticate(u, p);               // 调它的公开方法
-  }
-}
+- import 对方 repository。
+- import 对方 internal 子文件夹。
+- import 对方 DTO。
+- import 对方 service 实现文件里的类型。
+- 从文件路径 reach 进未 export 的 provider。
+
+### 1.5 Shared / Common 约定
+
+| 位置 | 用途 |
+|---|---|
+| `@agework/shared` | 前后端共享类型、协议类型、纯通用函数,如 `message-text`、`generateId` |
+| `apps/api/src/common/` | 只后端使用、完全不认识领域概念的通用能力 |
+| module 内部 | 认识某个领域概念、只该领域使用的能力 |
+
+工具函数默认不抽,先放 owner Service 的 `private` 方法 / 同文件局部函数。满足一条才抽成独立文件:被 >=2 处真复用、厚到自成可读单元、或是纯函数且值得精准单测。
+
+## 2. 行为规则 (RULES)
+
+### 2.1 Core Flow (P0)
+
+```text
+HTTP Request
+  ↓
+Controller        # HTTP I/O only
+  ↓
+Feature Service   # public API boundary / use-case orchestration
+  ↓
+Repository        # DB boundary / safe select-omit
+  ↓
+PrismaService
+
+Feature Service
+  ├─ calls lower module exported Service only
+  ├─ delegates to same-module internal providers only
+  └─ emits domain events only for past-tense facts
 ```
 
-- **同一个 `Service` 同时服务两类调用者**:自己的 `Controller`(HTTP)+ 上层领域的 `Service`(跨域)。**只有一个公开面、一条规则(向下、不成环),不拆「给 controller 的脸」和「给领域的脸」**;真分叉到一个类塞不下时再说,默认别预拆。
-- **只调对方 `Service`**,绝不 reach 进它的 `repository` / 子能力文件(那里有原始 / 敏感数据,且没有授权)。
-- **调之前自检一句:「对方会不会(直接或传递)反过来依赖我?」**
-  - 否 → 直接调,你就是它的上层,合法。
-  - 是 → 你在闭一个环,说明边界划错 / 方向反了,改用下面的拆环动作,**禁止 `forwardRef` 圆场**。
-- **「同级」不是预先贴的标签**:你调了 B,你就排在 B 之上。不存在「同级直连该不该」的问题,只存在「这次调用会不会成环」。
-- 两个领域要协作、又排不出谁在上时,拆环四选一:**① 定序**(多数「同级」其实有天然低者)/ **② 上提**——把协作上提到拥有该用例的更上层 Service,它向下调两边 / **③ 下沉**——把共享物抽成更低的 module,两边都向下调它 / **④ 事件**——若只是「通知已发生的事实」,用 domain event 断开依赖(见下节)。
+这张图是**调用路径**,不是三层 / 四层架构。不要据此创建 `application/domain/data` 目录,也不要把角色理解成横向 layer。
 
-## 依赖方向与事件
+| 角色 | 是什么 | 不是什么 |
+|---|---|---|
+| Controller | HTTP adapter,只处理 HTTP I/O | 业务入口 / 用例层 |
+| Root Feature Service | use-case orchestration role,维护 module 对外契约和流程编排 | application layer,也不是业务逻辑垃圾桶 |
+| Internal provider | domain execution role / private capability owner,承接稳定子能力的核心逻辑 | helper / utils / 可跨模块复用层 |
+| Repository | persistence boundary,封装 Prisma 查询、事务和字段安全 | data layer 总线 / mapper layer |
 
-```ts
-// 反向通知:下层在 module 组合根用 setter 端口 / registry 注册回上层入口,
-// 而不是反向注入上层 Service。
-this.someRegistry.setReceiver(this.eventsService);     // registry 端口
-this.liveSessions.setTimeoutErrorSink(this.eventsService); // 回调端口
-```
+判断口诀:
 
-- **依赖单向**:`Auth → Users → Conversations → Runs → Runtime / WorkerHost`。下层不得反向注入或直接调上层 Service。
-- **禁止 `forwardRef`**:出现循环依赖说明边界划错,重划,别用 `forwardRef` 掩盖。
-- 需要反向通知时三选一:`EventEmitter2` domain event(跨域事实通知)/ 回调端口 `set*Sink`(结果回灌)/ Registry(多态注册)。
-- **硬规则(最高优先级)——事件只通知,不命令**:domain event 只用于「通知已发生的事实」(过去式、fire-and-forget)。**禁止用事件去命令另一个模块改它的状态**。下层只发「发生了什么」,状态变更归领域自己决定。
+- 如果逻辑是在组织一次用户可见用例,留在 Root Feature Service。
+- 如果逻辑属于一个稳定子能力,有自己的状态流转 / 执行步骤 / 注册查找 / 恢复策略,放 Internal provider。
+- 如果只是单次使用的小转换,先留在 Service 私有方法或同文件 pure function。
+- 如果逻辑只是 Prisma 参数、查询、事务、字段安全,放 Repository。
 
-## 数据访问
+### 2.2 依赖规则 (P0)
 
-```ts
-@Injectable()
-export class UserRepository {
-  constructor(private prisma: PrismaService) {} // 唯一注入 Prisma 的地方
-  findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
-  }
-}
-```
+- 禁止循环依赖。
+- 禁止 `forwardRef`;出现循环依赖说明边界划错,重划。
+- 依赖按业务领域从上层往下走,下层不得反向注入或直接调上层 Service。
+- 具体谁在上谁在下,先按用例拥有者 / 状态拥有者 / 基础设施边界判断;调用方向必须服从这个判断。
+- 不维护固定全局模块链,避免和实现耦合、随重构漂移。
 
-- **一律走 Repository,Service 不注入 `PrismaService`。** 理由:本仓库大量被 agent 编辑,「一律走仓储」是是非题(照模板不会判错),优于「有查询才上」的判断题(易判错、在不该碰 Prisma 处戳进去)。
-- **护栏**:Repository 可以薄;**禁止**叠 `interface IXxxRepository` + injection token + 实现类;**Repository per 领域,不 per 表**。
-- 多步写用 `prisma.$transaction(fn)`:Prisma 查询和 tx client 留在 Repository;Service 可编排用例,但不直接写 Prisma 查询。留意并消除 N+1。
-- 响应不泄敏字段:**默认在 Repository 用 `select` / `omit` 把 password hash / token / 审计列挡在源头**(别建 response-DTO mapper 层)。
+拆环动作:
 
-## 输入校验
+| 场景 | 处理 |
+|---|---|
+| 多数“同级”其实有天然低者 | 定序,只允许上层调下层 |
+| 一个用例需要协调两个领域 | 上提到拥有该用例的更上层 Service,它向下调两边 |
+| 两边共享低层概念 | 下沉成更低 module,两边都向下调它 |
+| 只是通知已发生事实 | 使用 domain event |
 
-```ts
-// main.ts —— 一处全局,不在路由重复
-app.useGlobalPipes(
-  new ValidationPipe({ whitelist: true, transform: true /* 公开 API 建议加 forbidNonWhitelisted */ }),
-);
-```
+反向通知只允许三种机制:`EventEmitter2` domain event(跨域事实通知)、回调端口 `set*Sink`(结果回灌)、Registry(多态注册)。
 
+### 2.3 Service 规则 (P0)
+
+Service 是 module 唯一对外入口。
+
+允许:
+
+- 编排用例流程。
+- 调用本 module repository。
+- 调用本 module internal provider。
+- 调用下层 module 导出的 Service。
+- 发 domain event。
+- 做响应形状局部转换。
+
+禁止:
+
+- 直接注入 `PrismaService`。
+- 跨模块访问 internal / repository / DTO。
+- 承载所有业务规则、工具函数和稳定子能力。
+- 拆出“给 controller 的公开面”和“给领域的公开面”两套门面。默认只有一个公开面;真分叉到一个类塞不下时再评审。
+
+Service 不是 application layer。Service 方法里一旦出现明显的 execution/status/recovery/registry/sandbox 等子能力细节,应下沉到 internal provider,Service 只保留用例编排和对外契约。
+
+### 2.4 Repository 规则 (P0)
+
+- 业务数据访问一律走 Repository,Service 不注入 `PrismaService`。
+- Repository 可以薄,但 Prisma 查询和 tx client 留在 Repository。
+- Repository per 领域,不 per 表。
+- 禁止叠 `interface IXxxRepository` + injection token + 实现类。
+- 多步写用 `prisma.$transaction(fn)`,封装在 Repository 内。
+- 响应不泄敏字段:默认在 Repository 用 `select` / `omit` 把 password hash / token / 审计列挡在源头。
+- 留意并消除 N+1。
+
+### 2.5 Controller 规则 (P1)
+
+- Controller 只做 HTTP I/O:解析输入、触发边界校验、调 Service、返回响应。
+- 禁止业务逻辑。
+- 禁止直接调用 Repository。
+- 禁止直接调用 internal provider。
+
+### 2.6 DTO / Transform 规则 (P0/P1)
+
+| 事项 | 归属 |
+|---|---|
+| 外部输入校验(body/query/param/header) | DTO + pipe / guard;Controller 边界触发 |
+| HTTP 响应形状 | 根 Service 私有方法或同文件 pure function |
+| 敏感字段过滤 | Repository `select` / `omit`,从数据源头挡 |
+| Prisma 参数组装 / JSON cast / where/orderBy | Repository |
+| 业务状态计算 / 权限判断 / 用例编排 | 根 Service 或同模块 internal provider |
+| 跨前后端共享类型 / 协议类型 | `@agework/shared` |
+| 后端内部跨边界类型 | `*.types.ts` |
+
+硬规则:
+
+- 所有外部输入必须 DTO + ValidationPipe / pipe / guard。
+- DTO 只用于 input validation,不放业务逻辑。
+- 禁止绕过 DTO 让外部输入直接进 Service。
+- 禁止独立 `mapper.ts` / mapper layer。
+- 禁止把同一个转换拆成多处。
+- 字段涉及安全泄漏时,优先在 Repository select 层解决。
+- 字段只是响应命名 / 组合时,放 Service 局部转换。
+
+### 2.7 Event 规则 (P1)
+
+- Event 只表示已发生事实,命名用过去式语义。
+- Event 只用于通知,不用于同步控制流。
+- Handler 可以根据事实决定本领域状态变化。
+- 禁止用 event 命令另一个模块改状态。
+- 禁止把 event 当跨模块 method call 的替代品。
+- Event handler 必须遵守同样的模块边界;禁止调用跨模块 internal provider。
+
+### 2.8 Module 提升规则 (P2)
+
+子能力放进父模块子文件夹,还是提升为平级根 module?默认两可时不提升。If uncertainty exists, do not elevate module.
+
+先跑可计算判定:
+
+1. Blocker 先判:任一命中就必须不提升。
+2. 无 blocker 后再计分。
+
+Blocker:
+
+- 拆出去会成环,或需要 `forwardRef` 才能跑。
+- 共享父模块内存状态或生命周期。
+- 只是父模块某个阶段 / 动作 / 侧面。
+- 拆出去后父模块还要反向调用它。
+
+| 信号 | 分数 |
+|---|---:|
+| 有独立概念名,且不是父模块动作名 | +1 |
+| 有独立生命周期 / 状态边界 | +1 |
+| 有自己的表 / 独立持久化 | +2 |
+| 被 >=2 个其他根 module 直接依赖 | +2 |
+| 对外暴露自己的 HTTP/API 查询入口 | +2 |
+| 是独立外部系统 / SDK / transport 集成 | +2 |
+
+| 结果 | 处理 |
+|---|---|
+| 有 blocker | 必须不提升 |
+| 无 blocker 且分数 >=3 | 提升为平级根 module |
+| 无 blocker 且分数 =2 | 可提升,但优先看是否已有明确调用方 |
+| 无 blocker 且分数 <=1 | 留在父模块子文件夹 |
+
+说明:
+
+- Module 不要求有表;`auth`、`worker-host` 这类无表但清晰的认证 / 集成领域可以是 module。
+- `run-events` 和 `runs` 平级,因为事件日志是独立概念、有自己的表、可被独立查询。
+- 一个领域“生命周期”的执行 / 状态 / 流式 / 恢复若共享状态且彼此咬合,留在父模块 internal,乱了就合文件夹,不是拆平级 module。
+
+### 2.9 命名规则 (P2)
+
+- 优先用产品、API、数据模型里已经存在的常见名词。新名词必须能回答:用户或代码里是否已经有这个概念?
+- 动词用常见动词,同一模块里同一动作只选一个词,不要 `get/find/fetch` 混用。
+- 角色后缀按真实职责用,如 `service`、`repository`、`controller`、`registry`、`executor`、`validator`。
+- 少用或不用抽象空词 / 架构感词,如 `engine`、`core`、`pipeline`、`processor`、`manager`、`helper`、`utils`、`common`。除非它已经是外部协议 / SDK / 产品术语,否则换成具体领域名 + 具体职责。
+- `apps/api/src/common/` 是后端通用能力的唯一保留位置;不要在 feature module 内新建 `common/`、`utils/` 兜底。
+- 文件名和类名要能互相反推;如果名字只能靠比喻理解,就还没起好。
+
+### 2.10 输入、错误、鉴权、配置、日志、测试
+
+输入:
+
+- 全局 `ValidationPipe` 一处配置,不要在路由重复散落。
 - 每个请求 DTO 用 `class-validator` 装饰,放各模块 `dto/`。
 - 一切外部输入(body / query / param / header)都校验;路径参数用 `ParseUUIDPipe` 等管道。
 
-## 错误处理
+错误:
 
-```ts
-// 预期内客户端错误,抛框架异常;全局 AllExceptionsFilter 统一外壳
-throw new NotFoundException("user not found");
-// → { code, data: null, message, requestId }
-```
+- 预期错误抛 NestJS `HttpException` 族。
+- 统一外壳由全局 `common/filters`(`AllExceptionsFilter`)兜。
+- 不在 Service 里 try/catch 吞错;非预期失败冒泡到全局 filter 集中记录。
 
-- 预期错误抛 NestJS `HttpException` 族;统一外壳由全局 `common/filters`(`AllExceptionsFilter`)兜。
-- **不在 Service 里 try/catch 吞错**;非预期失败冒泡到全局 filter 集中记录。
+鉴权 / 配置 / 日志:
 
-## 鉴权 · 配置 · 日志(横切)
+- 粗粒度访问控制(登录态、角色)放 guard。
+- 资源级授权(这个用户能不能动这条数据)放 Service。
+- 外部配置 / env 经 `ConfigService` 统一读取与校验,非法值启动即抛。
+- Feature 代码不直接读 `process.env`。
+- 统一结构化日志 + 透传 `x-request-id`;不在业务里散写 `console`。
 
-- **鉴权分两层**:粗粒度访问控制(登录态、角色)放 guard(`JwtAuthGuard` / `RolesGuard`);**资源级授权**(这个用户能不能动这条数据)放 Service,别全塞进 guard。
-- **配置收口**:外部配置 / env 经 `ConfigService` 统一读取与校验,**非法值启动即抛**、不带病运行;feature 代码不直接读 `process.env`。
-- **日志**:统一结构化日志 + 透传 `x-request-id`(全局 `AllExceptionsFilter` 已落);不在业务里散写 `console`。
-
-## 测试
-
-```ts
-// 手搓 mock,经构造注入,不必起整个容器
-const repo = { findById: vi.fn() } as unknown as UserRepository;
-const service = new UserService(repo, /* ...其余 mock */);
-```
+测试:
 
 - `*.spec.ts` 贴着实现放;用 Vitest。
-- 单测里依赖手搓 mock + 构造注入;要测 guard / pipe / filter 时才用 `Test.createTestingModule`。
+- 单测依赖手搓 mock + 构造注入;要测 guard / pipe / filter 时才用 `Test.createTestingModule`。
 - 改 `shared` / `adapters` / `runtime` / 消息聚合等共享逻辑,优先补精准单测。
 
-## 不要做
+## 3. 禁止范式 (ANTI-PATTERNS)
 
-每条都附「为什么本工程不需要」。看到「最佳实践」想加这些时,停。
+DDD / Hexagonal / Clean Architecture 重型套路:
 
-DDD / Hexagonal 重型套路(本工程是过程复杂度,不是富领域):
+- 充血实体 / 值对象 / aggregate root 建模。
+- `domain/application/infrastructure` 三层目录。
+- use-case / command-handler 套路。
+- ports & adapters 命名包。
+- CQRS / event sourcing / outbox / anti-corruption layer。
+- 独立 response-DTO mapper layer。
 
-- 充血实体 / 值对象 / aggregate root 建模 —— 没有富领域不变量要封装。
-- `domain/application/infrastructure` 三层目录 —— 竖切按领域已够,三层是无意义层级。
-- use-case / command-handler 套路 —— Service 方法就是用例。
-- ports & adapters 命名包 —— 解耦已用 Registry / EventEmitter。
-- CQRS / event sourcing / outbox / anti-corruption layer —— 没有对应需求。
-- response-DTO mapper 层(每模型一套出参映射)—— 目标是「不泄露」,用 `select` 即可。
+为“分层好看”造的无意义结构:
 
-为「分层好看」造的无意义结构:
+- God Service。
+- Repository-per-table。
+- 为分层而分层的空层级。
+- `src/modules/` 包壳。
+- `entities/` 文件夹(TypeORM-ism)。
+- 根目录平铺一堆内部文件。
+- 为 1 个文件单建文件夹。
+- 为转发而转发的 internal provider。
 
-- God Service —— 单入口要配内部拆分。
-- repository-per-table —— per 领域不 per 表。
-- 为分层而分层的空层级 —— 抽不抽看「独立变化原因」,不看行数。
+## 4. 自检规则
 
-从通用 NestJS 模板筛掉的「别栈 ism」:
+每次后端改动前后必须确认:
 
-- `src/modules/` 包壳 —— feature 直接放 `src/` 顶层。
-- `entities/` 文件夹 —— TypeORM-ism,Prisma 不写 entity 类,用 Prisma 类型 + `*.types.ts`。
-- 根目录平铺一堆内部文件 / 为 1 个文件单建文件夹 —— 见「模块骨架」:根只留门面文件 + 子文件夹,其余进少而厚的文件夹。
-
-## 自检清单
-
-- [ ] 模块根目录是不是只有门面文件(module/service 必有,controller/repository 按职责)+ 子文件夹?有没有为「凑齐」造空文件 / 空文件夹?
-- [ ] 文件夹是不是「少而厚」、按子能力命名?有没有薄文件夹该合、或散文件该收进文件夹?
-- [ ] 跨模块调用是不是只走对方公开 `Service`?有没有 reach 进别人内部?
-- [ ] 跨领域调用前,有没有确认对方不会(传递地)反过来依赖我(不成环)?
-- [ ] Service 有没有直接注入 `PrismaService`?(应走 Repository)
-- [ ] 有没有用事件去**命令**别的模块改状态?(应只通知事实)
+- [ ] 模块根目录是否只有门面文件(module/service 必有,controller/repository 按职责)+ `dto/` + 子文件夹?
+- [ ] 有没有为“凑齐”造空文件 / 空文件夹?
+- [ ] 文件夹是否少而厚、按子能力命名?
+- [ ] 根 Service 是否只是公开入口 / 用例编排?
+- [ ] 复杂稳定子能力是否拆成同模块 internal provider,且没有 export 给别的模块?
+- [ ] Internal provider 是否只在本模块 providers 注册、不被 controller / 其他根 module 直接调用、不只是转发壳、且内部依赖无环?
+- [ ] 子能力提升为平级 module 前是否跑过 blocker + 计分?不确定时是否保持 internal?
+- [ ] 跨模块调用是否只走对方公开 Service?
+- [ ] 有没有 reach 进别人 repository / internal / DTO?
+- [ ] 跨领域调用前,是否确认对方不会直接或传递反过来依赖我?
+- [ ] Service 有没有直接注入 `PrismaService`?
+- [ ] DTO / transform 是否按归属表放置?
+- [ ] 有没有同一个转换散在 Repository、Service、Controller 多处?
 - [ ] 响应里会不会漏出敏感字段?
-- [ ] 有没有不知不觉加了「不要做」里的重型套路 / 别栈 ism?
+- [ ] 有没有新增独立 mapper layer?
+- [ ] Event 是否被用于控制流或命令别的模块改状态?Event handler 是否调用了跨模块 internal provider?
+- [ ] 反向通知是否走 setter 端口 / registry / domain event,而不是反向注入上层 Service?
+- [ ] 有没有不知不觉加了 anti-pattern 里的重型套路 / 别栈 ism?
+
+## 5. AI Bootstrap 机器语义
+
+- Service = public API boundary + use-case orchestration role。
+- Repository = persistence boundary。
+- Module = isolation boundary。
+- Internal provider = domain execution role + private capability owner。
+- DTO = external input validation boundary。
+- `*.types.ts` = backend cross-module contract。
+- `@agework/shared` = frontend/backend shared contract。
+- Event = fact-only notification。
+- Dependency = strictly downward or exported-service only。
+- Module exports = public API。
+- Unexported provider/file = internal implementation。
