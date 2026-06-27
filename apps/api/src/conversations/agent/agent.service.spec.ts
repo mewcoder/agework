@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, NotFoundException } from "@nestjs/common";
 import { AgentService } from "./agent.service";
 import { ConversationService } from "../conversation.service";
 import { RunService } from "../../runs/run.service";
@@ -288,6 +288,33 @@ describe("AgentService", () => {
       await service.stop("conversation-1", user);
 
       expect(mockConversationService.setActiveRunStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  // run 没有独立的用户接口，全部通过 conversationService.findOne(userId, …) 做归属闸门。
+  // 别人的 conversationId 会让 findOne 抛 NotFound，后续 runService 一律不得被调用。
+  describe("ownership gate (run access scoped to the caller)", () => {
+    beforeEach(() => {
+      mockConversationService.findOne = vi
+        .fn()
+        .mockRejectedValue(new NotFoundException("对话不存在"));
+    });
+
+    it("reply does not resolve approval for a conversation the caller does not own", async () => {
+      await expect(service.reply("conv-x", {}, user)).rejects.toThrow();
+      expect(mockRunService.resolveApproval).not.toHaveBeenCalled();
+    });
+
+    it("stop does not stop the run for a conversation the caller does not own", async () => {
+      await expect(service.stop("conv-x", user)).rejects.toThrow();
+      expect(mockRunService.stop).not.toHaveBeenCalled();
+    });
+
+    it("resume does not stream a conversation the caller does not own", async () => {
+      await expect(
+        service.resume("conv-x", res as Response, user)
+      ).rejects.toThrow();
+      expect(mockRunService.resumeStream).not.toHaveBeenCalled();
     });
   });
 });

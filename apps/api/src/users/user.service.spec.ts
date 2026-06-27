@@ -288,6 +288,24 @@ describe("UserService", () => {
         "普通管理员不能管理管理员账号"
       );
     });
+
+    it("prevents regular admin from resetting super_admin passwords", async () => {
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser({ role: "super_admin" }));
+
+      await expect(service.resetPassword("user-1", admin)).rejects.toThrow(
+        "超级管理员只能通过本人账号或服务器脚本管理"
+      );
+    });
+
+    it("blocks resetting a super_admin even for a super_admin operator (account/script only)", async () => {
+      const { service, repo } = makeService();
+      repo.findById.mockResolvedValue(makeUser({ role: "super_admin" }));
+
+      await expect(
+        service.resetPassword("user-1", superAdmin)
+      ).rejects.toThrow("超级管理员只能通过本人账号或服务器脚本管理");
+    });
   });
 
   describe("delete()", () => {

@@ -562,4 +562,59 @@ describe("WorkspaceService", () => {
       );
     });
   });
+
+  // 资源归属：用户接口的 update/delete 必须按 ownerWhere(userId) 限定，别人的 id 一律 404。
+  // 跨用户的管理操作走 updateAny/listAll，受 @Roles("admin") 保护，不在此路径。
+  describe("ownership scoping", () => {
+    it("delete 404s and never soft-deletes a workspace the caller does not own", async () => {
+      const findFirst = vi.fn().mockResolvedValue(null);
+      const update = vi.fn();
+      const service = new WorkspaceService(
+        { workspace: { findFirst, update }, run: { findFirst: vi.fn() } } as never,
+        {} as never,
+        { emit: vi.fn() } as never
+      );
+
+      await expect(service.delete("intruder", "ws-x")).rejects.toThrow(
+        "Workspace ws-x not found"
+      );
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: "ws-x",
+            userId: "intruder",
+            deletedAt: null,
+          }),
+        })
+      );
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it("update 404s and never mutates a workspace the caller does not own", async () => {
+      const txFindFirst = vi.fn().mockResolvedValue(null);
+      const txUpdate = vi.fn();
+      const service = new WorkspaceService(
+        {
+          $transaction: (fn: (tx: unknown) => unknown) =>
+            fn({ workspace: { findFirst: txFindFirst, update: txUpdate } }),
+        } as never,
+        {} as never,
+        { emit: vi.fn() } as never
+      );
+
+      await expect(
+        service.update("intruder", "ws-x", "New name")
+      ).rejects.toThrow("Workspace ws-x not found");
+      expect(txFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: "ws-x",
+            userId: "intruder",
+            deletedAt: null,
+          }),
+        })
+      );
+      expect(txUpdate).not.toHaveBeenCalled();
+    });
+  });
 });

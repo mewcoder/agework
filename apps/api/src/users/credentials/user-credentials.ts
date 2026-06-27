@@ -11,7 +11,10 @@ export const SUPER_ADMIN_USERNAME = "admin";
 const USERNAME_MIN_LENGTH = 3;
 const USERNAME_MAX_LENGTH = 32;
 const PASSWORD_MIN_LENGTH = 8;
+// 登录路径的长度兜底（防超长输入 DoS）；需保留对历史长密码的兼容，故不与设密码上限相同。
 const PASSWORD_MAX_LENGTH = 128;
+// 设密码的字符上限，宽松天花板（业界/NIST 800-63B 常见做法）。
+const PASSWORD_SET_MAX_LENGTH = 64;
 
 const USERNAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const LETTER_PATTERN = /[A-Za-z]/;
@@ -66,6 +69,11 @@ export function assertPasswordForSet(raw: unknown, username?: string): string {
   const password = assertPasswordForLogin(raw);
   if (password.length < PASSWORD_MIN_LENGTH) {
     throw new BadRequestException(`密码至少需要 ${PASSWORD_MIN_LENGTH} 个字符`);
+  }
+  if (password.length > PASSWORD_SET_MAX_LENGTH) {
+    throw new BadRequestException(
+      `密码不能超过 ${PASSWORD_SET_MAX_LENGTH} 个字符`
+    );
   }
   if (WHITESPACE_PATTERN.test(password)) {
     throw new BadRequestException("密码不能包含空白字符");

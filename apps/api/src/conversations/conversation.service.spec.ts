@@ -376,4 +376,68 @@ describe("ConversationService", () => {
       expect(snippet.endsWith("…")).toBe(true);
     });
   });
+
+  // 资源归属：所有按 id 的读写都必须限定在调用者自己的 workspace 下，
+  // 否则别人的 conversationId 也能命中。这里锁死 where 里的 owner 过滤。
+  describe("ownership scoping", () => {
+    const ownerFilter = { userId: mockUserId, deletedAt: null };
+
+    it("findOne scopes by workspace owner and 404s when not owned", async () => {
+      const findFirst = vi.fn().mockResolvedValue(null);
+      const service = new ConversationService({
+        conversation: { findFirst },
+      } as never);
+
+      await expect(service.findOne(mockUserId, "conv-x")).rejects.toThrow(
+        "对话不存在"
+      );
+      expect(findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: "conv-x",
+            workspace: ownerFilter,
+          }),
+        })
+      );
+    });
+
+    it.each([
+      ["delete", (s: ConversationService) => s.delete(mockUserId, "conv-x")],
+      ["archive", (s: ConversationService) => s.archive(mockUserId, "conv-x")],
+      [
+        "unarchive",
+        (s: ConversationService) => s.unarchive(mockUserId, "conv-x"),
+      ],
+    ])("%s only touches conversations under the owner's workspace", async (
+      _label,
+      call
+    ) => {
+      const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+      const service = new ConversationService({
+        conversation: { updateMany },
+      } as never);
+
+      await call(service);
+
+      expect(updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ workspace: ownerFilter }),
+        })
+      );
+    });
+
+    it("listMessages returns nothing for a conversation the caller does not own", async () => {
+      const findFirst = vi.fn().mockResolvedValue(null);
+      const findMany = vi.fn();
+      const service = new ConversationService({
+        conversation: { findFirst },
+        message: { findMany },
+      } as never);
+
+      const result = await service.listMessages(mockUserId, "conv-x");
+
+      expect(result).toEqual([]);
+      expect(findMany).not.toHaveBeenCalled();
+    });
+  });
 });

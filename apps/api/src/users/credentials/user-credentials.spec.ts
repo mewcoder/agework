@@ -125,6 +125,20 @@ describe("assertPasswordForSet", () => {
   it("allows passwords that differ from the username", () => {
     expect(assertPasswordForSet("Alice456", "alice123")).toBe("Alice456");
   });
+
+  it("rejects passwords longer than 64 characters", () => {
+    // 65 字符、含字母和数字
+    expectBadRequest(
+      () => assertPasswordForSet("a1" + "x".repeat(63)),
+      "不能超过 64 个字符"
+    );
+  });
+
+  it("accepts a password exactly at the 64-character limit", () => {
+    const atLimit = "a1" + "x".repeat(62); // 64 字符
+    expect(atLimit).toHaveLength(64);
+    expect(assertPasswordForSet(atLimit)).toBe(atLimit);
+  });
 });
 
 describe("assertSuperAdminPasswordForSet", () => {
@@ -194,5 +208,12 @@ describe("generateTemporaryPassword", () => {
       Array.from({ length: 20 }, () => generateTemporaryPassword())
     );
     expect(passwords.size).toBeGreaterThan(1);
+  });
+
+  it("produces passwords that satisfy the set-password rules (incl. length limit)", () => {
+    for (let i = 0; i < 20; i += 1) {
+      const password = generateTemporaryPassword();
+      expect(() => assertPasswordForSet(password)).not.toThrow();
+    }
   });
 });

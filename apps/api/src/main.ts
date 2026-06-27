@@ -37,6 +37,8 @@ async function bootstrap() {
 
   app.use(securityHeaders());
   app.use(cookieParser());
+  // 不开 CORS：前端与 API 始终同源（dev 经 Vite 代理、prod/桌面同 host），浏览器同源策略即足够。
+
   app.useBodyParser("json", { limit: bodyLimit });
   app.useBodyParser("urlencoded", { extended: true, limit: bodyLimit });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

@@ -13,7 +13,7 @@ export const usernameSchema = z
 export const passwordSchema = z
   .string()
   .min(8, "密码至少需要 8 个字符")
-  .max(128, "密码不能超过 128 个字符")
+  .max(64, "密码不能超过 64 个字符")
   .refine((value) => !/\s/.test(value), "密码不能包含空白字符")
   .refine((value) => /[A-Za-z]/.test(value) && /\d/.test(value), {
     message: "密码需要同时包含字母和数字",
