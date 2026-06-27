@@ -379,6 +379,7 @@ async function restoreDb(backups) {
 function apiModeDefaults(noAuth) {
   return {
     AGEWORK_PRIVATE_JWT_SECRET: generateJwtSecret(),
+    AGEWORK_PRIVATE_ADMIN_INIT_KEY: generateJwtSecret(),
     AGEWORK_DEV_AUTH_DISABLED: noAuth ? "true" : "false",
   };
 }

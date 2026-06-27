@@ -27,6 +27,7 @@ import {
   UserDisabledEvent,
 } from "./user.events";
 import { PasswordHasherService } from "./credentials/password-hasher.service";
+import { LoginFailedException } from "./credentials/login-failed.exception";
 import {
   UserRepository,
   type CredentialUserRecord,
@@ -226,7 +227,7 @@ export class UserService {
       SUPER_ADMIN_USERNAME
     );
     const now = new Date();
-    const user = await this.users.create({
+    const user = await this.users.createSuperAdmin({
       id: generateId(),
       username: SUPER_ADMIN_USERNAME,
       passwordHash: await this.passwordHasher.hash(password),
@@ -238,6 +239,10 @@ export class UserService {
       passwordUpdatedAt: now,
       approvedAt: now,
     });
+    if (!user) {
+      // 并发竞态：另一个请求已抢先创建超级管理员
+      throw new BadRequestException("系统已初始化");
+    }
 
     return this.toUserDto(user);
   }
@@ -295,11 +300,11 @@ export class UserService {
 
     const user = await this.users.findCredentialByUsername(normalizedUsername);
     if (!user) {
-      throw new UnauthorizedException("用户不存在");
+      throw new LoginFailedException("user_not_found");
     }
 
     if (user.lockedUntil && user.lockedUntil > now) {
-      throw new UnauthorizedException("登录失败次数过多，请稍后再试");
+      throw new LoginFailedException("locked");
     }
 
     const valid = await this.passwordHasher.compare(
@@ -308,7 +313,7 @@ export class UserService {
     );
     if (!valid) {
       await this.recordFailedLogin(user.id, user.failedLoginCount, user.role);
-      throw new UnauthorizedException("用户名或密码错误");
+      throw new LoginFailedException("bad_password");
     }
 
     this.assertCanLogin(user, now);
@@ -408,20 +413,20 @@ export class UserService {
 
   private assertCanLogin(user: CredentialUserRecord, now: Date) {
     if (user.status === "pending") {
-      throw new UnauthorizedException("账号待管理员审批");
+      throw new LoginFailedException("pending");
     }
     if (user.status === "disabled") {
-      throw new UnauthorizedException("账号已停用，请联系管理员");
+      throw new LoginFailedException("disabled");
     }
     if (user.status !== "active") {
-      throw new UnauthorizedException("账号状态异常，请联系管理员");
+      throw new LoginFailedException("status_invalid");
     }
     if (
       user.mustChangePassword &&
       user.passwordExpiresAt &&
       user.passwordExpiresAt <= now
     ) {
-      throw new UnauthorizedException("临时密码已过期，请联系管理员重新生成");
+      throw new LoginFailedException("temp_password_expired");
     }
   }
 

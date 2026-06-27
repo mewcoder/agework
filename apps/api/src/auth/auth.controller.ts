@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { SkipThrottle, ThrottlerGuard } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
@@ -8,6 +9,7 @@ import { RegisterDto } from "./dto/register.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { SetupDto } from "./dto/setup.dto";
 
+@UseGuards(ThrottlerGuard)
 @Controller("auth")
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -27,9 +29,10 @@ export class AuthController {
   @Public()
   @Post("setup")
   setup(@Body() body: SetupDto) {
-    return this.authService.setupSuperAdmin(body.newPassword);
+    return this.authService.setupSuperAdmin(body.newPassword, body.adminInitKey);
   }
 
+  @SkipThrottle()
   @Get("query")
   me(@CurrentUser() user: JwtUser) {
     return this.authService.me(user.userId);
@@ -54,6 +57,7 @@ export class AuthController {
     );
   }
 
+  @SkipThrottle()
   @Public()
   @Get("config")
   config() {

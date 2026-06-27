@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
+import { timingSafeEqual } from "node:crypto";
 import { JwtService } from "@nestjs/jwt";
 import { UserService } from "../users/user.service";
 import { ConfigService } from "../config/config.service";
@@ -34,12 +35,31 @@ export class AuthService {
     };
   }
 
-  async setupSuperAdmin(newPassword: string) {
+  async setupSuperAdmin(newPassword: string, adminInitKey?: string) {
+    this.assertSetupAuthorized(adminInitKey);
     const user = await this.users.setupSuperAdmin(newPassword);
     return {
       token: this.signToken(user),
       user,
     };
+  }
+
+  /**
+   * 生产环境初始化必须出示与 AGEWORK_PRIVATE_ADMIN_INIT_KEY 一致的引导密钥，
+   * 未配置即拒绝（fail closed），防止公网部署被抢注超级管理员。
+   */
+  private assertSetupAuthorized(adminInitKey?: string) {
+    if (!this.configService.requiresAdminInitKey()) return;
+
+    const expected = this.configService.getAdminInitKey();
+    if (!expected) {
+      throw new ForbiddenException(
+        "生产环境未配置 AGEWORK_PRIVATE_ADMIN_INIT_KEY，已拒绝初始化"
+      );
+    }
+    if (!adminInitKey || !safeEqual(adminInitKey, expected)) {
+      throw new ForbiddenException("初始化密钥无效");
+    }
   }
 
   async login(username: string, password: string) {
@@ -90,4 +110,12 @@ export class AuthService {
       sessionVersion: user.sessionVersion,
     });
   }
+}
+
+/** 常量时间比较，避免通过响应耗时旁路猜测 token。 */
+function safeEqual(a: string, b: string): boolean {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
 }

@@ -4,6 +4,7 @@ import { Logger, ValidationPipe } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { networkInterfaces } from "node:os";
 import { AppModule } from "./app.module";
+import { securityHeaders } from "./common/security-headers";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 import { resolveApiBasePath } from "./common/path.util";
@@ -33,12 +34,14 @@ async function bootstrap() {
   const bodyLimit = configService.getApiBodyLimit();
   const apiBasePath = resolveApiBasePath(getApiContext());
 
+  app.use(securityHeaders());
   app.useBodyParser("json", { limit: bodyLimit });
   app.useBodyParser("urlencoded", { extended: true, limit: bodyLimit });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new ResponseInterceptor(app.get(Reflector)));
   app.useGlobalFilters(new AllExceptionsFilter());
   app.setGlobalPrefix(apiBasePath.replace(/^\/+/, ""));
+  app.enableShutdownHooks();
   const port = configService.getPort();
   await app.listen(port);
   const protocol = "http";

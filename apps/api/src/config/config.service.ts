@@ -180,6 +180,19 @@ export class ConfigService implements OnModuleInit {
     return isDev && this.getEnv(EnvKey.DEV_AUTH_DISABLED) === "true";
   }
 
+  /**
+   * 生产环境（NODE_ENV=production）首次初始化必须出示 setup key，
+   * 防止公网部署时第一个访问者抢注超级管理员。非生产环境放行以便本地调试。
+   */
+  requiresAdminInitKey(): boolean {
+    return process.env.NODE_ENV === "production";
+  }
+
+  /** 首次初始化的引导密钥，init 自动生成并写入 .env。 */
+  getAdminInitKey(): string | undefined {
+    return this.getEnv(EnvKey.PRIVATE_ADMIN_INIT_KEY) || undefined;
+  }
+
   getUserWorkspace(username: string): string {
     const dir = join(this.workspace, username);
     mkdirSync(dir, { recursive: true });

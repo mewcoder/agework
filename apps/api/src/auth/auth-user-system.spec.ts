@@ -14,6 +14,7 @@ import { UserService } from "../users/user.service";
 import { UserRepository } from "../users/user.repository";
 import { SUPER_ADMIN_USERNAME } from "../users/credentials/user-credentials";
 import { PasswordHasherService } from "../users/credentials/password-hasher.service";
+import { LoginFailedException } from "../users/credentials/login-failed.exception";
 import { ConfigService } from "../config/config.service";
 import { SystemSettingRepository } from "../config/system-setting.repository";
 
@@ -87,13 +88,21 @@ class MemoryPrisma {
       );
     },
     create: (args: { data: UserData; select?: UserSelect }) => {
+      const username = requiredString(args.data.username, "username");
+      if (this.users.some((candidate) => candidate.username === username)) {
+        // 模拟 Prisma 唯一约束冲突，驱动并发抢注的 P2002 处理路径
+        throw Object.assign(
+          new Error("Unique constraint failed on the fields: (`username`)"),
+          { code: "P2002" }
+        );
+      }
       const now = new Date();
       const user: TestUser = {
         id:
           typeof args.data.id === "string"
             ? args.data.id
             : `user-${this.nextId++}`,
-        username: requiredString(args.data.username, "username"),
+        username,
         passwordHash: requiredString(args.data.passwordHash, "passwordHash"),
         role: optionalString(args.data.role, "user"),
         status: optionalString(args.data.status, "active"),
@@ -395,6 +404,92 @@ describe("auth and user management security flows", () => {
     );
   });
 
+  it("converts a concurrent super-admin creation race into 系统已初始化", async () => {
+    const { auth } = makeServices();
+    // 模拟两个请求都通过 isSetupRequired 后，另一个先一步落库（P2002 -> null）
+    vi.spyOn(UserRepository.prototype, "createSuperAdmin").mockResolvedValueOnce(
+      null
+    );
+    await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
+      "系统已初始化"
+    );
+  });
+
+  it("createSuperAdmin returns null instead of throwing on a unique-constraint collision", async () => {
+    const { prisma } = makeServices();
+    const repo = new UserRepository(prisma as unknown as PrismaService);
+    const data = {
+      id: "race-1",
+      username: SUPER_ADMIN_USERNAME,
+      passwordHash: "hash",
+      role: "super_admin",
+      status: "active",
+      mustChangePassword: false,
+      passwordKind: "user_set",
+    };
+
+    await expect(repo.createSuperAdmin(data)).resolves.toMatchObject({
+      username: SUPER_ADMIN_USERNAME,
+    });
+    await expect(
+      repo.createSuperAdmin({ ...data, id: "race-2" })
+    ).resolves.toBeNull();
+  });
+
+  describe("production setup bootstrap key", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalKey = process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
+
+    afterEach(() => {
+      restoreEnv("NODE_ENV", originalNodeEnv);
+      restoreEnv("AGEWORK_PRIVATE_ADMIN_INIT_KEY", originalKey);
+    });
+
+    it("rejects setup when no bootstrap key is configured", async () => {
+      const { auth } = makeServices();
+      process.env.NODE_ENV = "production";
+      delete process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
+
+      await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
+        "未配置 AGEWORK_PRIVATE_ADMIN_INIT_KEY"
+      );
+    });
+
+    it("rejects setup when the bootstrap key is missing or wrong", async () => {
+      const { auth } = makeServices();
+      process.env.NODE_ENV = "production";
+      process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY = "right-key";
+
+      await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
+        "初始化密钥无效"
+      );
+      await expect(
+        auth.setupSuperAdmin("AdminInitPass1", "wrong-key")
+      ).rejects.toThrow("初始化密钥无效");
+    });
+
+    it("creates the super admin when the bootstrap key matches", async () => {
+      const { auth } = makeServices();
+      process.env.NODE_ENV = "production";
+      process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY = "right-key";
+
+      const session = await auth.setupSuperAdmin("AdminInitPass1", "right-key");
+      expect(session.user).toMatchObject({
+        username: "admin",
+        role: "super_admin",
+      });
+    });
+
+    it("does not require a bootstrap key outside production", async () => {
+      const { auth } = makeServices();
+      process.env.NODE_ENV = "development";
+      delete process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
+
+      const session = await auth.setupSuperAdmin("AdminInitPass1");
+      expect(session.user).toMatchObject({ username: "admin" });
+    });
+  });
+
   it("validates usernames and passwords before registration", async () => {
     const { auth } = makeServices();
 
@@ -432,7 +527,7 @@ describe("auth and user management security flows", () => {
       passwordKind: "user_set",
     });
     await expect(auth.login("alice", "AlicePass123")).rejects.toThrow(
-      "账号待管理员审批"
+      "用户名或密码错误"
     );
 
     await users.approve(registered.id, superAdminUser());
@@ -442,6 +537,66 @@ describe("auth and user management security flows", () => {
       status: "active",
       mustChangePassword: false,
     });
+  });
+
+  it("returns one generic error for non-existent, wrong-password, pending, and disabled logins while keeping the internal reason", async () => {
+    const { auth, users } = makeServices();
+
+    const active = await users.create(superAdminUser(), "active_user", "user");
+    const disabled = await users.create(
+      superAdminUser(),
+      "disabled_user",
+      "user"
+    );
+    await users.update(
+      disabled.user.id,
+      { status: "disabled" },
+      superAdminUser()
+    );
+    await auth.register("pending_user", "PendingPass123");
+
+    const attempts: Array<{
+      username: string;
+      password: string;
+      reason: string;
+    }> = [
+      { username: "ghost_user", password: "Whatever123", reason: "user_not_found" },
+      { username: "active_user", password: "WrongPass999", reason: "bad_password" },
+      {
+        username: "pending_user",
+        password: "PendingPass123",
+        reason: "pending",
+      },
+      {
+        username: "disabled_user",
+        password: disabled.temporaryPassword,
+        reason: "disabled",
+      },
+    ];
+
+    const errors: LoginFailedException[] = [];
+    for (const attempt of attempts) {
+      await auth
+        .login(attempt.username, attempt.password)
+        .catch((error) => errors.push(error));
+    }
+
+    // 对外：所有失败都是同一句话，区分不出账号是否存在 / 状态
+    expect(new Set(errors.map((error) => error.message))).toEqual(
+      new Set(["用户名或密码错误"])
+    );
+    // 对内：保留具体原因供审计
+    expect(errors.every((error) => error instanceof LoginFailedException)).toBe(
+      true
+    );
+    expect(errors.map((error) => error.reason)).toEqual(
+      attempts.map((attempt) => attempt.reason)
+    );
+
+    // 正确密码的活跃账号仍可登录，确认收敛没有误伤正常路径
+    await expect(
+      auth.login("active_user", active.temporaryPassword)
+    ).resolves.toMatchObject({ user: { username: "active_user" } });
   });
 
   it("generates 72-hour initial passwords for admin-created accounts", async () => {
@@ -482,7 +637,7 @@ describe("auth and user management security flows", () => {
 
     await expect(
       auth.login("expired_user", created.temporaryPassword)
-    ).rejects.toThrow("临时密码已过期");
+    ).rejects.toThrow("用户名或密码错误");
   });
 
   it("creates 24-hour temporary passwords during admin reset and invalidates the old password", async () => {

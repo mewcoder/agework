@@ -188,6 +188,22 @@ export class UserRepository {
     });
   }
 
+  /**
+   * 创建超级管理员；并发场景下若 username 唯一约束被他人抢先占用（P2002），
+   * 返回 null 表示"已被初始化"，由调用方收敛为业务错误而非 500。
+   */
+  async createSuperAdmin(data: UserCreateData): Promise<UserRecord | null> {
+    try {
+      return await this.prisma.user.create({
+        data,
+        select: this.userSelect(),
+      });
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2002") return null;
+      throw error;
+    }
+  }
+
   approve(
     id: string,
     approvedAt: Date,

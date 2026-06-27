@@ -64,7 +64,7 @@ describe("AuthController", () => {
     it("delegates to authService.setupSuperAdmin", async () => {
       const { controller, auth } = makeController();
       await controller.setup({ newPassword: "AdminPass1" });
-      expect(auth.setupSuperAdmin).toHaveBeenCalledWith("AdminPass1");
+      expect(auth.setupSuperAdmin).toHaveBeenCalledWith("AdminPass1", undefined);
     });
   });
 

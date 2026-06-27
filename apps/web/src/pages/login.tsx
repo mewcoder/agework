@@ -3,6 +3,7 @@ import {
   useState,
   type FormEvent,
   type FormEventHandler,
+  type ReactNode,
 } from "react";
 import { useRouter } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -45,6 +46,7 @@ interface RequiredPasswordChangeFormProps {
   onSubmit: FormEventHandler<HTMLFormElement>;
   onNewPasswordChange: (value: string) => void;
   onConfirmPasswordChange: (value: string) => void;
+  extraFields?: ReactNode;
 }
 
 function RequiredPasswordChangeForm({
@@ -61,6 +63,7 @@ function RequiredPasswordChangeForm({
   onSubmit,
   onNewPasswordChange,
   onConfirmPasswordChange,
+  extraFields,
 }: RequiredPasswordChangeFormProps) {
   return (
     <Card>
@@ -102,6 +105,7 @@ function RequiredPasswordChangeForm({
               />
               {confirmError && <FieldError>{confirmError}</FieldError>}
             </Field>
+            {extraFields}
             {error && (
               <FieldError className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2">
                 {error}
@@ -135,6 +139,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [adminInitKey, setAdminInitKey] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [registrationSuccessOpen, setRegistrationSuccessOpen] = useState(false);
@@ -228,7 +233,10 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      const { token, user } = await authApi.setup({ newPassword });
+      const { token, user } = await authApi.setup({
+        newPassword,
+        adminInitKey: adminInitKey.trim() || undefined,
+      });
       setAuth(token, user);
       setSetupRequired(false);
       queryClient.setQueryData<AuthConfigResponse>(
@@ -238,6 +246,7 @@ export default function LoginPage() {
       );
       setNewPassword("");
       setConfirmPassword("");
+      setAdminInitKey("");
       toast.success("初始化完成");
       await router.navigate({ to: "/" });
     } catch (err) {
@@ -269,6 +278,21 @@ export default function LoginPage() {
             onSubmit={handleSetup}
             onNewPasswordChange={setNewPassword}
             onConfirmPasswordChange={setConfirmPassword}
+            extraFields={
+              <Field>
+                <FieldLabel htmlFor="admin-init-key">初始密钥</FieldLabel>
+                <Input
+                  id="admin-init-key"
+                  type="password"
+                  value={adminInitKey}
+                  onChange={(event) => setAdminInitKey(event.target.value)}
+                  autoComplete="off"
+                />
+                <FieldDescription>
+                  仅生产环境需要，取自服务端 AGEWORK_PRIVATE_ADMIN_INIT_KEY。
+                </FieldDescription>
+              </Field>
+            }
           />
         ) : requiresPasswordChange ? (
           <RequiredPasswordChangeForm

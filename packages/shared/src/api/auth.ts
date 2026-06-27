@@ -28,7 +28,7 @@ export type AuthConfigResponse = {
 
 export type LoginRequest = { username: string; password: string };
 export type RegisterRequest = { username: string; password: string };
-export type SetupRequest = { newPassword: string };
+export type SetupRequest = { newPassword: string; adminInitKey?: string };
 export type ChangePasswordRequest = {
   currentPassword?: string;
   newPassword: string;
