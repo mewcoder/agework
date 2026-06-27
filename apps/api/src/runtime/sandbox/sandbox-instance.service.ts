@@ -61,10 +61,6 @@ export type SandboxOwnerAccessKeyIssuer = {
 };
 
 export type SandboxRuntimeInstanceCallbacks = {
-  registerRuntimeInstanceAccess(
-    runtimeInstanceId: string,
-    ownerId: string
-  ): void;
   runtimeReady(runId: string, runtimeInstanceId: string): void;
   publishWorkerError(runId: string, error: string): void;
   cleanupByOwnerId(ownerId: string): void;
@@ -290,7 +286,6 @@ export class SandboxRuntimeInstanceService {
       context,
       context.engine,
       engineInput,
-      callbacks,
       resumeRuntimeInstanceId
     );
     this.pendingSandboxes.set(context.ownerId, runtimePromise);
@@ -411,19 +406,11 @@ export class SandboxRuntimeInstanceService {
     context: SandboxWorkerExecutionContext,
     engine: SandboxEngine,
     input: SandboxStartInput,
-    callbacks: Pick<
-      SandboxRuntimeInstanceCallbacks,
-      "registerRuntimeInstanceAccess"
-    >,
     resumeRuntimeInstanceId?: string
   ): Promise<SandboxRuntime> {
     if (resumeRuntimeInstanceId && engine.resume) {
       try {
         const runtime = await engine.resume(resumeRuntimeInstanceId, input);
-        callbacks.registerRuntimeInstanceAccess(
-          runtime.runtimeInstanceId,
-          context.ownerId
-        );
         await engine.startWorker(runtime, input);
         return runtime;
       } catch (err) {
@@ -437,10 +424,6 @@ export class SandboxRuntimeInstanceService {
     }
 
     const runtime = await engine.getOrCreate(input);
-    callbacks.registerRuntimeInstanceAccess(
-      runtime.runtimeInstanceId,
-      context.ownerId
-    );
     await engine.startWorker(runtime, input);
     return runtime;
   }

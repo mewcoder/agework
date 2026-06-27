@@ -8,7 +8,6 @@ function makeGuard(access?: Partial<WorkerAccessService>) {
   const runtimeAccess = {
     verifyAccessKey: vi.fn().mockReturnValue(false),
     verifyOwnerKey: vi.fn().mockReturnValue(false),
-    verifyRuntimeInstanceKey: vi.fn().mockReturnValue(false),
     diagnostics: vi.fn().mockReturnValue({}),
     ...access,
   };
@@ -26,7 +25,6 @@ function makeContext(params: Record<string, string>, authHeader?: string) {
     params,
     runId: undefined as string | undefined,
     ownerId: undefined as string | undefined,
-    runtimeInstanceId: undefined as string | undefined,
   };
   return {
     context: {
@@ -83,25 +81,6 @@ describe("WorkerAuthGuard", () => {
       "owner-key"
     );
     expect(request.ownerId).toBe("owner-1");
-  });
-
-  it("verifies runtime instance key when runtimeInstanceId is in params", async () => {
-    const { guard, runtimeAccess } = makeGuard({
-      verifyRuntimeInstanceKey: vi.fn().mockReturnValue(true),
-    });
-    const { context, request } = makeContext(
-      { runtimeInstanceId: "ri-1" },
-      "Bearer ri-key"
-    );
-
-    const result = await guard.canActivate(context);
-
-    expect(result).toBe(true);
-    expect(runtimeAccess.verifyRuntimeInstanceKey).toHaveBeenCalledWith(
-      "ri-1",
-      "ri-key"
-    );
-    expect(request.runtimeInstanceId).toBe("ri-1");
   });
 
   it("rejects when no key matches", async () => {

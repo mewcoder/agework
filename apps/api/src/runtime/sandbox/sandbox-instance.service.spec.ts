@@ -73,7 +73,6 @@ function makeService(engine = makeEngine()) {
   };
   const access = {
     issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
-    issueRuntimeInstanceKey: vi.fn(),
   };
   const service = new SandboxRuntimeInstanceService(
     config as never,
@@ -104,18 +103,8 @@ function makeOwnerAccessKeyIssuer(access: {
   };
 }
 
-function makeCallbacks(access?: {
-  issueRuntimeInstanceKey: (
-    runtimeInstanceId: string,
-    ownerId: string
-  ) => string;
-}) {
+function makeCallbacks() {
   return {
-    registerRuntimeInstanceAccess: vi.fn(
-      (runtimeInstanceId: string, ownerId: string) => {
-        access?.issueRuntimeInstanceKey(runtimeInstanceId, ownerId);
-      }
-    ),
     runtimeReady: vi.fn(),
     publishWorkerError: vi.fn(),
     cleanupByOwnerId: vi.fn(),
@@ -171,7 +160,7 @@ describe("SandboxRuntimeInstanceService", () => {
     );
     service.retainOwnerRun(context.ownerId);
     const onReady = vi.fn();
-    const callbacks = makeCallbacks(access);
+    const callbacks = makeCallbacks();
 
     service.attachOrStartRuntimeInstance(
       { context, ownerState, onRuntimeInstanceIdReady: onReady },
@@ -188,6 +177,7 @@ describe("SandboxRuntimeInstanceService", () => {
         env: expect.objectContaining({
           AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
           AGEWORK_WORKER_OWNER_ID: "ws-1",
+          AGEWORK_WORKER_RUNTIME_ACCESS_KEY: "owner-key",
         }),
       })
     );
@@ -202,13 +192,6 @@ describe("SandboxRuntimeInstanceService", () => {
       "ws-1",
       "docker-resource-1"
     );
-    expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
-      "docker-resource-1",
-      "ws-1"
-    );
-    expect(
-      vi.mocked(access.issueRuntimeInstanceKey).mock.invocationCallOrder[0]
-    ).toBeLessThan(vi.mocked(engine.startWorker).mock.invocationCallOrder[0]);
   });
 
   it("notifies pending attachments when runtime becomes ready", async () => {

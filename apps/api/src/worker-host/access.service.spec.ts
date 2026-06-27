@@ -65,45 +65,4 @@ describe("WorkerAccessService", () => {
     expect(service.verifyOwnerKey("owner-1", key)).toBe(false);
     expect(service.verifyAccessKey("run-1", key)).toBe(false);
   });
-
-  describe("runtime instance keys", () => {
-    it("issues and verifies a runtime instance key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
-
-      expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(true);
-    });
-
-    it("reuses owner key when owner already has one", () => {
-      const ownerKey = service.issueOwnerKey("owner-1");
-      const resourceAccessKey = service.issueRuntimeInstanceKey(
-        "rr-1",
-        "owner-1"
-      );
-
-      // Same key works for both endpoints
-      expect(resourceAccessKey).toBe(ownerKey);
-      expect(service.verifyOwnerKey("owner-1", resourceAccessKey)).toBe(true);
-      expect(service.verifyRuntimeInstanceKey("rr-1", ownerKey)).toBe(true);
-    });
-
-    it("issues a new key when owner has no owner key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
-
-      expect(key).toBeTruthy();
-      expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(true);
-    });
-
-    it("rejects an incorrect runtime instance key", () => {
-      service.issueRuntimeInstanceKey("rr-1", "owner-1");
-
-      expect(service.verifyRuntimeInstanceKey("rr-1", "wrong")).toBe(false);
-    });
-
-    it("revokes a runtime instance key", () => {
-      const key = service.issueRuntimeInstanceKey("rr-1", "owner-1");
-      service.revokeRuntimeInstance("rr-1");
-
-      expect(service.verifyRuntimeInstanceKey("rr-1", key)).toBe(false);
-    });
-  });
 });

@@ -8,8 +8,6 @@ export class WorkerAccessService {
   private readonly accessKeys = new Map<string, string>();
   /** ownerId → accessKey（持久容器复用，一个 owner 一个 key） */
   private readonly ownerKeys = new Map<string, string>();
-  /** runtimeInstanceId → accessKey（持久 worker 调 /worker/runs/:runId 时鉴权用） */
-  private readonly runtimeInstanceKeys = new Map<string, string>();
 
   /**
    * 为单个 run 签发内部访问 key。
@@ -58,37 +56,9 @@ export class WorkerAccessService {
     }
   }
 
-  /**
-   * 为 runtimeInstanceId 签发内部访问 key。
-   * 复用 ownerId 对应的 ownerKey，使同一个 key 可同时用于
-   * owner 命令端点和 /worker/runs/:runId 端点鉴权。
-   */
-  issueRuntimeInstanceKey(
-    runtimeInstanceId: string,
-    ownerId: string
-  ): string {
-    const existingKey = this.ownerKeys.get(ownerId);
-    if (existingKey) {
-      this.runtimeInstanceKeys.set(runtimeInstanceId, existingKey);
-    } else {
-      const accessKey = randomBytes(ACCESS_KEY_BYTES).toString("base64url");
-      this.runtimeInstanceKeys.set(runtimeInstanceId, accessKey);
-    }
-    return this.runtimeInstanceKeys.get(runtimeInstanceId)!;
-  }
-
-  verifyRuntimeInstanceKey(runtimeInstanceId: string, accessKey: string): boolean {
-    return this.constantTimeEqual(this.runtimeInstanceKeys.get(runtimeInstanceId), accessKey);
-  }
-
-  revokeRuntimeInstance(runtimeInstanceId: string): void {
-    this.runtimeInstanceKeys.delete(runtimeInstanceId);
-  }
-
   diagnostics(params: {
     runId?: string;
     ownerId?: string;
-    runtimeInstanceId?: string;
     accessKey?: string;
   }): Record<string, unknown> {
     const runKey = params.runId
@@ -97,17 +67,12 @@ export class WorkerAccessService {
     const ownerKey = params.ownerId
       ? this.ownerKeys.get(params.ownerId)
       : undefined;
-    const runtimeInstanceKey = params.runtimeInstanceId
-      ? this.runtimeInstanceKeys.get(params.runtimeInstanceId)
-      : undefined;
 
     return {
       accessKeyCount: this.accessKeys.size,
       ownerKeyCount: this.ownerKeys.size,
-      runtimeInstanceKeyCount: this.runtimeInstanceKeys.size,
       runId: params.runId,
       ownerId: params.ownerId,
-      runtimeInstanceId: params.runtimeInstanceId,
       hasProvidedKey: Boolean(params.accessKey),
       providedKeyFingerprint: fingerprint(params.accessKey),
       hasRunKey: Boolean(runKey),
@@ -119,11 +84,6 @@ export class WorkerAccessService {
       ownerKeyMatches:
         Boolean(params.accessKey) &&
         this.constantTimeEqual(ownerKey, params.accessKey ?? ""),
-      hasRuntimeInstanceKey: Boolean(runtimeInstanceKey),
-      runtimeInstanceKeyFingerprint: fingerprint(runtimeInstanceKey),
-      runtimeInstanceKeyMatches:
-        Boolean(params.accessKey) &&
-        this.constantTimeEqual(runtimeInstanceKey, params.accessKey ?? ""),
     };
   }
 

@@ -13,7 +13,6 @@ type RequestWithRunId = {
   params: Record<string, string>;
   runId?: string;
   ownerId?: string;
-  runtimeInstanceId?: string;
 };
 
 /**
@@ -38,7 +37,7 @@ export class WorkerAuthGuard implements CanActivate {
       throw new UnauthorizedException("Missing runtime access key");
     }
 
-    const { runId, ownerId, runtimeInstanceId } = request.params;
+    const { runId, ownerId } = request.params;
     if (runId && this.runtimeAccess.verifyAccessKey(runId, accessKey)) {
       request.runId = runId;
       return true;
@@ -47,17 +46,10 @@ export class WorkerAuthGuard implements CanActivate {
       request.ownerId = ownerId;
       return true;
     }
-    if (
-      runtimeInstanceId &&
-      this.runtimeAccess.verifyRuntimeInstanceKey(runtimeInstanceId, accessKey)
-    ) {
-      request.runtimeInstanceId = runtimeInstanceId;
-      return true;
-    }
 
     this.logger.warn(
       `Invalid runtime access key diagnostics=${JSON.stringify(
-        this.runtimeAccess.diagnostics({ runId, ownerId, runtimeInstanceId, accessKey })
+        this.runtimeAccess.diagnostics({ runId, ownerId, accessKey })
       )}`
     );
     throw new UnauthorizedException("Invalid runtime access key");
