@@ -73,22 +73,10 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().appName).toBe('MyApp');
   });
 
-  it('persist 持久化 token 和 user', () => {
-    useAuthStore.getState().setAuth('token-persist', adminUser);
-
-    const stored = JSON.parse(localStorage.getItem('agework-auth')!);
-    expect(stored.state.token).toBe('token-persist');
-    expect(stored.state.user).toEqual(adminUser);
-  });
-
-  it('persist 不持久化 authRequired/setupRequired/appName', () => {
+  it('不把 token/user 持久化到 localStorage（access token 仅存内存）', () => {
+    useAuthStore.getState().setAuth('token-123', adminUser);
     useAuthStore.getState().setAuthRequired(false);
-    useAuthStore.getState().setSetupRequired(true);
-    useAuthStore.getState().setAppName('Custom');
 
-    const stored = JSON.parse(localStorage.getItem('agework-auth')!);
-    expect(stored.state.authRequired).toBeUndefined();
-    expect(stored.state.setupRequired).toBeUndefined();
-    expect(stored.state.appName).toBeUndefined();
+    expect(localStorage.getItem('agework-auth')).toBeNull();
   });
 });

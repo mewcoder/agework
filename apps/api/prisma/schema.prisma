@@ -35,6 +35,23 @@ model User {
   deletedAt          DateTime?
   workspaces         Workspace[]
   modelProviders     ModelProvider[]
+  sessions           Session[]
+}
+
+/// 服务端登录会话：承载 refresh token 生命周期。只存 refresh token 的 hash，
+/// 不存明文；轮换、撤销、过期都在此表落地，使服务端可主动登出/失效。
+model Session {
+  id               String    @id
+  userId           String
+  // refresh token 的 SHA-256（token 本身高熵随机，无需 bcrypt）。唯一约束便于按 token 反查。
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model WorkspaceDirectory {

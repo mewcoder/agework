@@ -267,6 +267,19 @@ describe("UserService", () => {
       expect(result.user.mustChangePassword).toBe(true);
     });
 
+    it("emits USER_PASSWORD_RESET_EVENT so sessions get revoked", async () => {
+      const { service, repo, events } = makeService();
+      repo.findById.mockResolvedValue(makeUser());
+      repo.resetPassword.mockResolvedValue(makeUser());
+
+      await service.resetPassword("user-1", superAdmin);
+
+      expect(events.emit).toHaveBeenCalledWith(
+        "user.password-reset",
+        expect.objectContaining({ userId: "user-1" })
+      );
+    });
+
     it("prevents regular admin from resetting admin passwords", async () => {
       const { service, repo } = makeService();
       repo.findById.mockResolvedValue(makeUser({ role: "admin" }));

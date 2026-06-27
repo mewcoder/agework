@@ -2,6 +2,7 @@ import "dotenv/config";
 import { NestFactory, Reflector } from "@nestjs/core";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
+import cookieParser from "cookie-parser";
 import { networkInterfaces } from "node:os";
 import { AppModule } from "./app.module";
 import { securityHeaders } from "./common/security-headers";
@@ -35,6 +36,7 @@ async function bootstrap() {
   const apiBasePath = resolveApiBasePath(getApiContext());
 
   app.use(securityHeaders());
+  app.use(cookieParser());
   app.useBodyParser("json", { limit: bodyLimit });
   app.useBodyParser("urlencoded", { extended: true, limit: bodyLimit });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));

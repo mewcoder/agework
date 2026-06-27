@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { AuthUser } from '@agework/shared/api';
 
 export type { AuthUser };
@@ -18,24 +17,18 @@ interface AuthStore {
   logout: () => void;
 }
 
-export const useAuthStore = create<AuthStore>()(
-  persist(
-    (set) => ({
-      token: null,
-      user: null,
-      authRequired: true,
-      setupRequired: false,
-      appName: "AgeWork",
-      setAuth: (token, user) => set({ token, user }),
-      setUser: (user) => set({ user }),
-      setAuthRequired: (authRequired) => set({ authRequired }),
-      setSetupRequired: (setupRequired) => set({ setupRequired }),
-      setAppName: (appName) => set({ appName }),
-      logout: () => set({ token: null, user: null }),
-    }),
-    {
-      name: 'agework-auth',
-      partialize: (state) => ({ token: state.token, user: state.user }),
-    },
-  ),
-);
+// access token 只存内存、不持久化：localStorage 会被 XSS 读取，而 access token 短时效（15m）。
+// 刷新页面后由 /auth/refresh（HttpOnly cookie 里的 refresh token）静默换取新的 access token。
+export const useAuthStore = create<AuthStore>()((set) => ({
+  token: null,
+  user: null,
+  authRequired: true,
+  setupRequired: false,
+  appName: "AgeWork",
+  setAuth: (token, user) => set({ token, user }),
+  setUser: (user) => set({ user }),
+  setAuthRequired: (authRequired) => set({ authRequired }),
+  setSetupRequired: (setupRequired) => set({ setupRequired }),
+  setAppName: (appName) => set({ appName }),
+  logout: () => set({ token: null, user: null }),
+}));

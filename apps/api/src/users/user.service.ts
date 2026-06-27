@@ -23,8 +23,10 @@ import {
 import {
   USER_DELETED_EVENT,
   USER_DISABLED_EVENT,
+  USER_PASSWORD_RESET_EVENT,
   UserDeletedEvent,
   UserDisabledEvent,
+  UserPasswordResetEvent,
 } from "./user.events";
 import { PasswordHasherService } from "./credentials/password-hasher.service";
 import { LoginFailedException } from "./credentials/login-failed.exception";
@@ -179,6 +181,7 @@ export class UserService {
       passwordResetById: this.operatorId(operator),
       passwordUpdatedAt: now,
     });
+    this.events.emit(USER_PASSWORD_RESET_EVENT, new UserPasswordResetEvent(id));
     return {
       user: this.toUserDto(updated),
       temporaryPassword,

@@ -3,6 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { JwtService } from "@nestjs/jwt";
 import { UserService } from "../users/user.service";
 import { ConfigService } from "../config/config.service";
+import { SessionService } from "./session/session.service";
 
 type TokenUser = {
   id: string;
@@ -16,7 +17,8 @@ export class AuthService {
   constructor(
     private readonly users: UserService,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly sessions: SessionService
   ) {}
 
   isSetupRequired(): Promise<boolean> {
@@ -38,10 +40,7 @@ export class AuthService {
   async setupSuperAdmin(newPassword: string, adminInitKey?: string) {
     this.assertSetupAuthorized(adminInitKey);
     const user = await this.users.setupSuperAdmin(newPassword);
-    return {
-      token: this.signToken(user),
-      user,
-    };
+    return this.startSession(user);
   }
 
   /**
@@ -64,10 +63,25 @@ export class AuthService {
 
   async login(username: string, password: string) {
     const user = await this.users.authenticate(username, password);
+    return this.startSession(user);
+  }
+
+  /** 用 refresh token 轮换出新的 access token，并下发新的 refresh token。 */
+  async refresh(rawRefreshToken: string) {
+    const rotated = await this.sessions.rotate(rawRefreshToken);
+    const user = await this.users.me(rotated.userId);
     return {
       token: this.signToken(user),
+      refreshToken: rotated.rawToken,
       user,
     };
+  }
+
+  /** 登出：撤销当前 refresh token 对应的会话。无 token 时静默忽略。 */
+  async logout(rawRefreshToken: string | undefined) {
+    if (rawRefreshToken) {
+      await this.sessions.revoke(rawRefreshToken);
+    }
   }
 
   register(username: string, password: string) {
@@ -88,16 +102,27 @@ export class AuthService {
       currentPassword,
       newPassword
     );
-    return {
-      token: this.signToken(user),
-      user,
-    };
+    return this.rotateSessionsAfterPasswordChange(user);
   }
 
   async completePasswordChange(userId: string, newPassword: string) {
     const user = await this.users.completePasswordChange(userId, newPassword);
+    return this.rotateSessionsAfterPasswordChange(user);
+  }
+
+  /** 改密后撤销该用户所有旧会话（旧 refresh token 立即失效），再为当前设备签发新会话。 */
+  private async rotateSessionsAfterPasswordChange<T extends TokenUser>(
+    user: T
+  ) {
+    await this.sessions.revokeAllForUser(user.id);
+    return this.startSession(user);
+  }
+
+  private async startSession<T extends TokenUser>(user: T) {
+    const { rawToken } = await this.sessions.issue(user.id);
     return {
       token: this.signToken(user),
+      refreshToken: rawToken,
       user,
     };
   }

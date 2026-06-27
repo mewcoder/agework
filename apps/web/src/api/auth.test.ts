@@ -59,6 +59,22 @@ describe('authApi', () => {
     });
   });
 
+  describe('refresh', () => {
+    it('调用 refresh 端点', async () => {
+      await authApi.refresh();
+
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/auth/refresh');
+    });
+  });
+
+  describe('logout', () => {
+    it('调用 logout 端点', async () => {
+      await authApi.logout();
+
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/auth/logout');
+    });
+  });
+
   describe('config', () => {
     it('调用 config 端点', async () => {
       await authApi.config();

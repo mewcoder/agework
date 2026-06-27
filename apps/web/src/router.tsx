@@ -36,6 +36,27 @@ function applyAuthConfig(config: AuthConfigResponse) {
   }
 }
 
+async function hydrateSession(config: AuthConfigResponse) {
+  // 开发免登录：后端始终以真实 admin 响应，刷新本地用户缓存避免与后端状态不一致
+  if (!config.authRequired) {
+    const user = await queryClient.fetchQuery({
+      queryKey: ["auth", "me"],
+      queryFn: () => authApi.me(),
+      staleTime: 5 * 60 * 1000,
+    });
+    useAuthStore.getState().setAuth(null, user);
+    return;
+  }
+  // 需要登录：access token 只在内存，刷新页面后用 refresh cookie 静默换取新的 access token
+  if (config.setupRequired || useAuthStore.getState().token) return;
+  try {
+    const { token, user } = await authApi.refresh();
+    useAuthStore.getState().setAuth(token, user);
+  } catch {
+    // 无有效 refresh cookie → 保持未登录，路由守卫会跳 /login
+  }
+}
+
 const rootRoute = createRootRoute({
   beforeLoad: async () => {
     // 每次 app 启动时从服务端读取认证配置（通过 queryClient 缓存，避免路由切换时重复请求）
@@ -46,15 +67,7 @@ const rootRoute = createRootRoute({
         staleTime: 5 * 60 * 1000, // 5 分钟内复用缓存
       });
       applyAuthConfig(config);
-      // 开发免登录时，后端始终以真实 admin 身份响应，刷新本地缓存避免与后端状态不一致
-      if (!config.authRequired) {
-        const user = await queryClient.fetchQuery({
-          queryKey: ["auth", "me"],
-          queryFn: () => authApi.me(),
-          staleTime: 5 * 60 * 1000,
-        });
-        useAuthStore.getState().setAuth(null, user);
-      }
+      await hydrateSession(config);
     } catch (e) {
       // API 未就绪时轮询等待，避免 authRequired 保持默认 true 导致立即跳转 /login
       console.warn("[router] auth config unavailable, retrying...", e);
@@ -67,14 +80,7 @@ const rootRoute = createRootRoute({
             staleTime: 0, // 重试时强制刷新
           });
           applyAuthConfig(config);
-          if (!config.authRequired) {
-            const user = await queryClient.fetchQuery({
-              queryKey: ["auth", "me"],
-              queryFn: () => authApi.me(),
-              staleTime: 5 * 60 * 1000,
-            });
-            useAuthStore.getState().setAuth(null, user);
-          }
+          await hydrateSession(config);
           return;
         } catch {
           // 继续重试

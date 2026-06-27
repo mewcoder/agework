@@ -51,7 +51,12 @@ export function AccountSettings() {
   const canChangePassword =
     currentPassword && newPassword && confirmPassword && !passwordError && !confirmError;
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      await authApi.logout();
+    } catch {
+      // best-effort
+    }
     logout();
     router.navigate({ to: '/login' });
   }

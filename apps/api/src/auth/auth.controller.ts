@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Req,
+  Res,
+  UnauthorizedException,
+  UseGuards,
+} from "@nestjs/common";
+import type { Request, Response } from "express";
 import { SkipThrottle, ThrottlerGuard } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { Public } from "./decorators/public.decorator";
@@ -8,6 +18,13 @@ import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { SetupDto } from "./dto/setup.dto";
+import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from "./session/refresh-cookie";
+
+type SessionResult = { token: string; refreshToken: string; user: unknown };
 
 @UseGuards(ThrottlerGuard)
 @Controller("auth")
@@ -16,8 +33,12 @@ export class AuthController {
 
   @Public()
   @Post("login")
-  login(@Body() body: LoginDto) {
-    return this.authService.login(body.username, body.password);
+  async login(
+    @Body() body: LoginDto,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const result = await this.authService.login(body.username, body.password);
+    return this.issueSession(res, result);
   }
 
   @Public()
@@ -28,8 +49,41 @@ export class AuthController {
 
   @Public()
   @Post("setup")
-  setup(@Body() body: SetupDto) {
-    return this.authService.setupSuperAdmin(body.newPassword, body.adminInitKey);
+  async setup(
+    @Body() body: SetupDto,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const result = await this.authService.setupSuperAdmin(
+      body.newPassword,
+      body.adminInitKey
+    );
+    return this.issueSession(res, result);
+  }
+
+  @Public()
+  @Post("refresh")
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const rawToken = readRefreshCookie(req);
+    if (!rawToken) {
+      clearRefreshCookie(res);
+      throw new UnauthorizedException();
+    }
+    const result = await this.authService.refresh(rawToken);
+    return this.issueSession(res, result);
+  }
+
+  @Public()
+  @Post("logout")
+  async logout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    await this.authService.logout(readRefreshCookie(req));
+    clearRefreshCookie(res);
+    return { ok: true };
   }
 
   @SkipThrottle()
@@ -39,22 +93,23 @@ export class AuthController {
   }
 
   @Post("update-password")
-  updatePassword(
+  async updatePassword(
     @Body() body: ChangePasswordDto,
-    @CurrentUser() user: JwtUser
+    @CurrentUser() user: JwtUser,
+    @Res({ passthrough: true }) res: Response
   ) {
-    if (body.currentPassword === undefined) {
-      return this.authService.completePasswordChange(
-        user.userId,
-        body.newPassword
-      );
-    }
-
-    return this.authService.changePassword(
-      user.userId,
-      body.currentPassword,
-      body.newPassword
-    );
+    const result =
+      body.currentPassword === undefined
+        ? await this.authService.completePasswordChange(
+            user.userId,
+            body.newPassword
+          )
+        : await this.authService.changePassword(
+            user.userId,
+            body.currentPassword,
+            body.newPassword
+          );
+    return this.issueSession(res, result);
   }
 
   @SkipThrottle()
@@ -62,5 +117,11 @@ export class AuthController {
   @Get("config")
   config() {
     return this.authService.config();
+  }
+
+  /** 把 refresh token 写进 HttpOnly cookie，响应体只回 access token 与用户信息。 */
+  private issueSession(res: Response, result: SessionResult) {
+    setRefreshCookie(res, result.refreshToken);
+    return { token: result.token, user: result.user };
   }
 }

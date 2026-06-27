@@ -12,6 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SystemInitService } from "../system/init/system-init.service";
 import { UserService } from "../users/user.service";
 import { UserRepository } from "../users/user.repository";
+import { SessionService } from "./session/session.service";
 import { SUPER_ADMIN_USERNAME } from "../users/credentials/user-credentials";
 import { PasswordHasherService } from "../users/credentials/password-hasher.service";
 import { LoginFailedException } from "../users/credentials/login-failed.exception";
@@ -219,7 +220,16 @@ function makeServices() {
       emit: vi.fn(),
     } as never
   );
-  const auth = new AuthService(users, jwt, configService);
+  const sessions = {
+    issue: vi.fn(async () => ({
+      rawToken: "test-refresh-token",
+      expiresAt: new Date(Date.now() + 60_000),
+    })),
+    rotate: vi.fn(),
+    revoke: vi.fn(async () => {}),
+    revokeAllForUser: vi.fn(async () => {}),
+  } as unknown as SessionService;
+  const auth = new AuthService(users, jwt, configService, sessions);
   const systemInitialization = new SystemInitService(users, configService);
   const guard = new JwtAuthGuard(jwt, new Reflector(), users, configService);
 
@@ -228,6 +238,7 @@ function makeServices() {
     guard,
     passwordHasher,
     prisma,
+    sessions,
     systemInitialization,
     users,
     configService,

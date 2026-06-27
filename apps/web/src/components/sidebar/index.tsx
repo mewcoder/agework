@@ -47,6 +47,7 @@ import {
 import { cn } from "@/lib/utils";
 import { IconActionButton } from "@/components/icon-action-button";
 import { isAdmin } from "@/utils/auth";
+import { authApi } from "@/api/auth";
 import { useAuthStore } from "@/stores/auth-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import { AppLogo } from "@/components/app-logo";
@@ -78,7 +79,13 @@ function UserFooter() {
   const { user, logout, authRequired } = useAuthStore();
   const settingsLabel = isAdmin(user?.role) ? "设置与管理" : "设置";
   const router = useRouter();
-  function handleLogout() {
+  async function handleLogout() {
+    // 撤销服务端会话并清除 refresh cookie；失败也继续清本地状态
+    try {
+      await authApi.logout();
+    } catch {
+      // best-effort
+    }
     logout();
     router.navigate({ to: "/login" });
   }

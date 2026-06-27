@@ -1,6 +1,17 @@
 import { useAuthStore } from '@/stores/auth-store';
 import { normalizeBasePath } from '@/utils/path';
 import type { ApiResponse } from '@agework/shared';
+import type { AuthUser } from '@agework/shared/api';
+
+// 这些端点的 401 不触发刷新重试：登录/注册/初始化 401 是凭据问题；refresh/logout/config 本身是公开或刷新入口。
+const NO_REFRESH_PATHS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/setup',
+  '/auth/refresh',
+  '/auth/logout',
+  '/auth/config',
+];
 
 let unauthorizedHandler: (() => void) | undefined;
 
@@ -72,6 +83,41 @@ function handle401(response: Response) {
   }
 }
 
+let refreshPromise: Promise<boolean> | null = null;
+
+/** 用 HttpOnly cookie 里的 refresh token 静默换取新的 access token。并发 401 共用同一次刷新。 */
+function refreshAccessToken(): Promise<boolean> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const response = await fetch(apiUrl('/api/v1/auth/refresh'), {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (!response.ok) return false;
+        const data = unwrap<{ token: string; user: AuthUser }>(
+          await response.json(),
+        );
+        useAuthStore.getState().setAuth(data.token, data.user);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
+function canRefresh(url: string): boolean {
+  return (
+    useAuthStore.getState().authRequired &&
+    !NO_REFRESH_PATHS.some((path) => url.includes(path))
+  );
+}
+
 export function normalizeHeaders(headers: HeadersInit | undefined): Record<string, string> {
   const result: Record<string, string> = {};
   if (!headers) return result;
@@ -85,17 +131,33 @@ export function normalizeHeaders(headers: HeadersInit | undefined): Record<strin
   return result;
 }
 
-async function doFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+async function doFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+  allowRefresh = true,
+): Promise<Response> {
   const response = await fetch(
     typeof input === 'string' ? apiUrl(input) : input,
     {
       ...init,
+      credentials: 'include',
       headers: {
         ...authHeaders(),
         ...normalizeHeaders(init?.headers),
       },
     },
   );
+  // access token 过期返回 401 时，先静默刷新一次再重放原请求
+  if (
+    response.status === 401 &&
+    allowRefresh &&
+    typeof input === 'string' &&
+    canRefresh(apiUrl(input))
+  ) {
+    if (await refreshAccessToken()) {
+      return doFetch(input, init, false);
+    }
+  }
   if (!response.ok) {
     handle401(response);
     throw await requestError(response);

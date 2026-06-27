@@ -24,5 +24,11 @@ export const authApi = {
   changePassword: (body: ChangePasswordRequest) =>
     apiPost<AuthSessionResponse>('/api/v1/auth/update-password', body),
 
+  // 用 HttpOnly cookie 里的 refresh token 轮换出新的 access token
+  refresh: () => apiPost<AuthSessionResponse>('/api/v1/auth/refresh'),
+
+  // 撤销服务端会话并清除 refresh cookie
+  logout: () => apiPost<void>('/api/v1/auth/logout'),
+
   config: () => apiGet<AuthConfigResponse>('/api/v1/auth/config'),
 };
