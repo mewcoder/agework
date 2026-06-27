@@ -123,10 +123,6 @@ export class SandboxRunExecutor implements RunExecutor {
     });
   }
 
-  getHandle(runId: string): WorkerExecutionHandle | undefined {
-    return this.states.get(runId)?.handle;
-  }
-
   cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
     return this.runtimeInstances.recoverOrphan(runtimeInstanceId);
   }

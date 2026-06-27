@@ -17,7 +17,6 @@ export interface RunExecutor {
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle;
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void;
   cancel(handle: WorkerExecutionHandle): void;
-  getHandle(runId: string): WorkerExecutionHandle | undefined;
   /** 强制终止单次 run 的执行会话；不得停止可复用 runtime resource。 */
   terminateExecution?(runId: string, reason: string): void;
   cleanup(runId: string): void;

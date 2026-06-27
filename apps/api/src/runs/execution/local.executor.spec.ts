@@ -89,10 +89,6 @@ describe("LocalRunExecutor", () => {
     expect(provider).toBeDefined();
   });
 
-  it("getHandle returns undefined for unknown runId", () => {
-    expect(provider.getHandle("nonexistent")).toBeUndefined();
-  });
-
   it("start forks a local worker and sends the run config as RPC", () => {
     const runConfig = makeRunConfig();
     const runtimeTarget = makeRuntimeTarget();
@@ -118,7 +114,11 @@ describe("LocalRunExecutor", () => {
           }),
         })
       );
-      expect(provider.getHandle("run-1")).toBe(handle);
+      expect(handle).toMatchObject({
+        runId: "run-1",
+        runtimeType: "local",
+        conversationId: "conversation-1",
+      });
     } finally {
       provider.cleanup("run-1");
     }
@@ -239,7 +239,6 @@ describe("LocalRunExecutor", () => {
     provider.terminateExecution("run-1", "run timeout");
 
     expect(childProcessMock.child.kill).toHaveBeenCalledWith("SIGTERM");
-    expect(provider.getHandle("run-1")).toBeUndefined();
     provider.sendCommand(handle, {
       type: "interrupt",
       commandId: "command-1",

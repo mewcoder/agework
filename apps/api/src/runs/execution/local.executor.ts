@@ -207,10 +207,6 @@ export class LocalRunExecutor implements RunExecutor {
     this.sendCommand(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
   }
 
-  getHandle(runId: string): WorkerExecutionHandle | undefined {
-    return this.states.get(runId)?.handle;
-  }
-
   /** Run 终态后清理，幂等。 */
   cleanup(runId: string): void {
     this.states.delete(runId);

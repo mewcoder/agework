@@ -383,16 +383,6 @@ describe("SandboxRunExecutor — workspace scope", () => {
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
-  it("getHandle returns handle with runtimeType=sandbox", async () => {
-    const { provider } = makeProvider();
-    startProvider(provider);
-    await vi.runOnlyPendingTimersAsync();
-
-    const handle = provider.getHandle("run-1");
-    expect(handle).toBeDefined();
-    expect(handle!.runtimeType).toBe("sandbox");
-  });
-
   it("upserts WorkspaceRuntime after sandbox creation", async () => {
     const { provider, workspaceRuntimeService } = makeProvider();
     startProvider(provider);
