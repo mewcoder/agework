@@ -60,6 +60,8 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 
 ## 后端约定
 
+> 后端模块架构**完整规范**见 [`.claude/rules/backend-architecture.md`](.claude/rules/backend-architecture.md)（权威详版：文件骨架、模块边界、依赖与事件纪律、数据访问、「不要做」清单等）。以下为要点摘要。
+
 - 新功能按 NestJS Feature Module 组织：`*.module.ts`、`*.controller.ts`、`*.service.ts`。
 - `apps/api/src/app.module.ts` 只负责组合 feature module。
 - Controller 处理 HTTP 输入输出，业务逻辑放 Service。
@@ -70,10 +72,8 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 
 ### 模块组织与封装
 
-- 后端模块按业务领域组织，不按数据库表；模块外只能调用该领域公开 Service 和公开类型，不穿透 Repository、helper、internal、provider、execution、events 等内部文件；Service 是该领域对外唯一入口。
-- 模块依赖必须按架构定义保持单向；上层调用下层，下层不得反向注入或直接调用上层 Service；需要反向通知时用 domain event、回调端口或注册表解耦，避免 God Service 和循环依赖。
-- 辅助逻辑跟着它修改/拥有的数据走：默认合并进 owner Service 的 private method；数据库读写细节进 Repository，跨边界类型进公开 `*.types.ts` 或 shared contract；禁止为了“分层好看”制造无意义层级。
-- 是否抽成独立文件/目录看独立变化原因，不看行数；能起出清晰领域概念名才抽成同目录带领域名前缀的内部文件，起不出名就留在 private method；默认子目录最多一层，大领域确有稳定子能力时才加深。
+- 要点：模块按业务领域组织、Service 是领域唯一对外入口、依赖单向、辅助逻辑跟数据走、不为分层造层级。
+- **完整规则(模块边界、依赖与事件纪律、文件骨架、子文件夹 vs 平级 module、「不要做」清单)见 [`.claude/rules/backend-architecture.md`](.claude/rules/backend-architecture.md)。**
 
 ## 测试约定
 
