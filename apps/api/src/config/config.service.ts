@@ -161,10 +161,6 @@ export class ConfigService implements OnModuleInit {
     return dir;
   }
 
-  getJwtSecret(): string {
-    return getJwtSecret();
-  }
-
   getPort(): number {
     return getPort();
   }
@@ -232,10 +228,6 @@ export class ConfigService implements OnModuleInit {
     const explicit = this.getEnv(EnvKey.SANDBOX_ENGINE);
     if (explicit === "docker" || explicit === "opensandbox") return explicit;
     return DEFAULT_SANDBOX_ENGINE;
-  }
-
-  getIsolationScope(): IsolationScope {
-    return this.getDefaultIsolationScope();
   }
 
   getRuntimeLogDir(): string {

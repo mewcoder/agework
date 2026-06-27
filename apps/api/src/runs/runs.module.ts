@@ -7,6 +7,7 @@ import { WorkerEventsService } from "./worker-events/worker-events.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunService } from "./run.service";
+import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { ExecutionService } from "./execution/execution.service";
 import {
   RUN_EXECUTORS,
@@ -49,6 +50,7 @@ import { RunEventsModule } from "../run-events/run-events.module";
     LiveRunRegistry,
     WorkerEventsService,
     RunRecoveryService,
+    RunConversationEffects,
     RunStatusService,
     RunService,
     LocalRunExecutor,
@@ -63,12 +65,12 @@ import { RunEventsModule } from "../run-events/run-events.module";
     WorkerRunEventRecorder,
     WorkerAgUiEventHandler,
   ],
-  exports: [RunService, RunRepository],
+  exports: [RunService],
 })
 export class RunsModule implements OnModuleInit {
   constructor(
     private readonly runRecovery: RunRecoveryService,
-    private readonly runExecutors: RunExecutorRegistry,
+    private readonly executionService: ExecutionService,
     private readonly commandQueue: WorkerCommandQueue,
     private readonly workerUpstream: WorkerUpstreamRegistry,
     private readonly liveRuns: LiveRunRegistry,
@@ -76,10 +78,10 @@ export class RunsModule implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.runExecutors.setRunEventReceiver(this.workerEvents);
+    this.executionService.setRunEventReceiver(this.workerEvents);
     this.commandQueue.setCommandSentRecorder(this.workerEvents);
     this.workerUpstream.setReceiver(this.workerEvents);
     this.liveRuns.setTimeoutErrorSink(this.workerEvents);
-    await this.runRecovery.recoverOrphanRuns();
+    await this.runRecovery.recoverInterruptedRuns();
   }
 }

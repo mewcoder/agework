@@ -127,11 +127,14 @@ export class SandboxRunExecutor implements RunExecutor {
     return this.states.get(runId)?.handle;
   }
 
-  recoverOrphanExecution(runtimeInstanceId: string): Promise<void> {
+  cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
     return this.runtimeInstances.recoverOrphan(runtimeInstanceId);
   }
 
-  terminateExecution(runId: string): void {
+  terminateExecution(runId: string, reason: string): void {
+    this.logger.warn(
+      `terminating sandbox run session ${safeLogJson({ runId, reason })}`
+    );
     this.cleanup(runId);
   }
 
@@ -208,8 +211,6 @@ export class SandboxRunExecutor implements RunExecutor {
           .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
       cleanupByOwnerId: (ownerId) =>
         this.cleanupByOwnerId(ownerId),
-      registerRuntimeInstanceAccess: (runtimeInstanceId, ownerId) =>
-        this.access.issueRuntimeInstanceKey(runtimeInstanceId, ownerId),
     };
   }
 }

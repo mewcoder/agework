@@ -247,11 +247,11 @@ describe("LocalRunExecutor", () => {
     expect(childProcessMock.child.send).toHaveBeenCalledTimes(1);
   });
 
-  describe("recoverOrphanExecution()", () => {
+  describe("cleanupInterruptedExecution()", () => {
     it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
-      await provider.recoverOrphanExecution("12345:some-token");
+      await provider.cleanupInterruptedExecution("12345:some-token");
 
       expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
     });
@@ -259,7 +259,7 @@ describe("LocalRunExecutor", () => {
     it("does nothing for a malformed runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
 
-      await provider.recoverOrphanExecution("not-a-valid-runtime-id");
+      await provider.cleanupInterruptedExecution("not-a-valid-runtime-id");
 
       expect(killSpy).not.toHaveBeenCalled();
     });
@@ -270,7 +270,7 @@ describe("LocalRunExecutor", () => {
       });
 
       await expect(
-        provider.recoverOrphanExecution("12345:some-token")
+        provider.cleanupInterruptedExecution("12345:some-token")
       ).resolves.toBeUndefined();
     });
   });

@@ -32,10 +32,6 @@ export class RunExecutorRegistry {
     return executor;
   }
 
-  all(): RunExecutor[] {
-    return [...this.executors.values()];
-  }
-
   setRunEventReceiver(receiver: RunEventReceiver): void {
     for (const executor of this.executors.values()) {
       executor.setRunEventReceiver(receiver);

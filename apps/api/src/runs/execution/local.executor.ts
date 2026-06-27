@@ -246,7 +246,7 @@ export class LocalRunExecutor implements RunExecutor {
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
-  async recoverOrphanExecution(runtimeInstanceId: string): Promise<void> {
+  async cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
     const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
     if (!Number.isInteger(pid)) return;

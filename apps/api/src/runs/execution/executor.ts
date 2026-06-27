@@ -21,8 +21,8 @@ export interface RunExecutor {
   /** 强制终止单次 run 的执行会话；不得停止可复用 runtime resource。 */
   terminateExecution?(runId: string, reason: string): void;
   cleanup(runId: string): void;
-  /** 服务重启后清理孤儿 execution（如 local worker pid / sandbox run session）。 */
-  recoverOrphanExecution?(runtimeInstanceId: string): Promise<void>;
+  /** 服务重启后清理中断执行的残留（如 local worker pid / sandbox runtime resource）。 */
+  cleanupInterruptedExecution?(runtimeInstanceId: string): Promise<void>;
 }
 
 export interface RunEventReceiver {

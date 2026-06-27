@@ -16,12 +16,14 @@ function makeExecutor() {
     cancel: vi.fn(),
     terminateExecution: vi.fn(),
     cleanup: vi.fn(),
+    cleanupInterruptedExecution: vi.fn(),
   };
 }
 
 function makeRegistry(executor: ReturnType<typeof makeExecutor>) {
   return {
     resolve: vi.fn().mockReturnValue(executor),
+    setRunEventReceiver: vi.fn(),
   } as unknown as RunExecutorRegistry;
 }
 
@@ -89,5 +91,28 @@ describe("ExecutionService", () => {
       "run timeout"
     );
     expect(executor.cleanup).toHaveBeenCalledWith("run-1");
+  });
+
+  it("cleans up interrupted execution by runtimeType without exposing the registry to callers", async () => {
+    const executor = makeExecutor();
+    executor.cleanupInterruptedExecution.mockResolvedValue(undefined);
+    const registry = makeRegistry(executor);
+    const service = new ExecutionService(registry);
+
+    await service.cleanupInterruptedExecution("local", "runtime-1");
+
+    expect(registry.resolve).toHaveBeenCalledWith("local");
+    expect(executor.cleanupInterruptedExecution).toHaveBeenCalledWith("runtime-1");
+  });
+
+  it("wires the run event receiver through the registry during module setup", () => {
+    const executor = makeExecutor();
+    const registry = makeRegistry(executor);
+    const service = new ExecutionService(registry);
+    const receiver = {} as never;
+
+    service.setRunEventReceiver(receiver);
+
+    expect(registry.setRunEventReceiver).toHaveBeenCalledWith(receiver);
   });
 });

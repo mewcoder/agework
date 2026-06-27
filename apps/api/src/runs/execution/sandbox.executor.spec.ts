@@ -47,7 +47,6 @@ function makeProvider(engineOverride?: SandboxEngine) {
   const configStore = { register: vi.fn(), unregister: vi.fn() };
   const access = {
     issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
-    issueRuntimeInstanceKey: vi.fn().mockReturnValue("resource-key"),
     registerRun: vi.fn(),
     revokeOwner: vi.fn(),
     revokeAccess: vi.fn(),
@@ -395,7 +394,7 @@ describe("SandboxRunExecutor — workspace scope", () => {
   });
 
   it("upserts WorkspaceRuntime after sandbox creation", async () => {
-    const { provider, workspaceRuntimeService, access } = makeProvider();
+    const { provider, workspaceRuntimeService } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
@@ -403,10 +402,6 @@ describe("SandboxRunExecutor — workspace scope", () => {
       expect.objectContaining({ runtimeType: "sandbox" }),
       expect.any(String),
       expect.any(String)
-    );
-    expect(access.issueRuntimeInstanceKey).toHaveBeenCalledWith(
-      "docker-resource-1",
-      "ws-1"
     );
   });
 });
@@ -628,12 +623,12 @@ describe("SandboxRunExecutor — idle stop", () => {
   });
 });
 
-// ── recoverOrphan tests ──────────────────────────────────────────────
+// ── interrupted execution cleanup tests ──────────────────────────────
 
-describe("SandboxRunExecutor.recoverOrphanExecution", () => {
-  it("delegates to engine.recoverOrphan", async () => {
+describe("SandboxRunExecutor.cleanupInterruptedExecution", () => {
+  it("delegates runtime resource cleanup to the sandbox engine", async () => {
     const { provider, engine } = makeProvider();
-    await provider.recoverOrphanExecution("resource-abc");
+    await provider.cleanupInterruptedExecution("resource-abc");
     expect(engine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
   });
 });
