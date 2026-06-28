@@ -80,7 +80,9 @@ describe("ResponseInterceptor", () => {
       lastValueFrom(interceptor.intercept(makeContext(), makeCallHandler(0)))
     ).resolves.toEqual({ code: 0, data: 0, message: "ok" });
     await expect(
-      lastValueFrom(interceptor.intercept(makeContext(), makeCallHandler(false)))
+      lastValueFrom(
+        interceptor.intercept(makeContext(), makeCallHandler(false))
+      )
     ).resolves.toEqual({ code: 0, data: false, message: "ok" });
     await expect(
       lastValueFrom(interceptor.intercept(makeContext(), makeCallHandler("")))

@@ -81,8 +81,7 @@ export function getJwtSecret(): string {
     throw new Error("生产环境必须配置安全的 AGEWORK_PRIVATE_JWT_SECRET");
   }
   if (secret) return secret;
-  if (process.env[EnvKey.DEV_AUTH_DISABLED] === "true")
-    return DEV_JWT_SECRET;
+  if (process.env[EnvKey.DEV_AUTH_DISABLED] === "true") return DEV_JWT_SECRET;
   throw new Error(
     "未配置 AGEWORK_PRIVATE_JWT_SECRET：登录验证已启用时必须设置 AGEWORK_PRIVATE_JWT_SECRET（或设置 AGEWORK_DEV_AUTH_DISABLED=true 仅用于开发）"
   );
@@ -92,8 +91,14 @@ export type IsolationScope = "user" | "workspace";
 export type RuntimeType = "local" | "sandbox";
 export type SandboxEngineType = "docker" | "opensandbox";
 
-const RUNTIME_TYPES = ["local", "sandbox"] as const satisfies readonly RuntimeType[];
-const ISOLATION_SCOPES = ["user", "workspace"] as const satisfies readonly IsolationScope[];
+const RUNTIME_TYPES = [
+  "local",
+  "sandbox",
+] as const satisfies readonly RuntimeType[];
+const ISOLATION_SCOPES = [
+  "user",
+  "workspace",
+] as const satisfies readonly IsolationScope[];
 
 function isRuntimeType(value: string): value is RuntimeType {
   return (RUNTIME_TYPES as readonly string[]).includes(value);
@@ -210,7 +215,10 @@ export class ConfigService implements OnModuleInit {
   getAllowedRuntimeTypes(): RuntimeType[] {
     const raw = this.getEnv(EnvKey.RUNTIME_ALLOWED_TYPES);
     const values = raw
-      ? raw.split(",").map((value) => value.trim()).filter(Boolean)
+      ? raw
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
       : [...DEFAULT_ALLOWED_RUNTIME_TYPES];
 
     if (values.length === 0 || values.some((value) => !isRuntimeType(value))) {
@@ -227,13 +235,19 @@ export class ConfigService implements OnModuleInit {
   }
 
   isRuntimeTypeAllowed(runtimeType: string): runtimeType is RuntimeType {
-    return isRuntimeType(runtimeType) && this.getAllowedRuntimeTypes().includes(runtimeType);
+    return (
+      isRuntimeType(runtimeType) &&
+      this.getAllowedRuntimeTypes().includes(runtimeType)
+    );
   }
 
   getAllowedIsolationScopes(): IsolationScope[] {
     const raw = this.getEnv(EnvKey.RUNTIME_ALLOWED_ISOLATION_SCOPES);
     const values = raw
-      ? raw.split(",").map((value) => value.trim()).filter(Boolean)
+      ? raw
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean)
       : [...DEFAULT_ALLOWED_ISOLATION_SCOPES];
 
     if (

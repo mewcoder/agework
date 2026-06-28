@@ -55,7 +55,7 @@ function readPackageJson(path: string): PackageJson | undefined {
 
 function findNamedPackageJson(
   candidates: string[],
-  packageName: string,
+  packageName: string
 ): PackageJson | undefined {
   for (const candidate of candidates) {
     const packageJson = readPackageJson(candidate);
@@ -66,7 +66,7 @@ function findNamedPackageJson(
 
 function resolveInstalledPackageVersion(
   packageName: string,
-  fallback?: string,
+  fallback?: string
 ) {
   try {
     let current = dirname(requireFromHere.resolve(packageName));
@@ -98,7 +98,7 @@ export class SystemService {
       join(process.cwd(), "..", "..", "package.json"),
       join(process.cwd(), "package.json"),
     ],
-    "agework",
+    "agework"
   );
 
   private readonly apiPackage = findNamedPackageJson(
@@ -106,7 +106,7 @@ export class SystemService {
       join(process.cwd(), "package.json"),
       join(process.cwd(), "apps", "api", "package.json"),
     ],
-    "api",
+    "api"
   );
 
   about(): AboutInfo {
@@ -125,7 +125,7 @@ export class SystemService {
           name: sdk.name,
           version: resolveInstalledPackageVersion(
             sdk.packageName,
-            dependencies[sdk.packageName],
+            dependencies[sdk.packageName]
           ),
         };
       }),

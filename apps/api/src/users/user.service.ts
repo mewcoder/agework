@@ -54,7 +54,10 @@ export class UserService {
     private events: EventEmitter2
   ) {}
 
-  async list(operator: UserSession, pagination?: { take: number; skip: number }) {
+  async list(
+    operator: UserSession,
+    pagination?: { take: number; skip: number }
+  ) {
     const { list, total } = await this.users.list({
       includeAllRoles: operator.role === "super_admin",
       take: pagination?.take,
@@ -214,9 +217,8 @@ export class UserService {
       throw new BadRequestException("系统已初始化");
     }
 
-    const existing = await this.users.findSuperAdminByUsername(
-      SUPER_ADMIN_USERNAME
-    );
+    const existing =
+      await this.users.findSuperAdminByUsername(SUPER_ADMIN_USERNAME);
     if (existing) {
       throw new BadRequestException(
         existing.deletedAt
@@ -251,9 +253,8 @@ export class UserService {
   }
 
   async ensureDevSuperAdmin(): Promise<void> {
-    const existing = await this.users.findSuperAdminByUsername(
-      SUPER_ADMIN_USERNAME
-    );
+    const existing =
+      await this.users.findSuperAdminByUsername(SUPER_ADMIN_USERNAME);
 
     if (existing?.deletedAt) {
       throw new Error(
@@ -377,9 +378,8 @@ export class UserService {
   }
 
   async findDevSuperAdminSessionUser(): Promise<UserSession | null> {
-    const user = await this.users.findDevSuperAdminSessionUser(
-      SUPER_ADMIN_USERNAME
-    );
+    const user =
+      await this.users.findDevSuperAdminSessionUser(SUPER_ADMIN_USERNAME);
     return user ? this.toUserSession(user) : null;
   }
 

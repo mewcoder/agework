@@ -130,9 +130,7 @@ describe("LocalRunExecutor", () => {
         runtimeTarget: makeRuntimeTarget({ runtimeType: "sandbox" }),
         runConfig: makeRunConfig(),
       })
-    ).toThrow(
-      "LocalRunExecutor cannot start worker for runtime type: sandbox"
-    );
+    ).toThrow("LocalRunExecutor cannot start worker for runtime type: sandbox");
     expect(childProcessMock.fork).not.toHaveBeenCalled();
   });
 

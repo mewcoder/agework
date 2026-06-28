@@ -14,10 +14,7 @@ export class ConversationController {
   constructor(private conversationService: ConversationService) {}
 
   @Get("list")
-  list(
-    @CurrentUser() user: JwtUser,
-    @Query() query: ConversationListQueryDto
-  ) {
+  list(@CurrentUser() user: JwtUser, @Query() query: ConversationListQueryDto) {
     return this.conversationService.list(
       user.userId,
       query.after,
@@ -34,7 +31,7 @@ export class ConversationController {
     return this.conversationService.search(
       user.userId,
       query.q,
-      query.limit ?? 20,
+      query.limit ?? 20
     );
   }
 
@@ -45,7 +42,7 @@ export class ConversationController {
       body.workspaceId,
       body.firstMessage,
       body.agentType,
-      body.title,
+      body.title
     );
   }
 

@@ -3,7 +3,12 @@ const API_PATH = "/api/v1";
 export function normalizePath(value: string | undefined): string {
   const trimmed = value?.trim();
 
-  if (!trimmed || trimmed === "." || trimmed === "./" || /^\/+$/.test(trimmed)) {
+  if (
+    !trimmed ||
+    trimmed === "." ||
+    trimmed === "./" ||
+    /^\/+$/.test(trimmed)
+  ) {
     return "";
   }
 

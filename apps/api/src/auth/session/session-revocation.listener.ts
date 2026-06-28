@@ -21,11 +21,7 @@ export class SessionRevocationListener {
 
   constructor(private readonly sessions: SessionService) {}
 
-  @OnEvent([
-    USER_DELETED_EVENT,
-    USER_DISABLED_EVENT,
-    USER_PASSWORD_RESET_EVENT,
-  ])
+  @OnEvent([USER_DELETED_EVENT, USER_DISABLED_EVENT, USER_PASSWORD_RESET_EVENT])
   async onSessionsShouldRevoke({
     userId,
   }:

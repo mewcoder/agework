@@ -72,17 +72,19 @@ export class WorkspaceRuntimeInstanceRepository {
               ...data,
             },
           });
-      const workspaceRuntimeInstance = await tx.workspaceRuntimeInstance.upsert({
-        where: { workspaceId: placement.workspaceId },
-        create: {
-          id: generateId(),
-          workspaceId: placement.workspaceId,
-          resourceId: resource.id,
-        },
-        update: {
-          resourceId: resource.id,
-        },
-      });
+      const workspaceRuntimeInstance = await tx.workspaceRuntimeInstance.upsert(
+        {
+          where: { workspaceId: placement.workspaceId },
+          create: {
+            id: generateId(),
+            workspaceId: placement.workspaceId,
+            resourceId: resource.id,
+          },
+          update: {
+            resourceId: resource.id,
+          },
+        }
+      );
       return { resource, workspaceRuntimeInstance };
     });
   }
@@ -178,7 +180,9 @@ export class WorkspaceRuntimeInstanceRepository {
   }
 
   findAllRunning() {
-    return this.prisma.runtimeInstance.findMany({ where: { status: "running" } });
+    return this.prisma.runtimeInstance.findMany({
+      where: { status: "running" },
+    });
   }
 
   findByRuntimeId(runtimeType: string, runtimeInstanceId: string) {

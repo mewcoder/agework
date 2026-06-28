@@ -1,5 +1,8 @@
 import { IsNotEmpty, IsString } from "class-validator";
-import type { UpdateModelProviderRequest, ProviderConfig } from "@agework/shared/api";
+import type {
+  UpdateModelProviderRequest,
+  ProviderConfig,
+} from "@agework/shared/api";
 import { IsValidProviderConfig } from "./is-valid-provider-config.validator";
 
 export class UpdateModelProviderDto implements UpdateModelProviderRequest {

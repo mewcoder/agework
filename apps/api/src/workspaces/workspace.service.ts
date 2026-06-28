@@ -52,7 +52,9 @@ function gitClone(gitUrl: string, rootPath: string): Promise<void> {
 
     const timer = setTimeout(() => {
       proc.kill("SIGKILL");
-      reject(new Error(`git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s`));
+      reject(
+        new Error(`git clone timed out after ${GIT_CLONE_TIMEOUT_MS / 1000}s`)
+      );
     }, GIT_CLONE_TIMEOUT_MS);
 
     proc.on("close", (code) => {
@@ -114,8 +116,7 @@ export class WorkspaceService {
 
   capabilities() {
     const allowedRuntimeTypes = this.config.getAllowedRuntimeTypes();
-    const allowedIsolationScopes =
-      this.config.getAllowedIsolationScopes();
+    const allowedIsolationScopes = this.config.getAllowedIsolationScopes();
     const runtimeType = this.config.getDefaultRuntimeType();
     const isolationScope = this.config.getDefaultIsolationScope();
     const canSelectLocalDirectory =
@@ -179,7 +180,9 @@ export class WorkspaceService {
     } catch (err: unknown) {
       // 清理失败时残留的部分目录（如 git clone 超时后的不完整仓库）
       if (ownsDirectory) {
-        try { rmSync(rootPath, { recursive: true, force: true }); } catch {}
+        try {
+          rmSync(rootPath, { recursive: true, force: true });
+        } catch {}
       }
       const msg = err instanceof Error ? err.message : String(err);
       throw new InternalServerErrorException(
@@ -223,11 +226,7 @@ export class WorkspaceService {
     return this.toWorkspaceDto(updated);
   }
 
-  async updateAny(
-    id: string,
-    name: string,
-    description?: string | null
-  ) {
+  async updateAny(id: string, name: string, description?: string | null) {
     const patch = this.normalizePatch(name, description);
     const updated = await this.repo.updateById(id, patch);
     if (!updated) throw new NotFoundException(`Workspace ${id} not found`);
@@ -259,7 +258,11 @@ export class WorkspaceService {
 
   private toWorkspaceDto<
     T extends {
-      directory?: { rootPath: string; status: string; source?: string | null } | null;
+      directory?: {
+        rootPath: string;
+        status: string;
+        source?: string | null;
+      } | null;
       runtimeType?: string | null;
       isolationScope?: string | null;
       sandboxEngine?: string | null;
@@ -276,7 +279,8 @@ export class WorkspaceService {
         `Workspace ${(rest as { id?: string }).id ?? "unknown"} has no directory binding`
       );
     }
-    const runtimeType = storedRuntimeType ?? this.config.getDefaultRuntimeType();
+    const runtimeType =
+      storedRuntimeType ?? this.config.getDefaultRuntimeType();
     const workspaceIsolationScope =
       runtimeType === "sandbox"
         ? this.resolveStoredIsolationScope(storedIsolationScope)
@@ -403,7 +407,9 @@ export class WorkspaceService {
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {
     const value = runtimeType?.trim() || this.config.getDefaultRuntimeType();
     if (!this.config.isRuntimeTypeAllowed(value)) {
-      throw new BadRequestException(`当前部署不支持该工作空间运行环境: ${value}`);
+      throw new BadRequestException(
+        `当前部署不支持该工作空间运行环境: ${value}`
+      );
     }
     return value;
   }
@@ -414,7 +420,8 @@ export class WorkspaceService {
   ): SandboxEngineType | null {
     const value = sandboxEngine?.trim();
     if (runtimeType !== "sandbox") {
-      if (value) throw new BadRequestException("本地工作空间不能设置 sandboxEngine");
+      if (value)
+        throw new BadRequestException("本地工作空间不能设置 sandboxEngine");
       return null;
     }
     if (!value) return this.config.getSandboxEngine();
@@ -448,7 +455,9 @@ export class WorkspaceService {
 
     const resolved = value || this.config.getDefaultIsolationScope();
     if (!this.config.isIsolationScopeAllowed(resolved)) {
-      throw new BadRequestException(`当前部署不支持该沙箱隔离级别: ${resolved}`);
+      throw new BadRequestException(
+        `当前部署不支持该沙箱隔离级别: ${resolved}`
+      );
     }
     if (hasCustomRootPath && resolved !== "workspace") {
       throw new BadRequestException(
@@ -476,8 +485,10 @@ export class WorkspaceService {
     runtimeType: RuntimeType,
     isolationScope: IsolationScope | null
   ) {
-    return runtimeType === "local" ||
-      (runtimeType === "sandbox" && isolationScope === "workspace");
+    return (
+      runtimeType === "local" ||
+      (runtimeType === "sandbox" && isolationScope === "workspace")
+    );
   }
 }
 

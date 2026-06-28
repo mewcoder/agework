@@ -83,8 +83,7 @@ export class JwtAuthGuard implements CanActivate {
     // 去掉 query string，只匹配路径部分
     const path = fullPath.split("?")[0];
     return (
-      path.endsWith("/auth/query") ||
-      path.endsWith("/auth/update-password")
+      path.endsWith("/auth/query") || path.endsWith("/auth/update-password")
     );
   }
 }

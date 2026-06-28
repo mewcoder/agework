@@ -36,7 +36,7 @@ function extractText(content: unknown): string {
   }
   // assistant-ui 消息：{ id, role, content: [...] }，递归提取其 content 字段
   if (content !== null && typeof content === "object" && "content" in content) {
-    return extractText((content as { content: unknown }).content);
+    return extractText(content.content);
   }
   return "";
 }
@@ -114,7 +114,7 @@ export class ConversationService {
   async search(
     userId: string,
     query: string,
-    limit = 20,
+    limit = 20
   ): Promise<ConversationSearchResponse> {
     const trimmed = query.trim();
     if (!trimmed) return { list: [] };
@@ -196,7 +196,7 @@ export class ConversationService {
     text: string,
     matchIndex: number,
     matchLength: number,
-    radius = 40,
+    radius = 40
   ): string {
     const start = Math.max(0, matchIndex - radius);
     const end = Math.min(text.length, matchIndex + matchLength + radius);
@@ -210,15 +210,14 @@ export class ConversationService {
     workspaceId: string,
     firstMessage?: string,
     agentType?: string,
-    title?: string,
+    title?: string
   ) {
     if (!workspaceId) throw new BadRequestException("workspaceId is required");
     const workspace = await this.repo.findOwnedWorkspace(userId, workspaceId);
     if (!workspace)
       throw new BadRequestException(`Workspace ${workspaceId} not found`);
     const resolvedAgentType = this.resolveAgentType(agentType);
-    const resolvedTitle =
-      title ?? (firstMessage?.slice(0, 10) || undefined);
+    const resolvedTitle = title ?? (firstMessage?.slice(0, 10) || undefined);
     const conversation = await this.repo.create({
       id: generateId(),
       workspaceId,

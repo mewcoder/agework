@@ -31,9 +31,7 @@ export class AuthService {
       authRequired,
       appName: this.configService.getAppName(),
       registrationMode: "approval",
-      setupRequired: authRequired
-        ? await this.users.isSetupRequired()
-        : false,
+      setupRequired: authRequired ? await this.users.isSetupRequired() : false,
     };
   }
 

@@ -18,7 +18,11 @@ describe("AdminRunController", () => {
   describe("listAdmin()", () => {
     it("passes pagination and status filter to the run service", async () => {
       const { controller, runService } = makeController();
-      await controller.listAdmin({ status: "running", pageNo: 2, pageSize: 25 });
+      await controller.listAdmin({
+        status: "running",
+        pageNo: 2,
+        pageSize: 25,
+      });
       expect(runService.listAdminRuns).toHaveBeenCalledWith({
         status: "running",
         take: 25,

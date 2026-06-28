@@ -212,10 +212,7 @@ describe("SandboxRuntimeInstanceService", () => {
     service.retainOwnerRun(context.ownerId);
     const callbacks = makeCallbacks();
 
-    service.attachOrStartRuntimeInstance(
-      { context, ownerState },
-      callbacks
-    );
+    service.attachOrStartRuntimeInstance({ context, ownerState }, callbacks);
     resolveGetOrCreate!({
       engineType: "docker",
       runtimeInstanceId: "docker-resource-1",

@@ -56,7 +56,11 @@ describe("ConversationService", () => {
 
     expect(repo.findByOwner).toHaveBeenCalledWith(
       mockUserId,
-      expect.objectContaining({ status: "regular", sortKey: "updatedAt", take: 50 })
+      expect.objectContaining({
+        status: "regular",
+        sortKey: "updatedAt",
+        take: 50,
+      })
     );
     expect(result.list).toEqual([
       {
@@ -126,7 +130,10 @@ describe("ConversationService", () => {
         },
       ]),
     });
-    const service = new ConversationService(repo as never, titleService as never);
+    const service = new ConversationService(
+      repo as never,
+      titleService as never
+    );
 
     await service.generateTitleIfNeeded({
       conversationId: "conversation-1",
@@ -139,7 +146,10 @@ describe("ConversationService", () => {
       modelProviderId: "mp-1",
       userText: "帮我重构参数校验",
     });
-    expect(repo.updateTitle).toHaveBeenCalledWith("conversation-1", "重构参数校验");
+    expect(repo.updateTitle).toHaveBeenCalledWith(
+      "conversation-1",
+      "重构参数校验"
+    );
   });
 
   it("skips AI title generation after multiple stored user messages", async () => {
@@ -147,13 +157,18 @@ describe("ConversationService", () => {
       generateTitle: vi.fn().mockResolvedValue("不会生成"),
     };
     const repo = makeRepo({
-      findContentsByConversation: vi.fn().mockResolvedValue([
-        { content: { role: "user", content: "first" } },
-        { content: { role: "assistant", content: "reply" } },
-        { content: { role: "user", content: "second" } },
-      ]),
+      findContentsByConversation: vi
+        .fn()
+        .mockResolvedValue([
+          { content: { role: "user", content: "first" } },
+          { content: { role: "assistant", content: "reply" } },
+          { content: { role: "user", content: "second" } },
+        ]),
     });
-    const service = new ConversationService(repo as never, titleService as never);
+    const service = new ConversationService(
+      repo as never,
+      titleService as never
+    );
 
     await service.generateTitleIfNeeded({
       conversationId: "conversation-1",
@@ -257,7 +272,9 @@ describe("ConversationService", () => {
       const repo = makeRepo({
         findRegularByOwner: vi
           .fn()
-          .mockResolvedValue([makeConversation({ id: "c-msg", title: "untitled" })]),
+          .mockResolvedValue([
+            makeConversation({ id: "c-msg", title: "untitled" }),
+          ]),
         findMessagesForConversations: vi.fn().mockResolvedValue([
           {
             id: "m-1",
@@ -278,7 +295,9 @@ describe("ConversationService", () => {
 
       expect(result.list).toHaveLength(1);
       expect(result.list[0].matchedField).toBe("message");
-      expect(result.list[0].matchedSnippet.toLowerCase()).toContain("production");
+      expect(result.list[0].matchedSnippet.toLowerCase()).toContain(
+        "production"
+      );
     });
 
     it("clamps the conversation fetch window", async () => {
@@ -295,7 +314,9 @@ describe("ConversationService", () => {
       const repo = makeRepo({
         findRegularByOwner: vi
           .fn()
-          .mockResolvedValue([makeConversation({ id: "c-snip", title: longTitle })]),
+          .mockResolvedValue([
+            makeConversation({ id: "c-snip", title: longTitle }),
+          ]),
       });
       const service = new ConversationService(repo as never);
 
@@ -330,9 +351,12 @@ describe("ConversationService", () => {
         const repo = makeRepo();
         const service = new ConversationService(repo as never);
 
-        await (service as unknown as Record<string, (a: string, b: string) => Promise<void>>)[
-          method
-        ](mockUserId, "conv-x");
+        await (
+          service as unknown as Record<
+            string,
+            (a: string, b: string) => Promise<void>
+          >
+        )[method](mockUserId, "conv-x");
 
         expect(repo[repoMethod]).toHaveBeenCalledWith(mockUserId, "conv-x");
       }

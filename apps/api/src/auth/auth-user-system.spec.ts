@@ -418,9 +418,10 @@ describe("auth and user management security flows", () => {
   it("converts a concurrent super-admin creation race into 系统已初始化", async () => {
     const { auth } = makeServices();
     // 模拟两个请求都通过 isSetupRequired 后，另一个先一步落库（P2002 -> null）
-    vi.spyOn(UserRepository.prototype, "createSuperAdmin").mockResolvedValueOnce(
-      null
-    );
+    vi.spyOn(
+      UserRepository.prototype,
+      "createSuperAdmin"
+    ).mockResolvedValueOnce(null);
     await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
       "系统已初始化"
     );
@@ -571,8 +572,16 @@ describe("auth and user management security flows", () => {
       password: string;
       reason: string;
     }> = [
-      { username: "ghost_user", password: "Whatever123", reason: "user_not_found" },
-      { username: "active_user", password: "WrongPass999", reason: "bad_password" },
+      {
+        username: "ghost_user",
+        password: "Whatever123",
+        reason: "user_not_found",
+      },
+      {
+        username: "active_user",
+        password: "WrongPass999",
+        reason: "bad_password",
+      },
       {
         username: "pending_user",
         password: "PendingPass123",

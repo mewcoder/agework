@@ -18,9 +18,7 @@ export function OptionalStringArrayQuery() {
     if (values.some((item) => typeof item !== "string")) {
       return value;
     }
-    const items = values.flatMap((item) =>
-      item.split(",")
-    );
+    const items = values.flatMap((item) => item.split(","));
     const normalized = items
       .filter((item): item is string => typeof item === "string")
       .map((item) => item.trim())

@@ -89,7 +89,7 @@ export class OpenSandboxClient implements OpenSandboxClientLike {
     try {
       const sandbox = await Sandbox.connect({
         connectionConfig: this.connectionConfig.withTransportIfMissing(),
-        sandboxId: id as any,
+        sandboxId: id,
         skipHealthCheck: true,
       });
       const info = await sandbox.getInfo();
@@ -110,7 +110,7 @@ export class OpenSandboxClient implements OpenSandboxClientLike {
   async resumeSandbox(id: string): Promise<OpenSandboxSandboxLike> {
     const sandbox = await Sandbox.resume({
       connectionConfig: this.connectionConfig,
-      sandboxId: id as any,
+      sandboxId: id,
       skipHealthCheck: false,
     });
     return new OpenSandboxSandboxAdapter(sandbox);
@@ -145,7 +145,7 @@ export class OpenSandboxSandboxAdapter implements OpenSandboxSandboxLike {
   constructor(private readonly sandbox: Sandbox) {}
 
   get id(): string {
-    return this.sandbox.id as unknown as string;
+    return this.sandbox.id;
   }
 
   async runCommand(

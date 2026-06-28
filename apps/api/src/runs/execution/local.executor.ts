@@ -20,10 +20,7 @@ import {
   rpcResponseToCommandResultMessage,
   runConfigMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import type {
-  RunEventReceiver,
-  RunExecutor,
-} from "./executor";
+import type { RunEventReceiver, RunExecutor } from "./executor";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -160,7 +157,9 @@ export class LocalRunExecutor implements RunExecutor {
       this.logger.debug(`[worker:${runId}] ${data.toString().trimEnd()}`);
     });
     child.stderr?.on("data", (data: Buffer) => {
-      this.logger.debug(`[worker:${runId}:stderr] ${data.toString().trimEnd()}`);
+      this.logger.debug(
+        `[worker:${runId}:stderr] ${data.toString().trimEnd()}`
+      );
     });
 
     return handle;
@@ -204,7 +203,12 @@ export class LocalRunExecutor implements RunExecutor {
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    this.sendCommand(handle, { type: "cancel", commandId: generateId(), runId: handle.runId, conversationId: handle.conversationId });
+    this.sendCommand(handle, {
+      type: "cancel",
+      commandId: generateId(),
+      runId: handle.runId,
+      conversationId: handle.conversationId,
+    });
   }
 
   /** Run 终态后清理，幂等。 */
@@ -262,10 +266,7 @@ function normalizeWorkerIpcMessage(
     return rpcNotificationToUpstreamMessage(message);
   }
   if (isWorkerCommandResultRpcResponse(message)) {
-    return rpcResponseToCommandResultMessage(
-      message as RpcResponse<WorkerCommandResult>,
-      { runId: fallbackRunId }
-    );
+    return rpcResponseToCommandResultMessage(message, { runId: fallbackRunId });
   }
   return undefined;
 }

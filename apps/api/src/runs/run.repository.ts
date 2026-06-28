@@ -233,7 +233,8 @@ export class RunRepository {
       : null;
     const runtimeInstance = runtimeInstanceRecord
       ? (() => {
-          const { workspaceRuntimeInstances, ...resource } = runtimeInstanceRecord;
+          const { workspaceRuntimeInstances, ...resource } =
+            runtimeInstanceRecord;
           return {
             ...resource,
             workspaceRuntimes: workspaceRuntimeInstances,

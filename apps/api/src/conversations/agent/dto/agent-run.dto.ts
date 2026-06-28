@@ -32,9 +32,7 @@ function stringField(value: unknown, key: string): string | undefined {
 }
 
 @ValidatorConstraint({ name: "agentRunForwardedProps", async: false })
-class AgentRunForwardedPropsConstraint
-  implements ValidatorConstraintInterface
-{
+class AgentRunForwardedPropsConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     const agentType = stringField(value, "agentType");
     const modelProviderId = stringField(value, "modelProviderId");
@@ -46,9 +44,7 @@ class AgentRunForwardedPropsConstraint
     if (agentType && !isAgentType(agentType)) {
       return `forwardedProps.agentType must be one of: ${AGENT_TYPES.join(", ")}`;
     }
-    return (
-      "forwardedProps.agentType and forwardedProps.modelProviderId are required"
-    );
+    return "forwardedProps.agentType and forwardedProps.modelProviderId are required";
   }
 }
 

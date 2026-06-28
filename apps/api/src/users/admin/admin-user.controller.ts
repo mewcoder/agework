@@ -15,10 +15,7 @@ export class AdminUserController {
   constructor(private usersService: UserService) {}
 
   @Get("list")
-  list(
-    @CurrentUser() user: JwtUser,
-    @Query() query: AdminUserListQueryDto,
-  ) {
+  list(@CurrentUser() user: JwtUser, @Query() query: AdminUserListQueryDto) {
     const { take, skip } = pageWindow(query);
     return this.usersService.list(user, { take, skip });
   }

@@ -40,11 +40,16 @@ export class RunRecoveryService {
               await this.shouldCleanupInterruptedRuntimeResource(
                 run.runtimeInstanceId,
                 run.runtimeType
-            );
+              );
             if (shouldCleanupInterruptedRuntime) {
               await this.executionService
-                .cleanupInterruptedExecution(run.runtimeType, run.runtimeInstanceId)
-                .catch(swallow(this.logger, `cleanup interrupted run ${run.id}`));
+                .cleanupInterruptedExecution(
+                  run.runtimeType,
+                  run.runtimeInstanceId
+                )
+                .catch(
+                  swallow(this.logger, `cleanup interrupted run ${run.id}`)
+                );
             } else {
               this.logger.log(
                 `Skipping interrupted execution cleanup for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`

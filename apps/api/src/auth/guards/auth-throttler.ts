@@ -21,7 +21,9 @@ function trackerIp(req: Record<string, unknown>): string {
 function trackerUsername(req: Record<string, unknown>): string {
   const body = req.body as { username?: unknown } | undefined;
   const username =
-    typeof body?.username === "string" ? body.username.trim().toLowerCase() : "";
+    typeof body?.username === "string"
+      ? body.username.trim().toLowerCase()
+      : "";
   return `${trackerIp(req)}:${username}`;
 }
 

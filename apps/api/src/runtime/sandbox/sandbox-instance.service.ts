@@ -13,10 +13,7 @@ import {
 } from "../../config/registry/defaults";
 import { WorkspaceRuntimeInstanceRepository } from "../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../common/swallow";
-import {
-  IdleWatchdog,
-  resolveDockerApiBase,
-} from "./sandbox-utils";
+import { IdleWatchdog, resolveDockerApiBase } from "./sandbox-utils";
 import type {
   SandboxEngine,
   SandboxEngineType,
@@ -71,7 +68,10 @@ export class SandboxRuntimeInstanceService {
   private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
   private readonly ownerStates = new Map<string, SandboxOwnerState>();
-  private readonly pendingSandboxes = new Map<string, Promise<SandboxRuntime>>();
+  private readonly pendingSandboxes = new Map<
+    string,
+    Promise<SandboxRuntime>
+  >();
   private readonly idleWatchdog = new IdleWatchdog();
   private readonly engines: Map<SandboxEngineType, SandboxEngine>;
 
@@ -93,7 +93,8 @@ export class SandboxRuntimeInstanceService {
       );
     }
     const engineType =
-      placement.sandbox.sandboxEngineType ?? this.configService.getSandboxEngine();
+      placement.sandbox.sandboxEngineType ??
+      this.configService.getSandboxEngine();
     return {
       runConfig: input.runConfig,
       runtimeTarget: input.runtimeTarget,
@@ -113,9 +114,7 @@ export class SandboxRuntimeInstanceService {
   ): SandboxOwnerState {
     let ownerState = this.ownerStates.get(context.ownerId);
     if (!ownerState) {
-      const accessKey = accessKeys.issueOwnerAccessKey(
-        context.ownerId
-      );
+      const accessKey = accessKeys.issueOwnerAccessKey(context.ownerId);
       ownerState = {
         runtimeInstanceId: "",
         accessKey,
@@ -133,9 +132,7 @@ export class SandboxRuntimeInstanceService {
       !this.pendingSandboxes.has(context.ownerId) &&
       !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      ownerState.accessKey = accessKeys.issueOwnerAccessKey(
-        context.ownerId
-      );
+      ownerState.accessKey = accessKeys.issueOwnerAccessKey(context.ownerId);
       ownerState.engineType = context.engineType;
     }
 
@@ -193,17 +190,15 @@ export class SandboxRuntimeInstanceService {
     this.idleWatchdog.cancel(ownerId);
     if (state?.runtimeInstanceId) {
       const engine = this.engines.get(state.engineType);
-      engine?.stop(state.runtimeInstanceId).catch(
-        swallow(this.logger, `stop sandbox for runtime owner ${ownerId}`)
-      );
+      engine
+        ?.stop(state.runtimeInstanceId)
+        .catch(
+          swallow(this.logger, `stop sandbox for runtime owner ${ownerId}`)
+        );
     }
     if (state) {
       this.workspaceRuntimeService
-        .markStoppedByOwner(
-          "sandbox",
-          state.isolationScope,
-          ownerId
-        )
+        .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
         .catch(
           swallow(
             this.logger,
@@ -218,9 +213,11 @@ export class SandboxRuntimeInstanceService {
 
   async recoverOrphan(runtimeInstanceId: string): Promise<void> {
     for (const engine of this.engines.values()) {
-      await engine.recoverOrphan(runtimeInstanceId).catch(
-        swallow(this.logger, `recover orphan via ${engine.type} engine`)
-      );
+      await engine
+        .recoverOrphan(runtimeInstanceId)
+        .catch(
+          swallow(this.logger, `recover orphan via ${engine.type} engine`)
+        );
     }
   }
 
@@ -442,9 +439,11 @@ export class SandboxRuntimeInstanceService {
     );
 
     const engine = this.engines.get(state.engineType);
-    engine?.stop(state.runtimeInstanceId).catch(
-      swallow(this.logger, `stop idle sandbox for runtime owner ${ownerId}`)
-    );
+    engine
+      ?.stop(state.runtimeInstanceId)
+      .catch(
+        swallow(this.logger, `stop idle sandbox for runtime owner ${ownerId}`)
+      );
 
     this.releaseOwnerRuntime(ownerId, state);
   }
@@ -455,21 +454,14 @@ export class SandboxRuntimeInstanceService {
    * 并将 RuntimeTarget 标记为 stopped。access key 保留，供 resume 复用。
    * 不负责真正停止/删除容器——是否需要 engine.stop() 由调用方决定。
    */
-  private releaseOwnerRuntime(
-    ownerId: string,
-    state: SandboxOwnerState
-  ): void {
+  private releaseOwnerRuntime(ownerId: string, state: SandboxOwnerState): void {
     this.idleWatchdog.cancel(ownerId);
     state.activeRunCount = 0;
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
     state.runtimeInstanceId = "";
 
     this.workspaceRuntimeService
-      .markStoppedByOwner(
-        "sandbox",
-        state.isolationScope,
-        ownerId
-      )
+      .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
       .catch(
         swallow(
           this.logger,
@@ -487,10 +479,7 @@ export class SandboxRuntimeInstanceService {
       .upsertRunning(placement, ownerId, runtimeInstanceId)
       .then(() => undefined)
       .catch(
-        swallow(
-          this.logger,
-          `upsert workspace runtime for owner ${ownerId}`
-        )
+        swallow(this.logger, `upsert workspace runtime for owner ${ownerId}`)
       );
   }
 

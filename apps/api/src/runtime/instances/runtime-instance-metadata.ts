@@ -86,14 +86,11 @@ export function statusInstanceMetadata(input: {
 export function runtimeInstanceDiagnostics(metadata: unknown) {
   const record = isMetadataRecord(metadata) ? metadata : {};
   return {
-    ownerId:
-      typeof record.ownerId === "string" ? record.ownerId : undefined,
+    ownerId: typeof record.ownerId === "string" ? record.ownerId : undefined,
     workspaceId:
       typeof record.workspaceId === "string" ? record.workspaceId : undefined,
     statusReason:
-      typeof record.statusReason === "string"
-        ? record.statusReason
-        : undefined,
+      typeof record.statusReason === "string" ? record.statusReason : undefined,
     lastSeenAt:
       typeof record.lastSeenAt === "string" ? record.lastSeenAt : undefined,
     lastStartedAt:
@@ -103,9 +100,7 @@ export function runtimeInstanceDiagnostics(metadata: unknown) {
     stoppedAt:
       typeof record.stoppedAt === "string" ? record.stoppedAt : undefined,
     errorMessage:
-      typeof record.errorMessage === "string"
-        ? record.errorMessage
-        : undefined,
+      typeof record.errorMessage === "string" ? record.errorMessage : undefined,
     runtimeInstanceId:
       typeof record.runtimeInstanceId === "string"
         ? record.runtimeInstanceId

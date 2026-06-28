@@ -1,10 +1,7 @@
 import { UserService } from "./user.service";
 import type { JwtUser } from "../auth/decorators/current-user.decorator";
 import type { PasswordHasherService } from "./credentials/password-hasher.service";
-import type {
-  UserRepository,
-  UserRecord,
-} from "./user.repository";
+import type { UserRepository, UserRecord } from "./user.repository";
 
 function makeUser(overrides?: Partial<Record<string, unknown>>): UserRecord {
   return {
@@ -22,7 +19,7 @@ function makeUser(overrides?: Partial<Record<string, unknown>>): UserRecord {
     createdAt: new Date(),
     sessionVersion: 1,
     ...overrides,
-  } as UserRecord;
+  };
 }
 
 function makeService(overrides?: {
@@ -302,9 +299,9 @@ describe("UserService", () => {
       const { service, repo } = makeService();
       repo.findById.mockResolvedValue(makeUser({ role: "super_admin" }));
 
-      await expect(
-        service.resetPassword("user-1", superAdmin)
-      ).rejects.toThrow("超级管理员只能通过本人账号或服务器脚本管理");
+      await expect(service.resetPassword("user-1", superAdmin)).rejects.toThrow(
+        "超级管理员只能通过本人账号或服务器脚本管理"
+      );
     });
   });
 

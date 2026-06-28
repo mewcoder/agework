@@ -66,9 +66,12 @@ describe("ConversationRepository", () => {
         makePrisma({ conversation: { updateMany } }) as never
       );
 
-      await (repo as unknown as Record<string, (a: string, b: string) => Promise<void>>)[
-        method
-      ]("user-1", "conv-x");
+      await (
+        repo as unknown as Record<
+          string,
+          (a: string, b: string) => Promise<void>
+        >
+      )[method]("user-1", "conv-x");
 
       expect(updateMany).toHaveBeenCalledWith({
         where: { id: "conv-x", deletedAt: null, workspace: ownerFilter },

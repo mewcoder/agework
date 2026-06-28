@@ -1,5 +1,13 @@
 import { Type } from "class-transformer";
-import { IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min } from "class-validator";
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { OptionalTrimmedString } from "../../common/decorators/query-value.decorator";
 
 export const MAX_COMMAND_WAIT_MS = 30_000;

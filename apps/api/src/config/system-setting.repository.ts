@@ -29,11 +29,7 @@ export class SystemSettingRepository {
     await this.prisma.systemSetting.create({ data: { key, value } });
   }
 
-  async upsert(
-    key: string,
-    value: string,
-    updatedBy: string
-  ): Promise<void> {
+  async upsert(key: string, value: string, updatedBy: string): Promise<void> {
     await this.prisma.systemSetting.upsert({
       where: { key },
       create: { key, value, updatedBy },

@@ -37,7 +37,9 @@ export class RunEventService {
   constructor(private readonly repository: RunEventRepository) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
-  listAdminEvents(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
+  listAdminEvents(
+    params: Parameters<RunEventRepository["listAdminEvents"]>[0]
+  ) {
     return this.repository.listAdminEvents(params);
   }
 
@@ -136,14 +138,16 @@ export class RunEventService {
     };
   }
 
-  runtimeStatusChanged(input: RunEventBase & {
-    status: string;
-    runtimeType?: string;
-    runtimeInstanceId?: string;
-    isolationScope?: string;
-    sandboxEngineType?: string;
-    error?: string;
-  }): RecordRunEventInput {
+  runtimeStatusChanged(
+    input: RunEventBase & {
+      status: string;
+      runtimeType?: string;
+      runtimeInstanceId?: string;
+      isolationScope?: string;
+      sandboxEngineType?: string;
+      error?: string;
+    }
+  ): RecordRunEventInput {
     return {
       runId: input.runId,
       eventKey: input.eventKey,
@@ -275,7 +279,7 @@ export class RunEventService {
       summary:
         input.status === "ok"
           ? `${input.commandType} ok`
-          : input.error ?? `${input.commandType} error`,
+          : (input.error ?? `${input.commandType} error`),
       data: compactData({
         commandType: input.commandType,
         status: input.status,
@@ -396,12 +400,14 @@ export class RunEventService {
     };
   }
 
-  systemIssue(input: RunEventBase & {
-    code: string;
-    message?: string;
-    origin?: RunEventOrigin;
-    severity?: "warn" | "error";
-  }): RecordRunEventInput {
+  systemIssue(
+    input: RunEventBase & {
+      code: string;
+      message?: string;
+      origin?: RunEventOrigin;
+      severity?: "warn" | "error";
+    }
+  ): RecordRunEventInput {
     return {
       runId: input.runId,
       eventKey: input.eventKey,
@@ -632,7 +638,9 @@ function jsonSafe(value: unknown): RunEventData[string] {
   }
   if (typeof value === "object") {
     const output: RunEventData = {};
-    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    for (const [key, child] of Object.entries(
+      value as Record<string, unknown>
+    )) {
       if (child !== undefined) output[key] = jsonSafe(child);
     }
     return output;
@@ -691,7 +699,8 @@ function toolResultError(
     event.error === true ||
     status === "error" ||
     status === "failed";
-  if (failed) return stringValue(event.message) ?? preview ?? "tool call failed";
+  if (failed)
+    return stringValue(event.message) ?? preview ?? "tool call failed";
   return undefined;
 }
 

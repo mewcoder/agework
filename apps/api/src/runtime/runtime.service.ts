@@ -205,7 +205,9 @@ export class RuntimeService {
       status: resource.status,
       isReusable: resource.status === "running",
       workspaceCount: workspaceRuntimes?.length ?? 0,
-      expiresAt: resource.expiresAt ? this.toIsoString(resource.expiresAt) : null,
+      expiresAt: resource.expiresAt
+        ? this.toIsoString(resource.expiresAt)
+        : null,
       metadata: resource.metadata,
       diagnostics: {
         ...diagnostics,

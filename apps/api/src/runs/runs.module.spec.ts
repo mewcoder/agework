@@ -17,8 +17,7 @@ import type { RunExecutor } from "./execution/executor";
 import { ExecutionService } from "./execution/execution.service";
 import { RunService } from "./run.service";
 import { WorkerEventsService } from "./worker-events/worker-events.service";
-import { WorkerCommandDispatcher } from "../worker-host/commands/command-dispatcher.service";
-import { WorkerUpstreamRegistry } from "../worker-host/upstream/worker-upstream.registry";
+import { WorkerHostService } from "../worker-host/worker-host.service";
 import { RunsModule } from "./runs.module";
 
 @Injectable()
@@ -63,13 +62,12 @@ describe("RunsModule wiring", () => {
       executionService,
       "setRunEventReceiver"
     );
-    const workerCommands = testingModule.get(WorkerCommandDispatcher);
+    const workerHost = testingModule.get(WorkerHostService);
     const setCommandSentRecorder = vi.spyOn(
-      workerCommands,
+      workerHost,
       "setCommandSentRecorder"
     );
-    const workerUpstream = testingModule.get(WorkerUpstreamRegistry);
-    const setReceiver = vi.spyOn(workerUpstream, "setReceiver");
+    const setReceiver = vi.spyOn(workerHost, "setReceiver");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorSink = vi.spyOn(liveRuns, "setTimeoutErrorSink");
     const runtimeProviderRegistry = testingModule.get(RuntimeProviderRegistry);

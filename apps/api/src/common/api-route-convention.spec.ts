@@ -68,10 +68,7 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
   "GET system/about",
 ]);
 
-const RAW_RESPONSE_ALLOWLIST = [
-  "worker/owners/*",
-  "worker/runs/*",
-];
+const RAW_RESPONSE_ALLOWLIST = ["worker/owners/*", "worker/runs/*"];
 
 const RAW_RES_ROUTE_ALLOWLIST = [
   "POST conversations/agent/run",
@@ -330,7 +327,9 @@ describe("external API route convention", () => {
     ).toEqual([]);
     expect(
       workerControllers
-        .filter((controller) => !guardsFor(controller).includes(WorkerAuthGuard))
+        .filter(
+          (controller) => !guardsFor(controller).includes(WorkerAuthGuard)
+        )
         .map(controllerPath)
     ).toEqual([]);
   });
@@ -362,7 +361,9 @@ describe("external API route convention", () => {
     const rawResponseTargets = CONTROLLERS.flatMap((controller) => [
       ...(isRawResponse(controller) ? [`${controllerPath(controller)}/*`] : []),
       ...routeMethods(controller)
-        .filter((methodName) => isRawResponse(routeHandler(controller, methodName)))
+        .filter((methodName) =>
+          isRawResponse(routeHandler(controller, methodName))
+        )
         .map((methodName) => routeLabel(controller, methodName)),
     ]);
 
@@ -394,8 +395,6 @@ describe("external API route convention", () => {
         .map((methodName) => routeLabel(controller, methodName))
     );
 
-    expect(passthroughResponseRoutes).toEqual(
-      PASSTHROUGH_RES_ROUTE_ALLOWLIST
-    );
+    expect(passthroughResponseRoutes).toEqual(PASSTHROUGH_RES_ROUTE_ALLOWLIST);
   });
 });

@@ -130,7 +130,9 @@ export class UserRepository {
     });
   }
 
-  findCredentialByUsername(username: string): Promise<CredentialUserRecord | null> {
+  findCredentialByUsername(
+    username: string
+  ): Promise<CredentialUserRecord | null> {
     return this.prisma.user.findFirst({
       where: { username, deletedAt: null },
       select: this.credentialSelect(),

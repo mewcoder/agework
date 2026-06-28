@@ -18,7 +18,9 @@ describe("RuntimeProviderRegistry", () => {
     const provider = registry.resolve("local");
     expect(provider.type).toBe("local");
     expect(provider).not.toBe(mockSandboxProvider);
-    await expect(provider.recoverOrphan("legacy-local")).resolves.toBeUndefined();
+    await expect(
+      provider.recoverOrphan("legacy-local")
+    ).resolves.toBeUndefined();
     expect(() => provider.shutdownRuntimeInstance?.("ws-1")).not.toThrow();
   });
 

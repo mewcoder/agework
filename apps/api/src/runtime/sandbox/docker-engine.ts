@@ -55,7 +55,10 @@ export class DockerSandboxEngine implements SandboxEngine {
 
     if (input.runtimeLogHostPath && input.runtimeLogMountPath) {
       this.assertSafeMountPath(input.runtimeLogHostPath);
-      args.push("-v", `${input.runtimeLogHostPath}:${input.runtimeLogMountPath}`);
+      args.push(
+        "-v",
+        `${input.runtimeLogHostPath}:${input.runtimeLogMountPath}`
+      );
     }
 
     args.push(image);
@@ -71,10 +74,9 @@ export class DockerSandboxEngine implements SandboxEngine {
         throw err;
       }
 
-      const runtimeInstanceId =
-        await this.inspectContainerId(conflictingContainerId).catch(
-          swallow(this.logger, `docker inspect ${conflictingContainerId}`)
-        );
+      const runtimeInstanceId = await this.inspectContainerId(
+        conflictingContainerId
+      ).catch(swallow(this.logger, `docker inspect ${conflictingContainerId}`));
       if (!runtimeInstanceId) {
         throw err;
       }

@@ -61,9 +61,7 @@ export class WorkerAccessService {
     ownerId?: string;
     accessKey?: string;
   }): Record<string, unknown> {
-    const runKey = params.runId
-      ? this.accessKeys.get(params.runId)
-      : undefined;
+    const runKey = params.runId ? this.accessKeys.get(params.runId) : undefined;
     const ownerKey = params.ownerId
       ? this.ownerKeys.get(params.ownerId)
       : undefined;
@@ -78,7 +76,8 @@ export class WorkerAccessService {
       hasRunKey: Boolean(runKey),
       runKeyFingerprint: fingerprint(runKey),
       runKeyMatches:
-        Boolean(params.accessKey) && this.constantTimeEqual(runKey, params.accessKey ?? ""),
+        Boolean(params.accessKey) &&
+        this.constantTimeEqual(runKey, params.accessKey ?? ""),
       hasOwnerKey: Boolean(ownerKey),
       ownerKeyFingerprint: fingerprint(ownerKey),
       ownerKeyMatches:
@@ -87,7 +86,10 @@ export class WorkerAccessService {
     };
   }
 
-  private constantTimeEqual(expected: string | undefined, actual: string): boolean {
+  private constantTimeEqual(
+    expected: string | undefined,
+    actual: string
+  ): boolean {
     if (!expected) return false;
 
     const expectedBuffer = Buffer.from(expected);

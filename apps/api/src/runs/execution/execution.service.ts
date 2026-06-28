@@ -16,9 +16,7 @@ import type { RunEventReceiver } from "./executor";
  */
 @Injectable()
 export class ExecutionService {
-  constructor(
-    private readonly executorRegistry: RunExecutorRegistry
-  ) {}
+  constructor(private readonly executorRegistry: RunExecutorRegistry) {}
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
     return this.executorRegistry

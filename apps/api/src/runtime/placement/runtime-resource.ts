@@ -5,10 +5,7 @@ import type {
   RuntimeTarget,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import type {
-  IsolationScope,
-  RuntimeType,
-} from "../../config/config.service";
+import type { IsolationScope, RuntimeType } from "../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
 
 export type ResolveRuntimeTargetInput = {
@@ -47,12 +44,8 @@ export function resolveRuntimeTarget(
   input: ResolveRuntimeTargetInput,
   defaults: RuntimeTargetDefaults
 ): RuntimeTarget {
-  const {
-    userId,
-    workspaceId,
-    workspaceRootPath,
-    userWorkspaceRootPath,
-  } = input;
+  const { userId, workspaceId, workspaceRootPath, userWorkspaceRootPath } =
+    input;
 
   if (!isAbsolute(workspaceRootPath) || !isAbsolute(userWorkspaceRootPath)) {
     throw new Error(

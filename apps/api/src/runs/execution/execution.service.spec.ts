@@ -102,7 +102,9 @@ describe("ExecutionService", () => {
     await service.cleanupInterruptedExecution("local", "runtime-1");
 
     expect(registry.resolve).toHaveBeenCalledWith("local");
-    expect(executor.cleanupInterruptedExecution).toHaveBeenCalledWith("runtime-1");
+    expect(executor.cleanupInterruptedExecution).toHaveBeenCalledWith(
+      "runtime-1"
+    );
   });
 
   it("wires the run event receiver through the registry during module setup", () => {

@@ -66,10 +66,7 @@ describe("LiveRunRegistry", () => {
     registry.register("run-1", handle);
     await vi.advanceTimersByTimeAsync(1_000);
 
-    expect(markRunTimedOut).toHaveBeenCalledWith(
-      "run-1",
-      handle.runtimeHandle
-    );
+    expect(markRunTimedOut).toHaveBeenCalledWith("run-1", handle.runtimeHandle);
     registry.unregister("run-1");
   });
 

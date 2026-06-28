@@ -155,7 +155,9 @@ function normalizeCreateInput(input: RunEventCreateInput): RunEventCreateInput {
   };
 }
 
-function normalizeRefs(refs: RunEventRefs | undefined): RunEventRefs | undefined {
+function normalizeRefs(
+  refs: RunEventRefs | undefined
+): RunEventRefs | undefined {
   if (!refs) return undefined;
   const output: RunEventRefs = {};
   for (const [key, value] of Object.entries(refs)) {
@@ -166,7 +168,9 @@ function normalizeRefs(refs: RunEventRefs | undefined): RunEventRefs | undefined
   return Object.keys(output).length > 0 ? output : undefined;
 }
 
-function normalizeData(data: RunEventData | undefined): RunEventData | undefined {
+function normalizeData(
+  data: RunEventData | undefined
+): RunEventData | undefined {
   if (data === undefined) return undefined;
   const redacted = redactLogValue(data) as RunEventData;
   try {
@@ -198,9 +202,9 @@ function toPrismaCreateInput(
   if (input.targetType !== undefined) data.targetType = input.targetType;
   if (input.targetId !== undefined) data.targetId = input.targetId;
   if (input.chainId !== undefined) data.chainId = input.chainId;
-  if (input.refs !== undefined) data.refs = input.refs as Prisma.InputJsonValue;
+  if (input.refs !== undefined) data.refs = input.refs;
   if (input.summary !== undefined) data.summary = input.summary;
-  if (input.data !== undefined) data.data = input.data as Prisma.InputJsonValue;
+  if (input.data !== undefined) data.data = input.data;
   return data;
 }
 
@@ -231,7 +235,10 @@ function isPrismaUniqueError(err: unknown): boolean {
   );
 }
 
-function truncate(value: string | undefined, maxLength: number): string | undefined {
+function truncate(
+  value: string | undefined,
+  maxLength: number
+): string | undefined {
   if (!value || value.length <= maxLength) return value;
   return `${value.slice(0, maxLength)}...`;
 }

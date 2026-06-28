@@ -8,7 +8,12 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
-import { AGENT_TYPES, generateId, isAgentType, type AgentType } from "@agework/shared";
+import {
+  AGENT_TYPES,
+  generateId,
+  isAgentType,
+  type AgentType,
+} from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
 import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -60,7 +65,11 @@ function normalizeModels(models: unknown): string[] {
 }
 
 function normalizeExtraConfig(extraConfig: unknown): Record<string, string> {
-  if (typeof extraConfig !== "object" || extraConfig === null || Array.isArray(extraConfig)) {
+  if (
+    typeof extraConfig !== "object" ||
+    extraConfig === null ||
+    Array.isArray(extraConfig)
+  ) {
     return {};
   }
   const entries = Object.entries(extraConfig).filter(
@@ -80,7 +89,10 @@ function toProviderConfig(row: ProviderConfigColumns): ProviderConfig {
 
 /** desensitize=true 时（非 admin 的 listEnabled）把 apiKey 置空；
  * admin 的 listForAdmin 必须传 false——原样回显 apiKey，这是产品明确要求，不要改。 */
-function serializeProviderConfig(row: ProviderConfigColumns, desensitize: boolean): string {
+function serializeProviderConfig(
+  row: ProviderConfigColumns,
+  desensitize: boolean
+): string {
   const config = toProviderConfig(row);
   return JSON.stringify(desensitize ? { ...config, apiKey: "" } : config);
 }
@@ -120,9 +132,7 @@ export class ModelProviderService implements OnModuleInit {
 
   async onModuleInit() {
     await Promise.all(
-      AGENT_TYPES.map((agentType) =>
-        this.ensureSystemModelProvider(agentType)
-      )
+      AGENT_TYPES.map((agentType) => this.ensureSystemModelProvider(agentType))
     );
   }
 
@@ -228,7 +238,11 @@ export class ModelProviderService implements OnModuleInit {
     return { list };
   }
 
-  async create(agentType: string, name: string, providerConfig: ProviderConfig) {
+  async create(
+    agentType: string,
+    name: string,
+    providerConfig: ProviderConfig
+  ) {
     const resolvedAgentType = this.resolveAgentType(agentType);
     const providerName = this.normalizeName(name);
     this.validateBaseUrl(providerConfig.baseUrl);
@@ -253,7 +267,11 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(modelProvider, false);
   }
 
-  async update(modelProviderId: string, name: string, providerConfig: ProviderConfig) {
+  async update(
+    modelProviderId: string,
+    name: string,
+    providerConfig: ProviderConfig
+  ) {
     if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可修改");
     const modelProvider = await this.repo.findById(modelProviderId);
@@ -263,7 +281,7 @@ export class ModelProviderService implements OnModuleInit {
     const providerName = this.normalizeName(name);
     await this.assertNameAvailable(
       modelProvider.agentType,
-      modelProvider.scope as ModelProviderScope,
+      modelProvider.scope,
       modelProvider.userId,
       providerName,
       modelProvider.id
@@ -299,7 +317,10 @@ export class ModelProviderService implements OnModuleInit {
     agentType: string,
     modelProviderId: string
   ): Promise<ResolvedModelProvider | null> {
-    const modelProvider = await this.repo.findEnabled(modelProviderId, agentType);
+    const modelProvider = await this.repo.findEnabled(
+      modelProviderId,
+      agentType
+    );
     if (!modelProvider) return null;
     if (modelProvider.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
       return { source: "system" };

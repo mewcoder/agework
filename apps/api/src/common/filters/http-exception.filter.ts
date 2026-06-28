@@ -26,18 +26,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    let message = 'Internal server error';
+    let message = "Internal server error";
     if (exception instanceof HttpException) {
       const res = exception.getResponse();
-      if (typeof res === 'string') {
+      if (typeof res === "string") {
         message = res;
-      } else if (typeof res === 'object' && res !== null) {
+      } else if (typeof res === "object" && res !== null) {
         const r = res as Record<string, unknown>;
-        if (typeof r.message === 'string') {
+        if (typeof r.message === "string") {
           message = r.message;
         } else if (Array.isArray(r.message)) {
-          message = (r.message as string[]).join('; ');
-        } else if (typeof r.error === 'string') {
+          message = (r.message as string[]).join("; ");
+        } else if (typeof r.error === "string") {
           message = r.error;
         }
       }
@@ -80,7 +80,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       // 区分不同类型的 4xx 错误
       // 401/400/404: 常见客户端错误，使用 debug 避免日志噪音
       // 403/429: 可能需要关注的安全/限流问题，使用 warn
-      if (context.status === 401 || context.status === 400 || context.status === 404) {
+      if (
+        context.status === 401 ||
+        context.status === 400 ||
+        context.status === 404
+      ) {
         this.logger.debug(`request rejected ${payload}`);
       } else {
         this.logger.warn(`request rejected ${payload}`);

@@ -8,9 +8,9 @@ import {
 
 describe("requestIdFromHeaders", () => {
   it("returns a trimmed string request id", () => {
-    expect(
-      requestIdFromHeaders({ [REQUEST_ID_HEADER]: " request-1 " })
-    ).toBe("request-1");
+    expect(requestIdFromHeaders({ [REQUEST_ID_HEADER]: " request-1 " })).toBe(
+      "request-1"
+    );
   });
 
   it("returns the first non-empty array value", () => {
@@ -49,10 +49,7 @@ describe("requestIdMiddleware", () => {
     requestIdMiddleware()(req as never, res as never, next);
 
     expect(req.headers[REQUEST_ID_HEADER]).toBe("request-1");
-    expect(res.setHeader).toHaveBeenCalledWith(
-      REQUEST_ID_HEADER,
-      "request-1"
-    );
+    expect(res.setHeader).toHaveBeenCalledWith(REQUEST_ID_HEADER, "request-1");
     expect(next).toHaveBeenCalledWith();
   });
 

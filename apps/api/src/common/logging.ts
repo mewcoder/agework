@@ -50,7 +50,8 @@ function redactValue(
   if (value instanceof Error) return errorLogFields(value);
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "bigint") return value.toString();
-  if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
+  if (typeof value === "function")
+    return `[function ${value.name || "anonymous"}]`;
   if (typeof value === "string") return redactSensitiveString(value);
   if (!value || typeof value !== "object") return value;
   if (seen.has(value)) return "[circular]";

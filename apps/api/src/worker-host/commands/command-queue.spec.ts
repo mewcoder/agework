@@ -1,6 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { WorkerCommandQueue } from "./command-queue";
-import type { RunChannelMessage, CommandPayload } from "@agework/shared/protocol";
+import type {
+  RunChannelMessage,
+  CommandPayload,
+} from "@agework/shared/protocol";
 
 describe("WorkerCommandQueue", () => {
   let queue: WorkerCommandQueue;

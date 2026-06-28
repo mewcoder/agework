@@ -105,7 +105,11 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
       const repo = makeRepo({
         findWorkspaceIdsByUser: vi.fn().mockResolvedValue([{ id: "ws-2" }]),
         findRunningByOwners: vi.fn().mockResolvedValue([
-          makeResource({ id: "rr-user", isolationScope: "user", ownerId: "user-1" }),
+          makeResource({
+            id: "rr-user",
+            isolationScope: "user",
+            ownerId: "user-1",
+          }),
           makeResource({ id: "rr-ws", ownerId: "ws-2" }),
         ]),
       });
@@ -137,10 +141,12 @@ describe("RuntimeInstanceLifecycleUseCase", () => {
 
   it("logs a warning and continues when a provider throws", async () => {
     const repo = makeRepo({
-      findRunningByOwners: vi.fn().mockResolvedValue([
-        makeResource({ id: "rr-1", ownerId: "ws-1" }),
-        makeResource({ id: "rr-2", ownerId: "ws-2" }),
-      ]),
+      findRunningByOwners: vi
+        .fn()
+        .mockResolvedValue([
+          makeResource({ id: "rr-1", ownerId: "ws-1" }),
+          makeResource({ id: "rr-2", ownerId: "ws-2" }),
+        ]),
     });
     const shutdownRuntimeInstance = vi
       .fn()

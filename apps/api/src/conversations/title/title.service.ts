@@ -48,9 +48,7 @@ function firstConfiguredModel(providerConfig: ProviderConfig): string | null {
 
 @Injectable()
 export class TitleService {
-  constructor(
-    private readonly modelProviderService: ModelProviderService
-  ) {}
+  constructor(private readonly modelProviderService: ModelProviderService) {}
 
   async generateTitle(input: GenerateTitleInput): Promise<string | null> {
     const userText = input.userText.trim();

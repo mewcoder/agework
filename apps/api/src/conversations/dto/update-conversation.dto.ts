@@ -14,6 +14,6 @@ export class UpdateConversationDto implements UpdateConversationRequest {
 
   @IsOptional()
   @IsString()
-  @IsIn(CONVERSATION_STATUSES as unknown as string[])
+  @IsIn(CONVERSATION_STATUSES)
   status?: string;
 }

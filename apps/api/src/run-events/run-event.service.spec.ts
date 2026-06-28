@@ -26,7 +26,7 @@ function makeRunEventRecord(input: StoredRunEventInput): RunEventRecord {
     runSeq: input.runSeq,
     eventKey: input.eventKey ?? null,
     type: input.type ?? "system.issue",
-    origin: (input.origin ?? "platform") as RunEventRecord["origin"],
+    origin: input.origin ?? "platform",
     targetType: null,
     targetId: null,
     chainId: null,

@@ -272,7 +272,9 @@ describe("RunService", () => {
         "conversation-1",
         userMessage
       );
-      expect(mockConversationService.generateTitleIfNeeded).toHaveBeenCalledWith({
+      expect(
+        mockConversationService.generateTitleIfNeeded
+      ).toHaveBeenCalledWith({
         conversationId: "conversation-1",
         agentType: "claude",
         modelProviderId: "mp-1",

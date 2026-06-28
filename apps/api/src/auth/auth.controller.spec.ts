@@ -3,9 +3,7 @@ import { AuthController } from "./auth.controller";
 import type { AuthService } from "./auth.service";
 import type { JwtUser } from "./decorators/current-user.decorator";
 
-function makeController(overrides?: {
-  auth?: Partial<AuthService>;
-}) {
+function makeController(overrides?: { auth?: Partial<AuthService> }) {
   const session = { token: "jwt", refreshToken: "rt", user: { id: "1" } };
   const auth = {
     login: vi.fn().mockResolvedValue(session),
@@ -85,7 +83,10 @@ describe("AuthController", () => {
     it("delegates to authService.setupSuperAdmin", async () => {
       const { controller, auth } = makeController();
       await controller.setup({ newPassword: "AdminPass1" }, makeRes());
-      expect(auth.setupSuperAdmin).toHaveBeenCalledWith("AdminPass1", undefined);
+      expect(auth.setupSuperAdmin).toHaveBeenCalledWith(
+        "AdminPass1",
+        undefined
+      );
     });
   });
 
@@ -107,7 +108,10 @@ describe("AuthController", () => {
       const res = makeRes();
       await expect(controller.refresh(makeReq(), res)).rejects.toThrow();
       expect(auth.refresh).not.toHaveBeenCalled();
-      expect(res.clearCookie).toHaveBeenCalledWith("agework_rt", expect.any(Object));
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        "agework_rt",
+        expect.any(Object)
+      );
     });
   });
 
@@ -117,7 +121,10 @@ describe("AuthController", () => {
       const res = makeRes();
       const result = await controller.logout(makeReq("rt-1"), res);
       expect(auth.logout).toHaveBeenCalledWith("rt-1");
-      expect(res.clearCookie).toHaveBeenCalledWith("agework_rt", expect.any(Object));
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        "agework_rt",
+        expect.any(Object)
+      );
       expect(result).toEqual({ ok: true });
     });
   });

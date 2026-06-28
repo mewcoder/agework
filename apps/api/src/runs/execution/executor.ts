@@ -26,10 +26,7 @@ export interface RunExecutor {
 
 export interface RunEventReceiver {
   /** 转发上行 event（local 模式 IPC 入口；sandbox 模式直走 worker-host）。 */
-  sendEvent(
-    runId: string,
-    message: RunChannelMessage<unknown>
-  ): Promise<void>;
+  sendEvent(runId: string, message: RunChannelMessage<unknown>): Promise<void>;
   /**
    * 通知 run：worker 异常（进程崩溃 / 心跳超时 / sandbox 创建失败等）。
    * run 自行判断当前状态并决定是否转为 error 终态。

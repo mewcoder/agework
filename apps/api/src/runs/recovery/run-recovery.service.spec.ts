@@ -13,7 +13,7 @@ function makeRuntimeService(
     recoverOrphanRuntimeInstances: vi.fn().mockResolvedValue(undefined),
     cleanupStaleRuntimeInstances: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as Partial<RuntimeService>;
+  };
 }
 
 describe("RunRecoveryService.recoverInterruptedRuns", () => {
@@ -50,15 +50,16 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       "docker",
       "container-abc"
     );
-    expect(mockExecutionService.cleanupInterruptedExecution).toHaveBeenCalledWith(
-      "docker",
-      "container-abc"
-    );
+    expect(
+      mockExecutionService.cleanupInterruptedExecution
+    ).toHaveBeenCalledWith("docker", "container-abc");
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
     );
-    expect(mockRunConversation.markError).toHaveBeenCalledWith("conversation-1");
+    expect(mockRunConversation.markError).toHaveBeenCalledWith(
+      "conversation-1"
+    );
     // 运行环境资源的恢复委托给 runtime 领域
     expect(runtimeService.recoverOrphanRuntimeInstances).toHaveBeenCalled();
     expect(runtimeService.cleanupStaleRuntimeInstances).toHaveBeenCalled();
@@ -93,7 +94,9 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
 
     await service.recoverInterruptedRuns();
 
-    expect(mockExecutionService.cleanupInterruptedExecution).not.toHaveBeenCalled();
+    expect(
+      mockExecutionService.cleanupInterruptedExecution
+    ).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -131,7 +134,9 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
 
     await service.recoverInterruptedRuns();
 
-    expect(mockExecutionService.cleanupInterruptedExecution).not.toHaveBeenCalled();
+    expect(
+      mockExecutionService.cleanupInterruptedExecution
+    ).not.toHaveBeenCalled();
     // 即便跳过运行清理，run 仍标记为 error
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",

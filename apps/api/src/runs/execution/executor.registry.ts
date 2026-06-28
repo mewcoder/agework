@@ -1,8 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type {
-  RunEventReceiver,
-  RunExecutor,
-} from "./executor";
+import type { RunEventReceiver, RunExecutor } from "./executor";
 
 export const RUN_EXECUTORS = Symbol("RUN_EXECUTORS");
 
@@ -16,9 +13,7 @@ export const RUN_EXECUTORS = Symbol("RUN_EXECUTORS");
 export class RunExecutorRegistry {
   private readonly executors: Map<string, RunExecutor>;
 
-  constructor(
-    @Inject(RUN_EXECUTORS) executors: RunExecutor[]
-  ) {
+  constructor(@Inject(RUN_EXECUTORS) executors: RunExecutor[]) {
     this.executors = new Map(
       executors.map((executor) => [executor.type, executor])
     );

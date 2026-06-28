@@ -18,7 +18,9 @@ describe("RuntimeService", () => {
     sandboxProvider = {
       type: "sandbox",
       recoverOrphan: vi.fn(async (_runtimeInstanceId: string) => undefined),
-      shutdownRuntimeInstance: shutdownRuntimeInstance as (ownerId: string) => void,
+      shutdownRuntimeInstance: shutdownRuntimeInstance as (
+        ownerId: string
+      ) => void,
     };
     configService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
@@ -171,7 +173,9 @@ describe("RuntimeService", () => {
     await expect(
       service.isRuntimeInstanceUserScoped("sandbox", "container-1")
     ).resolves.toBe(true);
-    repository.findByRuntimeId.mockResolvedValue({ isolationScope: "workspace" });
+    repository.findByRuntimeId.mockResolvedValue({
+      isolationScope: "workspace",
+    });
     await expect(
       service.isRuntimeInstanceUserScoped("sandbox", "container-1")
     ).resolves.toBe(false);
@@ -188,7 +192,7 @@ describe("RuntimeService", () => {
       },
     ]);
     const recoverOrphan = vi.fn().mockResolvedValue(undefined);
-    resolveSpy.mockReturnValue({ recoverOrphan } as never);
+    resolveSpy.mockReturnValue({ recoverOrphan });
 
     await service.recoverOrphanRuntimeInstances();
 
@@ -212,7 +216,7 @@ describe("RuntimeService", () => {
     ]);
     repository.userExists.mockResolvedValue(true);
     const recoverOrphan = vi.fn();
-    resolveSpy.mockReturnValue({ recoverOrphan } as never);
+    resolveSpy.mockReturnValue({ recoverOrphan });
 
     await service.recoverOrphanRuntimeInstances();
 

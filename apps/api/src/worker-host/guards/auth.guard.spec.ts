@@ -12,9 +12,7 @@ function makeGuard(access?: Partial<WorkerAccessService>) {
     ...access,
   };
   return {
-    guard: new WorkerAuthGuard(
-      runtimeAccess as unknown as WorkerAccessService
-    ),
+    guard: new WorkerAuthGuard(runtimeAccess as unknown as WorkerAccessService),
     runtimeAccess,
   };
 }

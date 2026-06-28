@@ -25,12 +25,8 @@ export class OpenSandboxEngine implements SandboxEngine {
 
   async getOrCreate(input: SandboxStartInput): Promise<SandboxRuntime> {
     const { placement, image, apiBaseUrl, accessKey, env, metadata } = input;
-    const {
-      workspaceHostPath,
-      workspaceMountPath,
-      ownerId,
-      isolationScope,
-    } = placement;
+    const { workspaceHostPath, workspaceMountPath, ownerId, isolationScope } =
+      placement;
 
     if (workspaceHostPath) {
       this.assertSafeMountPath(workspaceHostPath);

@@ -43,9 +43,6 @@ export class RunConversationEffects {
     conversationId: string,
     agentSessionId: string
   ): Promise<void> {
-    return this.conversations.setAgentSessionId(
-      conversationId,
-      agentSessionId
-    );
+    return this.conversations.setAgentSessionId(conversationId, agentSessionId);
   }
 }
