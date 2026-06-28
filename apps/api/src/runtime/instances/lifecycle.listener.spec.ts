@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle.listener";
 import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
-import { UserDeletedEvent, UserDisabledEvent } from "../../users/user.events";
+import { UserDeletedEvent, UserDisabledEvent } from "../../user/user.events";
 
 describe("RuntimeInstanceLifecycleListener", () => {
   it("shuts down the workspace runtime resource on WorkspaceDeletedEvent", async () => {

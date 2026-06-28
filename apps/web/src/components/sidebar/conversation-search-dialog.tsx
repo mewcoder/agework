@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { IconActionButton } from "@/components/icon-action-button";
-import { useConversationSearch } from "@/hooks/use-conversations";
+import { useConversationSearch } from "@/hooks/use-conversation";
 import { useWorkspaces } from "@/hooks/use-workspace";
 
 interface ConversationSearchDialogProps {

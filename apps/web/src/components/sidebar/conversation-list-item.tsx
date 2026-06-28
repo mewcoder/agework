@@ -24,8 +24,8 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import type { Conversation, ConversationSortKey } from "@/hooks/use-conversations";
-import { useArchiveConversation } from "@/hooks/use-conversations";
+import type { Conversation, ConversationSortKey } from "@/hooks/use-conversation";
+import { useArchiveConversation } from "@/hooks/use-conversation";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/format";
 import { useRuntimeUiStore } from "@/stores/runtime-ui-store";

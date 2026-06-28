@@ -9,7 +9,7 @@
 
 ```text
 先用目录 + facade service + import 规则整理边界。
-第一轮只做目录和 service 边界整理：run 相关文件迁到 runs/，runtime 保留执行环境相关文件。
+第一轮只做目录和 service 边界整理：run 相关文件迁到 run/，runtime 保留执行环境相关文件。
 暂不强拆 RunModule / RuntimeModule。
 暂不改 worker event 回流 transport。
 暂不引入 RuntimeWorkerHooks / RuntimeHooksRegistry。
@@ -177,7 +177,7 @@ apps/api/src/
     agent-permission-options.ts
     dto/
 
-  runs/
+  run/
     run.service.ts
     run-config.assembler.ts
     run-service.types.ts
@@ -241,7 +241,7 @@ apps/api/src/
 - 有状态、成团协作者才进子目录。
 - 不为了“分层好看”制造单文件目录。
 - 不拆 `start-run.use-case.ts` / `stop-run.use-case.ts` 这类小文件。
-- **第一轮不新增 `runs/run.module.ts`**：`runs/` 只是目录边界，由现有 `RuntimeModule` 作组合 module 统一组装。看到 `runs/` 没有 module 文件是有意为之——别照目录补一个，那会把你推向 §8 的 X 路线（拆 module → 必须做端口反转）。
+- **第一轮不新增 `run/run.module.ts`**：`run/` 只是目录边界，由现有 `RuntimeModule` 作组合 module 统一组装。看到 `run/` 没有 module 文件是有意为之——别照目录补一个，那会把你推向 §8 的 X 路线（拆 module → 必须做端口反转）。
 
 ## 5. Service 职责集中
 
@@ -289,7 +289,7 @@ class RunService {
 - `RunExecutionStatusHandler`
 - `RawEventLogWriter`
 
-它们是 worker event 回流这条入站链路的组件，本轮仍由 runtime provider / internal controller 按现有路径调用，并与出站侧的 `RunService` 共享 `RunActiveStore`、`RunRepository`、`RunMessageAggregator` 等协作者。出站（start/stop）归 RunService，入站（envelope 处理）归这组——同属 `runs/` 层，只是职责一进一出。
+它们是 worker event 回流这条入站链路的组件，本轮仍由 runtime provider / internal controller 按现有路径调用，并与出站侧的 `RunService` 共享 `RunActiveStore`、`RunRepository`、`RunMessageAggregator` 等协作者。出站（start/stop）归 RunService，入站（envelope 处理）归这组——同属 `run/` 层，只是职责一进一出。
 
 `RunEventRecorder` 是**出入站共享的记录器**：所以它既在 `RunService` 内部组合里、也被入站组件用——`RunService` 用它记出站事实（run created / message accepted），processor 用它记入站事实（status / agui / control trace）。这就是它在列表里、而 `RawEventLogWriter`（只入站写 raw/agui 日志）不在的原因。
 
@@ -316,7 +316,7 @@ class RuntimeService {
 
 `heartbeatWorkspace` / `heartbeatRuntimeResource` / resource lifecycle 可以继续留在 `resources/` 子服务里，`RuntimeService` 需要时委托。
 
-`RuntimeConfigStore` / `RuntimeControlQueue` / `RuntimeInternalAccessService` 都在 `runtime/internal/`。**`RuntimeService`（也在 `runtime/`）import 它们是同层内部访问，合法**；§6 "runs 不可 import runtime/internal" 约束的是 `runs/` 层——`RunService` 只能经 `RuntimeService` facade 间接用到这些，不得直接 import `runtime/internal/**`。即：**internal 只对 RuntimeService 与同层 controller 开放，对 runs 关闭。**
+`RuntimeConfigStore` / `RuntimeControlQueue` / `RuntimeInternalAccessService` 都在 `runtime/internal/`。**`RuntimeService`（也在 `runtime/`）import 它们是同层内部访问，合法**；§6 "runs 不可 import runtime/internal" 约束的是 `run/` 层——`RunService` 只能经 `RuntimeService` facade 间接用到这些，不得直接 import `runtime/internal/**`。即：**internal 只对 RuntimeService 与同层 controller 开放，对 runs 关闭。**
 
 ## 6. Import 规则
 
@@ -324,14 +324,14 @@ class RuntimeService {
 
 ```text
 agent 可 import:
-  runs/run.service
+  run/run.service
   shared types
   model-provider / conversation 等业务 service
 
 agent 不可 import:
   runtime/**
-  runs/execution/**
-  runs/events/**
+  run/execution/**
+  run/events/**
 
 runs 可 import:
   runtime/runtime.service
@@ -347,7 +347,7 @@ runtime 可 import:
   config service
   runtime 自己的 providers/resources/internal
 
-runtime 第一轮允许内部 provider/internal 调用 runs/execution/worker-event.processor
+runtime 第一轮允许内部 provider/internal 调用 run/execution/worker-event.processor
   这是现有事件回流路径，暂不改 transport
 
 worker 不可 import:
@@ -364,12 +364,12 @@ adapters 不可 import:
 
 ### Step A — 目录搬迁
 
-把现有 run 生命周期相关文件从 `runtime/core` 搬到 `runs/`：
+把现有 run 生命周期相关文件从 `runtime/core` 搬到 `run/`：
 
 ```text
-runtime/core/run-execution -> runs/execution
-runtime/core/runs          -> runs/
-runtime/core/run-events    -> runs/events
+runtime/core/run-execution -> run/execution
+runtime/core/runs          -> run/
+runtime/core/run-events    -> run/events
 ```
 
 只做 `git mv` + import 更新，不改逻辑。
@@ -390,7 +390,7 @@ pnpm --filter api typecheck
 agent/agent-spec.builder.ts
   只解析 agent/model/permission/session，产出 AgentSpec
 
-runs/run-config.assembler.ts
+run/run-config.assembler.ts
   接收 AgentSpec + placement + run/conversation/workspace 信息，产出 RunConfig
 ```
 
@@ -455,7 +455,7 @@ StartRunInput 构造
 - `saveRun` 闭包拼装
 - run 状态更新
 - runtime provider 调用
-- 标题生成触发；`TitleService` 随触发点迁到 `runs/title.service.ts`，由 `RunService.start` 调用
+- 标题生成触发；`TitleService` 随触发点迁到 `run/title.service.ts`，由 `RunService.start` 调用
 
 这些都回到 Run 层或 Runtime 层。
 
@@ -470,7 +470,7 @@ StartRunInput 构造
 X 的目标：
 
 ```text
-runs/ 拆成 RunModule
+run/ 拆成 RunModule
 runtime/ 拆成 RuntimeModule
 RunModule import RuntimeModule
 RuntimeModule 不 import RunModule
@@ -518,6 +518,6 @@ RuntimeHooksRegistry 再回调 Run 层 hooks
 
 1. 低风险路线 Y 是否已经满足“职责清晰 + 层次清晰”。
 2. `AgentService -> RunService -> RuntimeService` 这条主链是否足够直观。
-3. 哪些文件应进入 `runs/`，哪些应留在 `runtime/`。
+3. 哪些文件应进入 `run/`，哪些应留在 `runtime/`。
 4. import 规则是否足够约束边界。
 5. 是否真的需要未来路线 X，还是 Y 已经够用。

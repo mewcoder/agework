@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
-import type { Conversation } from "@/hooks/use-conversations";
+import type { Conversation } from "@/hooks/use-conversation";
 
 /**
  * 监控会话列表中后台运行状态的变化，

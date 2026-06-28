@@ -32,10 +32,10 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
-  // 层次边界（§6）：agent 层只能经 runs/run.service 门面与 run-service.types 触达下层，
-  // 不得 deep import runtime 内部实现或 runs 的入站/事件管线。
+  // 层次边界（§6）：agent 层只能经 run/run.service 门面与 run-service.types 触达下层，
+  // 不得 deep import runtime 内部实现或 run 的入站/事件管线。
   {
-    files: ['src/conversations/agent/**/*.ts'],
+    files: ['src/conversation/agent/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -49,12 +49,12 @@ export default tseslint.config(
                 '**/runtime/runtime.service',
               ],
               message:
-                'agent 层不得 import runtime 内部实现；执行环境只能经 runs/run.service(RunService) 门面间接使用。',
+                'agent 层不得 import runtime 内部实现；执行环境只能经 run/run.service(RunService) 门面间接使用。',
             },
             {
-              group: ['**/runs/execution/**', '**/runs/events/**'],
+              group: ['**/run/execution/**'],
               message:
-                'agent 层不得 import runs 的入站/事件内部；只能用 runs/run.service 门面与 run-service.types。',
+                'agent 层不得 import run 的入站/事件内部；只能用 run/run.service 门面与 run-service.types。',
             },
           ],
         },

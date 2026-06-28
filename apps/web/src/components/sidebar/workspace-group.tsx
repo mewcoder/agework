@@ -39,8 +39,8 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import type { Workspace } from "@/hooks/use-workspace";
-import type { Conversation, ConversationSortKey } from "@/hooks/use-conversations";
-import { getRegularConversations } from "@/hooks/use-conversations";
+import type { Conversation, ConversationSortKey } from "@/hooks/use-conversation";
+import { getRegularConversations } from "@/hooks/use-conversation";
 import { ConversationListItem } from "./conversation-list-item";
 import { formatDateTime } from "@/utils/format";
 import { cn } from "@/lib/utils";

@@ -78,10 +78,10 @@ Middleware
 - 对多选 query 统一兼容逗号分隔和重复 key 数组，避免每个 controller 自己解析。
 
 **Likely paths:**
-- `apps/api/src/runs/admin/admin-run.controller.ts`
+- `apps/api/src/run/admin/admin-run.controller.ts`
 - `apps/api/src/runtime/admin/admin-runtime.controller.ts`
 - `apps/api/src/workspaces/admin/admin-workspace.controller.ts`
-- `apps/api/src/users/admin/admin-user.controller.ts`
+- `apps/api/src/user/admin/admin-user.controller.ts`
 - `apps/api/src/worker-host/command.controller.ts`
 - `apps/api/src/**/dto/*.ts`
 
@@ -161,7 +161,7 @@ Middleware
 **Likely paths:**
 - `apps/api/src/common/interceptors/response.interceptor.ts`
 - `apps/api/src/common/decorators/raw-response.decorator.ts`
-- `apps/api/src/conversations/agent/agent.controller.ts`
+- `apps/api/src/conversation/agent/agent.controller.ts`
 - `apps/api/src/worker-host/*.controller.ts`
 
 **Verification:**
@@ -195,7 +195,7 @@ Middleware
 **Likely paths:**
 - `apps/api/src/common/filters/http-exception.filter.ts`
 - `apps/api/src/common/logging.ts`
-- `apps/api/src/users/credentials/login-failed.exception.ts`
+- `apps/api/src/user/credential/login-failed.exception.ts`
 - `apps/api/src/auth/**`
 
 **Verification:**
@@ -306,8 +306,8 @@ Middleware
 - 禁止用 `ModuleRef` 或 `forwardRef` 掩盖边界问题。
 
 **Likely paths:**
-- `apps/api/src/runs/run.service.ts`
-- `apps/api/src/runs/worker-events/worker-events.service.ts`
+- `apps/api/src/run/run.service.ts`
+- `apps/api/src/run/worker-event/worker-event.service.ts`
 - `apps/api/src/workspaces/workspace.service.ts`
 - `apps/api/src/runtime/**`
 

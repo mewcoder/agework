@@ -11,7 +11,7 @@ datasource db {
 model User {
   id                 String          @id
   // username 一经设定不可修改：它用作工作空间目录名（见 WorkspaceService.resolveCreateRootPath /
-  // ConfigService.getUserWorkspace），改名会导致已有目录路径与 username 脱钩。格式见 user-credentials.ts。
+  // ConfigService.getUserWorkspace），改名会导致已有目录路径与 username 脱钩。格式见 user-credential.ts。
   username           String          @unique
   // 展示名（昵称），可改，可为空。UI 展示时回退到 username。与 username（登录标识+路径，不可改）解耦。
   nickname           String?

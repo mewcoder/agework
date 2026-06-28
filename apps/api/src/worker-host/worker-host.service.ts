@@ -5,8 +5,8 @@ import type {
   WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
 import { WorkerAccessService } from "./access/access.service";
-import type { CommandSentRecorder } from "./commands/command-sent-recorder.port";
-import { WorkerCommandDispatcher } from "./commands/command-dispatcher.service";
+import type { CommandSentRecorder } from "./command/command-sent-recorder.port";
+import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import type { WorkerUpstreamReceiver } from "./worker-host.types";

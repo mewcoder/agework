@@ -11,7 +11,7 @@ import { SessionService } from "./session/session.service";
 import { SessionRepository } from "./session/session.repository";
 import { SessionRevocationListener } from "./session/session-revocation.listener";
 import { getJwtSecret } from "../config/config.service";
-import { UserModule } from "../users/user.module";
+import { UserModule } from "../user/user.module";
 
 @Module({
   imports: [

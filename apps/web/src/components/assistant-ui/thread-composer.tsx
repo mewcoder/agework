@@ -22,7 +22,7 @@ import { AgentSettingsMenu, AgentSwitcher } from "@/components/assistant-ui/agen
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { WorkspaceSelector } from "@/components/workspace-selector";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useConversations } from "@/hooks/use-conversations";
+import { useConversations } from "@/hooks/use-conversation";
 import { useModelProviders } from "@/hooks/model-provider-hooks";
 import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAui, useAuiState, ComposerPrimitive } from "@assistant-ui/react";

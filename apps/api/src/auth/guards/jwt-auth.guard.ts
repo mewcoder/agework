@@ -10,7 +10,7 @@ import { ConfigService } from "../../config/config.service";
 import { extractBearerToken } from "../../common/extract-bearer-token";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
 import type { JwtUser } from "../decorators/current-user.decorator";
-import { UserService } from "../../users/user.service";
+import { UserService } from "../../user/user.service";
 
 type RequestWithUser = {
   headers: Record<string, string | string[] | undefined>;

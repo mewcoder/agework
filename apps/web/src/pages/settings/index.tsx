@@ -19,16 +19,16 @@ import {
   type SettingsNavSection,
 } from '@/components/settings/settings-panel';
 import { useAuthStore } from '@/stores/auth-store';
-import { UsersPanel } from '@/pages/admin/users';
+import { UsersPanel } from '@/pages/admin/user';
 import { AdminModelProvidersPanel } from '@/pages/admin/model-providers';
-import { RunsPanel } from '@/pages/admin/runs';
+import { RunsPanel } from '@/pages/admin/run';
 import { WorkspacesPanel } from '@/pages/admin/workspace';
 import { WorkspaceRuntimesPanel } from '@/pages/admin/workspace-runtimes';
 import { SystemSettingsPanel } from '@/pages/admin/system-settings';
 import { AccountSettings } from '@/pages/settings/account';
 import { GeneralSettings } from '@/pages/settings/general';
 import { ModelProvider } from '@/pages/settings/model-provider';
-import { ArchivedConversations } from '@/pages/settings/archived-conversations';
+import { ArchivedConversations } from '@/pages/settings/archived-conversation';
 import { WorkspaceSettings } from '@/pages/settings/workspace';
 import { AboutSettings } from '@/pages/settings/about';
 import { isAdmin as checkIsAdmin } from '@/utils/auth';

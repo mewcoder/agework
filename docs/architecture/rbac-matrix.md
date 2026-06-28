@@ -24,7 +24,7 @@
 | 系统设置、模型供应商等管理后台 | ✅ | ✅ | ❌ |
 
 说明：
-- super_admin 账号固定唯一为 `admin`，不能通过任何 API 改动，只能本人登录或服务器脚本维护（`assertCanManage` 在 `users/user.service.ts` 对 super_admin 目标一律拒绝）。
+- super_admin 账号固定唯一为 `admin`，不能通过任何 API 改动，只能本人登录或服务器脚本维护（`assertCanManage` 在 `user/user.service.ts` 对 super_admin 目标一律拒绝）。
 - admin 对 admin / super_admin 一律不可管理（`assertCanManage`：admin operator 遇到非 user 目标即 `Forbidden`）。
 
 ## 归属是怎么落地的（实现锚点）
@@ -42,7 +42,7 @@
 
 ## 测试锚点
 
-- `users/user.service.spec.ts` — admin 不能重置 admin/super_admin 密码；super_admin 也不能通过 API 重置 super_admin。
-- `conversations/conversation.service.spec.ts` — `findOne/delete/archive/unarchive/listMessages` 按 owner 过滤，未归属 404 / 空。
-- `conversations/agent/agent.service.spec.ts` — `reply/stop/resume` 在归属校验失败时不触达 `RunService`。
+- `user/user.service.spec.ts` — admin 不能重置 admin/super_admin 密码；super_admin 也不能通过 API 重置 super_admin。
+- `conversation/conversation.service.spec.ts` — `findOne/delete/archive/unarchive/listMessages` 按 owner 过滤，未归属 404 / 空。
+- `conversation/agent/agent.service.spec.ts` — `reply/stop/resume` 在归属校验失败时不触达 `RunService`。
 - `workspaces/workspace.service.spec.ts` — `update/delete` 按 owner 过滤，未归属 404 且不写库。

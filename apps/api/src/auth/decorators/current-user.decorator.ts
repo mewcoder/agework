@@ -3,7 +3,7 @@ import {
   ExecutionContext,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { UserSession } from "../../users/user.types";
+import type { UserSession } from "../../user/user.types";
 
 export type JwtUser = UserSession;
 

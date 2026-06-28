@@ -10,7 +10,7 @@ import {
   USER_DISABLED_EVENT,
   UserDeletedEvent,
   UserDisabledEvent,
-} from "../../users/user.events";
+} from "../../user/user.events";
 
 /**
  * 监听底层领域的删除事件，清理对应的 runtime 资源。

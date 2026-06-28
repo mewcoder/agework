@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { SquareIcon } from "lucide-react";
-import { useStopConversationRun } from "@/hooks/use-conversations";
+import { useStopConversationRun } from "@/hooks/use-conversation";
 import { Button } from "@/components/ui/button";
 
 export function StopConversationRunButton({

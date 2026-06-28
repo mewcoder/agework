@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ConversationSortKey } from "@/hooks/use-conversations";
+import type { ConversationSortKey } from "@/hooks/use-conversation";
 
 export type ConversationListViewMode = "grouped" | "flat";
 export type GroupedSort = "default" | "active";

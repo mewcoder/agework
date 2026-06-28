@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
-import { WorkerCommandQueue } from "./commands/command-queue";
+import { WorkerCommandQueue } from "./command/command-queue";
 import { WorkerConfigStore } from "./config/config-store";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";

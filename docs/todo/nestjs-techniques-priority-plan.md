@@ -33,7 +33,7 @@
 - `apps/api/src/worker-host/command-queue.ts`
 - `apps/api/src/worker-host/command-dispatcher.service.ts`
 - `apps/api/src/worker-host/command.controller.ts`
-- `apps/api/src/runs/execution/sandbox.executor.ts`
+- `apps/api/src/run/execution/sandbox.executor.ts`
 - `apps/worker/src/transport/http.ts`
 
 **Verification:**
@@ -85,8 +85,8 @@
 - 给任务执行结果加结构化日志。
 
 **Likely paths:**
-- `apps/api/src/runs/live-runs/live-run.registry.ts`
-- `apps/api/src/runs/recovery/run-recovery.service.ts`
+- `apps/api/src/run/live-run/live-run.registry.ts`
+- `apps/api/src/run/recovery/run-recovery.service.ts`
 - `apps/api/src/runtime/instances/lifecycle.use-case.ts`
 - `apps/api/src/runtime/sandbox/sandbox-instance.service.ts`
 
@@ -130,7 +130,7 @@
 - 为外部请求增加脱敏日志。
 
 **Likely paths:**
-- `apps/api/src/model-providers/model-provider.service.ts`
+- `apps/api/src/model-provider/model-provider.service.ts`
 - `apps/api/src/runtime/sandbox/opensandbox-client.ts`
 - `apps/worker/src/transport/http.ts`
 
@@ -150,7 +150,7 @@
 - 不优先缓存 `ConfigService` 的系统设置，当前已有 DB + 内存 cache。
 
 **Likely paths:**
-- `apps/api/src/model-providers/model-provider.service.ts`
+- `apps/api/src/model-provider/model-provider.service.ts`
 - `apps/api/src/runtime/admin/admin-runtime.controller.ts`
 - `apps/api/src/config/config.service.ts`
 

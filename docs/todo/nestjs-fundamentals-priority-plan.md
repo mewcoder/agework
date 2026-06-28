@@ -38,10 +38,10 @@
 **Likely paths:**
 - `apps/api/src/main.ts`
 - `apps/api/src/prisma/prisma.service.ts`
-- `apps/api/src/runs/runs.module.ts`
-- `apps/api/src/runs/live-runs/live-run.registry.ts`
-- `apps/api/src/runs/execution/local.executor.ts`
-- `apps/api/src/runs/execution/sandbox.executor.ts`
+- `apps/api/src/run/run.module.ts`
+- `apps/api/src/run/live-run/live-run.registry.ts`
+- `apps/api/src/run/execution/local.executor.ts`
+- `apps/api/src/run/execution/sandbox.executor.ts`
 - `apps/api/src/worker-host/command-queue.ts`
 - `apps/api/src/runtime/sandbox/sandbox-instance.service.ts`
 
@@ -73,7 +73,7 @@
 
 **Likely paths:**
 - `apps/api/src/runtime/runtime.module.ts`
-- `apps/api/src/runs/runs.module.ts`
+- `apps/api/src/run/run.module.ts`
 - `apps/api/src/auth/auth.module.ts`
 - `apps/api/src/**/*.spec.ts`
 
@@ -83,11 +83,11 @@
 
 **Completed:**
 - 新增 `apps/api/src/runtime/runtime.module.spec.ts`，覆盖 `SANDBOX_ENGINES`、`RUNTIME_PROVIDERS`、`OPENSANDBOX_CLIENT`、`RuntimeService` / `RuntimeProviderRegistry` export。
-- 新增 `apps/api/src/runs/runs.module.spec.ts`，覆盖 `RUN_EXECUTORS`、`RunExecutorRegistry`、`RunService` export，并验证 `RunsModule.onModuleInit()` 的 startup wiring。
+- 新增 `apps/api/src/run/run.module.spec.ts`，覆盖 `RUN_EXECUTORS`、`RunExecutorRegistry`、`RunService` export，并验证 `RunsModule.onModuleInit()` 的 startup wiring。
 - 新增 `apps/api/src/auth/auth.module.spec.ts`，覆盖 `APP_GUARD` 全局 guard、`JwtModule`、`ThrottlerModule`、`AuthService` export。
 
 **Verified with:**
-- `./node_modules/.bin/vitest run src/runtime/runtime.module.spec.ts src/runs/runs.module.spec.ts src/auth/auth.module.spec.ts`
+- `./node_modules/.bin/vitest run src/runtime/runtime.module.spec.ts src/run/run.module.spec.ts src/auth/auth.module.spec.ts`
 - `./node_modules/.bin/tsc --noEmit`
 
 ## P1 - DI 规范和可维护性
@@ -109,11 +109,11 @@
 - 给每个 token provider 增加 focused unit test。
 
 **Likely paths:**
-- `apps/api/src/runs/execution/executor.registry.ts`
+- `apps/api/src/run/execution/executor.registry.ts`
 - `apps/api/src/runtime/providers/provider-registry.ts`
 - `apps/api/src/runtime/sandbox/sandbox-engine.ts`
 - `apps/api/src/runtime/runtime.module.ts`
-- `apps/api/src/runs/runs.module.ts`
+- `apps/api/src/run/run.module.ts`
 
 **Verification:**
 - 单测覆盖重复 provider 被拒绝。

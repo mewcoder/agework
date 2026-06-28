@@ -10,12 +10,12 @@ import { JwtAuthGuard } from "./guards/jwt-auth.guard";
 import type { JwtUser } from "./decorators/current-user.decorator";
 import { PrismaService } from "../prisma/prisma.service";
 import { SystemInitService } from "../system/init/system-init.service";
-import { UserService } from "../users/user.service";
-import { UserRepository } from "../users/user.repository";
+import { UserService } from "../user/user.service";
+import { UserRepository } from "../user/user.repository";
 import { SessionService } from "./session/session.service";
-import { SUPER_ADMIN_USERNAME } from "../users/credentials/user-credentials";
-import { PasswordHasherService } from "../users/credentials/password-hasher.service";
-import { LoginFailedException } from "../users/credentials/login-failed.exception";
+import { SUPER_ADMIN_USERNAME } from "../user/credential/user-credential";
+import { PasswordHasherService } from "../user/credential/password-hasher.service";
+import { LoginFailedException } from "../user/credential/login-failed.exception";
 import { ConfigService } from "../config/config.service";
 import { SystemSettingRepository } from "../config/system-setting.repository";
 

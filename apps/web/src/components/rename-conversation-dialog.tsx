@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useRenameConversation } from "@/hooks/use-conversations";
+import { useRenameConversation } from "@/hooks/use-conversation";
 import { FormDialog } from "@/components/form-dialog";
 import { Input } from "@/components/ui/input";
 import {

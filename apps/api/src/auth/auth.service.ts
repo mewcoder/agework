@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable } from "@nestjs/common";
 import { timingSafeEqual } from "node:crypto";
 import { JwtService } from "@nestjs/jwt";
-import { UserService } from "../users/user.service";
+import { UserService } from "../user/user.service";
 import { ConfigService } from "../config/config.service";
 import { SessionService } from "./session/session.service";
 

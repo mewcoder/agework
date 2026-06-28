@@ -224,11 +224,11 @@ Worker 保持薄,只负责执行。
 ## 3. 当前代码地图
 
 ```text
-apps/api/src/runs/run.service.ts
+apps/api/src/run/run.service.ts
   Run lifecycle owner
   resolve placement, provision runtime, assemble RunConfig, start worker execution
 
-apps/api/src/runs/execution/run-worker-execution.service.ts
+apps/api/src/run/execution/run-worker-execution.service.ts
   Run-owned worker execution owner
   注入 RuntimeProviderRegistry，持有 runId -> WorkerExecutionHandle 派发表
   start/sendControl/cancel/heartbeat/cleanup -> provider
@@ -645,7 +645,7 @@ RunWorkerExecutionService
 - `run-internal.controller`(`@Controller("internal/runs")`)按计划留在 run 层,仅把 import 来源
   从 `runtime/internal/` 改成 `worker-host/`。
 - 模块接线:新建 `worker-host.module.ts`(leaf module,无下游依赖);`runtime.module` 与
-  `runs.module` 各自 `imports: [WorkerHostModule]` 并删去原 internal provider/export/controller。
+  `run.module` 各自 `imports: [WorkerHostModule]` 并删去原 internal provider/export/controller。
 - worker HTTP 端点路径不变(`internal/runs` / `internal/runtimes` / `internal/workspaces`)。
 
 ----
@@ -702,7 +702,7 @@ resource 和 session,它来写 scopeState,session 不碰）。session 的方法�
 
 **不搬的东西**:
 
-- `runs/run-internal.controller.ts`（`@Controller("internal/runs")`）**留在 run 层**。它注入
+- `run/run-internal.controller.ts`（`@Controller("internal/runs")`）**留在 run 层**。它注入
   worker-host 模块那套（config-store / control-queue / auth.guard），但它管的是"worker 上报事件给
   run"——消费侧是 run 业务，归 run。只是它的 import 来源从 `runtime/internal/` 改成 `worker-host/`。
 
@@ -710,7 +710,7 @@ resource 和 session,它来写 scopeState,session 不碰）。session 的方法�
 
 - 搬完后依赖方向必须仍是 `run → worker-host ← runtime`，worker-host 不反向依赖 run 或 runtime。
 - `runtime/internal/` 目录清空删除。
-- 两个 module 文件（`runtime.module.ts` / `runs.module.ts`）的 provider/export 跟着调整，
+- 两个 module 文件（`runtime.module.ts` / `run.module.ts`）的 provider/export 跟着调整，
   新建 `worker-host.module.ts`。
 - typecheck + 全量单测通过；重点验 sandbox 复用 / cancel-before-ready / 心跳 / per-run 清理路径。
 

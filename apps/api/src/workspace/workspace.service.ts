@@ -7,7 +7,7 @@ import {
 import { generateId } from "@agework/shared";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
-import { RunService } from "../runs/run.service";
+import { RunService } from "../run/run.service";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -16,7 +16,7 @@ import {
   EXTERNAL_DIRECTORY_SOURCE,
   MANAGED_DIRECTORY_SOURCE,
   WorkspaceDirectoryHandler,
-} from "./directories/workspace-directory.handler";
+} from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;

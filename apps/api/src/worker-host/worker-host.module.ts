@@ -1,11 +1,11 @@
 import { Module } from "@nestjs/common";
 
 import { WorkerConfigStore } from "./config/config-store";
-import { WorkerCommandQueue } from "./commands/command-queue";
+import { WorkerCommandQueue } from "./command/command-queue";
 import { WorkerAccessService } from "./access/access.service";
 import { WorkerAuthGuard } from "./guards/auth.guard";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { WorkerCommandDispatcher } from "./commands/command-dispatcher.service";
+import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerRunController } from "./worker-run.controller";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";

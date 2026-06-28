@@ -5,7 +5,7 @@ import {
   UserDeletedEvent,
   UserDisabledEvent,
   UserPasswordResetEvent,
-} from "../../users/user.events";
+} from "../../user/user.events";
 
 function makeListener() {
   const sessions = {

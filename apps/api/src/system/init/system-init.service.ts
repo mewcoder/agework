@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from "@nestjs/common";
 import { ConfigService } from "../../config/config.service";
-import { UserService } from "../../users/user.service";
+import { UserService } from "../../user/user.service";
 
 @Injectable()
 export class SystemInitService implements OnApplicationBootstrap {

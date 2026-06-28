@@ -16,7 +16,7 @@ import {
   useWorkspaces,
   type Workspace,
 } from '@/hooks/use-workspace';
-import { useConversations } from '@/hooks/use-conversations';
+import { useConversations } from '@/hooks/use-conversation';
 import { formatDateTime } from '@/utils/format';
 import { SettingsPageHeader } from '@/components/settings/settings-panel';
 

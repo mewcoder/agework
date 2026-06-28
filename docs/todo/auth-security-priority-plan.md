@@ -15,7 +15,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 | 项 | 状态 | 实际落点 |
 |---|---|---|
 | P0-1 限流 | ✅ | `auth/guards/auth-throttler.ts`（IP + IP+用户名双桶） |
-| P0-2 登录错误收敛 | ✅ | `users/credentials/login-failed.exception.ts` |
+| P0-2 登录错误收敛 | ✅ | `user/credential/login-failed.exception.ts` |
 | P0-3 setup 初始密钥 | ✅ | `AGEWORK_PRIVATE_ADMIN_INIT_KEY`（仅生产强制） |
 | P0-4 Helmet | ✅ | `common/security-headers.ts` |
 | P1-5 session/refresh token | ✅ | `auth/session/`（混合方案：access Bearer + refresh HttpOnly cookie） |
@@ -56,7 +56,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 - `apps/api/src/auth/auth.module.ts`
 - `apps/api/src/auth/auth.controller.ts`
 - `apps/api/src/auth/guards/*`
-- `apps/api/src/users/user.service.ts`
+- `apps/api/src/user/user.service.ts`
 
 **Verification:**
 - 单测覆盖登录多次失败触发 429。
@@ -74,7 +74,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 - 不改变管理员后台用户列表里的状态展示。
 
 **Likely paths:**
-- `apps/api/src/users/user.service.ts`
+- `apps/api/src/user/user.service.ts`
 - `apps/api/src/auth/auth.service.ts`
 - `apps/api/src/common/filters/http-exception.filter.ts`
 
@@ -95,7 +95,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 **Likely paths:**
 - `apps/api/src/auth/auth.controller.ts`
 - `apps/api/src/auth/auth.service.ts`
-- `apps/api/src/users/user.service.ts`
+- `apps/api/src/user/user.service.ts`
 - `scripts/init.mjs`
 
 **Verification:**
@@ -140,7 +140,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 **Likely paths:**
 - `apps/api/prisma/schema.prisma`
 - `apps/api/src/auth/**`
-- `apps/api/src/users/**`
+- `apps/api/src/user/**`
 - `apps/web/src/stores/auth-store.ts`
 - `apps/web/src/lib/http.ts`
 - `packages/shared/src/api/auth.ts`
@@ -164,10 +164,10 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 
 **Likely paths:**
 - `apps/api/src/auth/guards/roles.guard.ts`
-- `apps/api/src/users/user.service.ts`
+- `apps/api/src/user/user.service.ts`
 - `apps/api/src/workspaces/**`
-- `apps/api/src/conversations/**`
-- `apps/api/src/runs/**`
+- `apps/api/src/conversation/**`
+- `apps/api/src/run/**`
 
 **Verification:**
 - 单测覆盖越权访问他人 workspace/conversation 被拒绝或查不到。
@@ -206,8 +206,8 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 - 临时密码继续用高熵随机生成。
 
 **Likely paths:**
-- `apps/api/src/users/password-hasher.service.ts`
-- `apps/api/src/users/user-credentials.ts`
+- `apps/api/src/user/credential/password-hasher.service.ts`
+- `apps/api/src/user/credential/user-credential.ts`
 - `apps/web/src/utils/validation.ts`
 
 **Verification:**
@@ -229,7 +229,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 
 **Likely paths:**
 - `apps/api/src/auth/**`
-- `apps/api/src/users/**`
+- `apps/api/src/user/**`
 - `apps/api/src/common/logging.ts`
 
 **Verification:**
@@ -248,7 +248,7 @@ P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。
 - 考虑已有 dev.db 兼容或明确 pre-launch 不迁移。
 
 **Likely paths:**
-- `apps/api/src/model-providers/**`
+- `apps/api/src/model-provider/**`
 - `apps/api/src/config/**`
 - `apps/api/prisma/schema.prisma`
 

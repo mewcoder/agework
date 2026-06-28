@@ -14,7 +14,7 @@ vi.mock("@agework/shared", async (importOriginal) => ({
 import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
 import type { WorkspaceCreateInput } from "./workspace.repository";
-import { WorkspaceDirectoryHandler } from "./directories/workspace-directory.handler";
+import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
 import {
   WORKSPACE_DELETED_EVENT,
