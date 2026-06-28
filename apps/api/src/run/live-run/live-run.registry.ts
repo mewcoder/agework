@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import type {
   AgentEventTraceConfig,
   WorkerExecutionHandle,
@@ -37,7 +37,7 @@ export type LiveRunHandle = {
 };
 
 @Injectable()
-export class LiveRunRegistry {
+export class LiveRunRegistry implements OnApplicationShutdown {
   private readonly logger = new Logger(LiveRunRegistry.name);
   private readonly handles = new Map<string, LiveRunHandle>();
   private readonly timeoutTimers = new Map<string, NodeJS.Timeout>();
@@ -62,6 +62,18 @@ export class LiveRunRegistry {
 
   get(runId: string): LiveRunHandle | undefined {
     return this.handles.get(runId);
+  }
+
+  /**
+   * 进程退出时清掉所有 run 超时 timer。timer 虽已 unref（不阻塞退出），
+   * 但清掉可避免 shutdown 过程中误触发 timeout sink 去改 run 状态。
+   * run 状态由重启后 RunRecoveryService 收敛。
+   */
+  onApplicationShutdown(): void {
+    for (const timer of this.timeoutTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.timeoutTimers.clear();
   }
 
   private startTimeout(runId: string): void {

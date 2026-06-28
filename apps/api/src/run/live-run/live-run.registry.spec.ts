@@ -82,4 +82,18 @@ describe("LiveRunRegistry", () => {
 
     expect(markRunTimedOut).not.toHaveBeenCalled();
   });
+
+  it("clears all timeout timers on application shutdown", async () => {
+    vi.useFakeTimers();
+    const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
+    const registry = new LiveRunRegistry(makeConfig(1));
+    registry.setTimeoutErrorSink({ markRunTimedOut });
+
+    registry.register("run-1", makeHandle("run-1"));
+    registry.register("run-2", makeHandle("run-2"));
+    registry.onApplicationShutdown();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(markRunTimedOut).not.toHaveBeenCalled();
+  });
 });

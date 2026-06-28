@@ -244,6 +244,28 @@ describe("LocalRunExecutor", () => {
     expect(childProcessMock.child.send).toHaveBeenCalledTimes(1);
   });
 
+  it("onApplicationShutdown terminates all in-flight local workers", () => {
+    provider.start({
+      runtimeTarget: makeRuntimeTarget(),
+      runConfig: makeRunConfig(),
+    });
+
+    provider.onApplicationShutdown();
+
+    expect(childProcessMock.child.kill).toHaveBeenCalledWith("SIGTERM");
+    // state cleared: a follow-up command for the terminated run is dropped
+    provider.sendCommand(
+      {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      { type: "interrupt", commandId: "command-1" }
+    );
+    expect(childProcessMock.child.send).toHaveBeenCalledTimes(1); // only the run.config send
+  });
+
   describe("cleanupInterruptedExecution()", () => {
     it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);

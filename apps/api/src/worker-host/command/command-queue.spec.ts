@@ -124,4 +124,14 @@ describe("WorkerCommandQueue", () => {
 
     await expect(pending).resolves.toEqual([]);
   });
+
+  it("drains all pending waiters with empty commands on application shutdown", async () => {
+    const a = queue.waitForOwnerId("owner-1", 0, 60_000);
+    const b = queue.waitForOwnerId("owner-2", 0, 60_000);
+
+    queue.onApplicationShutdown();
+
+    await expect(a).resolves.toEqual([]);
+    await expect(b).resolves.toEqual([]);
+  });
 });

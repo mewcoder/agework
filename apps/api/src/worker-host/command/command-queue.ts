@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import type {
   RunChannelMessage,
   CommandPayload,
@@ -22,7 +22,7 @@ type OwnerWaiter = {
  * 一个 ownerId 对应一个可复用的持久容器，对应一个独立的命令队列分区。
  */
 @Injectable()
-export class WorkerCommandQueue {
+export class WorkerCommandQueue implements OnApplicationShutdown {
   private readonly logger = new Logger(WorkerCommandQueue.name);
   /** ownerId 级队列——持久容器通过 ownerId 轮询命令。 */
   private readonly ownerQueues = new Map<
@@ -132,6 +132,26 @@ export class WorkerCommandQueue {
           })}`
         )
       );
+  }
+
+  /**
+   * 进程退出时释放所有挂起的 long-poll waiter：清 timer（未 unref，会拖住干净退出）
+   * 并以空命令立即 resolve，避免轮询连接和定时器悬挂。
+   */
+  onApplicationShutdown(): void {
+    let drained = 0;
+    for (const waiters of this.ownerWaiters.values()) {
+      for (const waiter of waiters) {
+        clearTimeout(waiter.timer);
+        waiter.resolve([]);
+        drained += 1;
+      }
+    }
+    this.ownerWaiters.clear();
+    this.ownerQueues.clear();
+    if (drained > 0) {
+      this.logger.log(`drained ${drained} owner command waiter(s) on shutdown`);
+    }
   }
 
   cleanupByOwnerId(ownerId: string): void {

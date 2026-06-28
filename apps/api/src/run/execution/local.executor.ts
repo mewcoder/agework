@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
@@ -46,7 +46,7 @@ const TSX_CLI = require.resolve("tsx/cli");
  * runtimeInstanceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
  */
 @Injectable()
-export class LocalRunExecutor implements RunExecutor {
+export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRunExecutor.name);
   private readonly states = new Map<string, LocalRunState>();
@@ -242,6 +242,21 @@ export class LocalRunExecutor implements RunExecutor {
       );
     } finally {
       this.cleanup(runId);
+    }
+  }
+
+  /**
+   * 进程退出时最佳努力终止所有在途 local worker 子进程，避免孤儿进程。
+   * fork 出的 worker 是独立进程，向 API pid 发 SIGTERM 不会传播到它们。
+   * run 状态不在此落库，由重启后 RunRecoveryService 收敛。
+   */
+  onApplicationShutdown(): void {
+    if (this.states.size === 0) return;
+    this.logger.log(
+      `terminating ${this.states.size} local worker(s) on shutdown`
+    );
+    for (const runId of [...this.states.keys()]) {
+      this.terminateExecution(runId, "application_shutdown");
     }
   }
 

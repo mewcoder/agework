@@ -15,6 +15,19 @@
 
 ### 1. Lifecycle shutdown / graceful cleanup
 
+**Status:** Done (2026-06-28)
+
+落点与决策：
+- **run 状态走「恢复后处理」**，shutdown 期不写 DB。`RunRecoveryService.recoverInterruptedRuns()`（启动时跑）
+  已完整地清残留 active run 的进程/容器、标 run/conversation 为 error、恢复孤儿/stale runtime 资源。
+- 给 3 个持有状态的 provider 加 `OnApplicationShutdown`（最佳努力、不阻塞）：
+  - `LocalRunExecutor`：SIGTERM 所有在途子进程，避免孤儿（fork 的 worker 不随 API pid 退出）。
+  - `WorkerCommandQueue`：drain 所有 long-poll waiter（timer 未 unref，会拖住退出）+ 清队列。
+  - `LiveRunRegistry`：清所有超时 timer（已 unref 不阻塞，但避免 shutdown 中误触发 timeout sink）。
+- **sandbox 持久容器不动**：故意留给重启恢复（孤儿容器由 RunRecoveryService 清，符合「重启清而非复用」）。
+- `WorkerEventService` 的 completedRuns timer 已 unref、无害，不处理；Prisma 仍用既有 `OnModuleDestroy`。
+- 单测覆盖三个 hook（local.executor / command-queue / live-run.registry spec）；SIGTERM 全链路留手动验证。
+
 **Objective:** 在现有 lifecycle hook 基础上，补齐应用退出时的 run、worker、sandbox、timer、waiter 清理策略。
 
 **Nest doc:** [Lifecycle events](https://docs.nestjs.com/fundamentals/lifecycle-events)
