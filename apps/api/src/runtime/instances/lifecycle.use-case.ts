@@ -1,10 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeProviderRegistry } from "../providers/provider-registry";
-import {
-  runtimeInstanceMetadataJson,
-  stoppedInstanceMetadata,
-} from "./runtime-instance-metadata";
+import { WorkspaceRuntimeInstanceRepository } from "./workspace-runtime-instance.repository";
 
 /**
  * Runtime 资源生命周期清理：
@@ -16,16 +12,13 @@ export class RuntimeInstanceLifecycleUseCase {
   private readonly logger = new Logger(RuntimeInstanceLifecycleUseCase.name);
 
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly repository: WorkspaceRuntimeInstanceRepository,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry
   ) {}
 
   /** 关闭专属于该 workspace 的 runtime 资源（user 隔离下的共享资源不受影响）。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
-    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
-      where: { workspaceId },
-      include: { resource: true },
-    });
+    const binding = await this.repository.findBindingWithResource(workspaceId);
     if (binding?.resource.status === "running") {
       const resource = binding.resource;
       if (
@@ -35,21 +28,16 @@ export class RuntimeInstanceLifecycleUseCase {
         await this.shutdownResource(resource);
       }
     }
-    await this.prisma.workspaceRuntimeInstance.deleteMany({ where: { workspaceId } });
+    await this.repository.deleteWorkspaceBinding(workspaceId);
   }
 
   /** 关闭该用户名下所有 runtime 资源（user 级共享资源 + 该用户所有 workspace 级资源）。
    *  user 隔离下 ownerId = userId；workspace 隔离下 ownerId = workspaceId（也归该 user），
    *  通过 ownerId IN (userId, 该 user 的 workspace ids) 匹配。 */
   async shutdownForUser(userId: string): Promise<void> {
-    const workspaces = await this.prisma.workspace.findMany({
-      where: { userId, deletedAt: null },
-      select: { id: true },
-    });
+    const workspaces = await this.repository.findWorkspaceIdsByUser(userId);
     const ownerIds = [userId, ...workspaces.map((w) => w.id)];
-    const resources = await this.prisma.runtimeInstance.findMany({
-      where: { ownerId: { in: ownerIds }, status: "running" },
-    });
+    const resources = await this.repository.findRunningByOwners(ownerIds);
     for (const resource of resources) {
       await this.shutdownResource(resource);
     }
@@ -68,20 +56,7 @@ export class RuntimeInstanceLifecycleUseCase {
       await Promise.resolve(
         provider.shutdownRuntimeInstance?.(resource.ownerId)
       );
-      await this.prisma.runtimeInstance.update({
-        where: { id: resource.id },
-        data: {
-          status: "stopped",
-          metadata: runtimeInstanceMetadataJson(
-            stoppedInstanceMetadata({
-              runtimeType: resource.runtimeType,
-              isolationScope: resource.isolationScope,
-              ownerId: resource.ownerId,
-              reason: "owner_released",
-            })
-          ),
-        },
-      });
+      await this.repository.markStoppedById(resource, "owner_released");
     } catch (err) {
       this.logger.warn(
         `Failed to shut down runtime resource ${resource.id}: ${err instanceof Error ? err.message : String(err)}`

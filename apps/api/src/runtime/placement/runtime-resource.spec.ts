@@ -5,7 +5,7 @@ import {
   type ResolveRuntimeTargetInput,
   type RuntimeTargetDefaults,
 } from "./runtime-resource";
-import { CONTAINER_WORKSPACES_ROOT } from "../config/registry/defaults";
+import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
 
 const DEFAULTS: RuntimeTargetDefaults = {
   runtimeType: "sandbox",

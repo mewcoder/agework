@@ -172,4 +172,78 @@ export class WorkspaceRuntimeInstanceRepository {
       where: { status: "stale" },
     });
   }
+
+  countRunning(): Promise<number> {
+    return this.prisma.runtimeInstance.count({ where: { status: "running" } });
+  }
+
+  async listResourcesPage(opts: {
+    status?: string;
+    take: number;
+    skip: number;
+  }) {
+    const where = opts.status ? { status: opts.status } : {};
+    const [items, total] = await Promise.all([
+      this.prisma.runtimeInstance.findMany({
+        where,
+        include: { workspaceRuntimeInstances: true },
+        orderBy: { updatedAt: "desc" },
+        take: opts.take,
+        skip: opts.skip,
+      }),
+      this.prisma.runtimeInstance.count({ where }),
+    ]);
+    return { items, total };
+  }
+
+  findById(id: string) {
+    return this.prisma.runtimeInstance.findUnique({ where: { id } });
+  }
+
+  /** 绑定 + 资源（不限状态），供生命周期清理判断隔离归属。 */
+  findBindingWithResource(workspaceId: string) {
+    return this.prisma.workspaceRuntimeInstance.findUnique({
+      where: { workspaceId },
+      include: { resource: true },
+    });
+  }
+
+  findWorkspaceIdsByUser(userId: string): Promise<{ id: string }[]> {
+    return this.prisma.workspace.findMany({
+      where: { userId, deletedAt: null },
+      select: { id: true },
+    });
+  }
+
+  findRunningByOwners(ownerIds: string[]) {
+    return this.prisma.runtimeInstance.findMany({
+      where: { ownerId: { in: ownerIds }, status: "running" },
+    });
+  }
+
+  /** 按 id 置为 stopped 并写入停机诊断元数据。 */
+  async markStoppedById(
+    resource: {
+      id: string;
+      runtimeType: string;
+      isolationScope: string;
+      ownerId: string;
+    },
+    reason: string
+  ): Promise<void> {
+    await this.prisma.runtimeInstance.update({
+      where: { id: resource.id },
+      data: {
+        status: "stopped",
+        metadata: runtimeInstanceMetadataJson(
+          stoppedInstanceMetadata({
+            runtimeType: resource.runtimeType,
+            isolationScope: resource.isolationScope,
+            ownerId: resource.ownerId,
+            reason,
+          })
+        ),
+      },
+    });
+  }
 }

@@ -302,4 +302,70 @@ describe("WorkspaceRuntimeInstanceRepository", () => {
     });
     expect(result.count).toBe(2);
   });
+
+  it("listResourcesPage filters by status, includes bindings and counts", async () => {
+    const findMany = vi.fn().mockResolvedValue([{ id: "rr-1" }]);
+    const count = vi.fn().mockResolvedValue(1);
+    const service = new WorkspaceRuntimeInstanceRepository({
+      runtimeInstance: { findMany, count },
+    } as never);
+
+    const result = await service.listResourcesPage({
+      status: "running",
+      take: 10,
+      skip: 0,
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { status: "running" },
+        include: { workspaceRuntimeInstances: true },
+        take: 10,
+        skip: 0,
+      })
+    );
+    expect(result).toEqual({ items: [{ id: "rr-1" }], total: 1 });
+  });
+
+  it("findRunningByOwners matches running resources for the given owners", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const service = new WorkspaceRuntimeInstanceRepository({
+      runtimeInstance: { findMany },
+    } as never);
+
+    await service.findRunningByOwners(["user-1", "ws-2"]);
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: { ownerId: { in: ["user-1", "ws-2"] }, status: "running" },
+    });
+  });
+
+  it("markStoppedById sets status stopped with stop diagnostics metadata", async () => {
+    const update = vi.fn().mockResolvedValue({});
+    const service = new WorkspaceRuntimeInstanceRepository({
+      runtimeInstance: { update },
+    } as never);
+
+    await service.markStoppedById(
+      {
+        id: "rr-1",
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        ownerId: "ws-1",
+      },
+      "owner_released"
+    );
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "rr-1" },
+      data: {
+        status: "stopped",
+        metadata: expect.objectContaining({
+          ownerId: "ws-1",
+          statusReason: "owner_released",
+          stoppedAt: expect.any(String),
+        }),
+      },
+    });
+  });
 });
