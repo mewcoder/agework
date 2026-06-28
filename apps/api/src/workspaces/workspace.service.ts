@@ -18,7 +18,7 @@ import {
   type SandboxEngineType,
 } from "../config/config.service";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { PrismaService } from "../prisma/prisma.service";
+import { WorkspaceRepository } from "./workspace.repository";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -27,16 +27,7 @@ import {
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
 
-const WORKSPACE_INCLUDE = { directory: true } as const;
-
 const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
-const ACTIVE_RUN_STATUSES = [
-  "queued",
-  "preparing",
-  "running",
-  "cancelling",
-  "requires_action",
-] as const;
 const MANAGED_DIRECTORY_SOURCE = "managed";
 const EXTERNAL_DIRECTORY_SOURCE = "external";
 
@@ -91,61 +82,33 @@ function expandHomePath(input: string): string {
 export class WorkspaceService {
   private readonly logger = new Logger(WorkspaceService.name);
   constructor(
-    private prisma: PrismaService,
+    private repo: WorkspaceRepository,
     private config: ConfigService,
     private events: EventEmitter2
   ) {}
 
   async listAll(pagination?: { take: number; skip: number }) {
-    const where = { deletedAt: null };
-    if (pagination) {
-      const [workspaces, total] = await Promise.all([
-        this.prisma.workspace.findMany({
-          where,
-          include: {
-            user: { select: { username: true } },
-            _count: { select: { conversations: { where: { deletedAt: null } } } },
-            ...WORKSPACE_INCLUDE,
-          },
-          orderBy: { createdAt: "desc" },
-          take: pagination.take,
-          skip: pagination.skip,
-        }),
-        this.prisma.workspace.count({ where }),
-      ]);
+    const { list, total } = await this.repo.listAllWithMeta(pagination);
+    const mapped = list.map((p) => {
+      const { _count, ...rest } = p;
       return {
-        list: workspaces.map((p) => {
-          const { _count, ...rest } = p;
-          return { ...this.toWorkspaceDto(rest), conversationCount: _count.conversations };
-        }),
+        ...this.toWorkspaceDto(rest),
+        conversationCount: _count.conversations,
+      };
+    });
+    if (pagination) {
+      return {
+        list: mapped,
         total,
         pageNo: pagination.skip / pagination.take + 1,
         pageSize: pagination.take,
       };
     }
-    const workspaces = await this.prisma.workspace.findMany({
-      where,
-      include: {
-        user: { select: { username: true } },
-        _count: { select: { conversations: { where: { deletedAt: null } } } },
-        ...WORKSPACE_INCLUDE,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    return {
-      list: workspaces.map((p) => {
-        const { _count, ...rest } = p;
-        return { ...this.toWorkspaceDto(rest), conversationCount: _count.conversations };
-      }),
-    };
+    return { list: mapped };
   }
 
   async list(userId: string) {
-    const workspaces = await this.prisma.workspace.findMany({
-      where: { ...this.ownerWhere(userId), deletedAt: null },
-      include: WORKSPACE_INCLUDE,
-      orderBy: { createdAt: "desc" },
-    });
+    const workspaces = await this.repo.listByOwner(userId);
     return { list: workspaces.map((p) => this.toWorkspaceDto(p)) };
   }
 
@@ -225,32 +188,19 @@ export class WorkspaceService {
     }
 
     try {
-      const workspace = await this.prisma.$transaction(async (tx) => {
-        const created = await tx.workspace.create({
-          data: {
-            id,
-            name: workspaceName,
-            gitUrl: workspaceGitUrl,
-            description: workspaceDescription,
-            userId,
-            runtimeType: runtimeType,
-            isolationScope,
-            sandboxEngine,
-          },
-        });
-        const directory = await tx.workspaceDirectory.create({
-          data: {
-            id: generateId(),
-            workspaceId: created.id,
-            rootPath,
-            status: "ready",
-            source: ownsDirectory
-              ? MANAGED_DIRECTORY_SOURCE
-              : EXTERNAL_DIRECTORY_SOURCE,
-            metadata: {},
-          },
-        });
-        return { ...created, directory };
+      const workspace = await this.repo.createWithDirectory({
+        id,
+        name: workspaceName,
+        gitUrl: workspaceGitUrl,
+        description: workspaceDescription,
+        userId,
+        runtimeType,
+        isolationScope,
+        sandboxEngine,
+        rootPath,
+        directorySource: ownsDirectory
+          ? MANAGED_DIRECTORY_SOURCE
+          : EXTERNAL_DIRECTORY_SOURCE,
       });
       return this.toWorkspaceDto(workspace);
     } catch (err) {
@@ -267,26 +217,9 @@ export class WorkspaceService {
     name: string,
     description?: string | null
   ) {
-    const workspaceName = this.normalizeName(name);
-    const workspaceDescription =
-      description === undefined
-        ? undefined
-        : this.normalizeDescription(description);
-
-    // 使用事务确保查询和更新的原子性
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const workspace = await tx.workspace.findFirst({
-        where: { id, ...this.ownerWhere(userId), deletedAt: null },
-      });
-      if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
-
-      return tx.workspace.update({
-        where: { id },
-        data: { name: workspaceName, description: workspaceDescription },
-        include: WORKSPACE_INCLUDE,
-      });
-    });
-
+    const patch = this.normalizePatch(name, description);
+    const updated = await this.repo.updateOwned(userId, id, patch);
+    if (!updated) throw new NotFoundException(`Workspace ${id} not found`);
     return this.toWorkspaceDto(updated);
   }
 
@@ -295,57 +228,30 @@ export class WorkspaceService {
     name: string,
     description?: string | null
   ) {
-    const workspaceName = this.normalizeName(name);
-    const workspaceDescription =
-      description === undefined
-        ? undefined
-        : this.normalizeDescription(description);
-
-    // 使用事务确保查询和更新的原子性
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const workspace = await tx.workspace.findFirst({
-        where: { id, deletedAt: null },
-      });
-      if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
-
-      return tx.workspace.update({
-        where: { id },
-        data: { name: workspaceName, description: workspaceDescription },
-        include: WORKSPACE_INCLUDE,
-      });
-    });
-
+    const patch = this.normalizePatch(name, description);
+    const updated = await this.repo.updateById(id, patch);
+    if (!updated) throw new NotFoundException(`Workspace ${id} not found`);
     return this.toWorkspaceDto(updated);
   }
 
+  private normalizePatch(name: string, description?: string | null) {
+    return {
+      name: this.normalizeName(name),
+      description:
+        description === undefined
+          ? undefined
+          : this.normalizeDescription(description),
+    };
+  }
+
   async delete(userId: string, id: string) {
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id, ...this.ownerWhere(userId), deletedAt: null },
-      select: { id: true },
-    });
+    const workspace = await this.repo.findOwnedId(userId, id);
     if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
-    const activeRun = await this.prisma.run.findFirst({
-      where: {
-        conversation: { workspaceId: id },
-        status: { in: [...ACTIVE_RUN_STATUSES] },
-      },
-      select: { id: true },
-    });
-    if (activeRun) {
+    if (await this.repo.hasActiveRun(id)) {
       throw new BadRequestException("工作空间有正在运行的任务，不能删除");
     }
 
-    const deletedAt = new Date();
-    await this.prisma.$transaction([
-      this.prisma.workspace.update({
-        where: { id },
-        data: { deletedAt },
-      }),
-      this.prisma.conversation.updateMany({
-        where: { workspaceId: id, deletedAt: null },
-        data: { deletedAt },
-      }),
-    ]);
+    await this.repo.softDeleteCascade(id);
 
     // 下游（runtime）据此清理与该 workspace 绑定的资源；workspace 不感知下游。
     this.events.emit(WORKSPACE_DELETED_EVENT, new WorkspaceDeletedEvent(id));
@@ -434,10 +340,7 @@ export class WorkspaceService {
       this.assertPathOutsideUserRoot(username, rootPath);
     }
 
-    const existing = await this.prisma.workspaceDirectory.findFirst({
-      where: { rootPath },
-      select: { workspaceId: true },
-    });
+    const existing = await this.repo.findDirectoryByRootPath(rootPath);
     if (existing) {
       throw new ConflictException("该目录已绑定到其他工作空间");
     }
@@ -490,14 +393,11 @@ export class WorkspaceService {
   }
 
   private async resolveUsername(userId: string): Promise<string> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { username: true },
-    });
-    if (!user) {
+    const username = await this.repo.findUsername(userId);
+    if (!username) {
       throw new BadRequestException(`用户不存在: ${userId}`);
     }
-    return user.username;
+    return username;
   }
 
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {
@@ -578,10 +478,6 @@ export class WorkspaceService {
   ) {
     return runtimeType === "local" ||
       (runtimeType === "sandbox" && isolationScope === "workspace");
-  }
-
-  private ownerWhere(userId: string) {
-    return { userId };
   }
 }
 

@@ -3,7 +3,6 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 import { ModelProviderService } from "./model-provider.service";
-import { PrismaService } from "../prisma/prisma.service";
 
 vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
@@ -13,22 +12,21 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(),
 }));
 
-function createService(
-  overrides: Partial<PrismaService["modelProvider"]> = {}
-) {
-  const prisma = {
-    modelProvider: {
-      findMany: vi.fn().mockResolvedValue([]),
-      findUnique: vi.fn().mockResolvedValue(null),
-      create: vi.fn(),
-      update: vi.fn(),
-      ...overrides,
-    },
+function createService(overrides: Record<string, unknown> = {}) {
+  const repo = {
+    findById: vi.fn().mockResolvedValue(null),
+    findEnabled: vi.fn().mockResolvedValue(null),
+    findManyByAgent: vi.fn().mockResolvedValue([]),
+    findIdByName: vi.fn().mockResolvedValue(null),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    ...overrides,
   };
 
   return {
-    prisma,
-    service: new ModelProviderService(prisma as unknown as PrismaService),
+    repo,
+    service: new ModelProviderService(repo as never),
   };
 }
 
@@ -38,7 +36,7 @@ describe("ModelProviderService", () => {
 
   it("desensitizes apiKey for listEnabled (non-admin) responses", async () => {
     const { service } = createService({
-      findMany: vi.fn().mockResolvedValue([
+      findManyByAgent: vi.fn().mockResolvedValue([
         {
           id: "mp-1",
           agentType: "claude",
@@ -68,7 +66,7 @@ describe("ModelProviderService", () => {
 
   it("keeps the real apiKey for listForAdmin (admin) responses", async () => {
     const { service } = createService({
-      findMany: vi.fn().mockResolvedValue([
+      findManyByAgent: vi.fn().mockResolvedValue([
         {
           id: "mp-1",
           agentType: "claude",
@@ -97,12 +95,12 @@ describe("ModelProviderService", () => {
   });
 
   it("creates system model providers disabled by default", async () => {
-    const { prisma, service } = createService();
+    const { repo, service } = createService();
 
     await service.onModuleInit();
 
-    expect(prisma.modelProvider.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
         id: "system:claude",
         agentType: "claude",
         scope: "system",
@@ -112,10 +110,10 @@ describe("ModelProviderService", () => {
         apiKey: "",
         models: [],
         extraConfig: {},
-      }),
-    });
-    expect(prisma.modelProvider.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+      })
+    );
+    expect(repo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
         id: "system:codex",
         agentType: "codex",
         scope: "system",
@@ -125,8 +123,8 @@ describe("ModelProviderService", () => {
         apiKey: "",
         models: [],
         extraConfig: {},
-      }),
-    });
+      })
+    );
   });
 
   it("includes system status for system providers", async () => {
@@ -137,7 +135,7 @@ describe("ModelProviderService", () => {
 
     try {
       const { service } = createService({
-        findMany: vi.fn().mockResolvedValue([
+        findManyByAgent: vi.fn().mockResolvedValue([
           {
             id: "system:claude",
             agentType: "claude",
@@ -192,7 +190,7 @@ describe("ModelProviderService", () => {
 
     try {
       const { service } = createService({
-        findMany: vi.fn().mockResolvedValue([
+        findManyByAgent: vi.fn().mockResolvedValue([
           {
             id: "system:claude",
             agentType: "claude",
@@ -269,7 +267,7 @@ describe("ModelProviderService", () => {
 
   it("resolves an enabled system provider from database state", async () => {
     const { service } = createService({
-      findFirst: vi.fn().mockResolvedValue({
+      findEnabled: vi.fn().mockResolvedValue({
         id: "system:claude",
         agentType: "claude",
         scope: "system",
@@ -287,21 +285,19 @@ describe("ModelProviderService", () => {
   });
 
   it("returns null when a system provider is not enabled in database state", async () => {
-    const { prisma, service } = createService({
-      findFirst: vi.fn().mockResolvedValue(null),
+    const { repo, service } = createService({
+      findEnabled: vi.fn().mockResolvedValue(null),
     });
 
     await expect(
       service.resolveEnabledProvider("claude", "system:claude")
     ).resolves.toBeNull();
-    expect(prisma.modelProvider.findFirst).toHaveBeenCalledWith({
-      where: { id: "system:claude", agentType: "claude", isEnabled: true },
-    });
+    expect(repo.findEnabled).toHaveBeenCalledWith("system:claude", "claude");
   });
 
   it("resolves an enabled custom provider with its saved config", async () => {
     const { service } = createService({
-      findFirst: vi.fn().mockResolvedValue({
+      findEnabled: vi.fn().mockResolvedValue({
         id: "mp-1",
         agentType: "claude",
         scope: "global",
@@ -323,6 +319,36 @@ describe("ModelProviderService", () => {
         models: ["claude-test"],
         extraConfig: { FOO: "bar" },
       },
+    });
+  });
+
+  describe("test", () => {
+    it("rejects connectivity tests for the system provider", async () => {
+      const { service } = createService();
+      await expect(service.test("system:claude")).rejects.toThrow(
+        "系统环境不支持连通性测试"
+      );
+    });
+
+    it("fails fast without an ai-sdk call when no model is configured", async () => {
+      const { service } = createService({
+        findById: vi.fn().mockResolvedValue({
+          id: "mp-1",
+          agentType: "codex",
+          scope: "global",
+          isEnabled: true,
+          baseUrl: "https://example.com",
+          apiKey: "sk-test",
+          models: [],
+          extraConfig: {},
+        }),
+      });
+
+      await expect(service.test("mp-1")).resolves.toEqual({
+        success: false,
+        latency: 0,
+        error: "未配置 models",
+      });
     });
   });
 });

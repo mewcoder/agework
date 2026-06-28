@@ -14,18 +14,32 @@ import type {
   ConversationSearchResponse,
   ConversationStatus,
 } from "@agework/shared/api";
-import type { Prisma } from "../../generated/prisma/client.js";
-import { PrismaService } from "../prisma/prisma.service";
-import { extractText } from "./message-text";
 import { swallow } from "../common/swallow";
-import { TitleService } from "./title.service";
+import { ConversationRepository } from "./conversation.repository";
+import { TitleService } from "./title/title.service";
+import type { AssistantUserMessage } from "./conversation.types";
 
-export type AssistantUserMessage = {
-  id?: unknown;
-  parentId?: unknown;
-  parent_id?: unknown;
-  content?: unknown;
-};
+// 从 assistant-ui 消息 content(string / part 数组 / { role, content } 对象)提取纯文本。
+function extractText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter(
+        (p): p is { type: string; text: string } =>
+          !!p &&
+          typeof p === "object" &&
+          (p as { type?: unknown }).type === "text" &&
+          typeof (p as { text?: unknown }).text === "string"
+      )
+      .map((p) => p.text)
+      .join(" ");
+  }
+  // assistant-ui 消息：{ id, role, content: [...] }，递归提取其 content 字段
+  if (content !== null && typeof content === "object" && "content" in content) {
+    return extractText((content as { content: unknown }).content);
+  }
+  return "";
+}
 
 function isStoredUserMessage(
   content: unknown
@@ -42,7 +56,7 @@ export class ConversationService {
   private readonly logger = new Logger(ConversationService.name);
 
   constructor(
-    private prisma: PrismaService,
+    private repo: ConversationRepository,
     @Optional() private readonly titleService?: TitleService
   ) {}
 
@@ -80,16 +94,12 @@ export class ConversationService {
 
   async list(userId: string, after?: string, status?: string, sort?: string) {
     const sortKey = sort === "createdAt" ? "createdAt" : "updatedAt";
-    const conversations = await this.prisma.conversation.findMany({
-      where: {
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-        // 默认只返回常规会话；归档会话需显式 status=archived 查询
-        status: status ?? "regular",
-      },
-      orderBy: { [sortKey]: "desc" },
+    const conversations = await this.repo.findByOwner(userId, {
+      // 默认只返回常规会话；归档会话需显式 status=archived 查询
+      status: status ?? "regular",
+      sortKey,
+      after,
       take: 50,
-      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
     });
     return {
       list: conversations.map((c) => this.toConversationDto(c)),
@@ -113,15 +123,7 @@ export class ConversationService {
     const lowerQuery = trimmed.toLowerCase();
 
     // 1. 拉取当前用户全部常规会话（按 updatedAt desc，便于命中后保持顺序）
-    const conversations = await this.prisma.conversation.findMany({
-      where: {
-        deletedAt: null,
-        status: "regular",
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 200,
-    });
+    const conversations = await this.repo.findRegularByOwner(userId, 200);
 
     if (conversations.length === 0) return { list: [] };
 
@@ -149,11 +151,9 @@ export class ConversationService {
     if (unmatchedConversationIds.length === 0) {
       return { list: hits.slice(0, clampedLimit) };
     }
-    const messages = await this.prisma.message.findMany({
-      where: { conversationId: { in: unmatchedConversationIds } },
-      orderBy: { createdAt: "asc" },
-      select: { id: true, conversationId: true, content: true },
-    });
+    const messages = await this.repo.findMessagesForConversations(
+      unmatchedConversationIds
+    );
     const messagesByConversation = new Map<
       string,
       { id: string; conversationId: string; content: unknown }[]
@@ -213,21 +213,17 @@ export class ConversationService {
     title?: string,
   ) {
     if (!workspaceId) throw new BadRequestException("workspaceId is required");
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id: workspaceId, ...this.workspaceOwnerWhere(userId) },
-    });
+    const workspace = await this.repo.findOwnedWorkspace(userId, workspaceId);
     if (!workspace)
       throw new BadRequestException(`Workspace ${workspaceId} not found`);
     const resolvedAgentType = this.resolveAgentType(agentType);
     const resolvedTitle =
       title ?? (firstMessage?.slice(0, 10) || undefined);
-    const conversation = await this.prisma.conversation.create({
-      data: {
-        id: generateId(),
-        workspaceId,
-        title: resolvedTitle,
-        agentType: resolvedAgentType,
-      },
+    const conversation = await this.repo.create({
+      id: generateId(),
+      workspaceId,
+      title: resolvedTitle,
+      agentType: resolvedAgentType,
     });
     return this.toConversationDto(conversation);
   }
@@ -243,13 +239,7 @@ export class ConversationService {
   }
 
   async findOne(userId: string, conversationId: string) {
-    const c = await this.prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-    });
+    const c = await this.repo.findOwnedById(userId, conversationId);
     if (!c) {
       throw new NotFoundException(`对话不存在: ${conversationId}`);
     }
@@ -260,19 +250,10 @@ export class ConversationService {
     const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 50);
     if (uniqueIds.length === 0) return { list: [] };
 
-    const conversations = await this.prisma.conversation.findMany({
-      where: {
-        id: { in: uniqueIds },
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      select: {
-        id: true,
-        activeRunStatus: true,
-        pendingUserAction: true,
-        updatedAt: true,
-      },
-    });
+    const conversations = await this.repo.findRunStatusesByOwner(
+      userId,
+      uniqueIds
+    );
 
     return {
       list: conversations.map((conversation) => ({
@@ -288,10 +269,7 @@ export class ConversationService {
   }
 
   async setAgentSessionId(conversationId: string, agentSessionId: string) {
-    await this.prisma.conversation.updateMany({
-      where: { id: conversationId, deletedAt: null },
-      data: { agentSessionId },
-    });
+    await this.repo.setAgentSessionId(conversationId, agentSessionId);
   }
 
   async generateTitleIfNeeded(input: {
@@ -311,10 +289,7 @@ export class ConversationService {
     });
     if (!title) return;
 
-    await this.prisma.conversation.updateMany({
-      where: { id: input.conversationId, deletedAt: null },
-      data: { title },
-    });
+    await this.repo.updateTitle(input.conversationId, title);
   }
 
   async update(
@@ -326,51 +301,25 @@ export class ConversationService {
 
     // 只改标题时不更新 updatedAt，避免对话重新排序
     if (title !== undefined && status === undefined) {
-      await this.prisma.$executeRaw`
-        UPDATE Conversation
-        SET title = ${title}
-        WHERE id = ${conversationId}
-          AND deletedAt IS NULL
-          AND workspaceId IN (
-            SELECT id FROM Workspace WHERE userId = ${userId} AND deletedAt IS NULL
-          )
-      `;
+      await this.repo.renameOwned(userId, conversationId, title);
       return;
     }
 
-    await this.prisma.conversation.updateMany({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      data: { title, status },
-    });
+    await this.repo.updateOwned(userId, conversationId, { title, status });
   }
 
   async setActiveRunStatus(
     conversationId: string,
     activeRunStatus: "idle" | "running" | "error"
   ): Promise<boolean> {
-    const where =
-      activeRunStatus === "running"
-        ? { id: conversationId, activeRunStatus: { in: ["idle", "error"] } }
-        : { id: conversationId };
-    const result = await this.prisma.conversation.updateMany({
-      where,
-      data: { activeRunStatus, pendingUserAction: null },
-    });
-    return result.count > 0;
+    return this.repo.setActiveRunStatus(conversationId, activeRunStatus);
   }
 
   async setPendingUserAction(
     conversationId: string,
     pendingUserAction: ConversationPendingUserAction
   ) {
-    await this.prisma.conversation.updateMany({
-      where: { id: conversationId, deletedAt: null },
-      data: { pendingUserAction },
-    });
+    await this.repo.setPendingUserAction(conversationId, pendingUserAction);
   }
 
   async saveUserMessage(
@@ -418,20 +367,14 @@ export class ConversationService {
     messageId: string,
     runId: string
   ) {
-    return this.prisma.message.updateMany({
-      where: { id: messageId, conversationId },
-      data: { runId },
-    });
+    return this.repo.attachMessageToRun(conversationId, messageId, runId);
   }
 
   private async ensureTitleFromMessage(
     conversationId: string,
     content: unknown
   ) {
-    const conversation = await this.prisma.conversation.findUnique({
-      where: { id: conversationId, deletedAt: null },
-      select: { title: true },
-    });
+    const conversation = await this.repo.findTitle(conversationId);
     if (conversation?.title) return;
     const text = extractText(content).replace(/\s+/g, " ").trim();
     if (!text) return;
@@ -443,20 +386,13 @@ export class ConversationService {
         ""
       );
     if (!title) return;
-    await this.prisma.conversation.updateMany({
-      where: { id: conversationId, deletedAt: null },
-      data: { title },
-    });
+    await this.repo.updateTitle(conversationId, title);
   }
 
   private async findInitialUserText(
     conversationId: string
   ): Promise<string | null> {
-    const messages = await this.prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "asc" },
-      select: { content: true },
-    });
+    const messages = await this.repo.findContentsByConversation(conversationId);
     let userMessageCount = 0;
     let firstUserText: string | null = null;
 
@@ -473,63 +409,26 @@ export class ConversationService {
   }
 
   async archive(userId: string, conversationId: string) {
-    await this.prisma.conversation.updateMany({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      data: { status: "archived" },
-    });
+    await this.repo.archiveOwned(userId, conversationId);
   }
 
   async unarchive(userId: string, conversationId: string) {
-    await this.prisma.conversation.updateMany({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      data: { status: "regular" },
-    });
+    await this.repo.unarchiveOwned(userId, conversationId);
   }
 
   async delete(userId: string, conversationId: string) {
-    await this.prisma.conversation.updateMany({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      data: { deletedAt: new Date() },
-    });
+    await this.repo.softDeleteOwned(userId, conversationId);
   }
 
   async clearArchived(userId: string) {
-    await this.prisma.conversation.updateMany({
-      where: {
-        status: "archived",
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-      data: { deletedAt: new Date() },
-    });
+    await this.repo.clearArchivedOwned(userId);
   }
 
   async listMessages(userId: string, conversationId: string) {
-    const conversation = await this.prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: this.workspaceOwnerWhere(userId),
-      },
-    });
+    const conversation = await this.repo.findOwnedById(userId, conversationId);
     if (!conversation) return [];
 
-    const messages = await this.prisma.message.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: "asc" },
-    });
+    const messages = await this.repo.findMessages(conversationId);
     let previousMessageId: string | null = null;
     return messages.map((m) => {
       const content = m.content as unknown;
@@ -554,54 +453,7 @@ export class ConversationService {
       content: unknown;
     }
   ) {
-    const contentJson = this.toJsonInput(data.content);
-    const parentId = await this.resolveParentId(
-      conversationId,
-      data.id,
-      data.parent_id
-    );
-    await this.prisma.message.upsert({
-      where: { id_conversationId: { id: data.id, conversationId } },
-      create: {
-        id: data.id,
-        conversationId,
-        runId: data.runId ?? null,
-        parentId,
-        format: data.format,
-        content: contentJson,
-      },
-      update: {
-        parentId,
-        format: data.format,
-        content: contentJson,
-        ...(data.runId !== undefined ? { runId: data.runId } : {}),
-      },
-    });
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
-    });
-  }
-
-  private async resolveParentId(
-    conversationId: string,
-    messageId: string,
-    parentId: string | null
-  ) {
-    if (parentId) return parentId;
-
-    const existing = await this.prisma.message.findFirst({
-      where: { id: messageId, conversationId },
-      select: { parentId: true },
-    });
-    if (existing?.parentId) return existing.parentId;
-
-    const previous = await this.prisma.message.findFirst({
-      where: { conversationId, id: { not: messageId } },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    });
-    return previous?.id ?? null;
+    await this.repo.upsertMessage(conversationId, data);
   }
 
   private normalizeMessageFormat(format: string, content: unknown) {
@@ -616,10 +468,6 @@ export class ConversationService {
     return format;
   }
 
-  private toJsonInput(content: unknown): Prisma.InputJsonValue {
-    return JSON.parse(JSON.stringify(content ?? null)) as Prisma.InputJsonValue;
-  }
-
   private messageText(content: unknown) {
     if (content === null || content === undefined) return "";
     if (typeof content === "string") return content;
@@ -627,9 +475,5 @@ export class ConversationService {
       return String(content);
     }
     return "";
-  }
-
-  private workspaceOwnerWhere(userId: string) {
-    return { userId, deletedAt: null };
   }
 }

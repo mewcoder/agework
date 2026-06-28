@@ -10,15 +10,11 @@ import { homedir } from "os";
 import { join } from "path";
 import { AGENT_TYPES, generateId, isAgentType, type AgentType } from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
-import { PrismaService } from "../prisma/prisma.service";
-import {
-  getApiKey,
-  normalizeBaseUrl,
-  anthropicMessagesUrl,
-  anthropicHeaders,
-  openAIModelsUrl,
-  openAIHeaders,
-} from "./llm-client";
+import { generateText, type LanguageModel } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
+import { normalizeBaseUrl } from "../common/base-url";
+import { ModelProviderRepository } from "./model-provider.repository";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
 const SYSTEM_PREFIX = "system:";
@@ -120,7 +116,7 @@ function hasClaudeConfigFiles(home: string): boolean {
 
 @Injectable()
 export class ModelProviderService implements OnModuleInit {
-  constructor(private prisma: PrismaService) {}
+  constructor(private repo: ModelProviderRepository) {}
 
   async onModuleInit() {
     await Promise.all(
@@ -142,9 +138,7 @@ export class ModelProviderService implements OnModuleInit {
       models: [] as string[],
       extraConfig: {} as Record<string, string>,
     };
-    const existing = await this.prisma.modelProvider.findUnique({
-      where: { id },
-    });
+    const existing = await this.repo.findById(id);
     if (existing) {
       const isPlaceholder =
         existing.agentType === agentType &&
@@ -158,15 +152,10 @@ export class ModelProviderService implements OnModuleInit {
       if (isPlaceholder && existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
         return existing;
       }
-      return this.prisma.modelProvider.update({
-        where: { id },
-        data: placeholder,
-      });
+      return this.repo.update(id, placeholder);
     }
 
-    return this.prisma.modelProvider.create({
-      data: { id, ...placeholder, isEnabled: false },
-    });
+    return this.repo.create({ id, ...placeholder, isEnabled: false });
   }
 
   private validateBaseUrl(baseUrl: string) {
@@ -181,13 +170,10 @@ export class ModelProviderService implements OnModuleInit {
 
   private async list(agentType: string, includeDisabled: boolean) {
     const resolvedAgentType = this.resolveAgentType(agentType);
-    const modelProviders = await this.prisma.modelProvider.findMany({
-      where: {
-        agentType: resolvedAgentType,
-        ...(includeDisabled ? {} : { isEnabled: true }),
-      },
-      orderBy: { createdAt: "asc" },
-    });
+    const modelProviders = await this.repo.findManyByAgent(
+      resolvedAgentType,
+      includeDisabled
+    );
     const sorted = [...modelProviders].sort((a, b) => {
       const aSystem = isSystemModelProviderId(a.id);
       const bSystem = isSystemModelProviderId(b.id);
@@ -252,19 +238,17 @@ export class ModelProviderService implements OnModuleInit {
       null,
       providerName
     );
-    const modelProvider = await this.prisma.modelProvider.create({
-      data: {
-        id: generateId(),
-        agentType: resolvedAgentType,
-        scope: MODEL_PROVIDER_SCOPE_GLOBAL,
-        userId: null,
-        name: providerName,
-        isEnabled: true,
-        baseUrl: providerConfig.baseUrl,
-        apiKey: providerConfig.apiKey,
-        models: providerConfig.models,
-        extraConfig: providerConfig.extraConfig,
-      },
+    const modelProvider = await this.repo.create({
+      id: generateId(),
+      agentType: resolvedAgentType,
+      scope: MODEL_PROVIDER_SCOPE_GLOBAL,
+      userId: null,
+      name: providerName,
+      isEnabled: true,
+      baseUrl: providerConfig.baseUrl,
+      apiKey: providerConfig.apiKey,
+      models: providerConfig.models,
+      extraConfig: providerConfig.extraConfig,
     });
     return toModelProviderDto(modelProvider, false);
   }
@@ -272,9 +256,7 @@ export class ModelProviderService implements OnModuleInit {
   async update(modelProviderId: string, name: string, providerConfig: ProviderConfig) {
     if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可修改");
-    const modelProvider = await this.prisma.modelProvider.findUnique({
-      where: { id: modelProviderId },
-    });
+    const modelProvider = await this.repo.findById(modelProviderId);
     if (!modelProvider)
       throw new NotFoundException(`模型服务不存在: ${modelProviderId}`);
     this.validateBaseUrl(providerConfig.baseUrl);
@@ -286,15 +268,12 @@ export class ModelProviderService implements OnModuleInit {
       providerName,
       modelProvider.id
     );
-    const updated = await this.prisma.modelProvider.update({
-      where: { id: modelProviderId },
-      data: {
-        name: providerName,
-        baseUrl: providerConfig.baseUrl,
-        apiKey: providerConfig.apiKey,
-        models: providerConfig.models,
-        extraConfig: providerConfig.extraConfig,
-      },
+    const updated = await this.repo.update(modelProviderId, {
+      name: providerName,
+      baseUrl: providerConfig.baseUrl,
+      apiKey: providerConfig.apiKey,
+      models: providerConfig.models,
+      extraConfig: providerConfig.extraConfig,
     });
     return toModelProviderDto(updated, false);
   }
@@ -303,22 +282,14 @@ export class ModelProviderService implements OnModuleInit {
     if (isSystemModelProviderId(modelProviderId)) {
       const agentType = agentTypeFromSystemModelProviderId(modelProviderId);
       await this.ensureSystemModelProvider(agentType);
-      const updated = await this.prisma.modelProvider.update({
-        where: { id: modelProviderId },
-        data: { isEnabled },
-      });
+      const updated = await this.repo.update(modelProviderId, { isEnabled });
       return toModelProviderDto(updated, false);
     }
 
-    const modelProvider = await this.prisma.modelProvider.findUnique({
-      where: { id: modelProviderId },
-    });
+    const modelProvider = await this.repo.findById(modelProviderId);
     if (!modelProvider)
       throw new NotFoundException(`模型服务不存在: ${modelProviderId}`);
-    const updated = await this.prisma.modelProvider.update({
-      where: { id: modelProviderId },
-      data: { isEnabled },
-    });
+    const updated = await this.repo.update(modelProviderId, { isEnabled });
     return toModelProviderDto(updated, false);
   }
 
@@ -328,9 +299,7 @@ export class ModelProviderService implements OnModuleInit {
     agentType: string,
     modelProviderId: string
   ): Promise<ResolvedModelProvider | null> {
-    const modelProvider = await this.prisma.modelProvider.findFirst({
-      where: { id: modelProviderId, agentType, isEnabled: true },
-    });
+    const modelProvider = await this.repo.findEnabled(modelProviderId, agentType);
     if (!modelProvider) return null;
     if (modelProvider.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
       return { source: "system" };
@@ -344,14 +313,12 @@ export class ModelProviderService implements OnModuleInit {
   async delete(modelProviderId: string) {
     if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可删除");
-    const modelProvider = await this.prisma.modelProvider.findUnique({
-      where: { id: modelProviderId },
-    });
+    const modelProvider = await this.repo.findById(modelProviderId);
     if (!modelProvider)
       throw new NotFoundException(`模型服务不存在: ${modelProviderId}`);
     if (modelProvider.isEnabled)
       throw new BadRequestException("启用中的模型服务不可删除，请先停用");
-    await this.prisma.modelProvider.delete({ where: { id: modelProviderId } });
+    await this.repo.delete(modelProviderId);
   }
 
   getSystemInfo(agent: string) {
@@ -429,9 +396,7 @@ export class ModelProviderService implements OnModuleInit {
     if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不支持连通性测试");
 
-    const modelProvider = await this.prisma.modelProvider.findUnique({
-      where: { id: modelProviderId },
-    });
+    const modelProvider = await this.repo.findById(modelProviderId);
     if (!modelProvider)
       throw new NotFoundException(`模型服务不存在: ${modelProviderId}`);
     if (!includeDisabled && !modelProvider.isEnabled)
@@ -439,46 +404,24 @@ export class ModelProviderService implements OnModuleInit {
 
     const providerConfig = toProviderConfig(modelProvider);
     const agentType = modelProvider.agentType as AgentType;
-    const apiKey = getApiKey(providerConfig);
+
+    const built = this.buildProbeModel(agentType, providerConfig);
+    if ("error" in built) {
+      return { success: false, latency: 0, error: built.error };
+    }
+
+    // 通过 ai-sdk 发起一次最小生成作为连通性/鉴权探测。
     const start = Date.now();
-
     try {
-      let res: Response;
-      const base = normalizeBaseUrl(providerConfig.baseUrl);
-      if (!base) return { success: false, latency: 0, error: "未配置 baseUrl" };
-
-      if (agentType === "claude") {
-        const model = providerConfig.models[0];
-        if (!model) return { success: false, latency: 0, error: "未配置 models" };
-        res = await fetch(anthropicMessagesUrl(base), {
-          method: "POST",
-          headers: anthropicHeaders(apiKey),
-          body: JSON.stringify({
-            model,
-            max_tokens: 1,
-            messages: [{ role: "user", content: "hi" }],
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-      } else {
-        res = await fetch(openAIModelsUrl(base), {
-          headers: openAIHeaders(apiKey),
-          signal: AbortSignal.timeout(10000),
-        });
-      }
-
-      const latency = Date.now() - start;
-
-      if (!res.ok) {
-        const body = await res.text().catch(() => "");
-        return {
-          success: false,
-          latency,
-          error: `HTTP ${res.status}: ${body.slice(0, 120)}`,
-        };
-      }
-
-      return { success: true, latency };
+      await generateText({
+        model: built.model,
+        prompt: "hi",
+        maxOutputTokens: 1,
+        temperature: 0,
+        maxRetries: 0,
+        timeout: 10000,
+      });
+      return { success: true, latency: Date.now() - start };
     } catch (err: unknown) {
       return {
         success: false,
@@ -486,6 +429,34 @@ export class ModelProviderService implements OnModuleInit {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  private buildProbeModel(
+    agentType: AgentType,
+    providerConfig: ProviderConfig
+  ): { model: LanguageModel } | { error: string } {
+    let base: string | undefined;
+    try {
+      base = normalizeBaseUrl(providerConfig.baseUrl);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+    if (!base) return { error: "未配置 baseUrl" };
+
+    const apiKey = providerConfig.apiKey.trim();
+    if (!apiKey) return { error: "未配置 apiKey" };
+    const modelId = providerConfig.models[0];
+    if (!modelId) return { error: "未配置 models" };
+
+    const baseURL = base.endsWith("/v1") ? base : `${base}/v1`;
+    if (agentType === "claude") {
+      return {
+        model: createAnthropic({ authToken: apiKey, baseURL }).languageModel(
+          modelId
+        ),
+      };
+    }
+    return { model: createOpenAI({ apiKey, baseURL }).chat(modelId) };
   }
 
   private resolveAgentType(agentType: string): AgentType {
@@ -508,15 +479,12 @@ export class ModelProviderService implements OnModuleInit {
     name: string,
     excludeId?: string
   ) {
-    const existing = await this.prisma.modelProvider.findFirst({
-      where: {
-        agentType,
-        scope,
-        userId,
-        name,
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-      },
-      select: { id: true },
+    const existing = await this.repo.findIdByName({
+      agentType,
+      scope,
+      userId,
+      name,
+      excludeId,
     });
     if (existing) {
       throw new BadRequestException(`模型服务名称已存在: ${name}`);

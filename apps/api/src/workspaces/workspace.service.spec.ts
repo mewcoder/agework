@@ -1,7 +1,3 @@
-vi.mock("../prisma/prisma.service", () => ({
-  PrismaService: class PrismaService {},
-}));
-
 vi.mock("fs", () => ({
   mkdirSync: vi.fn(),
   readdirSync: vi.fn(),
@@ -17,6 +13,7 @@ vi.mock("@agework/shared", async (importOriginal) => ({
 
 import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
+import type { WorkspaceCreateInput } from "./workspace.repository";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -27,11 +24,54 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function makeMocks() {
-  const emit = vi.fn();
-  const events = { emit } as never;
+// Repository 返回的行由入参回推，保证 toWorkspaceDto 的 rootPath / source 映射可被断言。
+function workspaceRowFromCreate(input: WorkspaceCreateInput) {
+  return {
+    id: input.id,
+    name: input.name,
+    gitUrl: input.gitUrl ?? null,
+    description: input.description,
+    userId: input.userId,
+    runtimeType: input.runtimeType,
+    isolationScope: input.isolationScope,
+    sandboxEngine: input.sandboxEngine,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    deletedAt: null,
+    directory: {
+      id: "directory-1",
+      workspaceId: input.id,
+      rootPath: input.rootPath,
+      status: "ready",
+      source: input.directorySource,
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  };
+}
 
-  const config = {
+function makeRepo(overrides: Record<string, unknown> = {}) {
+  return {
+    listAllWithMeta: vi.fn().mockResolvedValue({ list: [], total: 0 }),
+    listByOwner: vi.fn().mockResolvedValue([]),
+    createWithDirectory: vi.fn((input: WorkspaceCreateInput) =>
+      Promise.resolve(workspaceRowFromCreate(input))
+    ),
+    updateOwned: vi.fn().mockResolvedValue(null),
+    updateById: vi.fn().mockResolvedValue(null),
+    findOwnedId: vi.fn().mockResolvedValue(null),
+    hasActiveRun: vi.fn().mockResolvedValue(false),
+    softDeleteCascade: vi.fn().mockResolvedValue(undefined),
+    findDirectoryByRootPath: vi.fn().mockResolvedValue(null),
+    findUsername: vi.fn().mockResolvedValue("admin-1"),
+    ...overrides,
+  };
+}
+
+function makeConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    getWorkspace: () => "/tmp/agework/workspaces",
     getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
     getAllowedRuntimeTypes: () => ["local"],
     getDefaultRuntimeType: () => "local",
@@ -40,82 +80,48 @@ function makeMocks() {
     getDefaultIsolationScope: () => "user",
     isIsolationScopeAllowed: (scope: string) => scope === "user",
     getSandboxEngine: () => "docker",
-  } as never;
+    ...overrides,
+  };
+}
 
-  return { emit, events, config };
+function makeService(
+  repo: ReturnType<typeof makeRepo>,
+  config: ReturnType<typeof makeConfig>
+) {
+  return new WorkspaceService(
+    repo as never,
+    config as never,
+    { emit: vi.fn() } as never
+  );
 }
 
 describe("WorkspaceService", () => {
-  it("creates a directory for the workspace and maps directory.rootPath back to rootPath", async () => {
+  it("creates a managed directory and maps directory.rootPath back to rootPath", async () => {
     const expectedRootPath = join(
       "/tmp/workspace",
       "admin-1",
       "ws260614113047"
     );
-
-    const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const directoryCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        id: "directory-1",
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const transaction = vi.fn(async (cb) =>
-      cb({
-        workspace: { create: workspaceCreate },
-        workspaceDirectory: { create: directoryCreate },
-      })
-    );
-    const service = new WorkspaceService(
-      {
-        $transaction: transaction,
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-      } as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const repo = makeRepo();
+    const service = makeService(repo, makeConfig());
 
     const workspace = await service.create({
       userId: "admin-1",
       name: "Local workspace",
     });
 
-    expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
-      id: "ws260614113047",
-      userId: "admin-1",
-      runtimeType: "local",
-      isolationScope: null,
-      sandboxEngine: null,
-    });
-    expect(directoryCreate).toHaveBeenCalledWith({
-      data: {
-        id: expect.any(String),
-        workspaceId: "ws260614113047",
+    expect(repo.createWithDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "ws260614113047",
+        userId: "admin-1",
+        runtimeType: "local",
+        isolationScope: null,
+        sandboxEngine: null,
         rootPath: expectedRootPath,
-        status: "ready",
-        source: "managed",
-        metadata: {},
-      },
-    });
+        directorySource: "managed",
+      })
+    );
+    expect(mkdirSync).toHaveBeenCalled();
     expect(workspace.rootPath).toBe(expectedRootPath);
     expect(workspace.directorySource).toBe("managed");
     expect((workspace as Record<string, unknown>).directory).toBeUndefined();
@@ -123,48 +129,8 @@ describe("WorkspaceService", () => {
 
   it("binds an existing local directory without creating or deleting it", async () => {
     const selectedRootPath = "/tmp/existing-project";
-
-    const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const directoryCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        id: "directory-1",
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const transaction = vi.fn(async (cb) =>
-      cb({
-        workspace: { create: workspaceCreate },
-        workspaceDirectory: { create: directoryCreate },
-      })
-    );
-    const service = new WorkspaceService(
-      {
-        $transaction: transaction,
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-        workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
-      } as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getSandboxEngine: () => "docker",
-        getAllowedRuntimeTypes: () => ["local"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const repo = makeRepo();
+    const service = makeService(repo, makeConfig());
 
     const workspace = await service.create({
       userId: "admin-1",
@@ -174,78 +140,42 @@ describe("WorkspaceService", () => {
 
     expect(mkdirSync).not.toHaveBeenCalled();
     expect(rmSync).not.toHaveBeenCalled();
-    expect(directoryCreate).toHaveBeenCalledWith({
-      data: {
-        id: expect.any(String),
-        workspaceId: "ws260614113047",
+    expect(repo.createWithDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
         rootPath: resolve(selectedRootPath),
-        status: "ready",
-        source: "external",
-        metadata: {},
-      },
-    });
+        directorySource: "external",
+      })
+    );
     expect(workspace.rootPath).toBe(resolve(selectedRootPath));
     expect(workspace.directorySource).toBe("external");
   });
 
   it("auto-selects workspace isolation for sandbox custom directories when allowed", async () => {
-    const selectedRootPath = "/tmp/other-project";
-    const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const directoryCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        id: "directory-1",
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const transaction = vi.fn(async (cb) =>
-      cb({
-        workspace: { create: workspaceCreate },
-        workspaceDirectory: { create: directoryCreate },
-      })
-    );
-    const service = new WorkspaceService(
-      {
-        $transaction: transaction,
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-        workspaceDirectory: { findFirst: vi.fn().mockResolvedValue(null) },
-      } as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user", "workspace"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) =>
-          scope === "user" || scope === "workspace",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const repo = makeRepo();
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+      getAllowedIsolationScopes: () => ["user", "workspace"],
+      isIsolationScopeAllowed: (scope: string) =>
+        scope === "user" || scope === "workspace",
+    });
+    const service = makeService(repo, config);
 
     await service.create({
       userId: "admin-1",
       name: "Sandbox workspace",
-      rootPath: selectedRootPath,
+      rootPath: "/tmp/other-project",
       runtimeType: "sandbox",
     });
 
-    expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
-      runtimeType: "sandbox",
-      isolationScope: "workspace",
-      sandboxEngine: "docker",
-    });
+    expect(repo.createWithDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        sandboxEngine: "docker",
+      })
+    );
   });
 
   it("places sandbox workspace-isolated directories outside the user root", async () => {
@@ -253,49 +183,16 @@ describe("WorkspaceService", () => {
       "/tmp/agework/workspaces",
       "admin-1_ws260614113047"
     );
-    const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const directoryCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({
-        id: "directory-1",
-        ...args.data,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-    );
-    const transaction = vi.fn(async (cb) =>
-      cb({
-        workspace: { create: workspaceCreate },
-        workspaceDirectory: { create: directoryCreate },
-      })
-    );
-    const service = new WorkspaceService(
-      {
-        $transaction: transaction,
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-      } as never,
-      {
-        getWorkspace: () => "/tmp/agework/workspaces",
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user", "workspace"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) =>
-          scope === "user" || scope === "workspace",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const repo = makeRepo();
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+      getAllowedIsolationScopes: () => ["user", "workspace"],
+      isIsolationScopeAllowed: (scope: string) =>
+        scope === "user" || scope === "workspace",
+    });
+    const service = makeService(repo, config);
 
     const workspace = await service.create({
       userId: "admin-1",
@@ -304,48 +201,29 @@ describe("WorkspaceService", () => {
       isolationScope: "workspace",
     });
 
-    expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
-      runtimeType: "sandbox",
-      isolationScope: "workspace",
-      sandboxEngine: "docker",
-    });
-    expect(directoryCreate).toHaveBeenCalledWith({
-      data: {
-        id: expect.any(String),
-        workspaceId: "ws260614113047",
+    expect(repo.createWithDirectory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        sandboxEngine: "docker",
         rootPath: expectedRootPath,
-        status: "ready",
-        source: "managed",
-        metadata: {},
-      },
-    });
+        directorySource: "managed",
+      })
+    );
     expect(workspace.rootPath).toBe(expectedRootPath);
     expect(workspace.directorySource).toBe("managed");
   });
 
   it("rejects workspace-isolated custom directories inside the user root", async () => {
-    const service = new WorkspaceService(
-      {
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-        workspaceDirectory: { findFirst: vi.fn() },
-      } as never,
-      {
-        getWorkspace: () => "/tmp/agework/workspaces",
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user", "workspace"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) =>
-          scope === "user" || scope === "workspace",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+      getAllowedIsolationScopes: () => ["user", "workspace"],
+      isIsolationScopeAllowed: (scope: string) =>
+        scope === "user" || scope === "workspace",
+    });
+    const service = makeService(makeRepo(), config);
 
     await expect(
       service.create({
@@ -359,27 +237,15 @@ describe("WorkspaceService", () => {
   });
 
   it("rejects sandbox custom directories when user isolation is explicitly selected", async () => {
-    const service = new WorkspaceService(
-      {
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-        workspaceDirectory: { findFirst: vi.fn() },
-      } as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user", "workspace"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) =>
-          scope === "user" || scope === "workspace",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+      getAllowedIsolationScopes: () => ["user", "workspace"],
+      isIsolationScopeAllowed: (scope: string) =>
+        scope === "user" || scope === "workspace",
+    });
+    const service = makeService(makeRepo(), config);
 
     await expect(
       service.create({
@@ -393,26 +259,12 @@ describe("WorkspaceService", () => {
   });
 
   it("rejects sandbox custom directories when workspace isolation is not allowed", async () => {
-    const service = new WorkspaceService(
-      {
-        user: {
-          findUnique: vi.fn().mockResolvedValue({ username: "admin-1" }),
-        },
-        workspaceDirectory: { findFirst: vi.fn() },
-      } as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+    });
+    const service = makeService(makeRepo(), config);
 
     await expect(
       service.create({
@@ -425,21 +277,12 @@ describe("WorkspaceService", () => {
   });
 
   it("rejects sandbox isolation scopes outside deployment capabilities", async () => {
-    const service = new WorkspaceService(
-      {} as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local", "sandbox"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) =>
-          runtimeType === "local" || runtimeType === "sandbox",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      isRuntimeTypeAllowed: (runtimeType: string) =>
+        runtimeType === "local" || runtimeType === "sandbox",
+    });
+    const service = makeService(makeRepo(), config);
 
     await expect(
       service.create({
@@ -452,20 +295,7 @@ describe("WorkspaceService", () => {
   });
 
   it("rejects runtime types outside deployment capabilities", async () => {
-    const service = new WorkspaceService(
-      {} as never,
-      {
-        getUserWorkspace: (username: string) => `/tmp/workspace/${username}`,
-        getAllowedRuntimeTypes: () => ["local"],
-        getDefaultRuntimeType: () => "local",
-        isRuntimeTypeAllowed: (runtimeType: string) => runtimeType === "local",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+    const service = makeService(makeRepo(), makeConfig());
 
     await expect(
       service.create({
@@ -477,41 +307,33 @@ describe("WorkspaceService", () => {
   });
 
   it("returns the stored sandbox isolation scope even when current deployment disallows it", async () => {
-    const service = new WorkspaceService(
-      {
-        workspace: {
-          findMany: vi.fn().mockResolvedValue([
-            {
-              id: "ws-1",
-              name: "Sandbox workspace",
-              gitUrl: null,
-              description: null,
-              runtimeType: "sandbox",
-              isolationScope: "workspace",
-              sandboxEngine: "docker",
-              userId: "admin-1",
-              createdAt: new Date(),
-              updatedAt: new Date(),
-              deletedAt: null,
-              directory: {
-                rootPath: "/tmp/workspace/admin-1/ws-1",
-                status: "ready",
-                source: "managed",
-              },
-            },
-          ]),
+    const repo = makeRepo({
+      listByOwner: vi.fn().mockResolvedValue([
+        {
+          id: "ws-1",
+          name: "Sandbox workspace",
+          gitUrl: null,
+          description: null,
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          sandboxEngine: "docker",
+          userId: "admin-1",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          deletedAt: null,
+          directory: {
+            rootPath: "/tmp/workspace/admin-1/ws-1",
+            status: "ready",
+            source: "managed",
+          },
         },
-      } as never,
-      {
-        getAllowedRuntimeTypes: () => ["sandbox"],
-        getDefaultRuntimeType: () => "sandbox",
-        getAllowedIsolationScopes: () => ["user"],
-        getDefaultIsolationScope: () => "user",
-        isIsolationScopeAllowed: (scope: string) => scope === "user",
-        getSandboxEngine: () => "docker",
-      } as never,
-      { emit: vi.fn() } as never
-    );
+      ]),
+    });
+    const config = makeConfig({
+      getAllowedRuntimeTypes: () => ["sandbox"],
+      getDefaultRuntimeType: () => "sandbox",
+    });
+    const service = makeService(repo, config);
 
     const result = await service.list("admin-1");
 
@@ -523,39 +345,20 @@ describe("WorkspaceService", () => {
     const workspaceId = "ws-123";
     const userId = "user-1";
 
-    function makeDeleteMocks() {
-      const mocks = makeMocks();
-
-      const prismaMock = {
-        workspace: {
-          findFirst: vi.fn().mockResolvedValue({ id: workspaceId }),
-          update: vi
-            .fn()
-            .mockResolvedValue({ id: workspaceId, deletedAt: new Date() }),
-        },
-        run: {
-          findFirst: vi.fn().mockResolvedValue(null),
-        },
-        conversation: {
-          updateMany: vi.fn().mockResolvedValue({ count: 0 }),
-        },
-        $transaction: vi.fn().mockResolvedValue(undefined),
-      } as never;
-
-      const service = new WorkspaceService(
-        prismaMock,
-        mocks.config,
-        mocks.events
-      );
-
-      return { ...mocks, service, prismaMock };
-    }
-
     it("emits WorkspaceDeletedEvent so downstream can clean up runtime resources", async () => {
-      const { service, emit } = makeDeleteMocks();
+      const emit = vi.fn();
+      const repo = makeRepo({
+        findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
+      });
+      const service = new WorkspaceService(
+        repo as never,
+        makeConfig() as never,
+        { emit } as never
+      );
 
       await service.delete(userId, workspaceId);
 
+      expect(repo.softDeleteCascade).toHaveBeenCalledWith(workspaceId);
       expect(emit).toHaveBeenCalledWith(
         WORKSPACE_DELETED_EVENT,
         new WorkspaceDeletedEvent(workspaceId)
@@ -563,58 +366,36 @@ describe("WorkspaceService", () => {
     });
   });
 
-  // 资源归属：用户接口的 update/delete 必须按 ownerWhere(userId) 限定，别人的 id 一律 404。
+  // 资源归属：用户接口的 update/delete 必须按属主限定，别人的 id 一律 404。
   // 跨用户的管理操作走 updateAny/listAll，受 @Roles("admin") 保护，不在此路径。
   describe("ownership scoping", () => {
     it("delete 404s and never soft-deletes a workspace the caller does not own", async () => {
-      const findFirst = vi.fn().mockResolvedValue(null);
-      const update = vi.fn();
-      const service = new WorkspaceService(
-        { workspace: { findFirst, update }, run: { findFirst: vi.fn() } } as never,
-        {} as never,
-        { emit: vi.fn() } as never
-      );
+      const repo = makeRepo({
+        findOwnedId: vi.fn().mockResolvedValue(null),
+      });
+      const service = makeService(repo, makeConfig());
 
       await expect(service.delete("intruder", "ws-x")).rejects.toThrow(
         "Workspace ws-x not found"
       );
-      expect(findFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            id: "ws-x",
-            userId: "intruder",
-            deletedAt: null,
-          }),
-        })
-      );
-      expect(update).not.toHaveBeenCalled();
+      expect(repo.findOwnedId).toHaveBeenCalledWith("intruder", "ws-x");
+      expect(repo.softDeleteCascade).not.toHaveBeenCalled();
     });
 
     it("update 404s and never mutates a workspace the caller does not own", async () => {
-      const txFindFirst = vi.fn().mockResolvedValue(null);
-      const txUpdate = vi.fn();
-      const service = new WorkspaceService(
-        {
-          $transaction: (fn: (tx: unknown) => unknown) =>
-            fn({ workspace: { findFirst: txFindFirst, update: txUpdate } }),
-        } as never,
-        {} as never,
-        { emit: vi.fn() } as never
-      );
+      const repo = makeRepo({
+        updateOwned: vi.fn().mockResolvedValue(null),
+      });
+      const service = makeService(repo, makeConfig());
 
       await expect(
         service.update("intruder", "ws-x", "New name")
       ).rejects.toThrow("Workspace ws-x not found");
-      expect(txFindFirst).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            id: "ws-x",
-            userId: "intruder",
-            deletedAt: null,
-          }),
-        })
+      expect(repo.updateOwned).toHaveBeenCalledWith(
+        "intruder",
+        "ws-x",
+        expect.objectContaining({ name: "New name" })
       );
-      expect(txUpdate).not.toHaveBeenCalled();
     });
   });
 });

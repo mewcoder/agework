@@ -1,6 +1,6 @@
 import type { Response } from "express";
 import type { AgentProviderConfig } from "@agework/shared/protocol";
-import type { AssistantUserMessage } from "../conversations/conversation.service";
+import type { AssistantUserMessage } from "../conversations/conversation.types";
 
 /**
  * RunService.start 的唯一入参：意图级。agent 层只负责把请求翻成它——

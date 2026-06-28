@@ -13,7 +13,7 @@ import {
 } from "class-validator";
 import { AGENT_TYPES, isAgentType, type AgentType } from "@agework/shared";
 import { Trim } from "../../../common/decorators/trim.decorator";
-import type { AssistantUserMessage } from "../../conversation.service";
+import type { AssistantUserMessage } from "../../conversation.types";
 
 export type AgentRunForwardedProps = Record<string, unknown> & {
   agentType: AgentType;

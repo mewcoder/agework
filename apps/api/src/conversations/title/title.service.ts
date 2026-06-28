@@ -4,8 +4,8 @@ import type { ProviderConfig } from "@agework/shared/api";
 import { generateText, type LanguageModel } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { ModelProviderService } from "../model-providers/model-provider.service";
-import { normalizeBaseUrl } from "../model-providers/llm-client";
+import { ModelProviderService } from "../../model-providers/model-provider.service";
+import { normalizeBaseUrl } from "../../common/base-url";
 
 const TITLE_MAX_LEN = 40;
 const REQUEST_TIMEOUT_MS = 15_000;
