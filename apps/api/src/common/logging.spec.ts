@@ -33,6 +33,24 @@ describe("safeLogJson", () => {
     );
   });
 
+  it("redacts sensitive values embedded in log strings", () => {
+    const json = safeLogJson({
+      message:
+        "failed password=hunter2 token=abc apiKey=key-123 cookie=session authorization=Bearer xyz",
+    });
+
+    expect(json).toContain("password=[redacted]");
+    expect(json).toContain("token=[redacted]");
+    expect(json).toContain("apiKey=[redacted]");
+    expect(json).toContain("cookie=[redacted]");
+    expect(json).toContain("authorization=[redacted]");
+    expect(json).not.toContain("hunter2");
+    expect(json).not.toContain("abc");
+    expect(json).not.toContain("key-123");
+    expect(json).not.toContain("session");
+    expect(json).not.toContain("xyz");
+  });
+
   it("returns String(value) on serialization failure", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;

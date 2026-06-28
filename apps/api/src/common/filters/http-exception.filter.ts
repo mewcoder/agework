@@ -6,9 +6,9 @@ import {
   HttpStatus,
   Logger,
 } from "@nestjs/common";
-import { generateId } from "@agework/shared";
 import type { Request, Response } from "express";
 import { errorLogFields, safeLogJson } from "../logging";
+import { REQUEST_ID_HEADER, resolveRequestId } from "../request-id";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -41,12 +41,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message = r.error;
         }
       }
-    } else if (exception instanceof Error) {
-      message = exception.message;
     }
 
     const requestId = resolveRequestId(request);
-    response.setHeader("x-request-id", requestId);
+    response.setHeader(REQUEST_ID_HEADER, requestId);
     this.logException(exception, {
       requestId,
       status,
@@ -54,7 +52,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: request.originalUrl ?? request.url,
     });
 
-    response.status(status).json({ code: status, data: null, message, requestId });
+    response.status(status).json({
+      code: status,
+      data: null,
+      message,
+      requestId,
+    });
   }
 
   private logException(
@@ -86,14 +89,4 @@ export class AllExceptionsFilter implements ExceptionFilter {
       this.logger.debug(`request exception ${payload}`);
     }
   }
-}
-
-function resolveRequestId(request: Request): string {
-  const header = request.headers["x-request-id"];
-  if (typeof header === "string" && header.trim()) return header;
-  if (Array.isArray(header)) {
-    const first = header.find((value) => value.trim());
-    if (first) return first;
-  }
-  return generateId();
 }

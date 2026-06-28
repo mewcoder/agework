@@ -3,6 +3,9 @@ export type NestLogLevel = "error" | "warn" | "log" | "debug" | "verbose";
 
 const SECRET_KEY_RE =
   /(api[_-]?key|authorization|auth[_-]?token|token|password|secret|jwt|cookie)$/i;
+const SECRET_VALUE_RE =
+  /\b(api[_-]?key|authorization|auth[_-]?token|token|password|secret|jwt|cookie)\b\s*([:=])\s*(Bearer\s+[^\s,;]+|"[^"]*"|'[^']*'|[^\s,;]+)/gi;
+const BEARER_TOKEN_RE = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 
 export function errorLogFields(error: unknown): Record<string, unknown> {
   if (error instanceof Error) {
@@ -48,6 +51,7 @@ function redactValue(
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "bigint") return value.toString();
   if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
+  if (typeof value === "string") return redactSensitiveString(value);
   if (!value || typeof value !== "object") return value;
   if (seen.has(value)) return "[circular]";
   seen.add(value);
@@ -63,4 +67,12 @@ function redactValue(
     output[childKey] = redactValue(childValue, childKey, seen);
   }
   return output;
+}
+
+function redactSensitiveString(value: string): string {
+  return value
+    .replace(SECRET_VALUE_RE, (_match, key: string, separator: string) => {
+      return `${key}${separator}[redacted]`;
+    })
+    .replace(BEARER_TOKEN_RE, "Bearer [redacted]");
 }

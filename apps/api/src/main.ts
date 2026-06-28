@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { networkInterfaces } from "node:os";
 import { AppModule } from "./app.module";
 import { securityHeaders } from "./common/security-headers";
+import { requestIdMiddleware } from "./common/request-id";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 import { resolveApiBasePath } from "./common/path.util";
@@ -35,6 +36,7 @@ async function bootstrap() {
   const bodyLimit = configService.getApiBodyLimit();
   const apiBasePath = resolveApiBasePath(getApiContext());
 
+  app.use(requestIdMiddleware());
   app.use(securityHeaders());
   app.use(cookieParser());
   // 不开 CORS：前端与 API 始终同源（dev 经 Vite 代理、prod/桌面同 host），浏览器同源策略即足够。

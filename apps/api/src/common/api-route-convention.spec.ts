@@ -4,12 +4,16 @@ import {
   GUARDS_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
+  RESPONSE_PASSTHROUGH_METADATA,
+  ROUTE_ARGS_METADATA,
 } from "@nestjs/common/constants";
+import { RouteParamtypes } from "@nestjs/common/enums/route-paramtypes.enum";
 import { describe, expect, it } from "vitest";
 import { AgentController } from "../conversations/agent/agent.controller";
 import { AuthController } from "../auth/auth.controller";
 import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { ROLES_KEY } from "../auth/decorators/roles.decorator";
+import { RAW_RESPONSE_KEY } from "./decorators/raw-response.decorator";
 import { AdminConfigController } from "../config/admin/admin-config.controller";
 import { ConversationController } from "../conversations/conversation.controller";
 import { AdminModelProviderController } from "../model-providers/admin/admin-model-provider.controller";
@@ -63,6 +67,24 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
   "GET auth/config",
   "GET system/about",
 ]);
+
+const RAW_RESPONSE_ALLOWLIST = [
+  "worker/owners/*",
+  "worker/runs/*",
+];
+
+const RAW_RES_ROUTE_ALLOWLIST = [
+  "POST conversations/agent/run",
+  "GET conversations/agent/resume",
+];
+
+const PASSTHROUGH_RES_ROUTE_ALLOWLIST = [
+  "POST auth/login",
+  "POST auth/setup",
+  "POST auth/refresh",
+  "POST auth/logout",
+  "POST auth/update-password",
+];
 
 function controllerPath(controller: ControllerClass) {
   return Reflect.getMetadata(PATH_METADATA, controller);
@@ -120,6 +142,37 @@ function guardsFor(controller: ControllerClass): unknown[] {
 
 function isPublic(target: object) {
   return Reflect.getMetadata(IS_PUBLIC_KEY, target) === true;
+}
+
+function isRawResponse(target: object) {
+  return Reflect.getMetadata(RAW_RESPONSE_KEY, target) === true;
+}
+
+function routeArgs(controller: ControllerClass, methodName: string) {
+  return Reflect.getMetadata(ROUTE_ARGS_METADATA, controller, methodName) as
+    | Record<string, unknown>
+    | undefined;
+}
+
+function hasResponseParam(controller: ControllerClass, methodName: string) {
+  const args = routeArgs(controller, methodName);
+  if (!args) return false;
+  return Object.keys(args).some((key) =>
+    key.startsWith(`${RouteParamtypes.RESPONSE}:`)
+  );
+}
+
+function hasPassthroughResponse(
+  controller: ControllerClass,
+  methodName: string
+) {
+  return (
+    Reflect.getMetadata(
+      RESPONSE_PASSTHROUGH_METADATA,
+      controller,
+      methodName
+    ) === true
+  );
 }
 
 function routeLabel(controller: ControllerClass, methodName: string) {
@@ -303,5 +356,46 @@ describe("external API route convention", () => {
     );
 
     expect(publicRoutes).toEqual([...PUBLIC_ROUTE_ALLOWLIST]);
+  });
+
+  it("allows @RawResponse only on worker internal controllers", () => {
+    const rawResponseTargets = CONTROLLERS.flatMap((controller) => [
+      ...(isRawResponse(controller) ? [`${controllerPath(controller)}/*`] : []),
+      ...routeMethods(controller)
+        .filter((methodName) => isRawResponse(routeHandler(controller, methodName)))
+        .map((methodName) => routeLabel(controller, methodName)),
+    ]);
+
+    expect(rawResponseTargets).toEqual(RAW_RESPONSE_ALLOWLIST);
+  });
+
+  it("allows raw @Res only on agent stream routes", () => {
+    const rawResponseRoutes = CONTROLLERS.flatMap((controller) =>
+      routeMethods(controller)
+        .filter(
+          (methodName) =>
+            hasResponseParam(controller, methodName) &&
+            !hasPassthroughResponse(controller, methodName)
+        )
+        .map((methodName) => routeLabel(controller, methodName))
+    );
+
+    expect(rawResponseRoutes).toEqual(RAW_RES_ROUTE_ALLOWLIST);
+  });
+
+  it("keeps cookie-writing @Res usage in passthrough mode", () => {
+    const passthroughResponseRoutes = CONTROLLERS.flatMap((controller) =>
+      routeMethods(controller)
+        .filter(
+          (methodName) =>
+            hasResponseParam(controller, methodName) &&
+            hasPassthroughResponse(controller, methodName)
+        )
+        .map((methodName) => routeLabel(controller, methodName))
+    );
+
+    expect(passthroughResponseRoutes).toEqual(
+      PASSTHROUGH_RES_ROUTE_ALLOWLIST
+    );
   });
 });
