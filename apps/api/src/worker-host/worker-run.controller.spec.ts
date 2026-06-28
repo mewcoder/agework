@@ -33,7 +33,7 @@ describe("WorkerRunController", () => {
         upstream: {},
       });
 
-      await expect(controller.getRunConfig("run-1")).resolves.toEqual({
+      await expect(controller.getRunConfig({ runId: "run-1" })).resolves.toEqual({
         config,
       });
     });
@@ -44,9 +44,9 @@ describe("WorkerRunController", () => {
         upstream: {},
       });
 
-      await expect(controller.getRunConfig("run-1")).rejects.toBeInstanceOf(
-        NotFoundException
-      );
+      await expect(
+        controller.getRunConfig({ runId: "run-1" })
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -66,7 +66,7 @@ describe("WorkerRunController", () => {
         ts: new Date().toISOString(),
       };
       await expect(
-        controller.postEvent("run-1", message)
+        controller.postEvent({ runId: "run-1" }, message)
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(sendEvent).not.toHaveBeenCalled();
     });
@@ -79,7 +79,7 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", {
+        controller.postEvent({ runId: "run-1" }, {
           jsonrpc: "2.0",
           method: "run.aguiEvent",
           params: {
@@ -110,7 +110,7 @@ describe("WorkerRunController", () => {
         upstream: { sendEvent },
       });
 
-      await controller.postEvent("run-1", [
+      await controller.postEvent({ runId: "run-1" }, [
         {
           jsonrpc: "2.0",
           method: "run.status",
@@ -160,7 +160,7 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", {
+        controller.postEvent({ runId: "run-1" }, {
           messages: [
             {
               jsonrpc: "2.0",
@@ -202,7 +202,7 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", [
+        controller.postEvent({ runId: "run-1" }, [
           {
             jsonrpc: "2.0",
             method: "run.status",
@@ -234,7 +234,7 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", [
+        controller.postEvent({ runId: "run-1" }, [
           {
             jsonrpc: "2.0",
             method: "run.status",
@@ -286,11 +286,11 @@ describe("WorkerRunController", () => {
         },
       };
 
-      await expect(controller.postEvent("run-1", [])).rejects.toBeInstanceOf(
-        BadRequestException
-      );
       await expect(
-        controller.postEvent("run-1", [[event]])
+        controller.postEvent({ runId: "run-1" }, [])
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        controller.postEvent({ runId: "run-1" }, [[event]])
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(sendEvent).not.toHaveBeenCalled();
     });
@@ -302,7 +302,7 @@ describe("WorkerRunController", () => {
         upstream: { sendEvent },
       });
 
-      await controller.postEvent("run-1", {
+      await controller.postEvent({ runId: "run-1" }, {
         jsonrpc: "2.0",
         id: "cmd-1",
         result: {
@@ -336,7 +336,7 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", {
+        controller.postEvent({ runId: "run-1" }, {
           jsonrpc: "2.0",
           id: "cmd-1",
           result: {
@@ -355,7 +355,10 @@ describe("WorkerRunController", () => {
       });
 
       await expect(
-        controller.postEvent("run-1", { jsonrpc: "2.0", method: "unknown" })
+        controller.postEvent(
+          { runId: "run-1" },
+          { jsonrpc: "2.0", method: "unknown" }
+        )
       ).rejects.toBeInstanceOf(BadRequestException);
       expect(sendEvent).not.toHaveBeenCalled();
     });

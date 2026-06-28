@@ -23,7 +23,8 @@ describe("ToolFallback 展开门槛", () => {
   it("没有 argsText / result / error 时，trigger 被禁用且不渲染 chevron", () => {
     renderTool({ status: { type: "running" } });
     const trigger = screen.getByRole("button") as HTMLButtonElement;
-    expect(trigger.disabled).toBe(true);
+    // base-ui 用 focusable-when-disabled：禁用时不设原生 disabled，而是 aria-disabled
+    expect(trigger.getAttribute("aria-disabled")).toBe("true");
     // 状态点（span，非 svg）；locked 时不渲染 chevron → 无 svg
     expect(trigger.querySelectorAll("svg")).toHaveLength(0);
     expect(trigger.querySelector("[data-slot='status-dot']")).not.toBeNull();
@@ -32,7 +33,7 @@ describe("ToolFallback 展开门槛", () => {
   it("有 argsText（即使仍是 running）时，trigger 可点击且渲染 chevron", () => {
     renderTool({ argsText: '{"command":"pwd"}', status: { type: "running" } });
     const trigger = screen.getByRole("button") as HTMLButtonElement;
-    expect(trigger.disabled).toBe(false);
+    expect(trigger.getAttribute("aria-disabled")).not.toBe("true");
     // 状态点（span）+ chevron（svg）→ 1 个 svg
     expect(trigger.querySelectorAll("svg")).toHaveLength(1);
   });
@@ -40,7 +41,7 @@ describe("ToolFallback 展开门槛", () => {
   it("有 result 时，trigger 可点击且渲染 chevron，完成态显绿色点", () => {
     renderTool({ result: "ok", status: { type: "complete" } });
     const trigger = screen.getByRole("button") as HTMLButtonElement;
-    expect(trigger.disabled).toBe(false);
+    expect(trigger.getAttribute("aria-disabled")).not.toBe("true");
     // 完成态显示绿色状态点 + chevron（svg）→ 1 个 svg
     expect(trigger.querySelectorAll("svg")).toHaveLength(1);
     const dot = trigger.querySelector("[data-slot='status-dot']");
@@ -51,7 +52,7 @@ describe("ToolFallback 展开门槛", () => {
   it("incomplete 且有 error 时，trigger 可点击且渲染 chevron", () => {
     renderTool({ status: { type: "incomplete", error: "失败原因" } });
     const trigger = screen.getByRole("button") as HTMLButtonElement;
-    expect(trigger.disabled).toBe(false);
+    expect(trigger.getAttribute("aria-disabled")).not.toBe("true");
     expect(trigger.querySelectorAll("svg")).toHaveLength(1);
     expect(trigger.querySelector("[data-slot='status-dot']")).not.toBeNull();
   });

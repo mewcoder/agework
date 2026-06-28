@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { CreateModelProviderDto } from "../dto/create-model-provider.dto";
 import { ModelProviderIdDto } from "../dto/model-provider-id.dto";
+import { ModelProviderAgentQueryDto } from "../dto/model-provider-query.dto";
 import { SetModelProviderEnabledDto } from "../dto/set-model-provider-enabled.dto";
 import { UpdateModelProviderDto } from "../dto/update-model-provider.dto";
 import { ModelProviderService } from "../model-provider.service";
@@ -12,8 +13,8 @@ export class AdminModelProviderController {
   constructor(private modelProviderService: ModelProviderService) {}
 
   @Get("list")
-  list(@Query("agentType") agentType: string) {
-    return this.modelProviderService.listForAdmin(agentType);
+  list(@Query() query: ModelProviderAgentQueryDto) {
+    return this.modelProviderService.listForAdmin(query.agentType);
   }
 
   @Post("create")

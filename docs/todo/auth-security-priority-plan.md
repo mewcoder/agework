@@ -8,21 +8,39 @@
 - 已有用户名密码登录、bcrypt hash、JWT、全局 `JwtAuthGuard`、`RolesGuard`、`sessionVersion` token 失效、用户审批、临时密码、强制改密。
 - 主要缺口是公共入口防滥用、首次初始化保护、登录错误收敛、服务端会话生命周期、权限矩阵和审计。
 
+## 实施状态（2026-06 更新）
+
+P0 全部完成，P1 完成核心项（5/6/8），P2 与 CSRF 经评估不做。详见下文各节标记。
+
+| 项 | 状态 | 实际落点 |
+|---|---|---|
+| P0-1 限流 | ✅ | `auth/guards/auth-throttler.ts`（IP + IP+用户名双桶） |
+| P0-2 登录错误收敛 | ✅ | `users/credentials/login-failed.exception.ts` |
+| P0-3 setup 初始密钥 | ✅ | `AGEWORK_PRIVATE_ADMIN_INIT_KEY`（仅生产强制） |
+| P0-4 Helmet | ✅ | `common/security-headers.ts` |
+| P1-5 session/refresh token | ✅ | `auth/session/`（混合方案：access Bearer + refresh HttpOnly cookie） |
+| P1-6 RBAC 矩阵+归属测试 | ✅ | `docs/architecture/rbac-matrix.md` + 4 处 spec |
+| P1-7 CORS | ⏭️ 撤销 | 同源架构，不开 CORS 即最安全；曾实现护栏后回滚 |
+| P1-8 密码长度边界 | ✅ | 设密码 8–64 字符（NIST 对齐） |
+| P2-9 审计日志 | ⏭️ 暂不做 | — |
+| P2-10 入库密钥加密 | ⏭️ 暂不做 | — |
+| Conditional-11 CSRF | ⏭️ 不触发 | 混合方案状态变更走 Bearer，不靠 cookie，无需 CSRF |
+
 ## Nest Security Menu 取舍
 
 | Nest 文档项 | 优先级 | 本项目决策 |
 |---|---:|---|
-| [Rate limiting](https://docs.nestjs.com/security/rate-limiting) | P0 | 立即做。保护登录、注册、setup、改密，防爆破和撞库。 |
-| [Authentication](https://docs.nestjs.com/security/authentication) | P0/P1 | 立即补错误收敛和 setup 保护；P1 再做服务端 session/refresh token。 |
-| [Authorization](https://docs.nestjs.com/security/authorization) | P1 | 保持 RBAC，不上 CASL/ABAC；补权限矩阵和资源归属测试。 |
-| [Helmet](https://docs.nestjs.com/security/helmet) | P0 | 低成本默认安全头，立即做。 |
-| [Encryption and Hashing](https://docs.nestjs.com/security/encryption-and-hashing) | P1/P2 | P1 修密码 hash 边界；P2 处理入库密钥加密。 |
-| [CORS](https://docs.nestjs.com/security/cors) | P1 | 明确同源/桌面/开发来源策略，避免开放 `*`。 |
-| [CSRF Protection](https://docs.nestjs.com/security/csrf) | 条件触发 | 只有改成 HttpOnly cookie/session 后才必须做；继续 bearer header 时暂缓。 |
+| [Rate limiting](https://docs.nestjs.com/security/rate-limiting) | P0 | ✅ 已做。保护登录、注册、setup、改密，防爆破和撞库。 |
+| [Authentication](https://docs.nestjs.com/security/authentication) | P0/P1 | ✅ 已做错误收敛、setup 保护、服务端 session/refresh token。 |
+| [Authorization](https://docs.nestjs.com/security/authorization) | P1 | ✅ 保持 RBAC，不上 CASL/ABAC；补权限矩阵和资源归属测试。 |
+| [Helmet](https://docs.nestjs.com/security/helmet) | P0 | ✅ 低成本默认安全头（CSP 暂关，留待 SPA/SSE 策略）。 |
+| [Encryption and Hashing](https://docs.nestjs.com/security/encryption-and-hashing) | P1/P2 | ✅ P1 修密码长度边界；⏭️ P2 入库密钥加密暂不做。 |
+| [CORS](https://docs.nestjs.com/security/cors) | P1 | ⏭️ 不做。前端与 API 始终同源（dev 代理/prod 同 host），不开 CORS 即最安全。 |
+| [CSRF Protection](https://docs.nestjs.com/security/csrf) | 条件触发 | ⏭️ 不触发。混合方案状态变更走 Bearer header，不靠 cookie 自动携带。 |
 
 ## P0 - 先关外部攻击面
 
-### 1. Auth endpoints 限流
+### 1. Auth endpoints 限流 ✅
 
 **Objective:** 给高风险公开接口加限流，覆盖未知用户名和已知用户名。
 

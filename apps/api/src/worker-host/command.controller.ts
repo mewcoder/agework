@@ -13,8 +13,10 @@ import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./auth.guard";
 import { WorkerCommandQueue } from "./command-queue";
 import { safeLogJson } from "../common/logging";
-
-const MAX_COMMAND_WAIT_MS = 30_000;
+import {
+  WorkerCommandQueryDto,
+  WorkerOwnerParamDto,
+} from "./dto/worker-command-query.dto";
 
 /**
  * Worker command API — 仅供持久容器内的 worker 调用。
@@ -37,15 +39,14 @@ export class WorkerCommandController {
    */
   @Get(":ownerId/commands")
   async pollCommands(
-    @Param("ownerId") ownerId: string,
-    @Query("afterSeq") afterSeq?: string,
-    @Query("waitMs") waitMs?: string
+    @Param() params: WorkerOwnerParamDto,
+    @Query() query: WorkerCommandQueryDto
   ): Promise<{
     messages: WorkerCommandRpcRequest[];
   }> {
-    const parsed = afterSeq ? parseInt(afterSeq, 10) : 0;
-    const seq = Number.isFinite(parsed) ? parsed : 0;
-    const wait = parseCommandWaitMs(waitMs);
+    const { ownerId } = params;
+    const seq = query.afterSeq ?? 0;
+    const wait = query.waitMs ?? 0;
     const commands =
       wait > 0
         ? await this.commandQueue.waitForOwnerId(ownerId, seq, wait)
@@ -66,10 +67,4 @@ export class WorkerCommandController {
     }
     return { messages: commands.map(commandMessageToRpcRequest) };
   }
-}
-
-function parseCommandWaitMs(value?: string): number {
-  const parsed = value ? parseInt(value, 10) : 0;
-  if (!Number.isFinite(parsed) || parsed <= 0) return 0;
-  return Math.min(parsed, MAX_COMMAND_WAIT_MS);
 }

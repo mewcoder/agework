@@ -27,6 +27,7 @@ import { WorkerAuthGuard } from "./auth.guard";
 import { WorkerConfigStore } from "./config-store";
 import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
 import { safeLogJson } from "../common/logging";
+import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 
 /**
  * Worker run API（run-scoped）— 仅供 worker 调用，不暴露给前端。
@@ -54,8 +55,9 @@ export class WorkerRunController {
    */
   @Get(":runId")
   async getRunConfig(
-    @Param("runId") runId: string
+    @Param() params: WorkerRunParamDto
   ): Promise<{ config: RunConfig }> {
+    const { runId } = params;
     const config = this.configStore.get(runId);
     if (!config) {
       this.logger.warn(`Run config not found runId=${runId}`);
@@ -79,9 +81,10 @@ export class WorkerRunController {
    */
   @Post(":runId/events")
   async postEvent(
-    @Param("runId") runId: string,
+    @Param() params: WorkerRunParamDto,
     @Body() body: unknown
   ): Promise<{ ok: boolean }> {
+    const { runId } = params;
     const events = normalizeWorkerEventPostBody(body, runId);
     if (!events || events.length === 0) {
       throw new BadRequestException("Invalid worker event body");

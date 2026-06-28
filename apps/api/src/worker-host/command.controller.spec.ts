@@ -28,7 +28,10 @@ describe("WorkerCommandController", () => {
         commandQueue as WorkerCommandQueue
       );
 
-      const result = await controller.pollCommands("owner-1", "3");
+      const result = await controller.pollCommands(
+        { ownerId: "owner-1" },
+        { afterSeq: 3 }
+      );
 
       expect(commandQueue.pollByOwnerId).toHaveBeenCalledWith("owner-1", 3);
       expect(result).toEqual({
@@ -60,12 +63,12 @@ describe("WorkerCommandController", () => {
         commandQueue as WorkerCommandQueue
       );
 
-      await controller.pollCommands("owner-1");
+      await controller.pollCommands({ ownerId: "owner-1" }, {});
 
       expect(commandQueue.pollByOwnerId).toHaveBeenCalledWith("owner-1", 0);
     });
 
-    it("defaults afterSeq to 0 when invalid", async () => {
+    it("defaults afterSeq to 0 when omitted", async () => {
       const commandQueue: Partial<WorkerCommandQueue> = {
         pollByOwnerId: vi.fn().mockReturnValue([]),
       };
@@ -74,7 +77,7 @@ describe("WorkerCommandController", () => {
         commandQueue as WorkerCommandQueue
       );
 
-      await controller.pollCommands("owner-1", "not-a-number");
+      await controller.pollCommands({ ownerId: "owner-1" }, { waitMs: 0 });
 
       expect(commandQueue.pollByOwnerId).toHaveBeenCalledWith("owner-1", 0);
     });
@@ -102,7 +105,10 @@ describe("WorkerCommandController", () => {
         commandQueue as WorkerCommandQueue
       );
 
-      const result = await controller.pollCommands("owner-1", "1", "25000");
+      const result = await controller.pollCommands(
+        { ownerId: "owner-1" },
+        { afterSeq: 1, waitMs: 25000 }
+      );
 
       expect(commandQueue.waitForOwnerId).toHaveBeenCalledWith(
         "owner-1",

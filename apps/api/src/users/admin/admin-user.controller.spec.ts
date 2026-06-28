@@ -32,19 +32,19 @@ describe("AdminUserController", () => {
   describe("list()", () => {
     it("passes pagination to usersService.list", async () => {
       const { controller, users } = makeController();
-      await controller.list(mockUser, "2", "20");
+      await controller.list(mockUser, { pageNo: 2, pageSize: 20 });
       expect(users.list).toHaveBeenCalledWith(mockUser, { take: 20, skip: 20 });
     });
 
     it("uses defaults when pagination is omitted", async () => {
       const { controller, users } = makeController();
-      await controller.list(mockUser);
+      await controller.list(mockUser, {});
       expect(users.list).toHaveBeenCalledWith(mockUser, { take: 10, skip: 0 });
     });
 
     it("clamps pageSize to max 100", async () => {
       const { controller, users } = makeController();
-      await controller.list(mockUser, "1", "500");
+      await controller.list(mockUser, { pageNo: 1, pageSize: 500 });
       expect(users.list).toHaveBeenCalledWith(mockUser, { take: 100, skip: 0 });
     });
   });

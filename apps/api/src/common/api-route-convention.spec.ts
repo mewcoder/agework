@@ -1,16 +1,26 @@
 import "reflect-metadata";
 import { RequestMethod } from "@nestjs/common";
-import { METHOD_METADATA, PATH_METADATA } from "@nestjs/common/constants";
+import {
+  GUARDS_METADATA,
+  METHOD_METADATA,
+  PATH_METADATA,
+} from "@nestjs/common/constants";
 import { describe, expect, it } from "vitest";
 import { AgentController } from "../conversations/agent/agent.controller";
 import { AuthController } from "../auth/auth.controller";
+import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
+import { ROLES_KEY } from "../auth/decorators/roles.decorator";
 import { AdminConfigController } from "../config/admin/admin-config.controller";
 import { ConversationController } from "../conversations/conversation.controller";
 import { AdminModelProviderController } from "../model-providers/admin/admin-model-provider.controller";
 import { ModelProviderController } from "../model-providers/model-provider.controller";
 import { AdminRunController } from "../runs/admin/admin-run.controller";
 import { AdminRuntimeController } from "../runtime/admin/admin-runtime.controller";
+import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../users/admin/admin-user.controller";
+import { WorkerCommandController } from "../worker-host/command.controller";
+import { WorkerAuthGuard } from "../worker-host/auth.guard";
+import { WorkerRunController } from "../worker-host/worker-run.controller";
 import { AdminWorkspaceController } from "../workspaces/admin/admin-workspace.controller";
 import { WorkspaceController } from "../workspaces/workspace.controller";
 
@@ -22,21 +32,70 @@ const METHOD_BY_NAME: Record<RouteMethod, RequestMethod> = {
   post: RequestMethod.POST,
 };
 
+const METHOD_NAME_BY_VALUE: Record<number, string> = {
+  [RequestMethod.GET]: "GET",
+  [RequestMethod.POST]: "POST",
+};
+
+const CONTROLLERS = [
+  AgentController,
+  AuthController,
+  AdminConfigController,
+  ConversationController,
+  AdminModelProviderController,
+  ModelProviderController,
+  AdminRunController,
+  AdminRuntimeController,
+  SystemController,
+  AdminUserController,
+  WorkerCommandController,
+  WorkerRunController,
+  AdminWorkspaceController,
+  WorkspaceController,
+] as const satisfies readonly ControllerClass[];
+
+const PUBLIC_ROUTE_ALLOWLIST = new Set([
+  "POST auth/login",
+  "POST auth/register",
+  "POST auth/setup",
+  "POST auth/refresh",
+  "POST auth/logout",
+  "GET auth/config",
+  "GET system/about",
+]);
+
 function controllerPath(controller: ControllerClass) {
   return Reflect.getMetadata(PATH_METADATA, controller);
+}
+
+function routeHandler(controller: ControllerClass, methodName: string) {
+  const prototype = controller.prototype as Record<string, unknown>;
+  const handler = prototype[methodName];
+  if (typeof handler !== "function") {
+    throw new Error(`${controller.name}.${methodName} is not a route handler`);
+  }
+  return handler;
 }
 
 function route(
   controller: ControllerClass,
   methodName: string
 ): { path: string; method: RequestMethod } {
-  const handler = controller.prototype[methodName] as (
-    ...args: never[]
-  ) => unknown;
+  const handler = routeHandler(controller, methodName);
   return {
     path: Reflect.getMetadata(PATH_METADATA, handler),
     method: Reflect.getMetadata(METHOD_METADATA, handler),
   };
+}
+
+function routeMethods(controller: ControllerClass) {
+  return Object.getOwnPropertyNames(controller.prototype).filter(
+    (methodName) => {
+      if (methodName === "constructor") return false;
+      const handler = routeHandler(controller, methodName);
+      return handler && Reflect.hasMetadata(PATH_METADATA, handler);
+    }
+  );
 }
 
 function expectRoute(
@@ -49,6 +108,25 @@ function expectRoute(
     method: METHOD_BY_NAME[method],
     path,
   });
+}
+
+function rolesFor(controller: ControllerClass): string[] {
+  return Reflect.getMetadata(ROLES_KEY, controller) ?? [];
+}
+
+function guardsFor(controller: ControllerClass): unknown[] {
+  return Reflect.getMetadata(GUARDS_METADATA, controller) ?? [];
+}
+
+function isPublic(target: object) {
+  return Reflect.getMetadata(IS_PUBLIC_KEY, target) === true;
+}
+
+function routeLabel(controller: ControllerClass, methodName: string) {
+  const controllerBasePath = controllerPath(controller);
+  const metadata = route(controller, methodName);
+  const method = METHOD_NAME_BY_VALUE[metadata.method] ?? metadata.method;
+  return `${method} ${controllerBasePath}/${metadata.path}`;
 }
 
 describe("external API route convention", () => {
@@ -159,5 +237,71 @@ describe("external API route convention", () => {
     expect(controllerPath(AdminWorkspaceController)).toBe("admin/workspaces");
     expectRoute(AdminWorkspaceController, "listAll", "get", "all");
     expectRoute(AdminWorkspaceController, "update", "post", "update");
+  });
+
+  it("requires admin role metadata for every admin controller", () => {
+    const adminControllers = CONTROLLERS.filter((controller) =>
+      controllerPath(controller).startsWith("admin/")
+    );
+
+    expect(adminControllers.map(controllerPath)).toEqual(
+      expect.arrayContaining([
+        "admin/config",
+        "admin/model-providers",
+        "admin/runs",
+        "admin/runtime",
+        "admin/users",
+        "admin/workspaces",
+      ])
+    );
+    expect(
+      adminControllers
+        .filter((controller) => !rolesFor(controller).includes("admin"))
+        .map(controllerPath)
+    ).toEqual([]);
+  });
+
+  it("keeps worker callbacks public but protected by WorkerAuthGuard", () => {
+    const workerControllers = CONTROLLERS.filter((controller) =>
+      controllerPath(controller).startsWith("worker/")
+    );
+
+    expect(workerControllers.map(controllerPath)).toEqual([
+      "worker/owners",
+      "worker/runs",
+    ]);
+    expect(
+      workerControllers
+        .filter((controller) => !isPublic(controller))
+        .map(controllerPath)
+    ).toEqual([]);
+    expect(
+      workerControllers
+        .filter((controller) => !guardsFor(controller).includes(WorkerAuthGuard))
+        .map(controllerPath)
+    ).toEqual([]);
+  });
+
+  it("does not mark non-worker controllers public at class level", () => {
+    expect(
+      CONTROLLERS.filter(
+        (controller) =>
+          !controllerPath(controller).startsWith("worker/") &&
+          isPublic(controller)
+      ).map(controllerPath)
+    ).toEqual([]);
+  });
+
+  it("allows @Public only on explicit public route allowlist", () => {
+    const publicRoutes = CONTROLLERS.flatMap((controller) =>
+      routeMethods(controller)
+        .filter((methodName) => {
+          const handler = routeHandler(controller, methodName);
+          return isPublic(handler);
+        })
+        .map((methodName) => routeLabel(controller, methodName))
+    );
+
+    expect(publicRoutes).toEqual([...PUBLIC_ROUTE_ALLOWLIST]);
   });
 });

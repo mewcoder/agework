@@ -19,13 +19,13 @@ describe("AdminWorkspaceController", () => {
   describe("listAll()", () => {
     it("passes pagination to workspaceService.listAll", async () => {
       const { controller, service } = makeController();
-      await controller.listAll("3", "15");
+      await controller.listAll({ pageNo: 3, pageSize: 15 });
       expect(service.listAll).toHaveBeenCalledWith({ take: 15, skip: 30 });
     });
 
     it("uses defaults when pagination is omitted", async () => {
       const { controller, service } = makeController();
-      await controller.listAll();
+      await controller.listAll({});
       expect(service.listAll).toHaveBeenCalledWith({ take: 10, skip: 0 });
     });
   });

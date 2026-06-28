@@ -22,7 +22,7 @@ function makeController() {
 describe("AdminModelProviderController", () => {
   it("list() delegates with agentType", async () => {
     const { controller, service } = makeController();
-    await controller.list("claude");
+    await controller.list({ agentType: "claude" });
     expect(service.listForAdmin).toHaveBeenCalledWith("claude");
   });
 

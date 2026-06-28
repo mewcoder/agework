@@ -72,7 +72,11 @@ describe("AdminRuntimeController", () => {
       },
     });
 
-    const result = await controller.listResources("running", "1", "10");
+    const result = await controller.listResources({
+      status: "running",
+      pageNo: 1,
+      pageSize: 10,
+    });
 
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({

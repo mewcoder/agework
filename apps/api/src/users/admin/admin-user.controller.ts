@@ -2,10 +2,12 @@ import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
+import { pageWindow } from "../../common/dto/pagination-query.dto";
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
 import { UserIdDto } from "../dto/user-id.dto";
 import { UserService } from "../user.service";
+import { AdminUserListQueryDto } from "./admin-user-query.dto";
 
 @Controller("admin/users")
 @Roles("admin")
@@ -15,12 +17,10 @@ export class AdminUserController {
   @Get("list")
   list(
     @CurrentUser() user: JwtUser,
-    @Query("pageNo") pageNo?: string,
-    @Query("pageSize") pageSize?: string,
+    @Query() query: AdminUserListQueryDto,
   ) {
-    const take = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
-    const pageNum = Math.max(Number(pageNo) || 1, 1);
-    return this.usersService.list(user, { take, skip: (pageNum - 1) * take });
+    const { take, skip } = pageWindow(query);
+    return this.usersService.list(user, { take, skip });
   }
 
   @Post("create")

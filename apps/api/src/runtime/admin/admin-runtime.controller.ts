@@ -3,7 +3,9 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { ConfigService } from "../../config/config.service";
 import { PrismaService } from "../../prisma/prisma.service";
 import { RuntimeService } from "../runtime.service";
+import { pageWindow } from "../../common/dto/pagination-query.dto";
 import { RuntimeInstanceIdDto } from "./runtime-instance-id.dto";
+import { AdminRuntimeResourcesQueryDto } from "./admin-runtime-query.dto";
 import {
   runtimeInstanceDiagnostics,
   runtimeInstanceMetadataJson,
@@ -40,29 +42,24 @@ export class AdminRuntimeController {
   }
 
   @Get("resources")
-  async listResources(
-    @Query("status") status?: string,
-    @Query("pageNo") pageNo?: string,
-    @Query("pageSize") pageSize?: string,
-  ) {
-    const take = Math.min(Math.max(Number(pageSize) || 10, 1), 100);
-    const pageNum = Math.max(Number(pageNo) || 1, 1);
-    const where = status ? { status } : {};
+  async listResources(@Query() query: AdminRuntimeResourcesQueryDto) {
+    const { pageNo, pageSize, take, skip } = pageWindow(query);
+    const where = query.status ? { status: query.status } : {};
     const [items, total] = await Promise.all([
       this.prisma.runtimeInstance.findMany({
         where,
         include: { workspaceRuntimeInstances: true },
         orderBy: { updatedAt: "desc" },
         take,
-        skip: (pageNum - 1) * take,
+        skip,
       }),
       this.prisma.runtimeInstance.count({ where }),
     ]);
     return {
       list: items.map((item) => this.toRuntimeInstanceResponse(item)),
       total,
-      pageNo: pageNum,
-      pageSize: take,
+      pageNo,
+      pageSize,
     };
   }
 
