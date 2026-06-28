@@ -8,6 +8,8 @@ import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerCommandDispatcher } from "./commands/command-dispatcher.service";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerRunController } from "./worker-run.controller";
+import { WorkerEndpointHandler } from "./worker-endpoint.handler";
+import { WorkerHostService } from "./worker-host.service";
 
 /**
  * worker-host：API ↔ worker 进程之间的通信边界（配置下发、命令下发、上行事件、
@@ -15,9 +17,8 @@ import { WorkerRunController } from "./worker-run.controller";
  * 依赖任何一方——反向通知所需的端口（CommandSentRecorder / WorkerUpstreamReceiver）
  * 由各自在启动时注入实现。
  *
- * 公开面只暴露跨模块真正用到的能力：命令下发（WorkerCommandDispatcher）、
- * access key（WorkerAccessService）、上行事件注册表（WorkerUpstreamRegistry）。
- * 配置存储、命令队列、鉴权 guard 是内部实现，不导出。
+ * 公开面只暴露 WorkerHostService。命令下发、access key、上行事件注册表、
+ * 配置存储、命令队列、鉴权 guard 都是 worker-host 内部实现。
  */
 @Module({
   controllers: [WorkerCommandController, WorkerRunController],
@@ -28,11 +29,9 @@ import { WorkerRunController } from "./worker-run.controller";
     WorkerAuthGuard,
     WorkerUpstreamRegistry,
     WorkerCommandDispatcher,
+    WorkerEndpointHandler,
+    WorkerHostService,
   ],
-  exports: [
-    WorkerCommandDispatcher,
-    WorkerAccessService,
-    WorkerUpstreamRegistry,
-  ],
+  exports: [WorkerHostService],
 })
 export class WorkerHostModule {}

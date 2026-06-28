@@ -7,12 +7,8 @@ import type {
 } from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import { safeLogJson } from "../../common/logging";
-import type {
-  RunEventReceiver,
-  RunExecutor,
-} from "./executor";
-import { WorkerCommandDispatcher } from "../../worker-host/commands/command-dispatcher.service";
-import { WorkerAccessService } from "../../worker-host/access/access.service";
+import type { RunEventReceiver, RunExecutor } from "./executor";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import {
   SandboxRuntimeInstanceService,
   type SandboxRuntimeInstanceCallbacks,
@@ -35,8 +31,7 @@ export class SandboxRunExecutor implements RunExecutor {
 
   constructor(
     private readonly runtimeInstances: SandboxRuntimeInstanceService,
-    private readonly commands: WorkerCommandDispatcher,
-    private readonly access: WorkerAccessService
+    private readonly workerHost: WorkerHostService
   ) {}
 
   setRunEventReceiver(receiver: RunEventReceiver): void {
@@ -50,14 +45,12 @@ export class SandboxRunExecutor implements RunExecutor {
       );
     }
 
-    const context =
-      this.runtimeInstances.resolveWorkerExecutionContext(input);
+    const context = this.runtimeInstances.resolveWorkerExecutionContext(input);
     this.logWorkerExecutionStart(context);
 
     const handle = this.createRunHandle(context);
     const ownerState = this.runtimeInstances.ensureOwnerState(context, {
-      issueOwnerAccessKey: (ownerId) =>
-        this.access.issueOwnerKey(ownerId),
+      issueOwnerAccessKey: (ownerId) => this.workerHost.issueOwnerKey(ownerId),
     });
 
     // Run executor 负责把 run 绑定到 runtime owner，并打开 worker-host session。
@@ -68,7 +61,7 @@ export class SandboxRunExecutor implements RunExecutor {
       onRuntimeInstanceIdReady: input.onRuntimeInstanceIdReady,
     });
     this.runtimeInstances.retainOwnerRun(context.ownerId);
-    this.commands.openSession({
+    this.workerHost.openSession({
       runId: context.runId,
       ownerId: context.ownerId,
       accessKey: ownerState.accessKey,
@@ -97,7 +90,7 @@ export class SandboxRunExecutor implements RunExecutor {
       );
       return;
     }
-    this.commands.sendCommand(state.ownerId, handle.runId, command);
+    this.workerHost.sendCommand(state.ownerId, handle.runId, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
@@ -140,7 +133,7 @@ export class SandboxRunExecutor implements RunExecutor {
       this.states.delete(runId);
       this.runtimeInstances.releaseOwnerRun(state.ownerId);
     }
-    this.commands.cleanupRun(runId);
+    this.workerHost.cleanupRun(runId);
   }
 
   private createRunHandle(
@@ -162,10 +155,7 @@ export class SandboxRunExecutor implements RunExecutor {
       this.receiver
         .notifyCancelledBeforeReady(runId)
         .catch(
-          swallow(
-            this.logger,
-            `notify cancelled before ready for run ${runId}`
-          )
+          swallow(this.logger, `notify cancelled before ready for run ${runId}`)
         );
       return;
     }
@@ -179,7 +169,7 @@ export class SandboxRunExecutor implements RunExecutor {
       if (state.ownerId !== ownerId) continue;
       this.states.delete(runId);
     }
-    this.commands.cleanupByOwnerId(ownerId);
+    this.workerHost.cleanupByOwnerId(ownerId);
   }
 
   private logWorkerExecutionStart(
@@ -205,8 +195,7 @@ export class SandboxRunExecutor implements RunExecutor {
         this.receiver
           .notifyWorkerError(runId, error)
           .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
-      cleanupByOwnerId: (ownerId) =>
-        this.cleanupByOwnerId(ownerId),
+      cleanupByOwnerId: (ownerId) => this.cleanupByOwnerId(ownerId),
     };
   }
 }

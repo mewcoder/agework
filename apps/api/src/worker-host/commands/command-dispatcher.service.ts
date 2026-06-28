@@ -15,8 +15,8 @@ import type { CommandSentRecorder } from "./command-sent-recorder.port";
  * 维护 command seq 计数器，并把命令塞入 command queue。不持有 runtime 实例状态，
  * 所有入参均为原始值，便于在 worker-host 层独立存在。
  *
- * SandboxRunExecutor 调用它打开/清理 owner 会话；runtime 层不直接依赖
- * worker-host，也不负责签发或撤销 worker access key。
+ * 由 SandboxRunExecutor 经 WorkerHostService facade 调用；runtime 层只依赖
+ * worker-host facade，不直接依赖命令队列，也不负责签发或撤销 worker access key。
  */
 @Injectable()
 export class WorkerCommandDispatcher {

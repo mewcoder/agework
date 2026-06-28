@@ -1,5 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { RunChannelMessage, CommandPayload } from "@agework/shared/protocol";
+import type {
+  RunChannelMessage,
+  CommandPayload,
+} from "@agework/shared/protocol";
 import type { CommandSentRecorder } from "./command-sent-recorder.port";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
@@ -10,8 +13,9 @@ type OwnerWaiter = {
 };
 
 /**
- * 内存 command 队列：SandboxRunExecutor 经 WorkerCommandDispatcher 按 ownerId
- * 写入 command，持久容器 worker 经 WorkerCommandController 按 ownerId 轮询读取。
+ * 内存 command 队列：写入侧由 SandboxRunExecutor 经 WorkerHostService →
+ * WorkerCommandDispatcher 按 ownerId 推入；读取侧由持久容器 worker 经
+ * WorkerCommandController → WorkerHostService 按 ownerId 轮询。
  * LocalRunExecutor 不经过此队列（直接 IPC send）。
  *
  * ownerId 是 runtime 容器归属者的 ID（user 隔离下 = userId，workspace 隔离下 = workspaceId），
@@ -138,9 +142,7 @@ export class WorkerCommandQueue {
       waiter.resolve([]);
     }
     this.ownerWaiters.delete(ownerId);
-    this.logger.debug(
-      `cleanup owner commands ${safeLogJson({ ownerId })}`
-    );
+    this.logger.debug(`cleanup owner commands ${safeLogJson({ ownerId })}`);
   }
 
   private resolveOwnerWaiters(ownerId: string): void {

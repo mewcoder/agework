@@ -147,8 +147,15 @@ export class FeatureModule {}
 
 - `module.exports` 定义公开面;没 export 的就是 internal implementation。
 - 默认只 export 根 `Service`。
+- 跨模块调用统一走目标模块根 `Service`。根 `Service` 可以作为 facade 薄转发到本模块 internal provider,以保持公开面稳定;但不能承载 internal provider 的核心实现细节。
 - 禁止 export repository / internal provider / controller / DTO。
+- 额外 export provider 原则上禁止;只有框架级 token / provider 无法通过根 `Service` 表达时才允许例外,并且必须保持职责极窄。
 - 跨模块需要类型时,使用对方公开的 `*.types.ts` 或 `@agework/shared`;禁止从 service 实现文件导出契约类型。
+
+定义:
+
+- `Root Service`: module 唯一对外入口,文件通常是 `<feature>.service.ts`。它负责公开契约、跨模块编排、对 internal provider 的薄转发。
+- `Internal Provider`: Root Service 下的一层 Nest provider,只在本 module 内注册和注入,不 export。它用具体职责命名,不使用泛泛的 `XxxProvider` 后缀。
 
 ### 1.4 Admin 边界
 
@@ -273,6 +280,7 @@ Service 是 module 唯一对外入口。
 - 调用下层 module 导出的 Service。
 - 发 domain event。
 - 做响应形状局部转换。
+- 作为 module public facade,对 internal provider 做薄转发。Service 可以宽,但不能深;复杂状态机、协议解析、queue / registry / store 细节仍应留在 internal provider。
 
 禁止:
 

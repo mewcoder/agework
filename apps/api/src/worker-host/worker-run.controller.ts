@@ -1,32 +1,9 @@
-import {
-  Controller,
-  Get,
-  Post,
-  Param,
-  Body,
-  UseGuards,
-  NotFoundException,
-  BadRequestException,
-  Logger,
-} from "@nestjs/common";
-import type {
-  RpcResponse,
-  RunChannelMessage,
-  RunConfig,
-  WorkerCommandResult,
-} from "@agework/shared/protocol";
-import {
-  isWorkerCommandResultRpcResponse,
-  isWorkerEventRpcNotification,
-  rpcNotificationToUpstreamMessage,
-  rpcResponseToCommandResultMessage,
-} from "@agework/shared/protocol/rpc";
+import { Controller, Get, Post, Param, Body, UseGuards } from "@nestjs/common";
+import type { RunConfig } from "@agework/shared/protocol";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./guards/auth.guard";
-import { WorkerConfigStore } from "./config/config-store";
-import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { safeLogJson } from "../common/logging";
+import { WorkerHostService } from "./worker-host.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 
 /**
@@ -34,45 +11,23 @@ import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
  * 所有端点需要 run-scoped worker access key，与用户登录态无关，因此标记 @Public()
  * 跳过全局 JwtAuthGuard，鉴权完全交由 WorkerAuthGuard。
  *
- * config 下发由 worker-host 自持的 WorkerConfigStore 完成；事件上报经
- * WorkerUpstreamRegistry 转发给 run 层（worker-host 不依赖 run 实现）。
+ * config 下发与事件上报都经 WorkerHostService facade 进入 worker-host，
+ * controller 不直接依赖内部 store / registry。
  */
 @Public()
 @RawResponse()
 @Controller("worker/runs")
 @UseGuards(WorkerAuthGuard)
 export class WorkerRunController {
-  private readonly logger = new Logger(WorkerRunController.name);
-
-  constructor(
-    private readonly configStore: WorkerConfigStore,
-    private readonly upstream: WorkerUpstreamRegistry
-  ) {}
+  constructor(private readonly workerHost: WorkerHostService) {}
 
   /**
    * GET /worker/runs/:runId
    * Worker 启动后拉取 RunConfig（sandbox worker 通过 HTTP 启动时使用）。
    */
   @Get(":runId")
-  async getRunConfig(
-    @Param() params: WorkerRunParamDto
-  ): Promise<{ config: RunConfig }> {
-    const { runId } = params;
-    const config = this.configStore.get(runId);
-    if (!config) {
-      this.logger.warn(`Run config not found runId=${runId}`);
-      throw new NotFoundException(`Run config not found: ${runId}`);
-    }
-    this.logger.debug(
-      `run config fetched ${safeLogJson({
-        runId,
-        conversationId: config.conversationId,
-        workspaceId: config.workspaceId,
-        agentType: config.agentProviderConfig.agentType,
-        agentProviderSource: config.agentProviderConfig.source,
-      })}`
-    );
-    return { config };
+  getRunConfig(@Param() params: WorkerRunParamDto): { config: RunConfig } {
+    return this.workerHost.getRunConfig(params.runId);
   }
 
   /**
@@ -84,52 +39,6 @@ export class WorkerRunController {
     @Param() params: WorkerRunParamDto,
     @Body() body: unknown
   ): Promise<{ ok: boolean }> {
-    const { runId } = params;
-    const events = normalizeWorkerEventPostBody(body, runId);
-    if (!events || events.length === 0) {
-      throw new BadRequestException("Invalid worker event body");
-    }
-    if (events.some((event) => event.runId !== runId)) {
-      throw new BadRequestException("Worker event runId mismatch");
-    }
-    for (const event of events) {
-      await this.upstream.sendEvent(runId, event);
-    }
-    return { ok: true };
+    return this.workerHost.postEvent(params.runId, body);
   }
-}
-
-function normalizeWorkerEventPostBody(
-  body: unknown,
-  routeRunId?: string
-): RunChannelMessage[] | undefined {
-  if (Array.isArray(body)) {
-    if (body.length === 0) return undefined;
-    const events: RunChannelMessage[] = [];
-    for (const message of body) {
-      const normalized = normalizeWorkerEventPostItem(message, routeRunId);
-      if (!normalized) return undefined;
-      events.push(normalized);
-    }
-    return events;
-  }
-
-  const event = normalizeWorkerEventPostItem(body, routeRunId);
-  return event ? [event] : undefined;
-}
-
-function normalizeWorkerEventPostItem(
-  body: unknown,
-  routeRunId?: string
-): RunChannelMessage | undefined {
-  if (isWorkerEventRpcNotification(body)) {
-    return rpcNotificationToUpstreamMessage(body);
-  }
-  if (isWorkerCommandResultRpcResponse(body)) {
-    return rpcResponseToCommandResultMessage(
-      body as RpcResponse<WorkerCommandResult>,
-      { runId: routeRunId }
-    );
-  }
-  return undefined;
 }

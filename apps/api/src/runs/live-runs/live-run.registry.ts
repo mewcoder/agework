@@ -6,7 +6,7 @@ import type {
 import type {
   IncompleteMessageReason,
   AssistantMessageAggregator,
-} from "../aggregation/assistant-message.aggregator";
+} from "../worker-events/assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import type { RunStream } from "../streaming/run-stream";

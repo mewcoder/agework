@@ -3,7 +3,7 @@ import { WorkerEventsService } from "./worker-events.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-runs/live-run.registry";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
-import { AssistantMessageAggregator } from "../aggregation/assistant-message.aggregator";
+import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-events/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
 import type { ConfigService } from "../../config/config.service";
@@ -28,10 +28,7 @@ function makeRes() {
   } as any;
 }
 
-function makeStream(
-  res = makeRes(),
-  mode: "events" | "snapshots" = "events"
-) {
+function makeStream(res = makeRes(), mode: "events" | "snapshots" = "events") {
   return new RunStream(res, mode);
 }
 
@@ -139,7 +136,9 @@ describe("WorkerEventsService", () => {
   });
 
   it("notifyWorkerError skips when run already terminal/finalizing", async () => {
-    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(true);
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
+      true
+    );
     const forceErrorStatus = vi.spyOn(workerEventsService, "forceErrorStatus");
 
     await workerEventsService.notifyWorkerError("run-1", "crashed");
@@ -148,7 +147,9 @@ describe("WorkerEventsService", () => {
   });
 
   it("notifyWorkerError forces error status when run not terminal", async () => {
-    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(false);
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
+      false
+    );
     const forceErrorStatus = vi
       .spyOn(workerEventsService, "forceErrorStatus")
       .mockResolvedValue(undefined);
@@ -159,7 +160,9 @@ describe("WorkerEventsService", () => {
   });
 
   it("notifyCancelledBeforeReady forces cancelled when run not terminal", async () => {
-    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(false);
+    vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
+      false
+    );
     const forceCancelledStatus = vi
       .spyOn(workerEventsService, "forceCancelledStatus")
       .mockResolvedValue(undefined);
@@ -266,9 +269,7 @@ describe("WorkerEventsService", () => {
   });
 
   it("still applies terminal status when run event recording fails", async () => {
-    mockRunEvents.append = vi
-      .fn()
-      .mockRejectedValue(new Error("SQLITE_BUSY"));
+    mockRunEvents.append = vi.fn().mockRejectedValue(new Error("SQLITE_BUSY"));
 
     await expect(
       workerEventsService.publish({
@@ -310,9 +311,7 @@ describe("WorkerEventsService", () => {
   });
 
   it("continues AG-UI processing when run event recording fails", async () => {
-    mockRunEvents.append = vi
-      .fn()
-      .mockRejectedValue(new Error("SQLITE_BUSY"));
+    mockRunEvents.append = vi.fn().mockRejectedValue(new Error("SQLITE_BUSY"));
     const aggregator = { handle: vi.fn() };
     liveRuns.register("run-1", {
       runtimeHandle: {

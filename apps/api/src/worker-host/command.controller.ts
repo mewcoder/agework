@@ -1,18 +1,8 @@
-import {
-  Controller,
-  Get,
-  Logger,
-  Param,
-  Query,
-  UseGuards,
-} from "@nestjs/common";
-import type { WorkerCommandRpcRequest } from "@agework/shared/protocol";
-import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerAuthGuard } from "./guards/auth.guard";
-import { WorkerCommandQueue } from "./commands/command-queue";
-import { safeLogJson } from "../common/logging";
+import { WorkerHostService } from "./worker-host.service";
 import {
   WorkerCommandQueryDto,
   WorkerOwnerParamDto,
@@ -28,9 +18,7 @@ import {
 @Controller("worker/owners")
 @UseGuards(WorkerAuthGuard)
 export class WorkerCommandController {
-  private readonly logger = new Logger(WorkerCommandController.name);
-
-  constructor(private readonly commandQueue: WorkerCommandQueue) {}
+  constructor(private readonly workerHost: WorkerHostService) {}
 
   /**
    * GET /worker/owners/:ownerId/commands?afterSeq=N
@@ -38,33 +26,10 @@ export class WorkerCommandController {
    * 每条 JSON-RPC request 的 meta/params 携带 runId，worker 据此分发到对应的并行 run。
    */
   @Get(":ownerId/commands")
-  async pollCommands(
+  pollCommands(
     @Param() params: WorkerOwnerParamDto,
     @Query() query: WorkerCommandQueryDto
-  ): Promise<{
-    messages: WorkerCommandRpcRequest[];
-  }> {
-    const { ownerId } = params;
-    const seq = query.afterSeq ?? 0;
-    const wait = query.waitMs ?? 0;
-    const commands =
-      wait > 0
-        ? await this.commandQueue.waitForOwnerId(ownerId, seq, wait)
-        : this.commandQueue.pollByOwnerId(ownerId, seq);
-    if (commands.length > 0) {
-      this.logger.debug(
-        `owner commands fetched ${safeLogJson({
-          ownerId,
-          afterSeq: seq,
-          count: commands.length,
-          commands: commands.map((command) => ({
-            seq: command.seq,
-            runId: command.runId,
-            type: command.payload.type,
-          })),
-        })}`
-      );
-    }
-    return { messages: commands.map(commandMessageToRpcRequest) };
+  ) {
+    return this.workerHost.pollCommands(params.ownerId, query);
   }
 }

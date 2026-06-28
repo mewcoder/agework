@@ -25,7 +25,7 @@ import { RunConversationEffects } from "./conversation/run-conversation.effects"
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
-} from "./aggregation/assistant-message.aggregator";
+} from "./worker-events/assistant-message.aggregator";
 import { ConfigService, type IsolationScope } from "../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
 import { EnvKey } from "../config/registry/env-key";
@@ -78,7 +78,9 @@ export class RunService {
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */
-  listAdminRunEvents(params: Parameters<RunEventService["listAdminEvents"]>[0]) {
+  listAdminRunEvents(
+    params: Parameters<RunEventService["listAdminEvents"]>[0]
+  ) {
     return this.runEvents.listAdminEvents(params);
   }
 
@@ -220,7 +222,7 @@ export class RunService {
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
       userWorkspaceRootPath: this.configService.getUserWorkspace(
-        workspace.username,
+        workspace.username
       ),
       runtimeType: requestedRuntimeType,
       isolationScope,
@@ -353,7 +355,10 @@ export class RunService {
     this.conversationService
       .generateTitleIfNeeded({ conversationId, agentType, modelProviderId })
       .catch(
-        swallow(this.logger, `generate title for conversation ${conversationId}`)
+        swallow(
+          this.logger,
+          `generate title for conversation ${conversationId}`
+        )
       );
   }
 

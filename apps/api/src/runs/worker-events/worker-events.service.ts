@@ -8,15 +8,13 @@ import type {
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "../execution/executor";
-import type { WorkerUpstreamReceiver } from "../../worker-host/upstream/worker-upstream.registry";
+import type { WorkerUpstreamReceiver } from "../../worker-host/worker-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorSink,
 } from "../live-runs/live-run.registry";
 import { ExecutionService } from "../execution/execution.service";
-import {
-  safeLogJson,
-} from "../../common/logging";
+import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { summarizeMessagePayload } from "./message-payload-summary";
 import {
@@ -102,10 +100,7 @@ export class WorkerEventsService
     const { runId, seq } = message;
     if (
       message.type === "run.status" &&
-      this.shouldIgnoreRunStatus(
-        runId,
-        message.payload as RunStatusPayload
-      )
+      this.shouldIgnoreRunStatus(runId, message.payload as RunStatusPayload)
     ) {
       return;
     }
@@ -166,10 +161,7 @@ export class WorkerEventsService
         this.recordSdkRaw(runId, message.payload);
         break;
       case "command.trace":
-        this.recordCommandTrace(
-          runId,
-          message.payload as CommandTracePayload
-        );
+        this.recordCommandTrace(runId, message.payload as CommandTracePayload);
         break;
       case "command.result":
         this.recordCommandResult(
@@ -192,10 +184,7 @@ export class WorkerEventsService
     try {
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
-      this.executionService.terminateExecution(
-        runtimeHandle,
-        "run timeout"
-      );
+      this.executionService.terminateExecution(runtimeHandle, "run timeout");
     }
   }
 
@@ -209,10 +198,7 @@ export class WorkerEventsService
     return this.finalizingRuns.has(runId) || this.completedRuns.has(runId);
   }
 
-  private async handleRunStatus(
-    runId: string,
-    payload: RunStatusPayload
-  ) {
+  private async handleRunStatus(runId: string, payload: RunStatusPayload) {
     const decision = decideRunStatusUpdate({
       nextStatus: payload.status,
       terminalOrFinalizing: this.isTerminalOrFinalizing(runId),

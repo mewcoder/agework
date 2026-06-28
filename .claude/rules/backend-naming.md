@@ -49,8 +49,25 @@
 
 - 具体职责后缀优先于 `service`: `*.policy.ts`、`*.registry.ts`、`*.executor.ts`、`*.handler.ts`。
 - `*.service.ts` 留给根 Service、业务 facade,或没有更具体职责名的 Nest provider。
+- `Provider` 是 Nest DI 概念,不是推荐类名后缀;除非是框架级 provider/token 或现有领域术语,不要新增 `XxxProvider`。
+- Root Service 下的一层统一叫 internal provider,但具体文件和类名必须表达职责。
 - 禁止新增 `*.use-case.ts` 和 `XxxUseCase`;历史 use-case 后续移除,改成具体职责名。
 - 避免抽象空词: `helper`、`utils`、`manager`、`processor`、`core`。除非它是外部协议、SDK 或现有产品术语。
+
+常用 internal provider 后缀:
+
+- `XxxHandler`: 处理某类入口流程或事件入口,通常连接 controller / queue / webhook 与内部能力。例: `WorkerEndpointHandler`、`WebhookEventHandler`、`RunTimeoutHandler`。
+- `XxxRegistry`: 维护运行时注册表、回调端口、实例映射。例: `WorkerUpstreamRegistry`、`RuntimeProviderRegistry`、`LiveRunRegistry`。
+- `XxxStore`: 模块内状态存储,尤其是内存态或短生命周期状态。例: `WorkerConfigStore`、`RuntimeSessionStore`。
+- `XxxDispatcher`: 下发命令、分发消息或把动作投递到队列/通道。例: `WorkerCommandDispatcher`、`RunEventDispatcher`。
+- `XxxPolicy`: 封装策略判断,不做 I/O 编排。例: `RuntimePlacementPolicy`、`RunPermissionPolicy`。
+- `XxxExecutor`: 执行某类运行单元或任务生命周期。例: `SandboxRunExecutor`、`LocalRunExecutor`。
+- `XxxRepository`: 数据库访问边界。例: `WorkspaceRepository`、`WorkspaceRuntimeInstanceRepository`。
+- `XxxAdapter`: 外部 SDK、协议或基础设施适配。例: `OpenAIAdapter`、`DockerSandboxAdapter`。
+- `XxxParser`: 协议/文本解析。纯函数文件优先,需要 DI 时再做 Injectable。例: `WorkerEventParser` 或 `worker-event.parser.ts`。
+- `XxxFactory`: 创建复杂对象或 provider 实例。例: `RuntimeTargetFactory`、`ModelClientFactory`。
+- `XxxGuard`: Nest guard。例: `WorkerAuthGuard`。
+- `XxxPort`: 端口接口/契约类型,通常是 `*.port.ts`。例: `CommandSentRecorder`。
 
 ## 6. 迁移原则
 

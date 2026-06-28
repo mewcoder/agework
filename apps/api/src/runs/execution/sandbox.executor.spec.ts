@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRunExecutor } from "./sandbox.executor";
 import { SandboxRuntimeInstanceService } from "../../runtime/sandbox/sandbox-instance.service";
-import { WorkerCommandDispatcher } from "../../worker-host/commands/command-dispatcher.service";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import type {
   SandboxEngine,
   SandboxRuntime,
@@ -44,17 +44,12 @@ function makeProvider(engineOverride?: SandboxEngine) {
     notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
     recordCommandSent: vi.fn().mockResolvedValue(undefined),
   };
-  const configStore = { register: vi.fn(), unregister: vi.fn() };
-  const access = {
+  const workerHost = {
     issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
-    registerRun: vi.fn(),
-    revokeOwner: vi.fn(),
-    revokeAccess: vi.fn(),
-  };
-  const commandQueue = {
-    pushByOwnerId: vi.fn(),
+    openSession: vi.fn(),
+    sendCommand: vi.fn(),
+    cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
-    cleanup: vi.fn(),
   };
   const config = {
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(1800),
@@ -76,24 +71,16 @@ function makeProvider(engineOverride?: SandboxEngine) {
     workspaceRuntimeService as never,
     [engine]
   );
-  const workerSessions = new WorkerCommandDispatcher(
-    configStore as never,
-    access as never,
-    commandQueue as never
-  );
   const provider = new SandboxRunExecutor(
     runtimeInstances,
-    workerSessions,
-    access as never
+    workerHost as unknown as WorkerHostService
   );
-  provider.setRunEventReceiver(eventProcessor as never);
+  provider.setRunEventReceiver(eventProcessor);
 
   return {
     provider,
     engine,
-    access,
-    commandQueue,
-    configStore,
+    workerHost,
     eventProcessor,
     config,
     workspaceRuntimeService,
@@ -177,9 +164,7 @@ describe("SandboxRunExecutor — executor contract", () => {
         runtimeTarget: makeRuntimeTarget({ runtimeType: "local" }),
         runConfig: baseRun as never,
       })
-    ).toThrow(
-      "SandboxRunExecutor cannot start worker for runtime type: local"
-    );
+    ).toThrow("SandboxRunExecutor cannot start worker for runtime type: local");
     expect(engine.getOrCreate).not.toHaveBeenCalled();
   });
 });
@@ -265,29 +250,24 @@ describe("SandboxRunExecutor — workspace scope", () => {
     ).toHaveBeenCalledWith("sandbox", "ws-1", "container-abc");
   });
 
-  it("registers RunConfig and pushes user_message control", async () => {
-    const { provider, configStore, commandQueue } = makeProvider();
+  it("opens a worker-host session for the run", async () => {
+    const { provider, workerHost } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
-    expect(configStore.register).toHaveBeenCalledWith(
-      "run-1",
-      expect.anything()
-    );
-    expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
-      "ws-1",
-      expect.objectContaining({
+    expect(workerHost.issueOwnerKey).toHaveBeenCalledWith("ws-1");
+    expect(workerHost.openSession).toHaveBeenCalledWith({
+      runId: "run-1",
+      ownerId: "ws-1",
+      accessKey: "owner-key",
+      runConfig: expect.objectContaining({
         runId: "run-1",
-        payload: expect.objectContaining({
-          type: "user_message",
-          runId: "run-1",
-        }),
-      })
-    );
+      }),
+    });
   });
 
   it("reuses the existing sandbox for a second run (no second getOrCreate)", async () => {
-    const { provider, engine, commandQueue } = makeProvider();
+    const { provider, engine, workerHost } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
@@ -299,7 +279,7 @@ describe("SandboxRunExecutor — workspace scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
-    expect(commandQueue.pushByOwnerId).toHaveBeenCalledTimes(2);
+    expect(workerHost.openSession).toHaveBeenCalledTimes(2);
   });
 
   it("reports error and cleans worker session when engine.getOrCreate fails", async () => {
@@ -307,8 +287,7 @@ describe("SandboxRunExecutor — workspace scope", () => {
     (engine.getOrCreate as ReturnType<typeof vi.fn>).mockRejectedValue(
       new Error("engine unavailable")
     );
-    const { provider, eventProcessor, commandQueue, access } =
-      makeProvider(engine);
+    const { provider, eventProcessor, workerHost } = makeProvider(engine);
 
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
@@ -317,8 +296,7 @@ describe("SandboxRunExecutor — workspace scope", () => {
       "run-1",
       expect.stringContaining("engine unavailable")
     );
-    expect(commandQueue.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
-    expect(access.revokeOwner).toHaveBeenCalledWith("ws-1");
+    expect(workerHost.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
   });
 
   it("cancel does not stop the sandbox", async () => {
@@ -330,20 +308,19 @@ describe("SandboxRunExecutor — workspace scope", () => {
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
-  it("cancel sends a cancel control via control queue", async () => {
-    const { provider, commandQueue } = makeProvider();
+  it("cancel sends a cancel command through worker-host", async () => {
+    const { provider, workerHost } = makeProvider();
     const handle = startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
     provider.cancel(handle);
-    expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
+    expect(workerHost.sendCommand).toHaveBeenCalledWith(
       "ws-1",
+      "run-1",
       expect.objectContaining({
-        payload: expect.objectContaining({
-          type: "cancel",
-          runId: "run-1",
-          conversationId: "conversation-1",
-        }),
+        type: "cancel",
+        runId: "run-1",
+        conversationId: "conversation-1",
       })
     );
   });
@@ -370,16 +347,18 @@ describe("SandboxRunExecutor — workspace scope", () => {
     await vi.runOnlyPendingTimersAsync();
     await Promise.resolve();
 
-    expect(eventProcessor.notifyCancelledBeforeReady).toHaveBeenCalledWith("run-1");
+    expect(eventProcessor.notifyCancelledBeforeReady).toHaveBeenCalledWith(
+      "run-1"
+    );
   });
 
-  it("cleanup revokes per-run access without stopping sandbox", async () => {
-    const { provider, access, engine } = makeProvider();
+  it("cleanup delegates run cleanup without stopping sandbox", async () => {
+    const { provider, workerHost, engine } = makeProvider();
     startProvider(provider);
     await vi.runOnlyPendingTimersAsync();
 
     provider.cleanup("run-1");
-    expect(access.revokeAccess).toHaveBeenCalledWith("run-1");
+    expect(workerHost.cleanupRun).toHaveBeenCalledWith("run-1");
     expect(engine.stop).not.toHaveBeenCalled();
   });
 
@@ -418,7 +397,7 @@ describe("SandboxRunExecutor — user scope", () => {
   });
 
   it("same user, different workspaces → reuses the same sandbox", async () => {
-    const { provider, engine, commandQueue } = makeProvider();
+    const { provider, engine, workerHost } = makeProvider();
 
     startProvider(
       provider,
@@ -440,7 +419,7 @@ describe("SandboxRunExecutor — user scope", () => {
     await vi.runOnlyPendingTimersAsync();
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(1);
-    expect(commandQueue.pushByOwnerId).toHaveBeenCalledTimes(2);
+    expect(workerHost.openSession).toHaveBeenCalledTimes(2);
   });
 
   it("different users → no reuse, separate sandboxes", async () => {
@@ -467,7 +446,6 @@ describe("SandboxRunExecutor — user scope", () => {
 
     expect(engine.getOrCreate).toHaveBeenCalledTimes(2);
   });
-
 });
 
 // ── Idle stop tests ──────────────────────────────────────────────────
@@ -515,7 +493,7 @@ describe("SandboxRunExecutor — idle stop", () => {
   });
 
   it("after idle timeout, marks resource stopped and resets runtimeInstanceId without revoking access", async () => {
-    const { provider, config, workspaceRuntimeService, access } =
+    const { provider, config, workspaceRuntimeService, workerHost } =
       makeProvider();
     config.getIdleTimeoutSeconds.mockReturnValue(5);
 
@@ -530,7 +508,7 @@ describe("SandboxRunExecutor — idle stop", () => {
       "workspace",
       "ws-1"
     );
-    expect(access.revokeOwner).not.toHaveBeenCalled();
+    expect(workerHost.cleanupByOwnerId).not.toHaveBeenCalled();
   });
 
   it("next run after idle stop resumes the previous container", async () => {
