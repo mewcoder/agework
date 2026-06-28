@@ -1,6 +1,14 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query, Res } from "@nestjs/common";
+import type { Response } from "express";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import { AgentService } from "./agent/agent.service";
+import { getAgentOptions } from "./agent/agent-options";
+import {
+  AgentConversationIdDto,
+  AgentReplyDto,
+} from "./agent/dto/agent-control.dto";
+import { AgentRunRequestDto } from "./agent/dto/agent-run.dto";
 import { ConversationService } from "./conversation.service";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 import { UpdateConversationDto } from "./dto/update-conversation.dto";
@@ -11,7 +19,10 @@ import { ConversationSearchQueryDto } from "./dto/conversation-search-query.dto"
 
 @Controller("conversations")
 export class ConversationController {
-  constructor(private conversationService: ConversationService) {}
+  constructor(
+    private readonly conversationService: ConversationService,
+    private readonly agentService: AgentService
+  ) {}
 
   @Get("list")
   list(@CurrentUser() user: JwtUser, @Query() query: ConversationListQueryDto) {
@@ -93,5 +104,44 @@ export class ConversationController {
     @CurrentUser() user: JwtUser
   ) {
     return this.conversationService.listMessages(user.userId, query.id);
+  }
+
+  @Get("agent/options")
+  agentOptions() {
+    return getAgentOptions();
+  }
+
+  @Post("agent/run")
+  async runAgent(
+    @Body() body: AgentRunRequestDto,
+    @Res() res: Response,
+    @CurrentUser() user: JwtUser
+  ) {
+    await this.agentService.run(body, res, user);
+  }
+
+  @Get("agent/resume")
+  async resumeAgent(
+    @Query() query: AgentConversationIdDto,
+    @Res() res: Response,
+    @CurrentUser() user: JwtUser
+  ) {
+    await this.agentService.resume(query.id, res, user);
+  }
+
+  @Post("agent/reply")
+  async replyAgent(
+    @Body() body: AgentReplyDto,
+    @CurrentUser() user: JwtUser
+  ) {
+    await this.agentService.reply(body.id, body.answers, user);
+  }
+
+  @Post("agent/stop")
+  async stopAgent(
+    @Body() body: AgentConversationIdDto,
+    @CurrentUser() user: JwtUser
+  ) {
+    await this.agentService.stop(body.id, user);
   }
 }

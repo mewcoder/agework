@@ -388,8 +388,13 @@ pnpm --filter api typecheck
 > run 侧的启动准备（placement / RunConfig 组装 / 落库 / 拉起 worker / 注册 handle）已从 888 行的
 > `RunService` 抽到 `run/launch/run-launcher.ts` 的 `RunLauncher`（命名取「launcher」而非 assembler/use-case）。
 > `RunService.start` 现在只委托 `RunLauncher.launch` 并注入 `stopActiveRun` 端口。RunService 收薄到 209 行、
-> 8→5 依赖。其余 Step（C/D/E 的目录与门面）在更早的模块单数化重构里已完成；剩 §6 import 规则 CI（Step F）
-> 与 run→runtime 内部依赖收口（P2-7 登记的 KNOWN_BOUNDARY_DEBT）未做。
+> 8→5 依赖。其余 Step（C/D/E 的目录与门面）在更早的模块单数化重构里已完成。
+>
+> **Update (2026-06-28)**：run→runtime 内部依赖收口（原 P2-7 KNOWN_BOUNDARY_DEBT）已完成——
+> sandbox 执行编排迁入 `runtime/sandbox/sandbox-worker.executor.ts`，由 `RuntimeService` 的
+> `startSandboxWorker / cancelSandboxRun / cleanupSandboxRun / setSandboxWorkerEventSink` 等门面暴露；
+> run 的 `SandboxRunExecutor` 改为薄适配器，`RunStartupService` 经 `RuntimeService.setSandboxOwnerSessionCleanup`
+> 接线。`common/module-boundary.spec.ts` 的 KNOWN_BOUNDARY_DEBT allowlist 已整体删除。剩 §6 import 规则 CI（Step F）未做。
 
 先把当前 `AgentRunConfigBuilder` 拆出两个明确职责：
 

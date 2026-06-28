@@ -3,7 +3,6 @@ import {
   Logger,
   BadRequestException,
   ConflictException,
-  NotFoundException,
 } from "@nestjs/common";
 import { join, posix } from "node:path";
 import type { Response } from "express";
@@ -14,12 +13,10 @@ import type {
   RuntimeTarget,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
-import { Prisma } from "../../../generated/prisma/client.js";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
-import { ConversationService } from "../../conversation/conversation.service";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import {
   AssistantMessageAggregator,
@@ -62,7 +59,6 @@ export class RunLauncher {
     private readonly liveRuns: LiveRunRegistry,
     private readonly runtimeService: RuntimeService,
     private readonly executionService: ExecutionService,
-    private readonly conversationService: ConversationService,
     private readonly runConversation: RunConversationEffects,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
@@ -290,7 +286,7 @@ export class RunLauncher {
     if (activated) return;
 
     try {
-      await this.conversationService.findOne(userId, conversationId);
+      await this.runConversation.assertOwned(userId, conversationId);
       if (interruptReason === "user_steered") {
         await stopActiveRun(conversationId, {
           reason: "user_steered",
@@ -310,12 +306,6 @@ export class RunLauncher {
       );
     } catch (err) {
       if (err instanceof ConflictException) throw err;
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === "P2025"
-      ) {
-        throw new NotFoundException(`Conversation ${conversationId} not found`);
-      }
       throw err;
     }
   }
@@ -329,8 +319,8 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.conversationService.saveUserMessage(conversationId, userMessage);
-    this.conversationService
+    await this.runConversation.saveUserMessage(conversationId, userMessage);
+    this.runConversation
       .generateTitleIfNeeded({ conversationId, agentType, modelProviderId })
       .catch(
         swallow(
@@ -354,7 +344,7 @@ export class RunLauncher {
           const snap = aggregator.build(complete, incompleteReason);
           if (snap.content.length === 0) return;
           const contentId = snap.messageId ?? runId;
-          return this.conversationService.upsertMessage(conversationId, {
+          return this.runConversation.upsertMessage(conversationId, {
             id: runId,
             runId,
             parent_id: null,
@@ -429,7 +419,7 @@ export class RunLauncher {
         )
         .catch(swallow(this.logger, `record run created for run ${runId}`));
       if (userMessageId) {
-        await this.conversationService
+        await this.runConversation
           .attachMessageToRun(conversationId, userMessageId, runId)
           .catch(
             swallow(

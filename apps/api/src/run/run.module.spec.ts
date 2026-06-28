@@ -89,7 +89,7 @@ describe("RunModule wiring", () => {
     expect(setReceiver).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorSink).toHaveBeenCalledWith(workerEvents);
     expect(setOwnerSessionCleanup).toHaveBeenCalledWith(expect.any(Function));
-    expect(runRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
+    expect(runRecovery.recoverInterruptedRuns).not.toHaveBeenCalled();
   });
 
   it("exports RunService to downstream modules", async () => {

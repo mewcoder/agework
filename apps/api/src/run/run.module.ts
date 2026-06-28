@@ -23,11 +23,9 @@ import { WorkerAgUiEventHandler } from "./worker-event/agui-event.handler";
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
-// deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
+// deps（向下依赖 runtime / worker-host）
 import { RuntimeModule } from "../runtime/runtime.module";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
-import { ConversationModule } from "../conversation/conversation.module";
-import { ModelProviderModule } from "../model-provider/model-provider.module";
 import { RunEventModule } from "../run-event/run-event.module";
 
 /**
@@ -36,13 +34,7 @@ import { RunEventModule } from "../run-event/run-event.module";
  * WorkerUpstreamReceiver → worker-host 的 WorkerRunController。
  */
 @Module({
-  imports: [
-    RuntimeModule,
-    WorkerHostModule,
-    RunEventModule,
-    ConversationModule,
-    ModelProviderModule,
-  ],
+  imports: [RuntimeModule, WorkerHostModule, RunEventModule],
   controllers: [AdminRunController],
   providers: [
     RunRepository,

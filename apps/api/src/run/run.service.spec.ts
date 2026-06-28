@@ -6,6 +6,8 @@ import { ExecutionService } from "./execution/execution.service";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { RuntimeService } from "../runtime/runtime.service";
+import { RunConversationEffects } from "./conversation/run-conversation.effects";
+import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 describe("RunService", () => {
   let service: RunService;
@@ -15,6 +17,8 @@ describe("RunService", () => {
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
   let mockRuntimeService: Partial<RuntimeService>;
+  let mockRunConversation: Partial<RunConversationEffects>;
+  let mockRunRecovery: Partial<RunRecoveryService>;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -37,6 +41,12 @@ describe("RunService", () => {
     mockRuntimeService = {
       getRunInstanceView: vi.fn().mockResolvedValue(null),
     };
+    mockRunConversation = {
+      setPort: vi.fn(),
+    };
+    mockRunRecovery = {
+      recoverInterruptedRuns: vi.fn().mockResolvedValue(undefined),
+    };
 
     service = new RunService(
       mockRunRepository as RunRepository,
@@ -44,7 +54,9 @@ describe("RunService", () => {
       mockExecutionService as ExecutionService,
       mockRunEvents,
       mockRunLauncher as RunLauncher,
-      mockRuntimeService as RuntimeService
+      mockRuntimeService as RuntimeService,
+      mockRunConversation as RunConversationEffects,
+      mockRunRecovery as RunRecoveryService
     );
   });
 
@@ -57,6 +69,18 @@ describe("RunService", () => {
         input,
         expect.objectContaining({ stopActiveRun: expect.any(Function) })
       );
+    });
+  });
+
+  describe("setConversationPort()", () => {
+    it("binds the conversation port before running startup recovery once", async () => {
+      const port = {} as never;
+
+      await service.setConversationPort(port);
+      await service.setConversationPort(port);
+
+      expect(mockRunConversation.setPort).toHaveBeenCalledWith(port);
+      expect(mockRunRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
     });
   });
 

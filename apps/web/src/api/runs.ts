@@ -48,7 +48,7 @@ export const runsApi = {
     if (params.pageNo) query.set("pageNo", String(params.pageNo));
     if (params.pageSize) query.set("pageSize", String(params.pageSize));
     return apiGet<AdminRunEventListResponse>(
-      `/api/v1/admin/runs/events?${query.toString()}`
+      `/api/v1/admin/runs/events/list?${query.toString()}`
     );
   },
 };

@@ -24,7 +24,7 @@ export class AdminRunController {
     return this.runService.getAdminRunDetail(query.id);
   }
 
-  @Get("events")
+  @Get("events/list")
   listEvents(@Query() query: AdminRunEventsQueryDto) {
     // 事件列表按单次 run 取全量在前端筛选/虚拟滚动，不再分页，上限仅用于兜底。
     const { take, skip } = pageWindow(query, {

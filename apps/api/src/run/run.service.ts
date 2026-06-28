@@ -8,13 +8,16 @@ import { RuntimeService } from "../runtime/runtime.service";
 import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
-import type { StartRunInput } from "./run-service.types";
+import type { RunConversationPort, StartRunInput } from "./run-service.types";
 import { RunStream } from "./streaming/run-stream";
 import { RunLauncher } from "./launch/run-launcher";
+import { RunConversationEffects } from "./conversation/run-conversation.effects";
+import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 @Injectable()
 export class RunService {
   private readonly logger = new Logger(RunService.name);
+  private recoveryStarted = false;
 
   constructor(
     private readonly runRepository: RunRepository,
@@ -22,8 +25,21 @@ export class RunService {
     private readonly executionService: ExecutionService,
     private readonly runEvents: RunEventService,
     private readonly runLauncher: RunLauncher,
-    private readonly runtimeService: RuntimeService
+    private readonly runtimeService: RuntimeService,
+    private readonly runConversation: RunConversationEffects,
+    private readonly runRecovery: RunRecoveryService
   ) {}
+
+  /**
+   * 注入 conversation 写入端口；由 ConversationModule 启动时绑定，避免模块环。
+   * 依赖 conversation 写回的重启恢复也必须等端口就绪后再执行。
+   */
+  async setConversationPort(port: RunConversationPort): Promise<void> {
+    this.runConversation.setPort(port);
+    if (this.recoveryStarted) return;
+    this.recoveryStarted = true;
+    await this.runRecovery.recoverInterruptedRuns();
+  }
 
   /** 管理端：分页查询 run 列表。 */
   listAdminRuns(params: { status?: string; take: number; skip: number }) {
@@ -155,7 +171,7 @@ export class RunService {
   /**
    * 停止指定 conversation 的活跃 run。
    * @returns 是否存在活跃的 in-memory run handle。
-   *   AgentController 用此判断是否需要重置 conversation status。
+   *   conversation agent 路由用此判断是否需要重置 conversation status。
    */
   async stop(
     conversationId: string,

@@ -9,7 +9,6 @@ import {
 } from "@nestjs/common/constants";
 import { RouteParamtypes } from "@nestjs/common/enums/route-paramtypes.enum";
 import { describe, expect, it } from "vitest";
-import { AgentController } from "../conversation/agent/agent.controller";
 import { AuthController } from "../auth/auth.controller";
 import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { ROLES_KEY } from "../auth/decorators/roles.decorator";
@@ -42,7 +41,6 @@ const METHOD_NAME_BY_VALUE: Record<number, string> = {
 };
 
 const CONTROLLERS = [
-  AgentController,
   AuthController,
   AdminConfigController,
   ConversationController,
@@ -255,12 +253,12 @@ describe("external API route convention", () => {
   });
 
   it("uses body ids instead of path ids for agent controls", () => {
-    expect(controllerPath(AgentController)).toBe("conversations/agent");
-    expectRoute(AgentController, "options", "get", "options");
-    expectRoute(AgentController, "run", "post", "run");
-    expectRoute(AgentController, "resume", "get", "resume");
-    expectRoute(AgentController, "answerQuestion", "post", "reply");
-    expectRoute(AgentController, "stop", "post", "stop");
+    expect(controllerPath(ConversationController)).toBe("conversations");
+    expectRoute(ConversationController, "agentOptions", "get", "agent/options");
+    expectRoute(ConversationController, "runAgent", "post", "agent/run");
+    expectRoute(ConversationController, "resumeAgent", "get", "agent/resume");
+    expectRoute(ConversationController, "replyAgent", "post", "agent/reply");
+    expectRoute(ConversationController, "stopAgent", "post", "agent/stop");
   });
 
   it("keeps admin routes under the admin prefix", () => {
@@ -272,6 +270,7 @@ describe("external API route convention", () => {
     expect(controllerPath(AdminRunController)).toBe("admin/runs");
     expectRoute(AdminRunController, "listAdmin", "get", "list");
     expectRoute(AdminRunController, "query", "get", "query");
+    expectRoute(AdminRunController, "listEvents", "get", "events/list");
 
     expect(controllerPath(AdminRuntimeController)).toBe("admin/runtime");
     expectRoute(AdminRuntimeController, "getRuntimePolicy", "get", "policy");

@@ -5,7 +5,6 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
-import { ConversationService } from "../../conversation/conversation.service";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
@@ -81,7 +80,6 @@ describe("RunLauncher", () => {
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockRuntimeService: Partial<RuntimeService>;
   let mockExecutionService: Partial<ExecutionService>;
-  let mockConversationService: Partial<ConversationService>;
   let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
@@ -153,17 +151,15 @@ describe("RunLauncher", () => {
       cancel: vi.fn(),
       cleanup: vi.fn(),
     };
-    mockConversationService = {
+    mockRunConversation = {
+      assertOwned: vi.fn().mockResolvedValue(undefined),
+      markRunning: vi.fn().mockResolvedValue(true),
+      markError: vi.fn().mockResolvedValue(true),
+      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
       attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       upsertMessage: vi.fn().mockResolvedValue(undefined),
       generateTitleIfNeeded: vi.fn().mockResolvedValue(undefined),
-      findOne: vi.fn().mockResolvedValue({}),
-    };
-    mockRunConversation = {
-      markRunning: vi.fn().mockResolvedValue(true),
-      markError: vi.fn().mockResolvedValue(true),
-      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -186,7 +182,6 @@ describe("RunLauncher", () => {
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeService as RuntimeService,
       mockExecutionService as ExecutionService,
-      mockConversationService as ConversationService,
       mockRunConversation as RunConversationEffects,
       mockRunEvents,
       mockConfigService as ConfigService
@@ -270,11 +265,11 @@ describe("RunLauncher", () => {
     const userMessage = { id: "msg-1", role: "user", content: "hi" } as any;
     await launch(makeStartInput({ userMessage, userMessageId: "msg-1" }));
 
-    expect(mockConversationService.saveUserMessage).toHaveBeenCalledWith(
+    expect(mockRunConversation.saveUserMessage).toHaveBeenCalledWith(
       "conversation-1",
       userMessage
     );
-    expect(mockConversationService.generateTitleIfNeeded).toHaveBeenCalledWith({
+    expect(mockRunConversation.generateTitleIfNeeded).toHaveBeenCalledWith({
       conversationId: "conversation-1",
       agentType: "claude",
       modelProviderId: "mp-1",
@@ -299,7 +294,7 @@ describe("RunLauncher", () => {
   it("attaches the accepted user message to the created run", async () => {
     await launch(makeStartInput({ userMessageId: "msg-1" }));
 
-    expect(mockConversationService.attachMessageToRun).toHaveBeenCalledWith(
+    expect(mockRunConversation.attachMessageToRun).toHaveBeenCalledWith(
       "conversation-1",
       "msg-1",
       "run-1"

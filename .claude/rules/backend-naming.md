@@ -236,7 +236,7 @@ type PaginatedListResponse<T> = {
 ## 6. 已知历史迁移项
 
 - `GET /api/v1/admin/workspaces/all` -> `GET /api/v1/admin/workspaces/list`
-- `GET /api/v1/admin/runs/events` -> `GET /api/v1/admin/runs/events/list`
+- ~~`GET /api/v1/admin/runs/events` -> `GET /api/v1/admin/runs/events/list`~~（已完成 2026-06-28，前后端同步改、无兼容旧端点）
 - `GET /api/v1/admin/runtime/resources` -> `GET /api/v1/admin/runtime/resources/list`
 
 迁移时优先后端和前端 API client 同步改;如果需要兼容旧调用,短期保留旧 endpoint 并在代码注释中标明移除条件。

@@ -17,7 +17,7 @@ export class RunRepository {
     agentType: string;
     runtimeType: string;
   }) {
-    // conversation 存在性/归属由上游 RunLauncher.claimRun 经 ConversationService 守卫。
+    // conversation 存在性/归属由上游 RunLauncher.claimRun 经 conversation port 守卫。
     return this.prisma.run.create({
       data: {
         id: data.id,

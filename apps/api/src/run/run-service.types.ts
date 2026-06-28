@@ -1,5 +1,9 @@
 import type { Response } from "express";
 import type { AgentProviderConfig } from "@agework/shared/protocol";
+import type {
+  ConversationActiveRunStatus,
+  ConversationPendingUserAction,
+} from "@agework/shared/api";
 import type { AssistantUserMessage } from "../conversation/conversation.types";
 
 /**
@@ -35,4 +39,46 @@ export type StartRunInput = {
   userMessageId?: string;
   res: Response;
   interruptReason?: "user_steered";
+};
+
+export type RunConversationPort = {
+  assertOwned(userId: string, conversationId: string): Promise<void>;
+  markRunning(conversationId: string): Promise<boolean>;
+  markError(conversationId: string): Promise<boolean>;
+  setActiveRunStatus(
+    conversationId: string,
+    status: ConversationActiveRunStatus
+  ): Promise<boolean>;
+  setPendingUserAction(
+    conversationId: string,
+    pendingUserAction: ConversationPendingUserAction
+  ): Promise<void>;
+  saveAgentSessionId(
+    conversationId: string,
+    agentSessionId: string
+  ): Promise<void>;
+  saveUserMessage(
+    conversationId: string,
+    userMessage: AssistantUserMessage
+  ): Promise<void>;
+  generateTitleIfNeeded(input: {
+    conversationId: string;
+    agentType: AgentProviderConfig["agentType"];
+    modelProviderId?: string | null;
+  }): Promise<void>;
+  upsertMessage(
+    conversationId: string,
+    data: {
+      id: string;
+      runId?: string;
+      parent_id: string | null;
+      format: string;
+      content: unknown;
+    }
+  ): Promise<void>;
+  attachMessageToRun(
+    conversationId: string,
+    messageId: string,
+    runId: string
+  ): Promise<unknown>;
 };
