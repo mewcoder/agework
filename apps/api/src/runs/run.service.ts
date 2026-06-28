@@ -25,7 +25,7 @@ import { RunConversationEffects } from "./conversation/run-conversation.effects"
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
-} from "./assistant-message.aggregator";
+} from "./aggregation/assistant-message.aggregator";
 import { ConfigService, type IsolationScope } from "../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
 import { EnvKey } from "../config/registry/env-key";
@@ -33,7 +33,6 @@ import { swallow } from "../common/swallow";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventService, compactData } from "../run-events/run-event.service";
 import type { StartRunInput } from "./run-service.types";
-import { PrismaService } from "../prisma/prisma.service";
 import { safePathPart } from "../common/safe-path";
 import { RunStream } from "./streaming/run-stream";
 
@@ -65,9 +64,23 @@ export class RunService {
     private readonly conversationService: ConversationService,
     private readonly runConversation: RunConversationEffects,
     private readonly runEvents: RunEventService,
-    private readonly configService: ConfigService,
-    private readonly prisma: PrismaService
+    private readonly configService: ConfigService
   ) {}
+
+  /** 管理端：分页查询 run 列表。 */
+  listAdminRuns(params: { status?: string; take: number; skip: number }) {
+    return this.runRepository.listAdmin(params);
+  }
+
+  /** 管理端：单个 run 详情。 */
+  getAdminRunDetail(id: string) {
+    return this.runRepository.detailAdmin(id);
+  }
+
+  /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */
+  listAdminRunEvents(params: Parameters<RunEventService["listAdminEvents"]>[0]) {
+    return this.runEvents.listAdminEvents(params);
+  }
 
   async start(input: StartRunInput): Promise<void> {
     const {
@@ -164,10 +177,7 @@ export class RunService {
   }
 
   private async getWorkspace(workspaceId: string): Promise<RunWorkspace> {
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { id: workspaceId, deletedAt: null },
-      include: { directory: true, user: { select: { username: true } } },
-    });
+    const workspace = await this.runRepository.findWorkspaceForRun(workspaceId);
     if (!workspace) {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
     }

@@ -3,7 +3,7 @@ import { WorkerEventsService } from "./worker-events.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-runs/live-run.registry";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
-import { AssistantMessageAggregator } from "../assistant-message.aggregator";
+import { AssistantMessageAggregator } from "../aggregation/assistant-message.aggregator";
 import { RunEventService } from "../../run-events/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
 import type { ConfigService } from "../../config/config.service";

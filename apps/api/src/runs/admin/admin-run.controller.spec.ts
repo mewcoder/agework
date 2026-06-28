@@ -1,32 +1,25 @@
 import { describe, it, expect, vi } from "vitest";
 import { AdminRunController } from "./admin-run.controller";
-import type { RunRepository } from "../run.repository";
-import type { RunEventQuery } from "../../run-events/run-event.query";
+import type { RunService } from "../run.service";
 
 function makeController() {
-  const runRepository = {
-    listAdmin: vi.fn().mockResolvedValue({ list: [] }),
-    detailAdmin: vi.fn().mockResolvedValue({}),
-  };
-  const runEventQueryService = {
-    listAdminEvents: vi.fn().mockResolvedValue({ list: [] }),
+  const runService = {
+    listAdminRuns: vi.fn().mockResolvedValue({ list: [] }),
+    getAdminRunDetail: vi.fn().mockResolvedValue({}),
+    listAdminRunEvents: vi.fn().mockResolvedValue({ list: [] }),
   };
   return {
-    controller: new AdminRunController(
-      runRepository as unknown as RunRepository,
-      runEventQueryService as unknown as RunEventQuery
-    ),
-    runRepository,
-    runEventQueryService,
+    controller: new AdminRunController(runService as unknown as RunService),
+    runService,
   };
 }
 
 describe("AdminRunController", () => {
   describe("listAdmin()", () => {
-    it("passes pagination and status filter", async () => {
-      const { controller, runRepository } = makeController();
+    it("passes pagination and status filter to the run service", async () => {
+      const { controller, runService } = makeController();
       await controller.listAdmin({ status: "running", pageNo: 2, pageSize: 25 });
-      expect(runRepository.listAdmin).toHaveBeenCalledWith({
+      expect(runService.listAdminRuns).toHaveBeenCalledWith({
         status: "running",
         take: 25,
         skip: 25,
@@ -34,9 +27,9 @@ describe("AdminRunController", () => {
     });
 
     it("uses defaults when params are omitted", async () => {
-      const { controller, runRepository } = makeController();
+      const { controller, runService } = makeController();
       await controller.listAdmin({});
-      expect(runRepository.listAdmin).toHaveBeenCalledWith({
+      expect(runService.listAdminRuns).toHaveBeenCalledWith({
         status: undefined,
         take: 10,
         skip: 0,
@@ -45,16 +38,16 @@ describe("AdminRunController", () => {
   });
 
   describe("query()", () => {
-    it("delegates to runRepository.detailAdmin", async () => {
-      const { controller, runRepository } = makeController();
+    it("delegates to runService.getAdminRunDetail", async () => {
+      const { controller, runService } = makeController();
       await controller.query({ id: "run-1" });
-      expect(runRepository.detailAdmin).toHaveBeenCalledWith("run-1");
+      expect(runService.getAdminRunDetail).toHaveBeenCalledWith("run-1");
     });
   });
 
   describe("listEvents()", () => {
-    it("passes all query params to runEventQueryService", async () => {
-      const { controller, runEventQueryService } = makeController();
+    it("passes all query params to the run service", async () => {
+      const { controller, runService } = makeController();
       await controller.listEvents({
         runId: "run-1",
         type: ["run.status"],
@@ -62,7 +55,7 @@ describe("AdminRunController", () => {
         pageNo: 2,
         pageSize: 50,
       });
-      expect(runEventQueryService.listAdminEvents).toHaveBeenCalledWith(
+      expect(runService.listAdminRunEvents).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: "run-1",
           type: ["run.status"],
@@ -73,13 +66,13 @@ describe("AdminRunController", () => {
       );
     });
 
-    it("parses comma-separated type filter", async () => {
-      const { controller, runEventQueryService } = makeController();
+    it("forwards the multi-value type filter", async () => {
+      const { controller, runService } = makeController();
       await controller.listEvents({
         runId: "run-1",
         type: ["run.status", "command.trace"],
       });
-      expect(runEventQueryService.listAdminEvents).toHaveBeenCalledWith(
+      expect(runService.listAdminRunEvents).toHaveBeenCalledWith(
         expect.objectContaining({
           type: ["run.status", "command.trace"],
         })

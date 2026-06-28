@@ -36,6 +36,11 @@ export class RunEventService {
 
   constructor(private readonly repository: RunEventRepository) {}
 
+  /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
+  listAdminEvents(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
+    return this.repository.listAdminEvents(params);
+  }
+
   /**
    * Per-run seq is allocated in-process for the single API instance deployment.
    * Multi-instance deployment must move seq allocation into RunEventRepository/DB.

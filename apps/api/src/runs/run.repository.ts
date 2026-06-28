@@ -15,6 +15,14 @@ import {
 export class RunRepository {
   constructor(private prisma: PrismaService) {}
 
+  /** run 启动所需的 workspace 视图（含目录与属主用户名）；归属/有效性校验在 Service。 */
+  findWorkspaceForRun(workspaceId: string) {
+    return this.prisma.workspace.findFirst({
+      where: { id: workspaceId, deletedAt: null },
+      include: { directory: true, user: { select: { username: true } } },
+    });
+  }
+
   async create(data: {
     id: string;
     conversationId: string;

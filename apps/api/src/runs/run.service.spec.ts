@@ -11,7 +11,6 @@ import { RunEventService } from "../run-events/run-event.service";
 import { ConfigService } from "../config/config.service";
 import type { StartRunInput } from "./run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
-import { PrismaService } from "../prisma/prisma.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
@@ -84,7 +83,6 @@ describe("RunService", () => {
   let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
-  let mockPrismaService: Partial<PrismaService>;
   let mockWorkspaceFindFirst: ReturnType<typeof vi.fn>;
 
   function makeRes() {
@@ -128,6 +126,7 @@ describe("RunService", () => {
       markFinished: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
       updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
+      findWorkspaceForRun: vi.fn().mockResolvedValue(makeWorkspace()),
     };
     mockLiveRunRegistry = {
       register: vi.fn(),
@@ -174,12 +173,8 @@ describe("RunService", () => {
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
       getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_DIR),
     };
-    mockWorkspaceFindFirst = vi.fn().mockResolvedValue(makeWorkspace());
-    mockPrismaService = {
-      workspace: {
-        findFirst: mockWorkspaceFindFirst,
-      } as never,
-    };
+    mockWorkspaceFindFirst =
+      mockRunRepository.findWorkspaceForRun as ReturnType<typeof vi.fn>;
 
     service = new RunService(
       mockRunRepository as RunRepository,
@@ -189,8 +184,7 @@ describe("RunService", () => {
       mockConversationService as ConversationService,
       mockRunConversation as RunConversationEffects,
       mockRunEvents,
-      mockConfigService as ConfigService,
-      mockPrismaService as PrismaService
+      mockConfigService as ConfigService
     );
   });
 

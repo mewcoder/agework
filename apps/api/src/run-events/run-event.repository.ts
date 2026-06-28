@@ -48,6 +48,102 @@ export class RunEventRepository {
       throw err;
     }
   }
+
+  async listAdminEvents(params: {
+    runId: string;
+    type?: string[];
+    typePrefix?: string;
+    origin?: string[];
+    targetType?: string;
+    targetId?: string;
+    chainId?: string;
+    refKey?: string;
+    refValue?: string;
+    fromRunSeq?: number;
+    toRunSeq?: number;
+    take: number;
+    skip: number;
+  }) {
+    const {
+      runId,
+      type,
+      typePrefix,
+      origin,
+      targetType,
+      targetId,
+      chainId,
+      refKey,
+      refValue,
+      fromRunSeq,
+      toRunSeq,
+      take,
+      skip,
+    } = params;
+    const typeFilter: Prisma.StringFilter = {};
+    if (type?.length) typeFilter.in = type;
+    if (typePrefix) typeFilter.startsWith = typePrefix;
+    const where: Prisma.RunEventWhereInput = {
+      runId,
+      ...(Object.keys(typeFilter).length ? { type: typeFilter } : {}),
+      ...(origin?.length ? { origin: { in: origin } } : {}),
+      ...(targetType ? { targetType } : {}),
+      ...(targetId ? { targetId } : {}),
+      ...(chainId ? { chainId } : {}),
+      ...(fromRunSeq || toRunSeq
+        ? {
+            runSeq: {
+              ...(fromRunSeq ? { gte: fromRunSeq } : {}),
+              ...(toRunSeq ? { lte: toRunSeq } : {}),
+            },
+          }
+        : {}),
+    };
+
+    if (refKey && refValue) {
+      // refs 是 JSON 列；SQLite 无原生 JSON 过滤，这里先按 where 拉到内存线性过滤。
+      // 触发升级：迁移到 Postgres 后，改用 refs @> '{"key":"value"}' 下推到 DB，
+      // 去掉 hasRefValue 内存过滤与全量 findMany。
+      const all = await this.prisma.runEvent.findMany({
+        where,
+        orderBy: [{ runSeq: "asc" }, { id: "asc" }],
+      });
+      const filtered = all.filter((event) =>
+        hasRefValue(event.refs, refKey, refValue)
+      );
+      return {
+        list: filtered.slice(skip, skip + take),
+        total: filtered.length,
+        pageNo: skip / take + 1,
+        pageSize: take,
+      };
+    }
+
+    const [list, total] = await Promise.all([
+      this.prisma.runEvent.findMany({
+        where,
+        orderBy: [{ runSeq: "asc" }, { id: "asc" }],
+        take,
+        skip,
+      }),
+      this.prisma.runEvent.count({ where }),
+    ]);
+
+    return {
+      list,
+      total,
+      pageNo: skip / take + 1,
+      pageSize: take,
+    };
+  }
+}
+
+function hasRefValue(
+  refs: Prisma.JsonValue,
+  refKey: string,
+  refValue: string
+): boolean {
+  if (!refs || typeof refs !== "object" || Array.isArray(refs)) return false;
+  return (refs as RunEventRefs)[refKey as keyof RunEventRefs] === refValue;
 }
 
 function normalizeCreateInput(input: RunEventCreateInput): RunEventCreateInput {

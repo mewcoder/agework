@@ -1,18 +1,14 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "../run.repository";
-import { RuntimeProviderRegistry } from "../../runtime/providers/provider-registry";
+import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
-import { PrismaService } from "../../prisma/prisma.service";
 import { swallow } from "../../common/swallow";
-import {
-  runtimeInstanceMetadataJson,
-  stoppedInstanceMetadata,
-} from "../../runtime/instances/runtime-instance-metadata";
 
 /**
  * 服务重启后恢复中断 run：找到所有仍处于 active 状态的 run，
  * 让对应 run executor 清理底层进程/容器，并将 run/thread 状态标记为 error。
+ * 运行环境资源（孤儿容器 / stale 资源）的恢复属于 runtime 领域，委托给 RuntimeService。
  */
 @Injectable()
 export class RunRecoveryService {
@@ -22,8 +18,7 @@ export class RunRecoveryService {
     private readonly runRepository: RunRepository,
     private readonly runConversation: RunConversationEffects,
     private readonly executionService: ExecutionService,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
-    private readonly prisma: PrismaService
+    private readonly runtimeService: RuntimeService
   ) {}
 
   async recoverInterruptedRuns(): Promise<void> {
@@ -76,124 +71,23 @@ export class RunRecoveryService {
       );
     }
 
-    await this.recoverOrphanContainers();
-    await this.cleanupStaleRuntimeInstances();
+    await this.runtimeService.recoverOrphanRuntimeInstances();
+    await this.runtimeService.cleanupStaleRuntimeInstances();
   }
 
   /**
    * Decide whether run-level interrupted execution cleanup is allowed.
-   * User-isolated RuntimeTarget resources can be shared across workspaces, so
-   * destroying one because a single run was interrupted would be destructive.
+   * User-isolated runtime resources can be shared across workspaces, so destroying
+   * one because a single run was interrupted would be destructive. 查询失败时
+   * 保守处理（视为 user 级），跳过清理。
    */
   private async shouldCleanupInterruptedRuntimeResource(
     runtimeInstanceId: string,
     runtimeType: string
   ): Promise<boolean> {
-    try {
-      const resource = await this.prisma.runtimeInstance.findUnique({
-        where: {
-          runtimeType_runtimeInstanceId: {
-            runtimeType,
-            runtimeInstanceId,
-          },
-        },
-      });
-      if (resource?.isolationScope === "user") {
-        return false;
-      }
-    } catch {
-      // If lookup fails, err on the side of caution: skip recovery
-      return false;
-    }
-    return true;
-  }
-
-  /**
-   * 服务重启后，所有内存中的 scope 状态都已丢失：将所有仍标记为 running 的
-   * RuntimeTarget 视为孤儿，停止其底层容器/沙箱。user-scope 的资源在所属用户
-   * 仍然存在时保留，用户已删除的则一并清理。清理后将状态标记为 stopped。
-   */
-  private async recoverOrphanContainers(): Promise<void> {
-    try {
-      const runningResources = await this.prisma.runtimeInstance.findMany({
-        where: { status: "running" },
-      });
-
-      if (runningResources.length === 0) {
-        this.logger.log("No orphan runtime resources found.");
-        return;
-      }
-
-      this.logger.warn(
-        `Found ${runningResources.length} orphan runtime resource(s) — stopping them`
-      );
-
-      for (const resource of runningResources) {
-        if (resource.isolationScope === "user") {
-          const owner = await this.prisma.user.findFirst({
-            where: { id: resource.ownerId, deletedAt: null },
-          });
-          if (owner) {
-            this.logger.log(
-              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeInstanceId} (user ${resource.ownerId} still exists)`
-            );
-            continue;
-          }
-          this.logger.log(
-            `User ${resource.ownerId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeInstanceId}`
-          );
-        }
-
-        const provider = this.runtimeProviderRegistry.resolve(
-          resource.runtimeType
-        );
-        await provider
-          .recoverOrphan(resource.runtimeInstanceId)
-          .catch(
-            swallow(
-              this.logger,
-              `cleanup interrupted runtime resource ${resource.runtimeInstanceId}`
-            )
-          );
-        await this.prisma.runtimeInstance.update({
-          where: { id: resource.id },
-          data: {
-            status: "stopped",
-            metadata: runtimeInstanceMetadataJson(
-              stoppedInstanceMetadata({
-                runtimeType: resource.runtimeType,
-                isolationScope: resource.isolationScope,
-                ownerId: resource.ownerId,
-                reason: "orphan_recovered",
-              })
-            ),
-          },
-        });
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to recover orphan containers: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-  }
-
-  /**
-   * 清理已明确标记为 stale 的 RuntimeTarget。
-   * 不能只因为服务重启后内存为空就清理 running resource；运行环境可能仍在外部存活，
-   * 应由 provider 下次启动时通过 runtimeInstanceId 验证。
-   */
-  private async cleanupStaleRuntimeInstances(): Promise<void> {
-    try {
-      const resourceResult = await this.prisma.runtimeInstance.deleteMany({
-        where: { status: "stale" },
-      });
-      if (resourceResult.count > 0) {
-        this.logger.log(`Deleted ${resourceResult.count} stale runtime resource(s)`);
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to cleanup stale runtime resources: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
+    const userScoped = await this.runtimeService
+      .isRuntimeInstanceUserScoped(runtimeType, runtimeInstanceId)
+      .catch(() => true);
+    return !userScoped;
   }
 }

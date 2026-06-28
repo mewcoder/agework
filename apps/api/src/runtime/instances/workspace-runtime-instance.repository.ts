@@ -177,6 +177,26 @@ export class WorkspaceRuntimeInstanceRepository {
     return this.prisma.runtimeInstance.count({ where: { status: "running" } });
   }
 
+  findAllRunning() {
+    return this.prisma.runtimeInstance.findMany({ where: { status: "running" } });
+  }
+
+  findByRuntimeId(runtimeType: string, runtimeInstanceId: string) {
+    return this.prisma.runtimeInstance.findUnique({
+      where: {
+        runtimeType_runtimeInstanceId: { runtimeType, runtimeInstanceId },
+      },
+    });
+  }
+
+  async userExists(userId: string): Promise<boolean> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: { id: true },
+    });
+    return user !== null;
+  }
+
   async listResourcesPage(opts: {
     status?: string;
     take: number;

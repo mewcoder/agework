@@ -4,9 +4,9 @@ vi.mock("../prisma/prisma.service", () => ({
   PrismaService: class PrismaService {},
 }));
 
-import { RunEventQuery } from "./run-event.query";
+import { RunEventRepository } from "./run-event.repository";
 
-describe("RunEventQuery", () => {
+describe("RunEventRepository.listAdminEvents", () => {
   it("lists run events with pagination and filters", async () => {
     const now = new Date().toISOString();
     const findMany = vi.fn().mockResolvedValue([
@@ -27,11 +27,11 @@ describe("RunEventQuery", () => {
       },
     ]);
     const count = vi.fn().mockResolvedValue(1);
-    const service = new RunEventQuery({
+    const repo = new RunEventRepository({
       runEvent: { findMany, count },
     } as never);
 
-    const result = await service.listAdminEvents({
+    const result = await repo.listAdminEvents({
       runId: "run-1",
       origin: ["worker"],
       typePrefix: "run.status",

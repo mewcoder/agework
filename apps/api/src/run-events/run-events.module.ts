@@ -1,22 +1,17 @@
 import { Module } from "@nestjs/common";
-import { RunEventQuery } from "./run-event.query";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventService } from "./run-event.service";
 
 /**
  * Run event ledger / diagnostics boundary.
  *
- * Run and worker execution code can append semantic run events through
- * RunEventService, while admin/read paths use RunEventQuery. The module owns
- * structured event persistence details; it does not own run lifecycle state or
- * raw trace-file writing.
+ * Run and worker execution code append semantic run events through
+ * RunEventService; admin/read paths also go through RunEventService（委托
+ * RunEventRepository）。模块拥有结构化事件持久化细节，不拥有 run 生命周期状态或
+ * 原始 trace 文件写入。
  */
 @Module({
-  providers: [
-    RunEventRepository,
-    RunEventService,
-    RunEventQuery,
-  ],
-  exports: [RunEventService, RunEventQuery],
+  providers: [RunEventRepository, RunEventService],
+  exports: [RunEventService],
 })
 export class RunEventsModule {}

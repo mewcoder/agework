@@ -65,11 +65,10 @@ import { ConfigService } from "../config/config.service";
     RuntimeService,
   ],
   exports: [
-    WorkspaceRuntimeInstanceRepository,
-    SandboxRuntimeInstanceService,
+    // 仅导出跨模块真正用到的能力。Repository 与 lifecycle use-case 是内部实现，不导出。
     RuntimeService,
+    SandboxRuntimeInstanceService,
     RuntimeProviderRegistry,
-    RuntimeInstanceLifecycleUseCase,
   ],
 })
 export class RuntimeModule {}
