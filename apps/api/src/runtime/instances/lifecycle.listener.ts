@@ -4,7 +4,7 @@ import { RuntimeInstanceLifecycleUseCase } from "./lifecycle.use-case";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
-} from "../../workspaces/workspace.events";
+} from "../../workspace/workspace.events";
 import {
   USER_DELETED_EVENT,
   USER_DISABLED_EVENT,

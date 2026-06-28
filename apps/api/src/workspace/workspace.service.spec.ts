@@ -14,6 +14,8 @@ vi.mock("@agework/shared", async (importOriginal) => ({
 import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
 import type { WorkspaceCreateInput } from "./workspace.repository";
+import { WorkspaceDirectoryHandler } from "./directories/workspace-directory.handler";
+import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -61,7 +63,6 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateOwned: vi.fn().mockResolvedValue(null),
     updateById: vi.fn().mockResolvedValue(null),
     findOwnedId: vi.fn().mockResolvedValue(null),
-    hasActiveRun: vi.fn().mockResolvedValue(false),
     softDeleteCascade: vi.fn().mockResolvedValue(undefined),
     findDirectoryByRootPath: vi.fn().mockResolvedValue(null),
     findUsername: vi.fn().mockResolvedValue("admin-1"),
@@ -84,14 +85,30 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeRunService(overrides: Record<string, unknown> = {}) {
+  return {
+    hasActiveRunForWorkspace: vi.fn().mockResolvedValue(false),
+    ...overrides,
+  };
+}
+
 function makeService(
   repo: ReturnType<typeof makeRepo>,
-  config: ReturnType<typeof makeConfig>
+  config: ReturnType<typeof makeConfig>,
+  runService: ReturnType<typeof makeRunService> = makeRunService()
 ) {
-  return new WorkspaceService(
+  const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
+  const directoryHandler = new WorkspaceDirectoryHandler(
     repo as never,
     config as never,
-    { emit: vi.fn() } as never
+    runtimePolicy
+  );
+  return new WorkspaceService(
+    repo as never,
+    { emit: vi.fn() } as never,
+    runService as never,
+    runtimePolicy,
+    directoryHandler
   );
 }
 
@@ -350,10 +367,18 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
       });
+      const config = makeConfig();
+      const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
       const service = new WorkspaceService(
         repo as never,
-        makeConfig() as never,
-        { emit } as never
+        { emit } as never,
+        makeRunService() as never,
+        runtimePolicy,
+        new WorkspaceDirectoryHandler(
+          repo as never,
+          config as never,
+          runtimePolicy
+        )
       );
 
       await service.delete(userId, workspaceId);
@@ -363,6 +388,24 @@ describe("WorkspaceService", () => {
         WORKSPACE_DELETED_EVENT,
         new WorkspaceDeletedEvent(workspaceId)
       );
+    });
+
+    it("refuses to delete when runs module reports an active run", async () => {
+      const repo = makeRepo({
+        findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
+      });
+      const runService = makeRunService({
+        hasActiveRunForWorkspace: vi.fn().mockResolvedValue(true),
+      });
+      const service = makeService(repo, makeConfig(), runService);
+
+      await expect(service.delete(userId, workspaceId)).rejects.toThrow(
+        "工作空间有正在运行的任务，不能删除"
+      );
+      expect(runService.hasActiveRunForWorkspace).toHaveBeenCalledWith(
+        workspaceId
+      );
+      expect(repo.softDeleteCascade).not.toHaveBeenCalled();
     });
   });
 

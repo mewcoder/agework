@@ -176,7 +176,7 @@ feature/
 
 - Admin controller 放在业务 owner 的 `admin/` 子目录,并注册在该 feature module 的 `controllers`。
 - Admin URL 统一使用 `/admin/...` 前缀;权限边界统一使用 `@Roles("admin")` 或更高等级 guard / policy。
-- Admin controller 只处理 HTTP I/O,只能调用本 module 根 `Service` 或本 module 内允许 controller 调用的查询入口;禁止直接注入 Prisma / repository / internal provider。
+- Admin controller 只处理 HTTP I/O,只能调用本 module 根 `Service`;禁止直接注入 Prisma / repository / internal provider / query provider。查询入口如果需要独立 provider,也必须由 Root Service 暴露。
 - Admin 查询需要跨领域信息时,由当前用例 owner 的根 `Service` 编排下层 module 导出的 `Service`;禁止从 admin controller reach 进其他 module 的 repository / internal 子目录。
 - 前端管理后台入口可以集中在 `apps/web/src/pages/admin`;共享 API 类型继续按业务领域放在 `@agework/shared` 的对应 `api/*` 文件中。
 - 只有真正跨领域的管理用例(如 admin overview、系统健康、审计日志)才允许新增独立 admin / operations feature module;该 module 只能编排其他 module 导出的根 `Service`,不得接管其他领域的数据 ownership。
@@ -281,6 +281,7 @@ Service 是 module 唯一对外入口。
 - 发 domain event。
 - 做响应形状局部转换。
 - 作为 module public facade,对 internal provider 做薄转发。Service 可以宽,但不能深;复杂状态机、协议解析、queue / registry / store 细节仍应留在 internal provider。
+- Root Service 的 public 方法必须加 JSDoc 注释,把它当作 module public API 维护。注释说明业务语义、主要调用方或重要副作用;不要只复述方法名。
 
 禁止:
 
@@ -289,7 +290,27 @@ Service 是 module 唯一对外入口。
 - 承载所有业务规则、工具函数和稳定子能力。
 - 拆出“给 controller 的公开面”和“给领域的公开面”两套门面。默认只有一个公开面;真分叉到一个类塞不下时再评审。
 
-Service 不是 application layer。Service 方法里一旦出现明显的 execution/status/recovery/registry/sandbox 等子能力细节,应下沉到 internal provider,Service 只保留用例编排和对外契约。
+Root Service 拆分判断:
+
+- Root Service 可以宽,但必须薄。方法数量多不是拆分理由;单个方法或一组方法承载了独立实现深度,才需要拆到 internal provider。
+- 出现以下任一强信号,应拆成 internal provider:
+  - 持有独立状态或生命周期,如 map/cache/session/queue/registry/timer/retry。
+  - 处理协议/传输细节,如 RPC/HTTP/webhook body 解析、normalize、序列化、兼容旧格式。
+  - 直接操作队列、registry、store、dispatcher、runtime engine、外部 SDK 或基础设施适配。
+  - 包含复杂状态机、恢复流程、调度流程、并发控制、重试/退避/超时处理。
+  - 这块能力可以独立命名、独立测试,且名字不是当前 root service 的同义反复。
+- 出现以下两个以上弱信号,建议拆成 internal provider:
+  - 私有方法开始围绕同一子概念聚集。
+  - 单个 public 方法需要多段无关步骤才能读懂。
+  - 单测需要大量 mock root service 的内部协作者。
+  - 后续很可能被本 module 内多个入口复用。
+- 可以留在 Root Service 的逻辑:
+  - 简单权限/存在性检查。
+  - 调用 internal provider 或下层 Service 的编排顺序。
+  - 少量响应形状转换。
+  - 对 internal provider 的一行或几行薄转发。
+
+Root Service 是 module facade / use-case orchestrator,但不是承载全部 application 细节的容器。Service 方法里一旦出现明显的 execution/status/recovery/registry/sandbox 等子能力细节,应下沉到 internal provider,Service 只保留用例编排和对外契约。
 
 ### 2.4 Repository 规则 (P0)
 

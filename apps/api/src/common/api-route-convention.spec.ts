@@ -25,8 +25,8 @@ import { AdminUserController } from "../users/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-host/command.controller";
 import { WorkerAuthGuard } from "../worker-host/guards/auth.guard";
 import { WorkerRunController } from "../worker-host/worker-run.controller";
-import { AdminWorkspaceController } from "../workspaces/admin/admin-workspace.controller";
-import { WorkspaceController } from "../workspaces/workspace.controller";
+import { AdminWorkspaceController } from "../workspace/admin/admin-workspace.controller";
+import { WorkspaceController } from "../workspace/workspace.controller";
 
 type ControllerClass = abstract new (...args: never[]) => unknown;
 type RouteMethod = "get" | "post";

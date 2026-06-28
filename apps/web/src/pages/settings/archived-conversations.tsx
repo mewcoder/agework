@@ -18,7 +18,7 @@ import {
   useClearArchived,
   type Conversation,
 } from "@/hooks/use-conversations";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useWorkspaces } from "@/hooks/use-workspace";
 import { formatDateTime } from "@/utils/format";
 import { SettingsPageHeader } from "@/components/settings/settings-panel";
 

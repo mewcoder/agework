@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Folder, FolderDot, FolderPlus } from "lucide-react";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAgentChatContext } from "@/components/agent-chat-context";
 import { useSelectionStore } from "@/stores/selection-store";
 import {

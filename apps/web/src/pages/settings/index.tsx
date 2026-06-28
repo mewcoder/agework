@@ -22,14 +22,14 @@ import { useAuthStore } from '@/stores/auth-store';
 import { UsersPanel } from '@/pages/admin/users';
 import { AdminModelProvidersPanel } from '@/pages/admin/model-providers';
 import { RunsPanel } from '@/pages/admin/runs';
-import { WorkspacesPanel } from '@/pages/admin/workspaces';
+import { WorkspacesPanel } from '@/pages/admin/workspace';
 import { WorkspaceRuntimesPanel } from '@/pages/admin/workspace-runtimes';
 import { SystemSettingsPanel } from '@/pages/admin/system-settings';
 import { AccountSettings } from '@/pages/settings/account';
 import { GeneralSettings } from '@/pages/settings/general';
 import { ModelProvider } from '@/pages/settings/model-provider';
 import { ArchivedConversations } from '@/pages/settings/archived-conversations';
-import { WorkspaceSettings } from '@/pages/settings/workspaces';
+import { WorkspaceSettings } from '@/pages/settings/workspace';
 import { AboutSettings } from '@/pages/settings/about';
 import { isAdmin as checkIsAdmin } from '@/utils/auth';
 

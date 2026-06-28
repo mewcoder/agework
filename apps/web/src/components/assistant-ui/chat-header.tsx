@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useConversations } from "@/hooks/use-conversations";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useWorkspaces } from "@/hooks/use-workspace";
 import { formatRelativeTime } from "@/utils/format";
 import { agentLabel } from "@/utils/model-provider";
 import { cn } from "@/lib/utils";

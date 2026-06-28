@@ -24,7 +24,7 @@ import { WorkspaceSelector } from "@/components/workspace-selector";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useConversations } from "@/hooks/use-conversations";
 import { useModelProviders } from "@/hooks/model-provider-hooks";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAui, useAuiState, ComposerPrimitive } from "@assistant-ui/react";
 import { useRuntimeUiStore, type QueuedUserInput } from "@/stores/runtime-ui-store";
 import { StopConversationRunButton } from "@/components/assistant-ui/stop-conversation-run-button";

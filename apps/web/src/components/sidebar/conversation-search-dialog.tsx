@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { IconActionButton } from "@/components/icon-action-button";
 import { useConversationSearch } from "@/hooks/use-conversations";
-import { useWorkspaces } from "@/hooks/use-workspaces";
+import { useWorkspaces } from "@/hooks/use-workspace";
 
 interface ConversationSearchDialogProps {
   open: boolean;

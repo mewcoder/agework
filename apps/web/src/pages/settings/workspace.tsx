@@ -15,7 +15,7 @@ import {
   useDeleteWorkspace,
   useWorkspaces,
   type Workspace,
-} from '@/hooks/use-workspaces';
+} from '@/hooks/use-workspace';
 import { useConversations } from '@/hooks/use-conversations';
 import { formatDateTime } from '@/utils/format';
 import { SettingsPageHeader } from '@/components/settings/settings-panel';

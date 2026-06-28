@@ -134,24 +134,6 @@ describe("WorkspaceRepository", () => {
     });
   });
 
-  it("hasActiveRun checks runs in the workspace's conversations", async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: "run-1" });
-    const prisma = makePrisma({ run: { findFirst } });
-    const repo = new WorkspaceRepository(prisma as never);
-
-    const active = await repo.hasActiveRun("ws-1");
-
-    expect(active).toBe(true);
-    expect(findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          conversation: { workspaceId: "ws-1" },
-          status: { in: expect.arrayContaining(["running"]) },
-        }),
-      })
-    );
-  });
-
   it("softDeleteCascade soft-deletes the workspace and its conversations", async () => {
     const update = vi.fn().mockReturnValue("ws-update");
     const updateMany = vi.fn().mockReturnValue("conv-update");

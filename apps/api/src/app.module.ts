@@ -7,7 +7,7 @@ import { AgentModule } from "./conversations/agent/agent.module";
 import { AuthModule } from "./auth/auth.module";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";
-import { WorkspaceModule } from "./workspaces/workspace.module";
+import { WorkspaceModule } from "./workspace/workspace.module";
 import { ConversationModule } from "./conversations/conversation.module";
 import { ModelProviderModule } from "./model-providers/model-provider.module";
 import { SystemModule } from "./system/system.module";

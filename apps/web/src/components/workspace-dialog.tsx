@@ -16,12 +16,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { Workspace } from "@/hooks/use-workspaces";
+import type { Workspace } from "@/hooks/use-workspace";
 import {
   useCreateWorkspace,
   useRenameWorkspace,
   useWorkspaceCapabilities,
-} from "@/hooks/use-workspaces";
+} from "@/hooks/use-workspace";
 import type { UpdateWorkspaceInput } from "@/api/workspaces";
 import type {
   WorkspaceIsolationScope,

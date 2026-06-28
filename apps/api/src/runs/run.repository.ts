@@ -129,6 +129,18 @@ export class RunRepository {
     });
   }
 
+  /** workspace 删除守卫用：该 workspace 下是否存在活跃 run。 */
+  async hasActiveRunForWorkspace(workspaceId: string): Promise<boolean> {
+    const activeRun = await this.prisma.run.findFirst({
+      where: {
+        conversation: { workspaceId },
+        status: { in: ACTIVE_RUN_STATUSES },
+      },
+      select: { id: true },
+    });
+    return activeRun !== null;
+  }
+
   async listAdmin(params: { status?: string; take: number; skip: number }) {
     const { status, take, skip } = params;
     const where = status ? { status } : undefined;

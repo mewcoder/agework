@@ -11,15 +11,6 @@ const WORKSPACE_META_INCLUDE = {
   directory: true,
 } as const;
 
-// 删除前的活跃任务守卫所认定的状态；只服务于 workspace 删除路径。
-const ACTIVE_RUN_STATUSES = [
-  "queued",
-  "preparing",
-  "running",
-  "cancelling",
-  "requires_action",
-] as const;
-
 export type WorkspaceRow = Prisma.WorkspaceGetPayload<{
   include: typeof WORKSPACE_INCLUDE;
 }>;
@@ -48,7 +39,7 @@ export type WorkspacePatch = {
 
 /**
  * Workspace 领域持久化边界：封装 workspace / workspaceDirectory 的 Prisma 访问
- * 与事务。删除守卫所需的活跃任务、用户名等关联读取在此集中，避免 Service 注入 Prisma。
+ * 与事务。目录绑定唯一性、用户名等关联读取在此集中，避免 Service 注入 Prisma。
  */
 @Injectable()
 export class WorkspaceRepository {
@@ -150,17 +141,6 @@ export class WorkspaceRepository {
       where: { id, userId, deletedAt: null },
       select: { id: true },
     });
-  }
-
-  async hasActiveRun(workspaceId: string): Promise<boolean> {
-    const activeRun = await this.prisma.run.findFirst({
-      where: {
-        conversation: { workspaceId },
-        status: { in: [...ACTIVE_RUN_STATUSES] },
-      },
-      select: { id: true },
-    });
-    return activeRun !== null;
   }
 
   async softDeleteCascade(id: string): Promise<void> {

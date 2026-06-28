@@ -61,6 +61,7 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 ## 后端约定
 
 > 后端模块架构**完整规范**见 [`.claude/rules/backend-architecture.md`](.claude/rules/backend-architecture.md)（权威详版：文件骨架、模块边界、依赖与事件纪律、数据访问、「不要做」清单等）。以下为要点摘要。
+> 后端命名、API URL / 接口动作命名见 [`.claude/rules/backend-naming.md`](.claude/rules/backend-naming.md)。
 
 - 新功能按 NestJS Feature Module 组织：`*.module.ts`、`*.controller.ts`、`*.service.ts`。
 - `apps/api/src/app.module.ts` 只负责组合 feature module。

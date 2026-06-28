@@ -18,7 +18,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { useDeleteWorkspace, useWorkspaces } from "@/hooks/use-workspaces";
+import { useDeleteWorkspace, useWorkspaces } from "@/hooks/use-workspace";
 import { useConversations, useConversationRunStatuses, getRegularConversations, type Conversation, type ConversationSortKey } from "@/hooks/use-conversations";
 import { useConversationListView } from "@/hooks/use-conversation-list-view";
 import { useConversationRunStatusMonitor } from "@/hooks/use-conversation-run-status-monitor";

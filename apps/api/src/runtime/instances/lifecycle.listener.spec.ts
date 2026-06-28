@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle.listener";
-import { WorkspaceDeletedEvent } from "../../workspaces/workspace.events";
+import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { UserDeletedEvent, UserDisabledEvent } from "../../users/user.events";
 
 describe("RuntimeInstanceLifecycleListener", () => {

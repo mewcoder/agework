@@ -319,4 +319,28 @@ describe("RunRepository", () => {
     });
     expect(run?.id).toBe("run-1");
   });
+
+  it("reports whether a workspace has any active run", async () => {
+    const findFirst = vi.fn().mockResolvedValue({ id: "run-1" });
+    const service = new RunRepository({ run: { findFirst } } as never);
+
+    const active = await service.hasActiveRunForWorkspace("ws-1");
+
+    expect(active).toBe(true);
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        conversation: { workspaceId: "ws-1" },
+        status: {
+          in: [
+            "queued",
+            "preparing",
+            "running",
+            "cancelling",
+            "requires_action",
+          ],
+        },
+      },
+      select: { id: true },
+    });
+  });
 });

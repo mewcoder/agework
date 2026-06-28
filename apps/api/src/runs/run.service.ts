@@ -84,6 +84,11 @@ export class RunService {
     return this.runEvents.listAdminEvents(params);
   }
 
+  /** workspace 删除前的活跃任务守卫：该 workspace 是否有正在进行的 run。 */
+  hasActiveRunForWorkspace(workspaceId: string) {
+    return this.runRepository.hasActiveRunForWorkspace(workspaceId);
+  }
+
   async start(input: StartRunInput): Promise<void> {
     const {
       runId,
