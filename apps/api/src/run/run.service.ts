@@ -4,6 +4,7 @@ import type { Response } from "express";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { ExecutionService } from "./execution/execution.service";
+import { RuntimeService } from "../runtime/runtime.service";
 import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
@@ -20,7 +21,8 @@ export class RunService {
     private readonly liveRuns: LiveRunRegistry,
     private readonly executionService: ExecutionService,
     private readonly runEvents: RunEventService,
-    private readonly runLauncher: RunLauncher
+    private readonly runLauncher: RunLauncher,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /** 管理端：分页查询 run 列表。 */
@@ -28,9 +30,16 @@ export class RunService {
     return this.runRepository.listAdmin(params);
   }
 
-  /** 管理端：单个 run 详情。 */
-  getAdminRunDetail(id: string) {
-    return this.runRepository.detailAdmin(id);
+  /** 管理端：单个 run 详情；runtime 实例视图经 RuntimeService 补齐。 */
+  async getAdminRunDetail(id: string) {
+    const detail = await this.runRepository.detailAdmin(id);
+    const runtimeInstance = detail.runtimeInstanceId
+      ? await this.runtimeService.getRunInstanceView(
+          detail.runtimeType,
+          detail.runtimeInstanceId
+        )
+      : null;
+    return { ...detail, runtimeInstance };
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */

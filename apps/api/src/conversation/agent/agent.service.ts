@@ -8,6 +8,7 @@ import type {
 import { ConversationService } from "../conversation.service";
 import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import { RunService } from "../../run/run.service";
+import { WorkspaceService } from "../../workspace/workspace.service";
 import { safeLogJson } from "../../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
 import { getAgentOptionsByType } from "./agent-options";
@@ -27,7 +28,8 @@ export class AgentService {
   constructor(
     private readonly conversationService: ConversationService,
     private readonly runService: RunService,
-    private readonly modelProviderService: ModelProviderService
+    private readonly modelProviderService: ModelProviderService,
+    private readonly workspaceService: WorkspaceService
   ) {}
 
   async run(
@@ -79,6 +81,7 @@ export class AgentService {
         "Conversation 必须关联工作空间才能运行 agent"
       );
     }
+    const workspace = await this.workspaceService.getRunView(workspaceId);
 
     const forwardedProps = {
       ...body.forwardedProps,
@@ -124,7 +127,7 @@ export class AgentService {
       agentProviderConfig,
       modelProviderId,
       input: runInput,
-      workspaceId,
+      workspace,
       userMessage,
       userMessageId,
       res,

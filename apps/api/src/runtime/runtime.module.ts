@@ -9,6 +9,7 @@ import { DockerSandboxEngine } from "./sandbox/docker-engine";
 import { OpenSandboxEngine } from "./sandbox/opensandbox-engine";
 import { SandboxRuntimeInstanceManager } from "./sandbox/sandbox-runtime-instance.manager";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
+import { SandboxWorkerExecutor } from "./sandbox/sandbox-worker.executor";
 import {
   OpenSandboxClient,
   OPENSANDBOX_CLIENT,
@@ -28,12 +29,14 @@ import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 
 // external deps
 import { ConfigService } from "../config/config.service";
+import { WorkerHostModule } from "../worker-host/worker-host.module";
 
 /**
  * Runtime 领域：运行环境 placement、sandbox engine、workspace runtime resource
  * 生命周期。它不启动 worker、不处理 run command；per-run execution 在 runs 模块。
  */
 @Module({
+  imports: [WorkerHostModule],
   controllers: [AdminRuntimeController],
   providers: [
     // core
@@ -62,17 +65,17 @@ import { ConfigService } from "../config/config.service";
       inject: [SandboxRuntimeInstanceManager],
     },
     RuntimeProviderRegistry,
+    SandboxWorkerExecutor,
     RuntimeService,
   ],
   exports: [
     // 公开面：根 Service 是 runtime 唯一稳定对外入口。
     RuntimeService,
-    // 边界欠债（非公开面）：run 模块的 SandboxRunExecutor 与 RunModule 直接依赖下面两个
-    // internal provider。这是 run<->runtime 的深耦合，按 docs/todo/
-    // agent-run-runtime-layering-review.md 的分层迁移由 RuntimeService 门面收口后移除。
-    // common/module-boundary.spec.ts 已把这两条登记为 KNOWN_BOUNDARY_DEBT，禁止再扩散。
+    // 边界欠债（非公开面）：run 模块的 SandboxRunExecutor 仍直接依赖此 internal provider
+    // 做 sandbox 执行编排。这是 run<->runtime 的深耦合，按 docs/todo/
+    // agent-run-runtime-layering-review.md 的分层迁移（RuntimeService.startWorker 门面）收口后移除。
+    // common/module-boundary.spec.ts 已把这条登记为 KNOWN_BOUNDARY_DEBT，禁止再扩散。
     SandboxRuntimeInstanceService,
-    RuntimeProviderRegistry,
   ],
 })
 export class RuntimeModule {}

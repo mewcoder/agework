@@ -9,7 +9,7 @@ import { ConversationService } from "../../conversation/conversation.service";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
-import type { StartRunInput } from "../run-service.types";
+import type { StartRunInput, RunWorkspaceView } from "../run-service.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 
@@ -61,14 +61,16 @@ const AGENT_EVENT_TRACE = {
   agentType: "claude",
 };
 
-function makeWorkspace(overrides: Record<string, unknown> = {}) {
+function makeWorkspaceView(
+  overrides: Partial<RunWorkspaceView> = {}
+): RunWorkspaceView {
   return {
-    id: "ws-1",
+    workspaceId: "ws-1",
+    workspaceRootPath: "/tmp/ws",
     runtimeType: "local",
     isolationScope: null,
     sandboxEngine: null,
-    directory: { rootPath: "/tmp/ws" },
-    user: { username: "admin-1" },
+    username: "admin-1",
     ...overrides,
   };
 }
@@ -83,7 +85,6 @@ describe("RunLauncher", () => {
   let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
-  let mockWorkspaceFindFirst: ReturnType<typeof vi.fn>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
 
   function makeRes() {
@@ -108,7 +109,7 @@ describe("RunLauncher", () => {
         source: "system",
       },
       modelProviderId: "mp-1",
-      workspaceId: "ws-1",
+      workspace: makeWorkspaceView(),
       input: { messages: [{ id: "msg-1" }] },
       res: makeRes(),
       ...overrides,
@@ -122,9 +123,6 @@ describe("RunLauncher", () => {
   }
 
   beforeEach(() => {
-    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_ENABLED", "true");
-    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_MAX_FILE_MB", "5");
-
     stopActiveRun = vi.fn().mockResolvedValue(true);
     mockRunRepository = {
       create: vi.fn().mockResolvedValue({ id: "run-1" }),
@@ -134,7 +132,6 @@ describe("RunLauncher", () => {
       markFinished: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
       updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
-      findWorkspaceForRun: vi.fn().mockResolvedValue(makeWorkspace()),
     };
     mockLiveRunRegistry = {
       register: vi.fn(),
@@ -180,10 +177,10 @@ describe("RunLauncher", () => {
         s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
       getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_DIR),
+      getAgentEventTraceConfig: vi
+        .fn()
+        .mockReturnValue({ enabled: true, maxFileMb: 5 }),
     };
-    mockWorkspaceFindFirst =
-      mockRunRepository.findWorkspaceForRun as ReturnType<typeof vi.fn>;
-
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
@@ -344,11 +341,9 @@ describe("RunLauncher", () => {
         queueMicrotask(() => onRuntimeInstanceIdReady?.("container-abc"));
         return handle;
       });
-    mockWorkspaceFindFirst.mockResolvedValue(
-      makeWorkspace({ runtimeType: "sandbox" })
+    await launch(
+      makeStartInput({ workspace: makeWorkspaceView({ runtimeType: "sandbox" }) })
     );
-
-    await launch();
     await new Promise<void>((resolve) => queueMicrotask(resolve));
 
     expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(

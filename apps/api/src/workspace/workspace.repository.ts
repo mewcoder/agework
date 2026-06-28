@@ -143,6 +143,14 @@ export class WorkspaceRepository {
     });
   }
 
+  /** run 启动视图：目录 + runtime 配置 + 属主用户名。 */
+  findRunView(id: string) {
+    return this.prisma.workspace.findFirst({
+      where: { id, deletedAt: null },
+      include: { directory: true, user: { select: { username: true } } },
+    });
+  }
+
   async softDeleteCascade(id: string): Promise<void> {
     const deletedAt = new Date();
     await this.prisma.$transaction([

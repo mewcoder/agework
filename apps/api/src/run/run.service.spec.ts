@@ -5,6 +5,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { ExecutionService } from "./execution/execution.service";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
+import { RuntimeService } from "../runtime/runtime.service";
 
 describe("RunService", () => {
   let service: RunService;
@@ -13,6 +14,7 @@ describe("RunService", () => {
   let mockExecutionService: Partial<ExecutionService>;
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
+  let mockRuntimeService: Partial<RuntimeService>;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -32,13 +34,17 @@ describe("RunService", () => {
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
     };
+    mockRuntimeService = {
+      getRunInstanceView: vi.fn().mockResolvedValue(null),
+    };
 
     service = new RunService(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockExecutionService as ExecutionService,
       mockRunEvents,
-      mockRunLauncher as RunLauncher
+      mockRunLauncher as RunLauncher,
+      mockRuntimeService as RuntimeService
     );
   });
 

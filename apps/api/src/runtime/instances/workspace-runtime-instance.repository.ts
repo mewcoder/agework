@@ -193,6 +193,34 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
+  /** 管理端 run 详情用：运行实例视图 + 绑定的 workspace。 */
+  findRunInstanceView(runtimeType: string, runtimeInstanceId: string) {
+    return this.prisma.runtimeInstance.findUnique({
+      where: {
+        runtimeType_runtimeInstanceId: { runtimeType, runtimeInstanceId },
+      },
+      select: {
+        id: true,
+        runtimeType: true,
+        isolationScope: true,
+        ownerId: true,
+        runtimeInstanceId: true,
+        status: true,
+        expiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+        workspaceRuntimeInstances: {
+          select: {
+            id: true,
+            workspaceId: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        },
+      },
+    });
+  }
+
   async userExists(userId: string): Promise<boolean> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },

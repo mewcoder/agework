@@ -1,5 +1,11 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import type { RuntimeTarget } from "@agework/shared/protocol";
+import type {
+  CommandPayload,
+  RuntimeTarget,
+  WorkerExecutionHandle,
+  WorkerExecutionStartInput,
+} from "@agework/shared/protocol";
+import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
 import { ConfigService } from "../config/config.service";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { swallow } from "../common/swallow";
@@ -9,6 +15,11 @@ import {
   type RuntimeTargetDefaults,
 } from "./placement/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
+import type { RuntimeOwnerSessionCleanup } from "./providers/provider-contracts";
+import {
+  SandboxWorkerExecutor,
+  type SandboxWorkerEventSink,
+} from "./sandbox/sandbox-worker.executor";
 import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
 import { runtimeInstanceDiagnostics } from "./instances/runtime-instance-metadata";
 
@@ -44,7 +55,8 @@ export class RuntimeService {
   constructor(
     private readonly configService: ConfigService,
     private readonly providerRegistry: RuntimeProviderRegistry,
-    private readonly repository: WorkspaceRuntimeInstanceRepository
+    private readonly repository: WorkspaceRuntimeInstanceRepository,
+    private readonly sandboxWorker: SandboxWorkerExecutor
   ) {
     this.defaults = {
       runtimeType: configService.getDefaultRuntimeType(),
@@ -56,6 +68,57 @@ export class RuntimeService {
   /** 从 run 输入解析出目标运行环境（纯计算，不启动 worker）。 */
   resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
     return resolveRuntimeTarget(input, this.defaults);
+  }
+
+  /**
+   * 注册 sandbox runtime owner 会话清理回调：runtime owner 资源释放时，
+   * 上层（worker-host）据此清理该 owner 的 worker command session。
+   * 由 run 启动期一次性接线；run 层经此门面接入，不直接持有 provider registry。
+   */
+  setSandboxOwnerSessionCleanup(cleanup: RuntimeOwnerSessionCleanup): void {
+    this.providerRegistry.resolve("sandbox").setOwnerSessionCleanup?.(cleanup);
+  }
+
+  // ── sandbox per-run 执行门面 ──────────────────────────────────────────
+  // run 层的 SandboxRunExecutor 只经下列方法驱动 sandbox 执行，不直接持有
+  // SandboxWorkerExecutor / SandboxRuntimeInstanceService 等 runtime 内部 provider。
+
+  /** 注入 sandbox 执行回流端口（run 的 RunEventReceiver 结构上满足）。 */
+  setSandboxWorkerEventSink(sink: SandboxWorkerEventSink): void {
+    this.sandboxWorker.setEventSink(sink);
+  }
+
+  /** 启动一次 sandbox run：绑定 runtime owner、打开 worker session、attach/start 实例。 */
+  startSandboxWorker(input: WorkerExecutionStartInput): WorkerExecutionHandle {
+    return this.sandboxWorker.start(input);
+  }
+
+  /** 向 sandbox run 下发命令。 */
+  sendSandboxCommand(
+    handle: WorkerExecutionHandle,
+    command: CommandPayload
+  ): void {
+    this.sandboxWorker.sendCommand(handle, command);
+  }
+
+  /** 取消 sandbox run（不停止可复用的 runtime 实例）。 */
+  cancelSandboxRun(handle: WorkerExecutionHandle): void {
+    this.sandboxWorker.cancel(handle);
+  }
+
+  /** 强制终止 sandbox run 执行会话。 */
+  terminateSandboxRun(runId: string, reason: string): void {
+    this.sandboxWorker.terminateExecution(runId, reason);
+  }
+
+  /** 清理 sandbox run 级资源（不停止 runtime 实例）。 */
+  cleanupSandboxRun(runId: string): void {
+    this.sandboxWorker.cleanup(runId);
+  }
+
+  /** 服务重启后清理中断 sandbox 执行的残留 runtime 实例。 */
+  recoverSandboxOrphan(runtimeInstanceId: string): Promise<void> {
+    return this.sandboxWorker.cleanupInterruptedExecution(runtimeInstanceId);
   }
 
   /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
@@ -95,6 +158,36 @@ export class RuntimeService {
       total,
       pageNo,
       pageSize,
+    };
+  }
+
+  /**
+   * 管理端 run 详情用：按 run 持久化的 runtime handle 取运行实例视图。
+   * runtime 资源归属本领域，run 层经此方法获取，不直接查 runtimeInstance 表。
+   */
+  async getRunInstanceView(
+    runtimeType: string,
+    runtimeInstanceId: string
+  ): Promise<AdminRunRuntimeInstanceResponse | null> {
+    const record = await this.repository.findRunInstanceView(
+      runtimeType,
+      runtimeInstanceId
+    );
+    if (!record) return null;
+    const { workspaceRuntimeInstances, ...resource } = record;
+    return {
+      ...resource,
+      expiresAt: resource.expiresAt
+        ? this.toIsoString(resource.expiresAt)
+        : null,
+      createdAt: this.toIsoString(resource.createdAt),
+      updatedAt: this.toIsoString(resource.updatedAt),
+      workspaceRuntimes: workspaceRuntimeInstances.map((binding) => ({
+        id: binding.id,
+        workspaceId: binding.workspaceId,
+        createdAt: this.toIsoString(binding.createdAt),
+        updatedAt: this.toIsoString(binding.updatedAt),
+      })),
     };
   }
 

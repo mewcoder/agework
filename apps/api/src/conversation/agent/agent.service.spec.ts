@@ -4,6 +4,7 @@ import { AgentService } from "./agent.service";
 import { ConversationService } from "../conversation.service";
 import { RunService } from "../../run/run.service";
 import { ModelProviderService } from "../../model-provider/model-provider.service";
+import { WorkspaceService } from "../../workspace/workspace.service";
 import type { Response } from "express";
 import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import type { AgentRunRequestDto as AgentRunRequestBody } from "./dto/agent-run.dto";
@@ -13,6 +14,7 @@ describe("AgentService", () => {
   let mockConversationService: Partial<ConversationService>;
   let mockRunService: Partial<RunService>;
   let mockModelProviderService: Partial<ModelProviderService>;
+  let mockWorkspaceService: Partial<WorkspaceService>;
   let res: Partial<Response>;
   let user: JwtUser;
 
@@ -36,6 +38,13 @@ describe("AgentService", () => {
       resolveApproval: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(false),
     };
+    mockWorkspaceService = {
+      getRunView: vi.fn().mockResolvedValue({
+        workspaceId: "proj-1",
+        workspaceRootPath: "/tmp/ws",
+        username: "mew",
+      }),
+    };
     res = {
       setHeader: vi.fn(),
       on: vi.fn(),
@@ -48,7 +57,8 @@ describe("AgentService", () => {
     service = new AgentService(
       mockConversationService as ConversationService,
       mockRunService as RunService,
-      mockModelProviderService as ModelProviderService
+      mockModelProviderService as ModelProviderService,
+      mockWorkspaceService as WorkspaceService
     );
   });
 
@@ -120,7 +130,7 @@ describe("AgentService", () => {
     expect(startArgs.conversationId).toBe("conversation-1");
     expect(startArgs.userId).toBe("user-1");
     expect(startArgs.modelProviderId).toBe("mc-1");
-    expect(startArgs.workspaceId).toBe("proj-1");
+    expect(startArgs.workspace.workspaceId).toBe("proj-1");
     expect(startArgs.userMessageId).toBe("msg-1");
     expect(startArgs.res).toBe(res);
     expect(startArgs.agentProviderConfig).toEqual(

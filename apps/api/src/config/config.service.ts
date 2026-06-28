@@ -24,6 +24,7 @@ import {
   DEFAULT_ALLOWED_ISOLATION_SCOPES,
   DEFAULT_PORT,
   DEFAULT_SANDBOX_ENGINE,
+  DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB,
 } from "./registry/defaults";
 import { EnvKey } from "./registry/env-key";
 import {
@@ -285,6 +286,21 @@ export class ConfigService implements OnModuleInit {
   getRuntimeLogDir(): string {
     mkdirSync(AGEWORK_HOST_RUNTIME_LOG_DIR, { recursive: true });
     return AGEWORK_HOST_RUNTIME_LOG_DIR;
+  }
+
+  /**
+   * agent event trace 开关与单文件上限：仅控制 raw/agui 大 payload 是否落 JSONL 文件，
+   * 不影响 RunEvent 索引记录。enabled 接受 1/true/yes/on（大小写不敏感）。
+   */
+  getAgentEventTraceConfig(): { enabled: boolean; maxFileMb: number } {
+    const raw = this.getEnv(EnvKey.AGENT_EVENT_TRACE_ENABLED)?.toLowerCase();
+    const enabled = raw ? ["1", "true", "yes", "on"].includes(raw) : false;
+    const parsed = Number(this.getEnv(EnvKey.AGENT_EVENT_TRACE_MAX_FILE_MB));
+    const maxFileMb =
+      Number.isFinite(parsed) && parsed > 0
+        ? Math.floor(parsed)
+        : DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB;
+    return { enabled, maxFileMb };
   }
 
   getIdleTimeoutSeconds(): number {

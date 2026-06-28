@@ -19,6 +19,7 @@ import { RunService } from "./run.service";
 import { WorkerEventService } from "./worker-event/worker-event.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
 import { RunModule } from "./run.module";
+import { RunStartupService } from "./startup/run-startup.service";
 
 @Injectable()
 class DownstreamRunConsumer {
@@ -41,7 +42,7 @@ describe("RunModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("compiles, resolves run executor tokens, and wires startup hooks", async () => {
+  it("compiles, resolves run executor tokens, and wires startup provider hooks", async () => {
     ({ testingModule, runRecovery } = await createRunsTestingModule([
       RunModule,
     ]));
@@ -58,6 +59,9 @@ describe("RunModule wiring", () => {
     expect(testingModule.get(RunService)).toBeInstanceOf(RunService);
 
     const executionService = testingModule.get(ExecutionService);
+    expect(testingModule.get(RunStartupService)).toBeInstanceOf(
+      RunStartupService
+    );
     const setRunEventReceiver = vi.spyOn(
       executionService,
       "setRunEventReceiver"

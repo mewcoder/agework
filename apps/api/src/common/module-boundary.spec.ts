@@ -43,16 +43,6 @@ const PUBLIC_SUFFIXES = [
 // 允许被跨模块 import 的公开子目录（按规则明确开放）。
 const PUBLIC_DIRS = ["auth/decorators/", "auth/guards/", "config/registry/"];
 
-/**
- * 已知边界欠债：run 模块直接 reach 进 runtime 内部 provider。
- * 这两条由 docs/todo/agent-run-runtime-layering-review.md 的分层迁移收口，
- * 收口后必须从本 allowlist 移除，不允许新增条目。
- */
-const KNOWN_BOUNDARY_DEBT = new Set([
-  "runtime/providers/provider-registry",
-  "runtime/sandbox/sandbox-instance.service",
-]);
-
 const IMPORT_RE = /import\s+(?:type\s+)?(?:[^"']*?from\s+)?["']([^"']+)["']/g;
 
 type CrossImport = { from: string; target: string };
@@ -112,21 +102,9 @@ describe("module boundary", () => {
   });
 
   it("only reaches another module's public surface", () => {
-    const offenders = crossImports.filter(
-      (c) => !isPublicSurface(c.target) && !KNOWN_BOUNDARY_DEBT.has(c.target)
-    );
+    const offenders = crossImports.filter((c) => !isPublicSurface(c.target));
     expect(
       offenders.map((c) => `${c.from} -> ${c.target}`).sort()
     ).toEqual([]);
-  });
-
-  it("keeps the known boundary debt from growing", () => {
-    const debtHits = new Set(
-      crossImports
-        .filter((c) => KNOWN_BOUNDARY_DEBT.has(c.target))
-        .map((c) => c.target)
-    );
-    // allowlist 里的每一条都必须仍被真实引用，否则应删掉这条欠债。
-    expect([...debtHits].sort()).toEqual([...KNOWN_BOUNDARY_DEBT].sort());
   });
 });

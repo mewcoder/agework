@@ -27,24 +27,12 @@ import {
 } from "../worker-event/assistant-message.aggregator";
 import { ConfigService, type IsolationScope } from "../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
-import { EnvKey } from "../../config/registry/env-key";
 import { swallow } from "../../common/swallow";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { RunEventService, compactData } from "../../run-event/run-event.service";
-import type { StartRunInput } from "../run-service.types";
+import type { StartRunInput, RunWorkspaceView } from "../run-service.types";
 import { safePathPart } from "../../common/safe-path";
 import { RunStream } from "../streaming/run-stream";
-
-const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
-
-type RunWorkspace = {
-  workspaceId: string;
-  workspaceRootPath: string;
-  runtimeType?: string;
-  isolationScope?: string | null;
-  sandboxEngine?: string | null;
-  username: string;
-};
 
 type SaveRun = (
   complete: boolean,
@@ -91,7 +79,7 @@ export class RunLauncher {
       userId,
       agentProviderConfig,
       modelProviderId,
-      workspaceId,
+      workspace,
       input: runInput,
       userMessage,
       userMessageId,
@@ -99,7 +87,6 @@ export class RunLauncher {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
-    const workspace = await this.getWorkspace(workspaceId);
     const runtimeTarget = this.getPlacement({ workspace, userId });
     const placement = runtimeTarget;
     const runtimeType = placement.runtimeType;
@@ -184,26 +171,8 @@ export class RunLauncher {
     });
   }
 
-  private async getWorkspace(workspaceId: string): Promise<RunWorkspace> {
-    const workspace = await this.runRepository.findWorkspaceForRun(workspaceId);
-    if (!workspace) {
-      throw new NotFoundException(`Workspace ${workspaceId} not found`);
-    }
-    if (!workspace.directory?.rootPath) {
-      throw new BadRequestException("工作空间必须关联目录才能运行 agent");
-    }
-    return {
-      workspaceId: workspace.id,
-      workspaceRootPath: workspace.directory.rootPath,
-      runtimeType: workspace.runtimeType ?? undefined,
-      isolationScope: workspace.isolationScope,
-      sandboxEngine: workspace.sandboxEngine,
-      username: workspace.user.username,
-    };
-  }
-
   private getPlacement(input: {
-    workspace: RunWorkspace;
+    workspace: RunWorkspaceView;
     userId: string;
   }): RuntimeTarget {
     const { workspace, userId } = input;
@@ -265,6 +234,7 @@ export class RunLauncher {
         input,
         agentProviderConfig,
         agentEventTrace: buildAgentEventTraceConfig({
+          ...this.configService.getAgentEventTraceConfig(),
           runId,
           conversationId,
           workspaceId,
@@ -694,10 +664,12 @@ type RuntimeLogPaths = {
   workerRuntimeFilePath: string;
 };
 
-// AGEWORK_AGENT_EVENT_TRACE_ENABLED 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，
-// 不是事件索引）。DB 关键事件索引（RunEventService 写入的 RunEvent）与本开关无关，始终记录，
-// 关闭本开关后 run 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。
+// enabled 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，不是事件索引）。
+// DB 关键事件索引（RunEventService 写入的 RunEvent）与本开关无关，始终记录，关闭本开关后 run
+// 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。开关与上限由 ConfigService 提供。
 function buildAgentEventTraceConfig(input: {
+  enabled: boolean;
+  maxFileMb: number;
   runId: string;
   conversationId: string;
   workspaceId: string;
@@ -708,12 +680,7 @@ function buildAgentEventTraceConfig(input: {
   aguiFilePath: string;
   aguiRuntimeFilePath: string;
 }) {
-  const enabled = isTruthy(process.env[EnvKey.AGENT_EVENT_TRACE_ENABLED]);
-  const maxFileMb = parsePositiveInt(
-    process.env[EnvKey.AGENT_EVENT_TRACE_MAX_FILE_MB],
-    DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB
-  );
-
+  const { enabled } = input;
   return {
     enabled,
     logDir: enabled ? input.logDir : undefined,
@@ -721,20 +688,10 @@ function buildAgentEventTraceConfig(input: {
     rawRuntimeFilePath: enabled ? input.rawRuntimeFilePath : undefined,
     aguiFilePath: enabled ? input.aguiFilePath : undefined,
     aguiRuntimeFilePath: enabled ? input.aguiRuntimeFilePath : undefined,
-    maxFileMb,
+    maxFileMb: input.maxFileMb,
     runId: input.runId,
     conversationId: input.conversationId,
     workspaceId: input.workspaceId,
     agentType: input.agentType,
   };
-}
-
-function isTruthy(value: string | undefined): boolean {
-  if (!value) return false;
-  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
-}
-
-function parsePositiveInt(value: string | undefined, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }

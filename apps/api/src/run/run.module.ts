@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from "@nestjs/common";
+import { Module } from "@nestjs/common";
 
 // core
 import { RunRepository } from "./run.repository";
@@ -6,6 +6,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { WorkerEventService } from "./worker-event/worker-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
+import { RunStartupService } from "./startup/run-startup.service";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { RunConversationEffects } from "./conversation/run-conversation.effects";
@@ -24,9 +25,7 @@ import { AdminRunController } from "./admin/admin-run.controller";
 
 // deps（向下依赖 runtime / worker-host，以及 conversation / model-provider 领域）
 import { RuntimeModule } from "../runtime/runtime.module";
-import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
-import { WorkerHostService } from "../worker-host/worker-host.service";
 import { ConversationModule } from "../conversation/conversation.module";
 import { ModelProviderModule } from "../model-provider/model-provider.module";
 import { RunEventModule } from "../run-event/run-event.module";
@@ -64,29 +63,8 @@ import { RunEventModule } from "../run-event/run-event.module";
     RunExecutorRegistry,
     ExecutionService,
     WorkerAgUiEventHandler,
+    RunStartupService,
   ],
   exports: [RunService],
 })
-export class RunModule implements OnModuleInit {
-  constructor(
-    private readonly runRecovery: RunRecoveryService,
-    private readonly executionService: ExecutionService,
-    private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
-    private readonly workerHost: WorkerHostService,
-    private readonly liveRuns: LiveRunRegistry,
-    private readonly workerEvents: WorkerEventService
-  ) {}
-
-  async onModuleInit() {
-    this.executionService.setRunEventReceiver(this.workerEvents);
-    this.runtimeProviderRegistry
-      .resolve("sandbox")
-      .setOwnerSessionCleanup?.((ownerId) =>
-        this.workerHost.cleanupByOwnerId(ownerId)
-      );
-    this.workerHost.setCommandSentRecorder(this.workerEvents);
-    this.workerHost.setReceiver(this.workerEvents);
-    this.liveRuns.setTimeoutErrorSink(this.workerEvents);
-    await this.runRecovery.recoverInterruptedRuns();
-  }
-}
+export class RunModule {}

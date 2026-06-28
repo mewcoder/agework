@@ -6,10 +6,8 @@ import { RunRepository } from "./run.repository";
 
 describe("RunRepository", () => {
   it("creates a run with the given identifiers", async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: "conversation-1" });
     const create = vi.fn().mockResolvedValue({ id: "run-1", status: "queued" });
     const service = new RunRepository({
-      conversation: { findFirst },
       run: { create },
     } as never);
 
@@ -20,14 +18,7 @@ describe("RunRepository", () => {
       runtimeType: "local",
     });
 
-    expect(findFirst).toHaveBeenCalledWith({
-      where: {
-        id: "conversation-1",
-        deletedAt: null,
-        workspace: { deletedAt: null },
-      },
-      select: { id: true },
-    });
+    // conversation 存在性守卫已上移到 RunLauncher.claimRun，repository 只写 run 表
     expect(create).toHaveBeenCalledWith({
       data: {
         id: "run-1",
@@ -36,26 +27,6 @@ describe("RunRepository", () => {
         runtimeType: "local",
       },
     });
-  });
-
-  it("rejects run creation when conversation does not exist", async () => {
-    const findFirst = vi.fn().mockResolvedValue(null);
-    const create = vi.fn();
-    const service = new RunRepository({
-      conversation: { findFirst },
-      run: { create },
-    } as never);
-
-    await expect(
-      service.create({
-        id: "run-1",
-        conversationId: "conversation-1",
-        agentType: "claude",
-        runtimeType: "local",
-      })
-    ).rejects.toThrow("Conversation 不存在");
-
-    expect(create).not.toHaveBeenCalled();
   });
 
   it("marks a run as running with a startedAt timestamp", async () => {
@@ -191,7 +162,7 @@ describe("RunRepository", () => {
     });
   });
 
-  it("returns admin run detail with owner and runtime resource context", async () => {
+  it("returns admin run detail with owner context (runtime view added by RunService)", async () => {
     const now = new Date("2026-06-17T00:00:00.000Z");
     const findRun = vi.fn().mockResolvedValue({
       id: "run-1",
@@ -222,44 +193,14 @@ describe("RunRepository", () => {
         },
       },
     });
-    const findRuntimeInstance = vi.fn().mockResolvedValue({
-      id: "resource-1",
-      runtimeType: "sandbox",
-      isolationScope: "workspace",
-      ownerId: "workspace-1",
-      runtimeInstanceId: "container-abc",
-      status: "running",
-      expiresAt: null,
-      createdAt: now,
-      updatedAt: now,
-      workspaceRuntimeInstances: [
-        {
-          id: "binding-1",
-          workspaceId: "workspace-1",
-          createdAt: now,
-          updatedAt: now,
-        },
-      ],
-    });
     const service = new RunRepository({
       run: { findUnique: findRun },
-      runtimeInstance: { findUnique: findRuntimeInstance },
     } as never);
 
     const detail = await service.detailAdmin("run-1");
 
     expect(findRun).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "run-1" } })
-    );
-    expect(findRuntimeInstance).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          runtimeType_runtimeInstanceId: {
-            runtimeType: "sandbox",
-            runtimeInstanceId: "container-abc",
-          },
-        },
-      })
     );
     expect(detail).toMatchObject({
       id: "run-1",
@@ -268,6 +209,9 @@ describe("RunRepository", () => {
       username: "mew",
       conversationTitle: "Fix login",
       workspaceName: "AgeWork",
+      // run 行自身携带 runtime handle，供 RunService 经 RuntimeService 补齐实例视图
+      runtimeType: "sandbox",
+      runtimeInstanceId: "container-abc",
       conversation: {
         id: "conversation-1",
         activeRunStatus: "running",
@@ -275,21 +219,9 @@ describe("RunRepository", () => {
       },
       workspace: { id: "workspace-1", name: "AgeWork" },
       user: { id: "user-1", username: "mew" },
-      runtimeInstance: {
-        id: "resource-1",
-        isolationScope: "workspace",
-        status: "running",
-        workspaceRuntimes: [
-          expect.objectContaining({
-            id: "binding-1",
-            workspaceId: "workspace-1",
-          }),
-        ],
-      },
     });
-    expect(detail.runtimeInstance).not.toHaveProperty(
-      "workspaceRuntimeInstances"
-    );
+    // runtimeInstance 视图不再由 repository 提供
+    expect(detail).not.toHaveProperty("runtimeInstance");
     // 详情不再内嵌事件列表，事件改由 listAdminEvents 独立分页提供
     expect(detail).not.toHaveProperty("events");
   });

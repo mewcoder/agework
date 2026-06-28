@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import type { RunUsage } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
@@ -15,21 +11,13 @@ import {
 export class RunRepository {
   constructor(private prisma: PrismaService) {}
 
-  /** run 启动所需的 workspace 视图（含目录与属主用户名）；归属/有效性校验在 Service。 */
-  findWorkspaceForRun(workspaceId: string) {
-    return this.prisma.workspace.findFirst({
-      where: { id: workspaceId, deletedAt: null },
-      include: { directory: true, user: { select: { username: true } } },
-    });
-  }
-
   async create(data: {
     id: string;
     conversationId: string;
     agentType: string;
     runtimeType: string;
   }) {
-    await this.assertConversationExists(data.conversationId);
+    // conversation 存在性/归属由上游 RunLauncher.claimRun 经 ConversationService 守卫。
     return this.prisma.run.create({
       data: {
         id: data.id,
@@ -38,21 +26,6 @@ export class RunRepository {
         runtimeType: data.runtimeType,
       },
     });
-  }
-
-  private async assertConversationExists(conversationId: string) {
-    const conversation = await this.prisma.conversation.findFirst({
-      where: {
-        id: conversationId,
-        deletedAt: null,
-        workspace: { deletedAt: null },
-      },
-      select: { id: true },
-    });
-
-    if (!conversation) {
-      throw new BadRequestException("Conversation 不存在，不能创建 Run");
-    }
   }
 
   async markRunning(runId: string) {
@@ -214,49 +187,10 @@ export class RunRepository {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
 
-    const runtimeInstanceRecord = run.runtimeInstanceId
-      ? await this.prisma.runtimeInstance.findUnique({
-          where: {
-            runtimeType_runtimeInstanceId: {
-              runtimeType: run.runtimeType,
-              runtimeInstanceId: run.runtimeInstanceId,
-            },
-          },
-          select: {
-            id: true,
-            runtimeType: true,
-            isolationScope: true,
-            ownerId: true,
-            runtimeInstanceId: true,
-            status: true,
-            expiresAt: true,
-            createdAt: true,
-            updatedAt: true,
-            workspaceRuntimeInstances: {
-              select: {
-                id: true,
-                workspaceId: true,
-                createdAt: true,
-                updatedAt: true,
-              },
-            },
-          },
-        })
-      : null;
-    const runtimeInstance = runtimeInstanceRecord
-      ? (() => {
-          const { workspaceRuntimeInstances, ...resource } =
-            runtimeInstanceRecord;
-          return {
-            ...resource,
-            workspaceRuntimes: workspaceRuntimeInstances,
-          };
-        })()
-      : null;
-
     const { conversation, ...runData } = run;
     const workspace = conversation.workspace;
 
+    // runtimeInstance 视图由 RunService 经 RuntimeService 补齐（runtime 领域所有）。
     return {
       ...runData,
       userId: workspace.userId,
@@ -279,7 +213,6 @@ export class RunRepository {
         id: workspace.user.id,
         username: workspace.user.username,
       },
-      runtimeInstance,
     };
   }
 }

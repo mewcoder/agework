@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
+import { SandboxWorkerExecutor } from "./sandbox/sandbox-worker.executor";
 import { ConfigService } from "../config/config.service";
 import type { RuntimeProvider } from "./providers/provider-contracts";
 
@@ -42,10 +43,20 @@ describe("RuntimeService", () => {
     };
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");
+    const sandboxWorker = {
+      setEventSink: vi.fn(),
+      start: vi.fn(),
+      sendCommand: vi.fn(),
+      cancel: vi.fn(),
+      terminateExecution: vi.fn(),
+      cleanup: vi.fn(),
+      cleanupInterruptedExecution: vi.fn().mockResolvedValue(undefined),
+    } as unknown as SandboxWorkerExecutor;
     service = new RuntimeService(
       configService as ConfigService,
       providerRegistry,
-      repository as never
+      repository as never,
+      sandboxWorker
     );
   });
 

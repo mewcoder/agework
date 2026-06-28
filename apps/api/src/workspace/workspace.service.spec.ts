@@ -63,6 +63,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateOwned: vi.fn().mockResolvedValue(null),
     updateById: vi.fn().mockResolvedValue(null),
     findOwnedId: vi.fn().mockResolvedValue(null),
+    findRunView: vi.fn().mockResolvedValue(null),
     softDeleteCascade: vi.fn().mockResolvedValue(undefined),
     findDirectoryByRootPath: vi.fn().mockResolvedValue(null),
     findUsername: vi.fn().mockResolvedValue("admin-1"),
@@ -406,6 +407,60 @@ describe("WorkspaceService", () => {
         workspaceId
       );
       expect(repo.softDeleteCascade).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("getRunView", () => {
+    it("maps the workspace run view (directory + runtime config + owner username)", async () => {
+      const repo = makeRepo({
+        findRunView: vi.fn().mockResolvedValue({
+          id: "ws-1",
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          sandboxEngine: "docker",
+          directory: { rootPath: "/tmp/ws" },
+          user: { username: "mew" },
+        }),
+      });
+      const service = makeService(repo, makeConfig());
+
+      const view = await service.getRunView("ws-1");
+
+      expect(view).toEqual({
+        workspaceId: "ws-1",
+        workspaceRootPath: "/tmp/ws",
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        sandboxEngine: "docker",
+        username: "mew",
+      });
+    });
+
+    it("404s when the workspace does not exist", async () => {
+      const repo = makeRepo({ findRunView: vi.fn().mockResolvedValue(null) });
+      const service = makeService(repo, makeConfig());
+
+      await expect(service.getRunView("missing")).rejects.toThrow(
+        "Workspace missing not found"
+      );
+    });
+
+    it("400s when the workspace has no directory binding", async () => {
+      const repo = makeRepo({
+        findRunView: vi.fn().mockResolvedValue({
+          id: "ws-1",
+          runtimeType: "local",
+          isolationScope: null,
+          sandboxEngine: null,
+          directory: null,
+          user: { username: "mew" },
+        }),
+      });
+      const service = makeService(repo, makeConfig());
+
+      await expect(service.getRunView("ws-1")).rejects.toThrow(
+        "工作空间必须关联目录才能运行 agent"
+      );
     });
   });
 

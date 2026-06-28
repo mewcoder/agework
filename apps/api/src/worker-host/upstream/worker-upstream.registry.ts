@@ -4,7 +4,7 @@ import type { WorkerUpstreamReceiver } from "../worker-host.types";
 
 /**
  * worker-host 持有的上行事件转发注册表。WorkerRunController 经此把 worker 上报
- * 转发给 run 层，具体接收方由 run 在 onModuleInit 时通过 setReceiver 注入。
+ * 转发给 run 层，具体接收方由 run startup provider 通过 setReceiver 注入。
  */
 @Injectable()
 export class WorkerUpstreamRegistry {
