@@ -1,395 +1,56 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { BadRequestException } from "@nestjs/common";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RuntimeService } from "../runtime/runtime.service";
 import { ExecutionService } from "./execution/execution.service";
-import { ConversationService } from "../conversation/conversation.service";
-import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { RunEventService } from "../run-event/run-event.service";
-import { ConfigService } from "../config/config.service";
-import type { StartRunInput } from "./run-service.types";
-import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
-import { CONTAINER_RUNTIME_LOG_DIR } from "../config/registry/defaults";
-
-const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
-
-function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
-  const common = {
-    userId: "user-1",
-    workspaceId: "ws-1",
-    hostPath: "/tmp/ws",
-  };
-  if (runtimeType === "local") {
-    return { ...common, runtimeType: "local", runtimePath: "/tmp/ws" };
-  }
-  return {
-    ...common,
-    runtimeType: "sandbox",
-    runtimePath: "/workspace",
-    sandbox: {
-      isolationScope: "workspace",
-      mountTarget: "/workspace",
-      sandboxEngineType: "docker",
-    },
-  };
-}
-
-function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
-  return {
-    ...placement,
-    ownerId:
-      placement.runtimeType === "sandbox" &&
-      placement.sandbox.isolationScope === "user"
-        ? placement.userId
-        : placement.workspaceId,
-  };
-}
-
-const AGENT_EVENT_TRACE = {
-  enabled: true,
-  logDir: RUNTIME_LOG_DIR,
-  rawFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-  rawRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-  aguiFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
-  aguiRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
-  maxFileMb: 5,
-  runId: "run-1",
-  conversationId: "conversation-1",
-  workspaceId: "ws-1",
-  agentType: "claude",
-};
-
-function makeWorkspace(overrides: Record<string, unknown> = {}) {
-  return {
-    id: "ws-1",
-    runtimeType: "local",
-    isolationScope: null,
-    sandboxEngine: null,
-    directory: { rootPath: "/tmp/ws" },
-    user: { username: "admin-1" },
-    ...overrides,
-  };
-}
+import { RunLauncher } from "./launch/run-launcher";
 
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockRuntimeService: Partial<RuntimeService>;
   let mockExecutionService: Partial<ExecutionService>;
-  let mockConversationService: Partial<ConversationService>;
-  let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunEvents: RunEventService;
-  let mockConfigService: Partial<ConfigService>;
-  let mockWorkspaceFindFirst: ReturnType<typeof vi.fn>;
-
-  function makeRes() {
-    return {
-      on: vi.fn(),
-      setHeader: vi.fn(),
-      write: vi.fn(),
-      end: vi.fn(),
-      writableEnded: false,
-    } as any;
-  }
-
-  function makeStartInput(
-    overrides: Partial<StartRunInput> = {}
-  ): StartRunInput {
-    return {
-      runId: "run-1",
-      conversationId: "conversation-1",
-      userId: "user-1",
-      agentProviderConfig: {
-        agentType: "claude",
-        source: "system",
-      },
-      modelProviderId: "mp-1",
-      workspaceId: "ws-1",
-      input: { messages: [{ id: "msg-1" }] },
-      res: makeRes(),
-      ...overrides,
-    };
-  }
+  let mockRunLauncher: Partial<RunLauncher>;
 
   beforeEach(() => {
-    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_ENABLED", "true");
-    vi.stubEnv("AGEWORK_AGENT_EVENT_TRACE_MAX_FILE_MB", "5");
-
     mockRunRepository = {
-      create: vi.fn().mockResolvedValue({ id: "run-1" }),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
-      markError: vi.fn().mockResolvedValue(undefined),
       markCancelling: vi.fn().mockResolvedValue(undefined),
-      markFinished: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
-      updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
-      findWorkspaceForRun: vi.fn().mockResolvedValue(makeWorkspace()),
     };
     mockLiveRunRegistry = {
-      register: vi.fn(),
-      unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockRuntimeService = {
-      resolveRuntimeTarget: vi
-        .fn()
-        .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
-    };
     mockExecutionService = {
-      start: vi.fn().mockReturnValue({
-        runId: "run-1",
-        runtimeType: "local",
-        runtimeInstanceId: "1:token",
-      }),
       sendCommand: vi.fn(),
       cancel: vi.fn(),
-      cleanup: vi.fn(),
-    };
-    mockConversationService = {
-      attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
-      saveUserMessage: vi.fn().mockResolvedValue(undefined),
-      upsertMessage: vi.fn().mockResolvedValue(undefined),
-      generateTitleIfNeeded: vi.fn().mockResolvedValue(undefined),
-      findOne: vi.fn().mockResolvedValue({}),
-    };
-    mockRunConversation = {
-      markRunning: vi.fn().mockResolvedValue(true),
-      markError: vi.fn().mockResolvedValue(true),
-      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
-    vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
-    mockConfigService = {
-      getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
-      getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
-      isRuntimeTypeAllowed: (t: string): t is "local" | "sandbox" =>
-        t === "local" || t === "sandbox",
-      isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
-        s === "user" || s === "workspace",
-      getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
-      getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_DIR),
+    mockRunLauncher = {
+      launch: vi.fn().mockResolvedValue(undefined),
     };
-    mockWorkspaceFindFirst =
-      mockRunRepository.findWorkspaceForRun as ReturnType<typeof vi.fn>;
 
     service = new RunService(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockRuntimeService as RuntimeService,
       mockExecutionService as ExecutionService,
-      mockConversationService as ConversationService,
-      mockRunConversation as RunConversationEffects,
       mockRunEvents,
-      mockConfigService as ConfigService
+      mockRunLauncher as RunLauncher
     );
   });
 
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   describe("start()", () => {
-    it("resolves placement, creates run, starts the worker and registers the handle", async () => {
-      const res = makeRes();
-      await service.start(makeStartInput({ res }));
+    it("delegates to RunLauncher with a stopActiveRun port", async () => {
+      const input = { conversationId: "conversation-1" } as never;
+      await service.start(input);
 
-      expect(mockRuntimeService.resolveRuntimeTarget).toHaveBeenCalledWith(
-        expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
+      expect(mockRunLauncher.launch).toHaveBeenCalledWith(
+        input,
+        expect.objectContaining({ stopActiveRun: expect.any(Function) })
       );
-      expect(mockRunRepository.create).toHaveBeenCalledWith({
-        id: "run-1",
-        conversationId: "conversation-1",
-        agentType: "claude",
-        runtimeType: "local",
-      });
-      expect(mockExecutionService.start).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runConfig: expect.objectContaining({ runId: "run-1" }),
-          runtimeTarget: expect.objectContaining({
-            runtimeType: "local",
-            ownerId: "ws-1",
-          }),
-        })
-      );
-      expect(mockExecutionService.start).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runConfig: expect.objectContaining({
-            runId: "run-1",
-            conversationId: "conversation-1",
-            workspaceId: "ws-1",
-            runtimePath: "/tmp/ws",
-            input: { messages: [{ id: "msg-1" }] },
-            agentProviderConfig: expect.objectContaining({
-              agentType: "claude",
-              source: "system",
-            }),
-            agentEventTrace: AGENT_EVENT_TRACE,
-            workerLogFilePath: `${RUNTIME_LOG_DIR}/conversation-1.worker.log`,
-          }),
-        })
-      );
-      expect(mockLiveRunRegistry.register).toHaveBeenCalledWith(
-        "run-1",
-        expect.objectContaining({
-          runId: "run-1",
-          conversationId: "conversation-1",
-          workspaceId: "ws-1",
-          agentType: "claude",
-          agentEventTrace: AGENT_EVENT_TRACE,
-          stream: expect.objectContaining({}),
-        })
-      );
-      expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
-        "run-1",
-        "local",
-        "1:token"
-      );
-      const registered = (
-        mockLiveRunRegistry.register as ReturnType<typeof vi.fn>
-      ).mock.calls[0][1];
-      expect(typeof registered.saveRun).toBe("function");
-      expect(typeof registered.onAgentSessionId).toBe("function");
-    });
-
-    it("marks the conversation running before starting", async () => {
-      await service.start(makeStartInput());
-      expect(mockRunConversation.markRunning).toHaveBeenCalledWith(
-        "conversation-1"
-      );
-    });
-
-    it("saves the user message and triggers title generation", async () => {
-      const userMessage = { id: "msg-1", role: "user", content: "hi" } as any;
-      await service.start(
-        makeStartInput({ userMessage, userMessageId: "msg-1" })
-      );
-
-      expect(mockConversationService.saveUserMessage).toHaveBeenCalledWith(
-        "conversation-1",
-        userMessage
-      );
-      expect(
-        mockConversationService.generateTitleIfNeeded
-      ).toHaveBeenCalledWith({
-        conversationId: "conversation-1",
-        agentType: "claude",
-        modelProviderId: "mp-1",
-      });
-    });
-
-    it("throws BadRequestException when the runtime type is not allowed", async () => {
-      mockConfigService.isRuntimeTypeAllowed = (
-        _t: string
-      ): _t is "local" | "sandbox" => false;
-      await expect(service.start(makeStartInput())).rejects.toThrow(
-        BadRequestException
-      );
-      expect(mockRuntimeService.resolveRuntimeTarget).not.toHaveBeenCalled();
-    });
-
-    it("wraps RunConfig assembly errors as BadRequestException", async () => {
-      mockConfigService.getRuntimeLogDir = vi.fn().mockImplementation(() => {
-        throw new Error("模型服务不可用");
-      });
-      await expect(service.start(makeStartInput())).rejects.toThrow(
-        BadRequestException
-      );
-    });
-
-    it("attaches the accepted user message to the created run", async () => {
-      await service.start(makeStartInput({ userMessageId: "msg-1" }));
-
-      expect(mockConversationService.attachMessageToRun).toHaveBeenCalledWith(
-        "conversation-1",
-        "msg-1",
-        "run-1"
-      );
-      expect(mockRunEvents.append).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventKey: "message:msg-1:accepted",
-          type: "message.accepted",
-        })
-      );
-    });
-
-    it("continues starting the worker when audit event recording fails", async () => {
-      mockRunEvents.append = vi
-        .fn()
-        .mockRejectedValue(new Error("SQLITE_BUSY"));
-      const res = makeRes();
-
-      await service.start(makeStartInput({ res }));
-
-      expect(mockExecutionService.start).toHaveBeenCalled();
-      expect(mockLiveRunRegistry.register).toHaveBeenCalled();
-      expect(mockRunRepository.markError).not.toHaveBeenCalled();
-      expect(res.write).not.toHaveBeenCalled();
-    });
-
-    it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
-      // placement.runtimeType=sandbox，runtimeInstanceId 由 sandbox provider 异步解析
-      mockRuntimeService.resolveRuntimeTarget = vi
-        .fn()
-        .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
-      mockExecutionService.start = vi
-        .fn()
-        .mockImplementation(({ onRuntimeInstanceIdReady }) => {
-          const handle = {
-            runId: "run-1",
-            runtimeType: "sandbox",
-            runtimeInstanceId: "",
-            conversationId: "conversation-1",
-          };
-          queueMicrotask(() => onRuntimeInstanceIdReady?.("container-abc"));
-          return handle;
-        });
-      mockWorkspaceFindFirst.mockResolvedValue(
-        makeWorkspace({ runtimeType: "sandbox" })
-      );
-
-      await service.start(makeStartInput());
-      await new Promise<void>((resolve) => queueMicrotask(resolve));
-
-      expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
-        "run-1",
-        "sandbox",
-        "container-abc"
-      );
-      expect(mockExecutionService.start).toHaveBeenCalledWith(
-        expect.objectContaining({
-          runConfig: expect.objectContaining({
-            runtimePath: "/workspace",
-            agentEventTrace: expect.objectContaining({
-              rawRuntimeFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-            }),
-            workerLogFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.worker.log`,
-          }),
-        })
-      );
-    });
-
-    it("rolls back on worker start failure", async () => {
-      mockExecutionService.start = vi.fn().mockImplementation(() => {
-        throw new Error("spawn failed");
-      });
-      const res = makeRes();
-
-      await service.start(makeStartInput({ res }));
-
-      expect(mockLiveRunRegistry.register).not.toHaveBeenCalled();
-      expect(mockRunRepository.markError).toHaveBeenCalledWith(
-        "run-1",
-        "Failed to start worker"
-      );
-      expect(mockRunConversation.markError).toHaveBeenCalledWith(
-        "conversation-1"
-      );
-      await Promise.resolve();
-      expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
     });
   });
 

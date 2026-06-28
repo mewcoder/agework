@@ -7,6 +7,7 @@ import { WorkerEventService } from "./worker-event/worker-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunService } from "./run.service";
+import { RunLauncher } from "./launch/run-launcher";
 import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { ExecutionService } from "./execution/execution.service";
 import {
@@ -52,6 +53,7 @@ import { RunEventModule } from "../run-event/run-event.module";
     RunConversationEffects,
     RunStatusService,
     RunService,
+    RunLauncher,
     LocalRunExecutor,
     SandboxRunExecutor,
     {

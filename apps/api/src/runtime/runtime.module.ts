@@ -65,8 +65,12 @@ import { ConfigService } from "../config/config.service";
     RuntimeService,
   ],
   exports: [
-    // 仅导出跨模块真正用到的能力。Repository 与 lifecycle use-case 是内部实现，不导出。
+    // 公开面：根 Service 是 runtime 唯一稳定对外入口。
     RuntimeService,
+    // 边界欠债（非公开面）：run 模块的 SandboxRunExecutor 与 RunModule 直接依赖下面两个
+    // internal provider。这是 run<->runtime 的深耦合，按 docs/todo/
+    // agent-run-runtime-layering-review.md 的分层迁移由 RuntimeService 门面收口后移除。
+    // common/module-boundary.spec.ts 已把这两条登记为 KNOWN_BOUNDARY_DEBT，禁止再扩散。
     SandboxRuntimeInstanceService,
     RuntimeProviderRegistry,
   ],

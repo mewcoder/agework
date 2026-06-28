@@ -277,6 +277,16 @@ Middleware
 
 ### 7. Module 边界和 exports 审计
 
+**Status:** Done (2026-06-28)
+
+审计结论：14 个 module 中 Repository 跨模块外露 0 处；13/14 只 export 根 Service。唯一例外是
+`runtime.module` 多 export 的 `SandboxRuntimeInstanceService` 与 `RuntimeProviderRegistry`，
+被 `run` 模块（`SandboxRunExecutor` / `RunModule`）深度依赖。这是 run<->runtime 深耦合，归属
+`agent-run-runtime-layering-review.md` 的分层迁移收口，已在 `runtime.module.ts` 写明理由。
+新增 `common/module-boundary.spec.ts`：扫描跨模块 import，护栏 = 不许 import 对方 repository、
+只许触碰公开面（service/types/events + auth decorators/guards + config registry 常量），
+那两条登记为 `KNOWN_BOUNDARY_DEBT` 禁止扩散、收口后强制删除。
+
 **Objective:** 确保 module 只 export 根 service 或明确 public API，不把 repository/internal provider 暴露给其他 module。
 
 **Docs:** [Modules](https://docs.nestjs.com/modules), [Providers](https://docs.nestjs.com/providers)
@@ -295,6 +305,23 @@ Middleware
 - 代码约定测试扫描跨模块 import repository/internal provider。
 
 ### 8. Provider 注入和职责厚度审计
+
+**Status:** Done — audit only, no extraction (2026-06-28)
+
+审计结论：
+- 全仓 `forwardRef` / `ModuleRef` = 0，无边界掩盖。
+- `WorkerEventService`（5 依赖 + seq/finalize 状态）已是职责清晰的 internal provider，状态是其本职，不拆。
+- `WorkspaceService`（5 依赖）是薄 facade，子能力已下沉到 `WorkspaceRuntimePolicy` / `WorkspaceDirectoryHandler`，不拆。
+- `RunService`（原 8 依赖、888 行）是唯一强信号：`start()` 之后聚集了一大团 run 启动准备私有方法
+  （`getPlacement`/`makeRunConfig`/`makeLogPaths`/`claimRun`/`saveUserTurn`/`makeSaveRun`/`saveSession`/
+  `createRun`/`startWorker`/`saveRuntime`/`registerRun`），是可命名的稳定子能力。
+  **已抽成 `run/launch/run-launcher.ts`（`RunLauncher` internal provider，按 root 白名单收进子目录）**，即 `agent-run-runtime-layering-review.md`
+  Step B「劈开 RunConfig 组装」。`RunService.start` 现在只委托到 `RunLauncher.launch` 并注入 `stopActiveRun`
+  端口（避免 launcher 反向依赖 RunService 成环）。结果：RunService 888→209 行、8→5 依赖；
+  launcher 8 依赖（启动编排本职，符合「深度证明拆分」）。8 个 start 单测迁到 `run-launcher.spec.ts`，
+  RunService spec 保留 stop/approval/resume + 一条 delegate 断言。
+- 单测核对：`run.service.spec` / `workspace.service.spec` 均围绕公开用例，`as any` 仅用于 mock fixture，
+  未探测私有方法；符合 verification 要求。
 
 **Objective:** 保持 constructor injection 清晰，避免 service 变成 god service 或 service locator。
 
@@ -315,6 +342,15 @@ Middleware
 - 单测保持围绕公开 service 用例，不测试私有实现细节。
 
 ### 9. First steps / bootstrap 简化
+
+**Status:** Done — already compliant (2026-06-28)
+
+核对 `main.ts`：只含 NestFactory、middleware（requestId/securityHeaders/cookieParser）、body parser、
+global pipe/interceptor/filter、global prefix、shutdown hooks、listen + 启动 banner。无 `process.env` 直读
+（端口/body limit/context 全走 `ConfigService`），无业务初始化——业务启动逻辑在
+`SystemInitService.onApplicationBootstrap`。`getLanAddress()` 仅是启动 banner 辅助，doc 允许。无需改动。
+（旁注：`model-provider` / `prisma` / `run.service` 等仍有散落的 `process.env` 直读，属「feature 不直接读 env」
+的更广议题，不在本 bootstrap 项范围内。）
 
 **Objective:** 保持 bootstrap 清晰，只做应用级 wiring；避免业务初始化逻辑继续堆进 `main.ts`。
 
