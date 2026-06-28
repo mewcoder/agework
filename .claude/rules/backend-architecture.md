@@ -14,6 +14,7 @@
 - Event = fact-only notification,只通知已发生事实。
 - Dependency = strictly downward or cross-service only。
 - 禁止 DDD / Clean Architecture 重型分层体系。
+- 后端命名细则见 [`backend-naming.md`](backend-naming.md),本文只保留架构边界与组织规则。
 
 规则冲突或时间不够时,按优先级从上到下执行。高优先级没满足,低优先级不要补救性绕开。
 
