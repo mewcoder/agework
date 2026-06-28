@@ -23,9 +23,9 @@ import {
 } from "@agework/shared/protocol/rpc";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerAuthGuard } from "./auth.guard";
-import { WorkerConfigStore } from "./config-store";
-import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
+import { WorkerAuthGuard } from "./guards/auth.guard";
+import { WorkerConfigStore } from "./config/config-store";
+import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { safeLogJson } from "../common/logging";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 

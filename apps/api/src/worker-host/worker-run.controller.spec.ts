@@ -3,8 +3,8 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { WorkerRunController } from "./worker-run.controller";
-import { WorkerConfigStore } from "./config-store";
-import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
+import { WorkerConfigStore } from "./config/config-store";
+import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 
 function makeController(opts: {
   configStore: Partial<WorkerConfigStore>;

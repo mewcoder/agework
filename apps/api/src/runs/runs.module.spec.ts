@@ -17,8 +17,8 @@ import type { RunExecutor } from "./execution/executor";
 import { ExecutionService } from "./execution/execution.service";
 import { RunService } from "./run.service";
 import { WorkerEventsService } from "./worker-events/worker-events.service";
-import { WorkerCommandQueue } from "../worker-host/command-queue";
-import { WorkerUpstreamRegistry } from "../worker-host/worker-upstream.registry";
+import { WorkerCommandDispatcher } from "../worker-host/commands/command-dispatcher.service";
+import { WorkerUpstreamRegistry } from "../worker-host/upstream/worker-upstream.registry";
 import { RunsModule } from "./runs.module";
 
 @Injectable()
@@ -63,9 +63,9 @@ describe("RunsModule wiring", () => {
       executionService,
       "setRunEventReceiver"
     );
-    const commandQueue = testingModule.get(WorkerCommandQueue);
+    const workerCommands = testingModule.get(WorkerCommandDispatcher);
     const setCommandSentRecorder = vi.spyOn(
-      commandQueue,
+      workerCommands,
       "setCommandSentRecorder"
     );
     const workerUpstream = testingModule.get(WorkerUpstreamRegistry);

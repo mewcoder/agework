@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { SandboxRunExecutor } from "./sandbox.executor";
 import { SandboxRuntimeInstanceService } from "../../runtime/sandbox/sandbox-instance.service";
-import { WorkerCommandDispatcher } from "../../worker-host/command-dispatcher.service";
+import { WorkerCommandDispatcher } from "../../worker-host/commands/command-dispatcher.service";
 import type {
   SandboxEngine,
   SandboxRuntime,

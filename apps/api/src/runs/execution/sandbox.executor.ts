@@ -11,8 +11,8 @@ import type {
   RunEventReceiver,
   RunExecutor,
 } from "./executor";
-import { WorkerCommandDispatcher } from "../../worker-host/command-dispatcher.service";
-import { WorkerAccessService } from "../../worker-host/access.service";
+import { WorkerCommandDispatcher } from "../../worker-host/commands/command-dispatcher.service";
+import { WorkerAccessService } from "../../worker-host/access/access.service";
 import {
   SandboxRuntimeInstanceService,
   type SandboxRuntimeInstanceCallbacks,

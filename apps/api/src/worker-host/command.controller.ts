@@ -10,8 +10,8 @@ import type { WorkerCommandRpcRequest } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerAuthGuard } from "./auth.guard";
-import { WorkerCommandQueue } from "./command-queue";
+import { WorkerAuthGuard } from "./guards/auth.guard";
+import { WorkerCommandQueue } from "./commands/command-queue";
 import { safeLogJson } from "../common/logging";
 import {
   WorkerCommandQueryDto,

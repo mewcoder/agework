@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { RunChannelMessage, CommandPayload } from "@agework/shared/protocol";
 import type { CommandSentRecorder } from "./command-sent-recorder.port";
-import { errorLogFields, safeLogJson } from "../common/logging";
+import { errorLogFields, safeLogJson } from "../../common/logging";
 
 type OwnerWaiter = {
   afterSeq: number;

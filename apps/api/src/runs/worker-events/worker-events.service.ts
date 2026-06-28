@@ -8,7 +8,7 @@ import type {
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "../execution/executor";
-import type { WorkerUpstreamReceiver } from "../../worker-host/worker-upstream.registry";
+import type { WorkerUpstreamReceiver } from "../../worker-host/upstream/worker-upstream.registry";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorSink,

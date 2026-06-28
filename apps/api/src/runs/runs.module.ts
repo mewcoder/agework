@@ -25,9 +25,8 @@ import { AdminRunController } from "./admin/admin-run.controller";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
-import { WorkerCommandQueue } from "../worker-host/command-queue";
-import { WorkerCommandDispatcher } from "../worker-host/command-dispatcher.service";
-import { WorkerUpstreamRegistry } from "../worker-host/worker-upstream.registry";
+import { WorkerCommandDispatcher } from "../worker-host/commands/command-dispatcher.service";
+import { WorkerUpstreamRegistry } from "../worker-host/upstream/worker-upstream.registry";
 import { ConversationModule } from "../conversations/conversation.module";
 import { ModelProviderModule } from "../model-providers/model-provider.module";
 import { RunEventsModule } from "../run-events/run-events.module";
@@ -73,7 +72,6 @@ export class RunsModule implements OnModuleInit {
     private readonly executionService: ExecutionService,
     private readonly runtimeProviderRegistry: RuntimeProviderRegistry,
     private readonly workerCommands: WorkerCommandDispatcher,
-    private readonly commandQueue: WorkerCommandQueue,
     private readonly workerUpstream: WorkerUpstreamRegistry,
     private readonly liveRuns: LiveRunRegistry,
     private readonly workerEvents: WorkerEventsService
@@ -86,7 +84,7 @@ export class RunsModule implements OnModuleInit {
       .setOwnerSessionCleanup?.((ownerId) =>
         this.workerCommands.cleanupByOwnerId(ownerId)
       );
-    this.commandQueue.setCommandSentRecorder(this.workerEvents);
+    this.workerCommands.setCommandSentRecorder(this.workerEvents);
     this.workerUpstream.setReceiver(this.workerEvents);
     this.liveRuns.setTimeoutErrorSink(this.workerEvents);
     await this.runRecovery.recoverInterruptedRuns();

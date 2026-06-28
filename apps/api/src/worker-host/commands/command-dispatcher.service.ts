@@ -5,9 +5,10 @@ import {
   type CommandPayload,
   type RunConfig,
 } from "@agework/shared/protocol";
-import { WorkerConfigStore } from "./config-store";
-import { WorkerAccessService } from "./access.service";
+import { WorkerConfigStore } from "../config/config-store";
+import { WorkerAccessService } from "../access/access.service";
 import { WorkerCommandQueue } from "./command-queue";
+import type { CommandSentRecorder } from "./command-sent-recorder.port";
 
 /**
  * worker command 下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
@@ -26,6 +27,14 @@ export class WorkerCommandDispatcher {
     private readonly runtimeAccess: WorkerAccessService,
     private readonly commandQueue: WorkerCommandQueue
   ) {}
+
+  /**
+   * 注入命令下发 trace 记录端口（由 run 层在启动时提供实现）。
+   * 经此转发到内部 command queue，使 run 层无需直接依赖内部队列。
+   */
+  setCommandSentRecorder(recorder: CommandSentRecorder): void {
+    this.commandQueue.setCommandSentRecorder(recorder);
+  }
 
   openSession(params: {
     runId: string;

@@ -23,7 +23,7 @@ import { AdminRuntimeController } from "../runtime/admin/admin-runtime.controlle
 import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../users/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-host/command.controller";
-import { WorkerAuthGuard } from "../worker-host/auth.guard";
+import { WorkerAuthGuard } from "../worker-host/guards/auth.guard";
 import { WorkerRunController } from "../worker-host/worker-run.controller";
 import { AdminWorkspaceController } from "../workspaces/admin/admin-workspace.controller";
 import { WorkspaceController } from "../workspaces/workspace.controller";

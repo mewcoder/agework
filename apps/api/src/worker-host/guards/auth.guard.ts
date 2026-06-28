@@ -5,8 +5,8 @@ import {
   Logger,
   UnauthorizedException,
 } from "@nestjs/common";
-import { WorkerAccessService } from "./access.service";
-import { extractBearerToken } from "../common/extract-bearer-token";
+import { WorkerAccessService } from "../access/access.service";
+import { extractBearerToken } from "../../common/extract-bearer-token";
 
 type RequestWithRunId = {
   headers: Record<string, string | string[] | undefined>;

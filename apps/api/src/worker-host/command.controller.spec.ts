@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { WorkerCommandController } from "./command.controller";
-import { WorkerCommandQueue } from "./command-queue";
+import { WorkerCommandQueue } from "./commands/command-queue";
 
 describe("WorkerCommandController", () => {
   describe("pollCommands()", () => {

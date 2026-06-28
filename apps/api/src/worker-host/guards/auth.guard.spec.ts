@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { UnauthorizedException } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
 import { WorkerAuthGuard } from "./auth.guard";
-import type { WorkerAccessService } from "./access.service";
+import type { WorkerAccessService } from "../access/access.service";
 
 function makeGuard(access?: Partial<WorkerAccessService>) {
   const runtimeAccess = {
