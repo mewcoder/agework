@@ -403,7 +403,7 @@ Blocker:
 - 优先用产品、API、数据模型里已经存在的常见名词。新名词必须能回答:用户或代码里是否已经有这个概念?
 - 动词用常见动词,同一模块里同一动作只选一个词,不要 `get/find/fetch` 混用。
 - 角色后缀按真实职责用,如 `service`、`repository`、`controller`、`registry`、`executor`、`validator`。
-- 少用或不用抽象空词 / 架构感词,如 `engine`、`core`、`pipeline`、`processor`、`manager`、`helper`、`utils`、`common`。除非它已经是外部协议 / SDK / 产品术语,否则换成具体领域名 + 具体职责。
+- 少用或不用抽象空词 / 架构感词,如 `engine`、`core`、`pipeline`、`helper`、`utils`、`common`。除非它已经是外部协议 / SDK / 产品术语,否则换成具体领域名 + 具体职责。
 - `apps/api/src/common/` 是后端通用能力的唯一保留位置;不要在 feature module 内新建 `common/`、`utils/` 兜底。
 - 文件名和类名要能互相反推;如果名字只能靠比喻理解,就还没起好。
 

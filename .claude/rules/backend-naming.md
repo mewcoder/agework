@@ -73,7 +73,7 @@
 - `*.service.ts` 留给根 Service、业务 facade,或没有更具体职责名的 Nest provider。
 - `Provider` 是 Nest DI 概念,不是推荐类名后缀。`ModelProvider`、`RuntimeProvider` 这类业务术语可以保留;泛泛表示内部实现层时不要叫 `XxxProvider`。
 - Root Service 下的一层统一叫 internal provider,但具体文件和类名必须表达职责。
-- 避免抽象空词: `helper`、`utils`、`manager`、`processor`、`core`。除非它是外部协议、SDK 或现有产品术语。
+- 避免抽象空词: `helper`、`utils`、`core`。除非它是外部协议、SDK 或现有产品术语。
 
 常用后缀:
 

@@ -376,16 +376,20 @@ global pipe/interceptor/filter、global prefix、shutdown hooks、listen + 启�
 **Decision:** 暂不鼓励给每个 route 单独挂 pipe/filter/interceptor。
 
 **Reason:**
-- 当前全局 pipe/filter/interceptor 已覆盖主要统一行为。
+- 当前全局 pipe/filter/interceptor 已覆盖主要统一行为；实际代码里局部 pipe/filter/interceptor 为 0。
 - 局部挂载会增加阅读成本，只有 file upload、raw stream、特殊错误契约等场景再用。
+- 局部 **guard** 是合理例外，不在此列：`ThrottlerGuard`（auth）、`WorkerAuthGuard`（worker controller）天然按 controller 挂，限流和 worker 鉴权本就是局部边界。
 
 ### 11. 复杂组合 decorator
 
 **Decision:** 暂不引入大型 `applyDecorators()` 组合装饰器。
 
 **Reason:**
-- 当前 `@Public()`、`@Roles()`、`@CurrentUser()` 足够清晰。
-- 如果未来 admin route 需要固定组合，如 `@AdminRoute()`，必须确保不会隐藏权限细节。
+- 重复其实已存在：`@Roles("admin")` 在 6 个 admin controller、`@Public()` + `@UseGuards(WorkerAuthGuard)` 在 2 个 worker controller。所以不引入的理由不是「还没重复」。
+- admin 这 6 处每处只一行 `@Roles("admin")`，合成 `@AdminController()` 省得极少，却会把安全边界标注藏进组合 decorator——本项目刻意让 `@Roles` / `@Public` 保持可见。
+- 且 `common/api-route-convention.spec.ts` 已在护栏层强制每个 admin controller 必须带 `@Roles("admin")`，显式留着比组合更安全。
+- worker 那 2 处够不上抽象阈值。
+- 如果未来真要做 `@AdminRoute()` 这类组合，必须确保不隐藏权限细节，并保留 convention spec 护栏。
 
 ### 12. MiddlewareConsumer 大规模路由配置
 
