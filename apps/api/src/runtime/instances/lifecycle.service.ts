@@ -8,8 +8,8 @@ import { WorkspaceRuntimeInstanceRepository } from "./workspace-runtime-instance
  * - user 删除：关闭该用户名下的所有 user/workspace 隔离资源。
  */
 @Injectable()
-export class RuntimeInstanceLifecycleUseCase {
-  private readonly logger = new Logger(RuntimeInstanceLifecycleUseCase.name);
+export class RuntimeInstanceLifecycleService {
+  private readonly logger = new Logger(RuntimeInstanceLifecycleService.name);
 
   constructor(
     private readonly repository: WorkspaceRuntimeInstanceRepository,

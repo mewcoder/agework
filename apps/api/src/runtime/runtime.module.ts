@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 
 // core
 import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
-import { RuntimeInstanceLifecycleUseCase } from "./instances/lifecycle.use-case";
+import { RuntimeInstanceLifecycleService } from "./instances/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener";
 
 import { DockerSandboxEngine } from "./sandbox/docker-engine";
@@ -41,7 +41,7 @@ import { WorkerHostModule } from "../worker-host/worker-host.module";
   providers: [
     // core
     WorkspaceRuntimeInstanceRepository,
-    RuntimeInstanceLifecycleUseCase,
+    RuntimeInstanceLifecycleService,
     RuntimeInstanceLifecycleListener,
     // providers
     DockerSandboxEngine,

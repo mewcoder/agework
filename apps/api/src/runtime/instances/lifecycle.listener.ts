@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { RuntimeInstanceLifecycleUseCase } from "./lifecycle.use-case";
+import { RuntimeInstanceLifecycleService } from "./lifecycle.service";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -20,7 +20,7 @@ import {
 export class RuntimeInstanceLifecycleListener {
   private readonly logger = new Logger(RuntimeInstanceLifecycleListener.name);
 
-  constructor(private readonly lifecycle: RuntimeInstanceLifecycleUseCase) {}
+  constructor(private readonly lifecycle: RuntimeInstanceLifecycleService) {}
 
   @OnEvent(WORKSPACE_DELETED_EVENT)
   async onWorkspaceDeleted({
