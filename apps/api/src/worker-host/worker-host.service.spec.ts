@@ -2,10 +2,10 @@ import { describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerAccessService } from "./access/access.service";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
-import type { CommandSentRecorder } from "./command/command-sent-recorder.port";
+import type { CommandSentPort } from "./command/command-sent.port";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
-import type { WorkerUpstreamReceiver } from "./worker-host.types";
+import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerHostService } from "./worker-host.service";
 
 /**
@@ -22,14 +22,14 @@ function makeService() {
     postEvent: vi.fn(),
   };
   const upstream = {
-    setReceiver: vi.fn(),
+    setUpstreamPort: vi.fn(),
   };
   const commandDispatcher = {
     openSession: vi.fn(),
     sendCommand: vi.fn(),
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
-    setCommandSentRecorder: vi.fn(),
+    setCommandSentPort: vi.fn(),
   };
   const access = {
     issueOwnerKey: vi.fn(),
@@ -131,27 +131,27 @@ describe("WorkerHostService — facade routing", () => {
     expect(commandDispatcher.cleanupByOwnerId).toHaveBeenCalledWith("owner-1");
   });
 
-  it("routes setCommandSentRecorder to the command dispatcher", () => {
+  it("routes setCommandSentPort to the command dispatcher", () => {
     const { service, commandDispatcher } = makeService();
     const recorder = {
       recordCommandSent: vi.fn(),
-    } as unknown as CommandSentRecorder;
+    } as unknown as CommandSentPort;
 
-    service.setCommandSentRecorder(recorder);
+    service.setCommandSentPort(recorder);
 
-    expect(commandDispatcher.setCommandSentRecorder).toHaveBeenCalledWith(
+    expect(commandDispatcher.setCommandSentPort).toHaveBeenCalledWith(
       recorder
     );
   });
 
-  it("routes setReceiver to the upstream registry", () => {
+  it("routes setUpstreamPort to the upstream registry", () => {
     const { service, upstream } = makeService();
     const receiver = {
       sendEvent: vi.fn(),
-    } as unknown as WorkerUpstreamReceiver;
+    } as unknown as WorkerUpstreamPort;
 
-    service.setReceiver(receiver);
+    service.setUpstreamPort(receiver);
 
-    expect(upstream.setReceiver).toHaveBeenCalledWith(receiver);
+    expect(upstream.setUpstreamPort).toHaveBeenCalledWith(receiver);
   });
 });

@@ -245,8 +245,10 @@ type PaginatedListResponse<T> = {
 - `GET /api/v1/admin/workspaces/all` -> `GET /api/v1/admin/workspaces/list`
 - ~~`GET /api/v1/admin/runs/events` -> `GET /api/v1/admin/runs/events/list`~~（已完成 2026-06-28，前后端同步改、无兼容旧端点）
 - `GET /api/v1/admin/runtime/resources` -> `GET /api/v1/admin/runtime/resources/list`
-- 反向契约改名:`WorkerUpstreamReceiver` / `RunEventReceiver` / `*Sink` / `*Recorder` -> `*Port`(随反向依赖整改一并收敛)
-- `RunConversationPort` 是历史 broad port debt:方法数超出新规则,普通改动不继续加方法;后续随 agent-run 用例 owner 上提或 run/conversation 边界收敛拆解。
+- 反向契约改名:跨模块反向契约 -> `*Port`;通信层(controller / protocol / DTO)不叫 Port。
+  - ~~`WorkerUpstreamReceiver` -> `WorkerUpstreamPort`、`CommandSentRecorder` -> `CommandSentPort`(setter 同步改 `setUpstreamPort` / `setCommandSentPort`,文件 `command-sent.port.ts`)~~(已完成 2026-06-29)。
+  - 待做:run 模块内部反向契约 `RunEventReceiver` / `RunTimeoutErrorSink` -> `*Port`(intra-module,非跨模块,优先级低,随触碰再收敛)。
+- ~~`RunConversationPort` 历史 broad port debt~~(已删除 2026-06-29:conversation 是平级业务域,应 flip 而非 Port;run 现正向直调 ConversationService,见 [架构 §2.2 决策链])。
 
 迁移时优先后端和前端 API client 同步改;如果需要兼容旧调用,短期保留旧 endpoint 并在代码注释中标明移除条件。
 

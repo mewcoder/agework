@@ -67,11 +67,11 @@ describe("RunModule wiring", () => {
       "setRunEventReceiver"
     );
     const workerHost = testingModule.get(WorkerHostService);
-    const setCommandSentRecorder = vi.spyOn(
+    const setCommandSentPort = vi.spyOn(
       workerHost,
-      "setCommandSentRecorder"
+      "setCommandSentPort"
     );
-    const setReceiver = vi.spyOn(workerHost, "setReceiver");
+    const setUpstreamPort = vi.spyOn(workerHost, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorSink = vi.spyOn(liveRuns, "setTimeoutErrorSink");
     const runtimeProviderRegistry = testingModule.get(RuntimeProviderRegistry);
@@ -85,8 +85,8 @@ describe("RunModule wiring", () => {
 
     const workerEvents = testingModule.get(WorkerEventService);
     expect(setRunEventReceiver).toHaveBeenCalledWith(workerEvents);
-    expect(setCommandSentRecorder).toHaveBeenCalledWith(workerEvents);
-    expect(setReceiver).toHaveBeenCalledWith(workerEvents);
+    expect(setCommandSentPort).toHaveBeenCalledWith(workerEvents);
+    expect(setUpstreamPort).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorSink).toHaveBeenCalledWith(workerEvents);
     expect(setOwnerSessionCleanup).toHaveBeenCalledWith(expect.any(Function));
     // run 自身在 onApplicationBootstrap 触发一次性重启恢复（不再依赖反向端口接线）

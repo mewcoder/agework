@@ -20,8 +20,8 @@ export class RunStartupService implements OnModuleInit {
     this.runtimeService.setSandboxOwnerSessionCleanup((ownerId) =>
       this.workerHost.cleanupByOwnerId(ownerId)
     );
-    this.workerHost.setCommandSentRecorder(this.workerEvents);
-    this.workerHost.setReceiver(this.workerEvents);
+    this.workerHost.setCommandSentPort(this.workerEvents);
+    this.workerHost.setUpstreamPort(this.workerEvents);
     this.liveRuns.setTimeoutErrorSink(this.workerEvents);
   }
 }

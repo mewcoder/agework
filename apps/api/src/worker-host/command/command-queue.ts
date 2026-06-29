@@ -3,7 +3,7 @@ import type {
   RunChannelMessage,
   CommandPayload,
 } from "@agework/shared/protocol";
-import type { CommandSentRecorder } from "./command-sent-recorder.port";
+import type { CommandSentPort } from "./command-sent.port";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 type OwnerWaiter = {
@@ -30,9 +30,9 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     RunChannelMessage<CommandPayload>[]
   >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
-  private recorder!: CommandSentRecorder;
+  private recorder!: CommandSentPort;
 
-  setCommandSentRecorder(recorder: CommandSentRecorder): void {
+  setCommandSentPort(recorder: CommandSentPort): void {
     this.recorder = recorder;
   }
 

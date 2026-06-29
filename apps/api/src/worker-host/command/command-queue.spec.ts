@@ -10,7 +10,7 @@ describe("WorkerCommandQueue", () => {
 
   beforeEach(() => {
     queue = new WorkerCommandQueue();
-    queue.setCommandSentRecorder({
+    queue.setCommandSentPort({
       recordCommandSent: vi.fn().mockResolvedValue(undefined),
     });
   });

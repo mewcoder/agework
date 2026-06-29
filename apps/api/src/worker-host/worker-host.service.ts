@@ -5,11 +5,11 @@ import type {
   WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
 import { WorkerAccessService } from "./access/access.service";
-import type { CommandSentRecorder } from "./command/command-sent-recorder.port";
+import type { CommandSentPort } from "./command/command-sent.port";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
-import type { WorkerUpstreamReceiver } from "./worker-host.types";
+import type { WorkerUpstreamPort } from "./worker-host.types";
 
 @Injectable()
 export class WorkerHostService {
@@ -60,11 +60,11 @@ export class WorkerHostService {
     this.commandDispatcher.cleanupByOwnerId(ownerId);
   }
 
-  setCommandSentRecorder(recorder: CommandSentRecorder): void {
-    this.commandDispatcher.setCommandSentRecorder(recorder);
+  setCommandSentPort(recorder: CommandSentPort): void {
+    this.commandDispatcher.setCommandSentPort(recorder);
   }
 
-  setReceiver(receiver: WorkerUpstreamReceiver): void {
-    this.upstream.setReceiver(receiver);
+  setUpstreamPort(receiver: WorkerUpstreamPort): void {
+    this.upstream.setUpstreamPort(receiver);
   }
 }

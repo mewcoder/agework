@@ -8,7 +8,7 @@ import type {
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import type { RunEventReceiver } from "../execution/executor";
-import type { WorkerUpstreamReceiver } from "../../worker-host/worker-host.types";
+import type { WorkerUpstreamPort } from "../../worker-host/worker-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorSink,
@@ -30,7 +30,7 @@ const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class WorkerEventService
-  implements RunEventReceiver, WorkerUpstreamReceiver, RunTimeoutErrorSink
+  implements RunEventReceiver, WorkerUpstreamPort, RunTimeoutErrorSink
 {
   private readonly logger = new Logger(WorkerEventService.name);
   private readonly lastSeqMap = new Map<string, number>();

@@ -33,7 +33,7 @@ import { ConversationModule } from "../conversation/conversation.module";
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。单向依赖 runtime / worker-host，
  * 并在启动时把 worker 事件统一入口注入 run executor；
- * WorkerUpstreamReceiver → worker-host 的 WorkerRunController。
+ * WorkerUpstreamPort → worker-host 的 WorkerRunController。
  */
 @Module({
   imports: [RuntimeModule, WorkerHostModule, RunEventModule, ConversationModule],
