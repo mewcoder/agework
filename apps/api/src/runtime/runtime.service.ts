@@ -15,7 +15,6 @@ import {
   type RuntimeTargetDefaults,
 } from "./placement/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
-import type { RuntimeOwnerSessionCleanup } from "./providers/provider-contracts";
 import {
   SandboxWorkerExecutor,
   type SandboxWorkerEventSink,
@@ -70,14 +69,6 @@ export class RuntimeService {
     return resolveRuntimeTarget(input, this.defaults);
   }
 
-  /**
-   * 注册 sandbox runtime owner 会话清理回调：runtime owner 资源释放时，
-   * 上层（worker-host）据此清理该 owner 的 worker command session。
-   * 由 run 启动期一次性接线；run 层经此门面接入，不直接持有 provider registry。
-   */
-  setSandboxOwnerSessionCleanup(cleanup: RuntimeOwnerSessionCleanup): void {
-    this.providerRegistry.resolve("sandbox").setOwnerSessionCleanup?.(cleanup);
-  }
 
   // ── sandbox per-run 执行门面 ──────────────────────────────────────────
   // run 层的 SandboxRunExecutor 只经下列方法驱动 sandbox 执行，不直接持有

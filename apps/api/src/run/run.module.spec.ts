@@ -6,7 +6,6 @@ import { ConfigService } from "../config/config.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeProviderRegistry } from "../runtime/providers/provider-registry";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import {
@@ -74,13 +73,6 @@ describe("RunModule wiring", () => {
     const setUpstreamPort = vi.spyOn(workerHost, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorSink = vi.spyOn(liveRuns, "setTimeoutErrorSink");
-    const runtimeProviderRegistry = testingModule.get(RuntimeProviderRegistry);
-    const sandboxProvider = runtimeProviderRegistry.resolve("sandbox");
-    const setOwnerSessionCleanup = vi.spyOn(
-      sandboxProvider,
-      "setOwnerSessionCleanup"
-    );
-
     await testingModule.init();
 
     const workerEvents = testingModule.get(WorkerEventService);
@@ -88,7 +80,6 @@ describe("RunModule wiring", () => {
     expect(setCommandSentPort).toHaveBeenCalledWith(workerEvents);
     expect(setUpstreamPort).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorSink).toHaveBeenCalledWith(workerEvents);
-    expect(setOwnerSessionCleanup).toHaveBeenCalledWith(expect.any(Function));
     // run 自身在 onApplicationBootstrap 触发一次性重启恢复（不再依赖反向端口接线）
     expect(runRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
   });

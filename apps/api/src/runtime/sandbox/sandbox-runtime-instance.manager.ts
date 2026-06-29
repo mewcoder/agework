@@ -1,26 +1,20 @@
 import { Injectable } from "@nestjs/common";
-import type {
-  RuntimeInstanceManager,
-  RuntimeOwnerSessionCleanup,
-} from "../providers/provider-contracts";
+import type { RuntimeInstanceManager } from "../providers/provider-contracts";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { SandboxRuntimeInstanceService } from "./sandbox-instance.service";
 
 @Injectable()
 export class SandboxRuntimeInstanceManager implements RuntimeInstanceManager {
   readonly type = "sandbox" as const;
-  private cleanupOwnerSession: RuntimeOwnerSessionCleanup = () => undefined;
 
   constructor(
-    private readonly runtimeInstances: SandboxRuntimeInstanceService
+    private readonly runtimeInstances: SandboxRuntimeInstanceService,
+    private readonly workerHost: WorkerHostService
   ) {}
-
-  setOwnerSessionCleanup(cleanup: RuntimeOwnerSessionCleanup): void {
-    this.cleanupOwnerSession = cleanup;
-  }
 
   shutdownRuntimeInstance(ownerId: string): void {
     this.runtimeInstances.shutdownRuntimeInstance(ownerId, {
-      cleanupByOwnerId: this.cleanupOwnerSession,
+      cleanupByOwnerId: (id) => this.workerHost.cleanupByOwnerId(id),
     });
   }
 
