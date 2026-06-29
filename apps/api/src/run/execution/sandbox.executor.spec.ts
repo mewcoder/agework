@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SandboxRunExecutor } from "./sandbox.executor";
 import { RuntimeService } from "../../runtime/runtime.service";
+import type { RunEventPort } from "./executor";
 import type {
   CommandPayload,
   WorkerExecutionHandle,
@@ -8,8 +9,9 @@ import type {
 } from "@agework/shared/protocol";
 
 /**
- * 适配器只负责把 RunExecutor 契约薄转发到 RuntimeService 门面；
- * sandbox 执行编排本身的行为测试在 runtime/sandbox/sandbox-worker.executor.spec.ts。
+ * 适配器把 RunExecutor 契约薄转发到 RuntimeService 门面；sandbox 执行编排本身的
+ * 行为测试在 runtime/sandbox/sandbox-worker.executor.spec.ts。本类额外负责命令下发的
+ * command.sent trace（run 侧记录）与首个 user_message 的显式下发。
  */
 describe("SandboxRunExecutor — delegates to RuntimeService", () => {
   let runtimeService: {
@@ -21,6 +23,7 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
     cleanupSandboxRun: ReturnType<typeof vi.fn>;
     recoverSandboxOrphan: ReturnType<typeof vi.fn>;
   };
+  let receiver: { recordCommandSent: ReturnType<typeof vi.fn> };
   let executor: SandboxRunExecutor;
 
   const handle = {
@@ -34,13 +37,17 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
     runtimeService = {
       setSandboxWorkerEventPort: vi.fn(),
       startSandboxWorker: vi.fn().mockReturnValue(handle),
-      sendSandboxCommand: vi.fn(),
+      sendSandboxCommand: vi.fn().mockReturnValue(true),
       cancelSandboxRun: vi.fn(),
       terminateSandboxRun: vi.fn(),
       cleanupSandboxRun: vi.fn(),
       recoverSandboxOrphan: vi.fn().mockResolvedValue(undefined),
     };
-    executor = new SandboxRunExecutor(runtimeService as unknown as RuntimeService);
+    receiver = { recordCommandSent: vi.fn().mockResolvedValue(undefined) };
+    executor = new SandboxRunExecutor(
+      runtimeService as unknown as RuntimeService
+    );
+    executor.setRunEventPort(receiver as unknown as RunEventPort);
   });
 
   it("declares the sandbox runtime type", () => {
@@ -48,32 +55,98 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
   });
 
   it("forwards the run event receiver as the sandbox worker event sink", () => {
-    const receiver = { notifyWorkerError: vi.fn() } as never;
-    executor.setRunEventPort(receiver);
     expect(runtimeService.setSandboxWorkerEventPort).toHaveBeenCalledWith(
       receiver
     );
   });
 
-  it("forwards start and returns the runtime handle", () => {
-    const input = { runConfig: {}, runtimeTarget: {} } as WorkerExecutionStartInput;
+  it("starts the runtime then dispatches the first user_message", () => {
+    const input = {
+      runConfig: {},
+      runtimeTarget: {},
+    } as WorkerExecutionStartInput;
+
     expect(executor.start(input)).toBe(handle);
     expect(runtimeService.startSandboxWorker).toHaveBeenCalledWith(input);
+    expect(runtimeService.sendSandboxCommand).toHaveBeenCalledWith(
+      handle,
+      expect.objectContaining({ type: "user_message", runId: "run-1" })
+    );
+    expect(receiver.recordCommandSent).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", commandType: "user_message" })
+    );
   });
 
-  it("forwards command, cancel, terminate, cleanup and orphan recovery", async () => {
-    const command = { type: "cancel" } as CommandPayload;
+  it("records a command.sent trace when dispatching a command", () => {
+    const command = {
+      type: "approval_resolved",
+      commandId: "cmd-1",
+      conversationId: "conversation-1",
+    } as unknown as CommandPayload;
+
     executor.sendCommand(handle, command);
-    executor.cancel(handle);
-    executor.terminateExecution("run-1", "shutdown");
-    executor.cleanup("run-1");
-    await executor.cleanupInterruptedExecution("container-1");
 
     expect(runtimeService.sendSandboxCommand).toHaveBeenCalledWith(
       handle,
       command
     );
+    expect(receiver.recordCommandSent).toHaveBeenCalledWith({
+      runId: "run-1",
+      commandId: "cmd-1",
+      commandType: "approval_resolved",
+    });
+  });
+
+  it("does not record a command.sent trace when the command is dropped", () => {
+    runtimeService.sendSandboxCommand.mockReturnValueOnce(false);
+    const command = {
+      type: "approval_resolved",
+      commandId: "cmd-1",
+      conversationId: "conversation-1",
+    } as unknown as CommandPayload;
+
+    executor.sendCommand(handle, command);
+
+    expect(runtimeService.sendSandboxCommand).toHaveBeenCalledWith(
+      handle,
+      command
+    );
+    expect(receiver.recordCommandSent).not.toHaveBeenCalled();
+  });
+
+  it("records a command.sent trace for a cancel only when one was dispatched", () => {
+    const cancelCommand = {
+      type: "cancel",
+      commandId: "cancel-1",
+      runId: "run-1",
+      conversationId: "conversation-1",
+    } as CommandPayload;
+    runtimeService.cancelSandboxRun.mockReturnValueOnce(cancelCommand);
+
+    executor.cancel(handle);
+
     expect(runtimeService.cancelSandboxRun).toHaveBeenCalledWith(handle);
+    expect(receiver.recordCommandSent).toHaveBeenCalledWith({
+      runId: "run-1",
+      commandId: "cancel-1",
+      commandType: "cancel",
+    });
+  });
+
+  it("does not record a cancel trace when cancelled before ready", () => {
+    runtimeService.cancelSandboxRun.mockReturnValueOnce(undefined);
+
+    executor.cancel(handle);
+
+    expect(runtimeService.cancelSandboxRun).toHaveBeenCalledWith(handle);
+    expect(receiver.recordCommandSent).not.toHaveBeenCalled();
+  });
+
+  it("forwards terminate, cleanup and orphan recovery", async () => {
+    executor.terminateExecution("run-1", "shutdown");
+    executor.cleanup("run-1");
+    await executor.cleanupInterruptedExecution("container-1");
+
     expect(runtimeService.terminateSandboxRun).toHaveBeenCalledWith(
       "run-1",
       "shutdown"

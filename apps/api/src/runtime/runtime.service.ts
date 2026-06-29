@@ -84,17 +84,21 @@ export class RuntimeService {
     return this.sandboxWorker.start(input);
   }
 
-  /** 向 sandbox run 下发命令。 */
+  /** 向 sandbox run 下发命令；返回是否真的入队（drop 时 false），供 run 侧据此记 trace。 */
   sendSandboxCommand(
     handle: WorkerExecutionHandle,
     command: CommandPayload
-  ): void {
-    this.sandboxWorker.sendCommand(handle, command);
+  ): boolean {
+    return this.sandboxWorker.sendCommand(handle, command);
   }
 
-  /** 取消 sandbox run（不停止可复用的 runtime 实例）。 */
-  cancelSandboxRun(handle: WorkerExecutionHandle): void {
-    this.sandboxWorker.cancel(handle);
+  /**
+   * 取消 sandbox run（不停止可复用的 runtime 实例）。
+   * 返回实际下发的 cancel 命令供 run 侧记 command.sent trace；
+   * 实例 ready 前到达的取消不下发命令，返回 undefined。
+   */
+  cancelSandboxRun(handle: WorkerExecutionHandle): CommandPayload | undefined {
+    return this.sandboxWorker.cancel(handle);
   }
 
   /** 强制终止 sandbox run 执行会话。 */

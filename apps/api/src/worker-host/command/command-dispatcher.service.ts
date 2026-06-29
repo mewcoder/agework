@@ -1,5 +1,4 @@
 import { Injectable } from "@nestjs/common";
-import { generateId } from "@agework/shared";
 import {
   nextCommandMessage,
   type CommandPayload,
@@ -8,7 +7,6 @@ import {
 import { WorkerConfigStore } from "../config/config-store";
 import { WorkerAccessService } from "../access/access.service";
 import { WorkerCommandQueue } from "./command-queue";
-import type { CommandSentPort } from "./command-sent.port";
 
 /**
  * worker command 下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
@@ -29,13 +27,10 @@ export class WorkerCommandDispatcher {
   ) {}
 
   /**
-   * 注入命令下发 trace 记录端口（由 run 层在启动时提供实现）。
-   * 经此转发到内部 command queue，使 run 层无需直接依赖内部队列。
+   * 打开一次 run 的会话：登记 runConfig 与 access key。
+   * 首个 user_message 由 run 侧 SandboxRunExecutor 在 start 后显式下发，
+   * worker-host 不再代为生成命令，因此也不需要知道 run-event。
    */
-  setCommandSentPort(recorder: CommandSentPort): void {
-    this.commandQueue.setCommandSentPort(recorder);
-  }
-
   openSession(params: {
     runId: string;
     ownerId: string;
@@ -44,16 +39,6 @@ export class WorkerCommandDispatcher {
   }): void {
     this.runConfigStore.register(params.runId, params.runConfig);
     this.runtimeAccess.registerRun(params.runId, params.accessKey);
-
-    if (!this.commandSeqs.has(params.ownerId)) {
-      this.commandSeqs.set(params.ownerId, 0);
-    }
-
-    this.sendCommand(params.ownerId, params.runId, {
-      type: "user_message",
-      commandId: generateId(),
-      runId: params.runId,
-    });
   }
 
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {

@@ -15,7 +15,6 @@ export class RunStartupService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     this.executionService.setRunEventPort(this.workerEvents);
-    this.workerHost.setCommandSentPort(this.workerEvents);
     this.workerHost.setUpstreamPort(this.workerEvents);
     this.liveRuns.setTimeoutErrorPort(this.workerEvents);
   }

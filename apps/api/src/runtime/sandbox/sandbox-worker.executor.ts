@@ -93,7 +93,8 @@ export class SandboxWorkerExecutor {
     return handle;
   }
 
-  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
+  /** 下发命令；返回是否真的入队（无 run state 时 drop 并返回 false，供 run 侧据此决定是否记 trace）。 */
+  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): boolean {
     const state = this.states.get(handle.runId);
     if (!state) {
       this.logger.warn(
@@ -103,12 +104,18 @@ export class SandboxWorkerExecutor {
           reason: "no_owner",
         })}`
       );
-      return;
+      return false;
     }
     this.workerHost.sendCommand(state.ownerId, handle.runId, command);
+    return true;
   }
 
-  cancel(handle: WorkerExecutionHandle): void {
+  /**
+   * 取消执行；返回实际下发的 cancel 命令供 run 侧记一条 command.sent trace。
+   * runtime 实例 ready 之前到达的取消不下发命令（标记 cancelledBeforeReady，
+   * 由 markRuntimeReady 转 cancelled 终态），返回 undefined。
+   */
+  cancel(handle: WorkerExecutionHandle): CommandPayload | undefined {
     const state = this.states.get(handle.runId);
     const ownerState = state
       ? this.runtimeInstances.getOwnerState(state.ownerId)
@@ -121,14 +128,16 @@ export class SandboxWorkerExecutor {
           ownerId: state?.ownerId,
         })}`
       );
-      return;
+      return undefined;
     }
-    this.sendCommand(handle, {
+    const command: CommandPayload = {
       type: "cancel",
       commandId: generateId(),
       runId: handle.runId,
       conversationId: handle.conversationId,
-    });
+    };
+    this.sendCommand(handle, command);
+    return command;
   }
 
   cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {

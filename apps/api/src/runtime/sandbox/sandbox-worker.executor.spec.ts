@@ -292,6 +292,42 @@ describe("SandboxWorkerExecutor — workspace scope", () => {
     expect(workerHost.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
   });
 
+  it("sendCommand enqueues for an active run and reports true", async () => {
+    const { provider, workerHost } = makeProvider();
+    const handle = startProvider(provider);
+    await vi.runOnlyPendingTimersAsync();
+
+    const sent = provider.sendCommand(handle, {
+      type: "user_message",
+      commandId: "cmd-1",
+      runId: "run-1",
+    });
+
+    expect(sent).toBe(true);
+    expect(workerHost.sendCommand).toHaveBeenCalledWith(
+      "ws-1",
+      "run-1",
+      expect.objectContaining({ type: "user_message" })
+    );
+  });
+
+  it("sendCommand drops and reports false when the run has no state", () => {
+    const { provider, workerHost } = makeProvider();
+
+    const sent = provider.sendCommand(
+      {
+        runId: "run-unknown",
+        runtimeType: "sandbox",
+        runtimeInstanceId: "",
+        conversationId: "conversation-1",
+      } as never,
+      { type: "user_message", commandId: "cmd-1", runId: "run-unknown" }
+    );
+
+    expect(sent).toBe(false);
+    expect(workerHost.sendCommand).not.toHaveBeenCalled();
+  });
+
   it("cancel does not stop the sandbox", async () => {
     const { provider, engine } = makeProvider();
     const handle = startProvider(provider);

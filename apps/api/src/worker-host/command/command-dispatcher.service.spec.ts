@@ -31,7 +31,7 @@ function makeService() {
 }
 
 describe("WorkerCommandDispatcher", () => {
-  it("opens a session: stores config, binds access, enqueues first user_message", () => {
+  it("opens a session: stores config and binds access without enqueuing a command", () => {
     const { service, configStore, access, commandQueue } = makeService();
 
     service.openSession({
@@ -43,27 +43,17 @@ describe("WorkerCommandDispatcher", () => {
 
     expect(configStore.register).toHaveBeenCalledWith("run-1", makeRunConfig());
     expect(access.registerRun).toHaveBeenCalledWith("run-1", "owner-key");
-    expect(commandQueue.pushByOwnerId).toHaveBeenCalledWith(
-      "owner-1",
-      expect.objectContaining({
-        runId: "run-1",
-        seq: 1,
-        payload: expect.objectContaining({
-          type: "user_message",
-          runId: "run-1",
-        }),
-      })
-    );
+    // 首个 user_message 由 run 侧 SandboxRunExecutor 显式下发，openSession 不再代发。
+    expect(commandQueue.pushByOwnerId).not.toHaveBeenCalled();
   });
 
   it("increments command sequence per owner", () => {
     const { service, commandQueue } = makeService();
 
-    service.openSession({
+    service.sendCommand("owner-1", "run-1", {
+      type: "user_message",
+      commandId: "command-1",
       runId: "run-1",
-      ownerId: "owner-1",
-      accessKey: "owner-key",
-      runConfig: makeRunConfig(),
     });
     service.sendCommand("owner-1", "run-1", {
       type: "cancel",
@@ -72,6 +62,11 @@ describe("WorkerCommandDispatcher", () => {
       conversationId: "conversation-1",
     });
 
+    expect(commandQueue.pushByOwnerId).toHaveBeenNthCalledWith(
+      1,
+      "owner-1",
+      expect.objectContaining({ runId: "run-1", seq: 1 })
+    );
     expect(commandQueue.pushByOwnerId).toHaveBeenNthCalledWith(
       2,
       "owner-1",

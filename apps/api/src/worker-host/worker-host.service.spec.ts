@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerAccessService } from "./access/access.service";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
-import type { CommandSentPort } from "./command/command-sent.port";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
@@ -29,7 +28,6 @@ function makeService() {
     sendCommand: vi.fn(),
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
-    setCommandSentPort: vi.fn(),
   };
   const access = {
     issueOwnerKey: vi.fn(),
@@ -129,19 +127,6 @@ describe("WorkerHostService — facade routing", () => {
     service.cleanupByOwnerId("owner-1");
 
     expect(commandDispatcher.cleanupByOwnerId).toHaveBeenCalledWith("owner-1");
-  });
-
-  it("routes setCommandSentPort to the command dispatcher", () => {
-    const { service, commandDispatcher } = makeService();
-    const recorder = {
-      recordCommandSent: vi.fn(),
-    } as unknown as CommandSentPort;
-
-    service.setCommandSentPort(recorder);
-
-    expect(commandDispatcher.setCommandSentPort).toHaveBeenCalledWith(
-      recorder
-    );
   });
 
   it("routes setUpstreamPort to the upstream registry", () => {

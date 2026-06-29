@@ -3,8 +3,7 @@ import type {
   RunChannelMessage,
   CommandPayload,
 } from "@agework/shared/protocol";
-import type { CommandSentPort } from "./command-sent.port";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { safeLogJson } from "../../common/logging";
 
 type OwnerWaiter = {
   afterSeq: number;
@@ -30,11 +29,6 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     RunChannelMessage<CommandPayload>[]
   >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
-  private recorder!: CommandSentPort;
-
-  setCommandSentPort(recorder: CommandSentPort): void {
-    this.recorder = recorder;
-  }
 
   /** 按 ownerId 推送命令（持久容器场景）。 */
   pushByOwnerId(
@@ -48,7 +42,6 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     }
     queue.push(message);
     this.resolveOwnerWaiters(ownerId);
-    this.recordEnqueued(message.runId, message);
     this.logger.debug(
       `push owner command ${safeLogJson({
         ownerId,
@@ -108,30 +101,6 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
       );
     }
     return result;
-  }
-
-  /** command 入队即记一条 sent trace，commandId 供 worker 上行的 received/handled/failed 回连。 */
-  private recordEnqueued(
-    runId: string,
-    message: RunChannelMessage<CommandPayload>
-  ): void {
-    if (!runId) return;
-    const payload = message.payload;
-    this.recorder
-      .recordCommandSent({
-        runId,
-        commandId: payload.commandId,
-        commandType: payload.type,
-      })
-      .catch((err) =>
-        this.logger.warn(
-          `record command sent failed ${safeLogJson({
-            runId,
-            commandType: payload.type,
-            ...errorLogFields(err),
-          })}`
-        )
-      );
   }
 
   /**

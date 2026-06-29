@@ -5,7 +5,6 @@ import type {
   WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
 import { WorkerAccessService } from "./access/access.service";
-import type { CommandSentPort } from "./command/command-sent.port";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
@@ -58,10 +57,6 @@ export class WorkerHostService {
 
   cleanupByOwnerId(ownerId: string): void {
     this.commandDispatcher.cleanupByOwnerId(ownerId);
-  }
-
-  setCommandSentPort(recorder: CommandSentPort): void {
-    this.commandDispatcher.setCommandSentPort(recorder);
   }
 
   setUpstreamPort(receiver: WorkerUpstreamPort): void {
