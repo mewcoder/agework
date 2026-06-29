@@ -8,6 +8,7 @@ import { generateId } from "@agework/shared";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
 import type { WorkspaceRunContext } from "./workspace.types";
+import { ConversationService } from "../conversation/conversation.service";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -37,6 +38,7 @@ type CreateWorkspaceInput = {
 export class WorkspaceService {
   constructor(
     private readonly repo: WorkspaceRepository,
+    private readonly conversations: ConversationService,
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler
@@ -209,7 +211,9 @@ export class WorkspaceService {
     const workspace = await this.repo.findOwnedId(userId, id);
     if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
 
-    await this.repo.softDeleteCascade(id);
+    const deletedAt = new Date();
+    await this.repo.softDelete(id, deletedAt);
+    await this.conversations.softDeleteByWorkspace(id, deletedAt);
 
     this.events.emit(WORKSPACE_DELETED_EVENT, new WorkspaceDeletedEvent(id));
   }

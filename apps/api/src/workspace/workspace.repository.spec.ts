@@ -9,19 +9,17 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-// $transaction 支持两种形态：回调式（create/update）与数组式（softDelete）。
+// $transaction 支持 create/update 使用的回调式事务。
 function makePrisma(parts: {
   workspace?: Record<string, unknown>;
   workspaceDirectory?: Record<string, unknown>;
   run?: Record<string, unknown>;
-  conversation?: Record<string, unknown>;
   user?: Record<string, unknown>;
 }) {
   const client = {
     workspace: parts.workspace ?? {},
     workspaceDirectory: parts.workspaceDirectory ?? {},
     run: parts.run ?? {},
-    conversation: parts.conversation ?? {},
     user: parts.user ?? {},
     $transaction: vi.fn((arg: unknown) =>
       typeof arg === "function"
@@ -134,28 +132,20 @@ describe("WorkspaceRepository", () => {
     });
   });
 
-  it("softDeleteCascade soft-deletes the workspace and its conversations", async () => {
-    const update = vi.fn().mockReturnValue("ws-update");
-    const updateMany = vi.fn().mockReturnValue("conv-update");
+  it("softDelete only soft-deletes the workspace boundary", async () => {
+    const update = vi.fn().mockResolvedValue({ id: "ws-1" });
     const prisma = makePrisma({
       workspace: { update },
-      conversation: { updateMany },
     });
     const repo = new WorkspaceRepository(prisma as never);
+    const deletedAt = new Date("2026-06-29T10:00:00.000Z");
 
-    await repo.softDeleteCascade("ws-1");
+    await repo.softDelete("ws-1", deletedAt);
 
-    expect(update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "ws-1" } })
-    );
-    expect(updateMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { workspaceId: "ws-1", deletedAt: null },
-      })
-    );
-    expect(prisma.$transaction).toHaveBeenCalledWith([
-      "ws-update",
-      "conv-update",
-    ]);
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "ws-1" },
+      data: { deletedAt },
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 });

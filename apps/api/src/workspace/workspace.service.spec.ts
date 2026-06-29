@@ -14,6 +14,7 @@ vi.mock("@agework/shared", async (importOriginal) => ({
 import { join, resolve } from "path";
 import { WorkspaceService } from "./workspace.service";
 import type { WorkspaceCreateInput } from "./workspace.repository";
+import type { ConversationService } from "../conversation/conversation.service";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
 import {
@@ -64,11 +65,18 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateById: vi.fn().mockResolvedValue(null),
     findOwnedId: vi.fn().mockResolvedValue(null),
     findRunView: vi.fn().mockResolvedValue(null),
-    softDeleteCascade: vi.fn().mockResolvedValue(undefined),
+    softDelete: vi.fn().mockResolvedValue(undefined),
     findDirectoryByRootPath: vi.fn().mockResolvedValue(null),
     findUsername: vi.fn().mockResolvedValue("admin-1"),
     ...overrides,
   };
+}
+
+function makeConversationService(overrides: Record<string, unknown> = {}) {
+  return {
+    softDeleteByWorkspace: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  } as unknown as ConversationService;
 }
 
 function makeConfig(overrides: Record<string, unknown> = {}) {
@@ -98,6 +106,7 @@ function makeService(
   );
   return new WorkspaceService(
     repo as never,
+    makeConversationService(),
     { emit: vi.fn() } as never,
     runtimePolicy,
     directoryHandler
@@ -359,10 +368,12 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
       });
+      const conversations = makeConversationService();
       const config = makeConfig();
       const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
       const service = new WorkspaceService(
         repo as never,
+        conversations,
         { emit } as never,
         runtimePolicy,
         new WorkspaceDirectoryHandler(
@@ -374,7 +385,14 @@ describe("WorkspaceService", () => {
 
       await service.delete(userId, workspaceId);
 
-      expect(repo.softDeleteCascade).toHaveBeenCalledWith(workspaceId);
+      expect(repo.softDelete).toHaveBeenCalledWith(
+        workspaceId,
+        expect.any(Date)
+      );
+      expect(conversations.softDeleteByWorkspace).toHaveBeenCalledWith(
+        workspaceId,
+        expect.any(Date)
+      );
       expect(emit).toHaveBeenCalledWith(
         WORKSPACE_DELETED_EVENT,
         new WorkspaceDeletedEvent(workspaceId)
@@ -450,7 +468,7 @@ describe("WorkspaceService", () => {
         "Workspace ws-x not found"
       );
       expect(repo.findOwnedId).toHaveBeenCalledWith("intruder", "ws-x");
-      expect(repo.softDeleteCascade).not.toHaveBeenCalled();
+      expect(repo.softDelete).not.toHaveBeenCalled();
     });
 
     it("update 404s and never mutates a workspace the caller does not own", async () => {

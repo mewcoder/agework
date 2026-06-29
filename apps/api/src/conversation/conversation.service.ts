@@ -418,6 +418,14 @@ export class ConversationService {
     await this.repo.softDeleteOwned(userId, conversationId);
   }
 
+  /**
+   * Workspace 删除后的会话级联软删入口。由 WorkspaceService 编排调用，
+   * conversation 自己持有 conversation/message 持久化边界。
+   */
+  async softDeleteByWorkspace(workspaceId: string, deletedAt = new Date()) {
+    await this.repo.softDeleteByWorkspace(workspaceId, deletedAt);
+  }
+
   async clearArchived(userId: string) {
     await this.repo.clearArchivedOwned(userId);
   }

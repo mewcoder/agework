@@ -151,15 +151,8 @@ export class WorkspaceRepository {
     });
   }
 
-  async softDeleteCascade(id: string): Promise<void> {
-    const deletedAt = new Date();
-    await this.prisma.$transaction([
-      this.prisma.workspace.update({ where: { id }, data: { deletedAt } }),
-      this.prisma.conversation.updateMany({
-        where: { workspaceId: id, deletedAt: null },
-        data: { deletedAt },
-      }),
-    ]);
+  async softDelete(id: string, deletedAt: Date): Promise<void> {
+    await this.prisma.workspace.update({ where: { id }, data: { deletedAt } });
   }
 
   findDirectoryByRootPath(

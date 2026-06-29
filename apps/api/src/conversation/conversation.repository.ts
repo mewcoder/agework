@@ -216,6 +216,13 @@ export class ConversationRepository {
     });
   }
 
+  async softDeleteByWorkspace(workspaceId: string, deletedAt: Date) {
+    await this.prisma.conversation.updateMany({
+      where: { workspaceId, deletedAt: null },
+      data: { deletedAt },
+    });
+  }
+
   async clearArchivedOwned(userId: string) {
     await this.prisma.conversation.updateMany({
       where: {

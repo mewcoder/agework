@@ -22,6 +22,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     archiveOwned: vi.fn().mockResolvedValue(undefined),
     unarchiveOwned: vi.fn().mockResolvedValue(undefined),
     softDeleteOwned: vi.fn().mockResolvedValue(undefined),
+    softDeleteByWorkspace: vi.fn().mockResolvedValue(undefined),
     clearArchivedOwned: vi.fn().mockResolvedValue(undefined),
     findMessages: vi.fn().mockResolvedValue([]),
     upsertMessage: vi.fn().mockResolvedValue(undefined),
@@ -112,6 +113,19 @@ describe("ConversationService", () => {
       "conversation-1",
       "msg-1",
       "run-1"
+    );
+  });
+
+  it("soft deletes conversations for a deleted workspace through the conversation repository", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+    const deletedAt = new Date("2026-06-29T10:00:00.000Z");
+
+    await service.softDeleteByWorkspace("workspace-1", deletedAt);
+
+    expect(repo.softDeleteByWorkspace).toHaveBeenCalledWith(
+      "workspace-1",
+      deletedAt
     );
   });
 

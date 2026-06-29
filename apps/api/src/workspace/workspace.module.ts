@@ -5,8 +5,10 @@ import { WorkspaceService } from "./workspace.service";
 import { WorkspaceRepository } from "./workspace.repository";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
+import { ConversationModule } from "../conversation/conversation.module";
 
 @Module({
+  imports: [ConversationModule],
   controllers: [WorkspaceController, AdminWorkspaceController],
   providers: [
     WorkspaceService,
