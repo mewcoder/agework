@@ -8,7 +8,8 @@ import { ExecutionService } from "../execution/execution.service";
 import { RunConversationEffects } from "../conversation/run-conversation.effects";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
-import type { StartRunInput, RunWorkspaceView } from "../run-service.types";
+import type { StartRunInput } from "../run-service.types";
+import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 
@@ -61,8 +62,8 @@ const AGENT_EVENT_TRACE = {
 };
 
 function makeWorkspaceView(
-  overrides: Partial<RunWorkspaceView> = {}
-): RunWorkspaceView {
+  overrides: Partial<WorkspaceRunContext> = {}
+): WorkspaceRunContext {
   return {
     workspaceId: "ws-1",
     workspaceRootPath: "/tmp/ws",

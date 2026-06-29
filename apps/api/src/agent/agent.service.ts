@@ -107,7 +107,7 @@ export class AgentService {
         "Conversation 必须关联工作空间才能运行 agent"
       );
     }
-    const workspace = await this.workspaceService.getRunView(workspaceId);
+    const workspace = await this.workspaceService.getRunContext(workspaceId);
 
     const forwardedProps = {
       ...body.forwardedProps,

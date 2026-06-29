@@ -383,7 +383,7 @@ describe("WorkspaceService", () => {
 
   });
 
-  describe("getRunView", () => {
+  describe("getRunContext", () => {
     it("maps the workspace run view (directory + runtime config + owner username)", async () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
@@ -397,7 +397,7 @@ describe("WorkspaceService", () => {
       });
       const service = makeService(repo, makeConfig());
 
-      const view = await service.getRunView("ws-1");
+      const view = await service.getRunContext("ws-1");
 
       expect(view).toEqual({
         workspaceId: "ws-1",
@@ -413,7 +413,7 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({ findRunView: vi.fn().mockResolvedValue(null) });
       const service = makeService(repo, makeConfig());
 
-      await expect(service.getRunView("missing")).rejects.toThrow(
+      await expect(service.getRunContext("missing")).rejects.toThrow(
         "Workspace missing not found"
       );
     });
@@ -431,7 +431,7 @@ describe("WorkspaceService", () => {
       });
       const service = makeService(repo, makeConfig());
 
-      await expect(service.getRunView("ws-1")).rejects.toThrow(
+      await expect(service.getRunContext("ws-1")).rejects.toThrow(
         "工作空间必须关联目录才能运行 agent"
       );
     });

@@ -39,7 +39,7 @@ describe("AgentService", () => {
       stop: vi.fn().mockResolvedValue(false),
     };
     mockWorkspaceService = {
-      getRunView: vi.fn().mockResolvedValue({
+      getRunContext: vi.fn().mockResolvedValue({
         workspaceId: "proj-1",
         workspaceRootPath: "/tmp/ws",
         username: "mew",

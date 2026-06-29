@@ -7,7 +7,7 @@ import {
 import { generateId } from "@agework/shared";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
-import type { RunWorkspaceView } from "../run/run-service.types";
+import type { WorkspaceRunContext } from "./workspace.types";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -74,11 +74,11 @@ export class WorkspaceService {
   }
 
   /**
-   * run 启动所需的 workspace 视图：目录 + runtime 配置 + 属主用户名。
+   * run 启动所需的 workspace 运行上下文：目录 + runtime 配置 + 属主用户名。
    * 供 agent 层在调用 RunService.start 前解析（run 层不直接读 workspace 表）。
    * workspace 不存在抛 404，未关联目录抛 400。
    */
-  async getRunView(workspaceId: string): Promise<RunWorkspaceView> {
+  async getRunContext(workspaceId: string): Promise<WorkspaceRunContext> {
     const workspace = await this.repo.findRunView(workspaceId);
     if (!workspace) {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
