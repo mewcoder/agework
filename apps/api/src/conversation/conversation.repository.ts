@@ -59,16 +59,6 @@ export class ConversationRepository {
     });
   }
 
-  findOwnedWorkspace(
-    userId: string,
-    workspaceId: string
-  ): Promise<{ id: string } | null> {
-    return this.prisma.workspace.findFirst({
-      where: { id: workspaceId, ...this.ownerWhere(userId) },
-      select: { id: true },
-    });
-  }
-
   create(data: {
     id: string;
     workspaceId: string;

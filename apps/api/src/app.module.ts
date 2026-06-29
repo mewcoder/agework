@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { Module } from "@nestjs/common";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ServeStaticModule } from "@nestjs/serve-static";
+import { AgentModule } from "./agent/agent.module";
 import { AuthModule } from "./auth/auth.module";
 import { ConfigModule } from "./config/config.module";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -37,6 +38,7 @@ const shouldServeFrontend =
     AuthModule,
     UserModule,
     ConversationModule,
+    AgentModule,
     WorkspaceModule,
     ModelProviderModule,
     SystemModule,

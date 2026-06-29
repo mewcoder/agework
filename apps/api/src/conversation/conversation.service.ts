@@ -205,17 +205,16 @@ export class ConversationService {
     return prefix + text.slice(start, end) + suffix;
   }
 
+  /**
+   * 创建会话数据。`workspaceId` 必须由调用方(agent 入口)预先校验归属;
+   * 本方法只负责持久化,不读取 / 校验 workspace。
+   */
   async create(
-    userId: string,
     workspaceId: string,
     firstMessage?: string,
     agentType?: string,
     title?: string
   ) {
-    if (!workspaceId) throw new BadRequestException("workspaceId is required");
-    const workspace = await this.repo.findOwnedWorkspace(userId, workspaceId);
-    if (!workspace)
-      throw new BadRequestException(`Workspace ${workspaceId} not found`);
     const resolvedAgentType = this.resolveAgentType(agentType);
     const resolvedTitle = title ?? (firstMessage?.slice(0, 10) || undefined);
     const conversation = await this.repo.create({

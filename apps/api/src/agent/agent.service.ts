@@ -5,14 +5,15 @@ import type {
   AgentProviderConfig,
   CustomAgentProviderConfig,
 } from "@agework/shared/protocol";
-import { ConversationService } from "../conversation.service";
-import type { JwtUser } from "../../auth/decorators/current-user.decorator";
-import { RunService } from "../../run/run.service";
-import { WorkspaceService } from "../../workspace/workspace.service";
-import { safeLogJson } from "../../common/logging";
+import { ConversationService } from "../conversation/conversation.service";
+import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import { RunService } from "../run/run.service";
+import { WorkspaceService } from "../workspace/workspace.service";
+import { safeLogJson } from "../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
-import { getAgentOptionsByType } from "./agent-options";
-import { ModelProviderService } from "../../model-provider/model-provider.service";
+import type { CreateConversationDto } from "./dto/create-conversation.dto";
+import { getAgentOptions, getAgentOptionsByType } from "./options/agent-options";
+import { ModelProviderService } from "../model-provider/model-provider.service";
 
 type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
 
@@ -31,6 +32,31 @@ export class AgentService {
     private readonly modelProviderService: ModelProviderService,
     private readonly workspaceService: WorkspaceService
   ) {}
+
+  /** 返回各 agent 类型的入口可选项(权限模式等),供前端入口展示。 */
+  getOptions() {
+    return getAgentOptions();
+  }
+
+  /**
+   * 创建一次 agent 会话入口:先经 WorkspaceService 校验工作空间归属(不属于则 400),
+   * 再委托 ConversationService 持久化会话。conversation 不再自行接触 workspace。
+   */
+  async createConversation(userId: string, input: CreateConversationDto) {
+    const owned = await this.workspaceService.findOwnedId(
+      userId,
+      input.workspaceId
+    );
+    if (!owned) {
+      throw new BadRequestException(`Workspace ${input.workspaceId} not found`);
+    }
+    return this.conversationService.create(
+      input.workspaceId,
+      input.firstMessage,
+      input.agentType,
+      input.title
+    );
+  }
 
   async run(
     body: AgentRunRequestDto,

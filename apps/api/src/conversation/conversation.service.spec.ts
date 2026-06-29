@@ -7,7 +7,6 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     findByOwner: vi.fn().mockResolvedValue([]),
     findRegularByOwner: vi.fn().mockResolvedValue([]),
     findMessagesForConversations: vi.fn().mockResolvedValue([]),
-    findOwnedWorkspace: vi.fn().mockResolvedValue({ id: "ws-1" }),
     create: vi.fn(),
     findOwnedById: vi.fn().mockResolvedValue(null),
     findRunStatusesByOwner: vi.fn().mockResolvedValue([]),

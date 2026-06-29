@@ -18,6 +18,7 @@ import { describe, expect, it } from "vitest";
 const SRC_ROOT = path.resolve(__dirname, "..");
 
 const FEATURES = new Set([
+  "agent",
   "auth",
   "config",
   "conversation",

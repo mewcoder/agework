@@ -15,6 +15,7 @@ import { ROLES_KEY } from "../auth/decorators/roles.decorator";
 import { RAW_RESPONSE_KEY } from "./decorators/raw-response.decorator";
 import { AdminConfigController } from "../config/admin/admin-config.controller";
 import { ConversationController } from "../conversation/conversation.controller";
+import { AgentController } from "../agent/agent.controller";
 import { AdminModelProviderController } from "../model-provider/admin/admin-model-provider.controller";
 import { ModelProviderController } from "../model-provider/model-provider.controller";
 import { AdminRunController } from "../run/admin/admin-run.controller";
@@ -44,6 +45,7 @@ const CONTROLLERS = [
   AuthController,
   AdminConfigController,
   ConversationController,
+  AgentController,
   AdminModelProviderController,
   ModelProviderController,
   AdminRunController,
@@ -181,7 +183,6 @@ describe("external API route convention", () => {
   it("uses RPC action paths for conversations", () => {
     expect(controllerPath(ConversationController)).toBe("conversations");
     expectRoute(ConversationController, "list", "get", "list");
-    expectRoute(ConversationController, "create", "post", "create");
     expectRoute(ConversationController, "findOne", "get", "query");
     expectRoute(
       ConversationController,
@@ -253,12 +254,13 @@ describe("external API route convention", () => {
   });
 
   it("uses body ids instead of path ids for agent controls", () => {
-    expect(controllerPath(ConversationController)).toBe("conversations");
-    expectRoute(ConversationController, "agentOptions", "get", "agent/options");
-    expectRoute(ConversationController, "runAgent", "post", "agent/run");
-    expectRoute(ConversationController, "resumeAgent", "get", "agent/resume");
-    expectRoute(ConversationController, "replyAgent", "post", "agent/reply");
-    expectRoute(ConversationController, "stopAgent", "post", "agent/stop");
+    expect(controllerPath(AgentController)).toBe("conversations");
+    expectRoute(AgentController, "create", "post", "create");
+    expectRoute(AgentController, "agentOptions", "get", "agent/options");
+    expectRoute(AgentController, "runAgent", "post", "agent/run");
+    expectRoute(AgentController, "resumeAgent", "get", "agent/resume");
+    expectRoute(AgentController, "replyAgent", "post", "agent/reply");
+    expectRoute(AgentController, "stopAgent", "post", "agent/stop");
   });
 
   it("keeps admin routes under the admin prefix", () => {

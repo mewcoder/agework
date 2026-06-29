@@ -45,6 +45,14 @@ export class WorkspaceService {
   ) {}
 
   /**
+   * 查询工作空间是否存在且属于该用户;返回 null 表示不存在或非属主。
+   * 供上层入口(如 agent 建会话)做归属校验,由调用方决定如何处理 null。
+   */
+  findOwnedId(userId: string, workspaceId: string): Promise<{ id: string } | null> {
+    return this.repo.findOwnedId(userId, workspaceId);
+  }
+
+  /**
    * Admin 查询工作空间列表,包含 owner username 和会话数量等管理视图字段。
    */
   async listAll(pagination?: { take: number; skip: number }) {
