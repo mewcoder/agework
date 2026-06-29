@@ -24,15 +24,16 @@ import { WorkerAgUiEventHandler } from "./worker-event/agui-event.handler";
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
-// deps（向下依赖 runtime / worker-host）
+// deps（向下依赖：runtime / worker-host / run-event / conversation）
 import { RuntimeModule } from "../runtime/runtime.module";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
 
 /**
- * Run 领域：一次执行的生命周期、事件记录/聚合。单向依赖 runtime / worker-host，
- * 并在启动时把 worker 事件统一入口注入 run executor；
+ * Run 领域：一次执行的生命周期、事件记录/聚合。向下依赖 runtime / worker-host /
+ * run-event / conversation（执行中经 RunConversationEffects 写回会话状态），并在
+ * 启动时把 worker 事件统一入口注入 run executor；
  * WorkerUpstreamPort → worker-host 的 WorkerRunController。
  */
 @Module({
