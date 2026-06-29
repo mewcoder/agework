@@ -16,16 +16,11 @@ import {
 } from "./providers/provider-registry";
 import type { RuntimeProvider } from "./providers/provider-contracts";
 import { RuntimeService } from "./runtime.service";
-import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { RuntimeModule } from "./runtime.module";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
-  constructor(
-    readonly runtimeService: RuntimeService,
-    // 仍导出的边界欠债：run 的 SandboxRunExecutor 依赖此 internal provider。
-    readonly sandboxInstances: SandboxRuntimeInstanceService
-  ) {}
+  constructor(readonly runtimeService: RuntimeService) {}
 }
 
 @Module({
@@ -68,16 +63,13 @@ describe("RuntimeModule wiring", () => {
     expect(registry.resolve("local").type).toBe("local");
   });
 
-  it("exports runtime services to downstream modules", async () => {
+  it("exports only RuntimeService to downstream modules", async () => {
     testingModule = await createRuntimeTestingModule([
       DownstreamRuntimeConsumerModule,
     ]);
 
     const consumer = testingModule.get(DownstreamRuntimeConsumer);
     expect(consumer.runtimeService).toBe(testingModule.get(RuntimeService));
-    expect(consumer.sandboxInstances).toBe(
-      testingModule.get(SandboxRuntimeInstanceService)
-    );
   });
 });
 
