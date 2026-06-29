@@ -6,6 +6,8 @@ import { RunConversationEffects } from "../conversation/run-conversation.effects
 import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-event/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
+import { RunFinalizationStore } from "../status/run-finalization.store";
+import { WorkerSeqStore } from "./worker-seq.store";
 import type { ConfigService } from "../../config/config.service";
 import type { ExecutionService } from "../execution/execution.service";
 import { RunStream } from "../streaming/run-stream";
@@ -80,7 +82,9 @@ describe("WorkerEventService", () => {
       mockRunEvents,
       runStatusService,
       mockExecutionService as ExecutionService,
-      aguiEvents
+      aguiEvents,
+      new RunFinalizationStore(),
+      new WorkerSeqStore()
     );
   });
 

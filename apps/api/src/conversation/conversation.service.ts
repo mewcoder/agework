@@ -16,7 +16,7 @@ import type {
 } from "@agework/shared/api";
 import { swallow } from "../common/swallow";
 import { ConversationRepository } from "./conversation.repository";
-import { TitleService } from "./title/title.service";
+import { TitleGenerator } from "./title/title-generator";
 import type { AssistantUserMessage } from "./conversation.types";
 
 // 从 assistant-ui 消息 content(string / part 数组 / { role, content } 对象)提取纯文本。
@@ -57,7 +57,7 @@ export class ConversationService {
 
   constructor(
     private repo: ConversationRepository,
-    @Optional() private readonly titleService?: TitleService
+    @Optional() private readonly titleGenerator?: TitleGenerator
   ) {}
 
   private toConversationDto(c: {
@@ -275,12 +275,12 @@ export class ConversationService {
     agentType: AgentType;
     modelProviderId?: string | null;
   }): Promise<void> {
-    if (!this.titleService) return;
+    if (!this.titleGenerator) return;
 
     const userText = await this.findInitialUserText(input.conversationId);
     if (!userText) return;
 
-    const title = await this.titleService.generateTitle({
+    const title = await this.titleGenerator.generateLLMTitle({
       agentType: input.agentType,
       modelProviderId: input.modelProviderId,
       userText,
@@ -374,15 +374,7 @@ export class ConversationService {
   ) {
     const conversation = await this.repo.findTitle(conversationId);
     if (conversation?.title) return;
-    const text = extractText(content).replace(/\s+/g, " ").trim();
-    if (!text) return;
-    // 截断处理可能残留半截标点（逗号/句号/问号等），去掉结尾的标点和空白
-    const title = text
-      .slice(0, 40)
-      .replace(
-        /[，。、；！？,.;!?…—\-~·"'"'「」『』（）()【】[\]《》<>\s]+$/u,
-        ""
-      );
+    const title = TitleGenerator.generateFallbackTitle(extractText(content));
     if (!title) return;
     await this.repo.updateTitle(conversationId, title);
   }

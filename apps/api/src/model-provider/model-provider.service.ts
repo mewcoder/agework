@@ -15,10 +15,9 @@ import {
   type AgentType,
 } from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
-import { generateText, type LanguageModel } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
+import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
+import { getLLMClient } from "../common/llm";
 import { ModelProviderRepository } from "./model-provider.repository";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
@@ -426,7 +425,7 @@ export class ModelProviderService implements OnModuleInit {
     const providerConfig = toProviderConfig(modelProvider);
     const agentType = modelProvider.agentType as AgentType;
 
-    const built = this.buildProbeModel(agentType, providerConfig);
+    const built = getLLMClient(agentType, providerConfig);
     if ("error" in built) {
       return { success: false, latency: 0, error: built.error };
     }
@@ -450,34 +449,6 @@ export class ModelProviderService implements OnModuleInit {
         error: err instanceof Error ? err.message : String(err),
       };
     }
-  }
-
-  private buildProbeModel(
-    agentType: AgentType,
-    providerConfig: ProviderConfig
-  ): { model: LanguageModel } | { error: string } {
-    let base: string | undefined;
-    try {
-      base = normalizeBaseUrl(providerConfig.baseUrl);
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
-    }
-    if (!base) return { error: "未配置 baseUrl" };
-
-    const apiKey = providerConfig.apiKey.trim();
-    if (!apiKey) return { error: "未配置 apiKey" };
-    const modelId = providerConfig.models[0];
-    if (!modelId) return { error: "未配置 models" };
-
-    const baseURL = base.endsWith("/v1") ? base : `${base}/v1`;
-    if (agentType === "claude") {
-      return {
-        model: createAnthropic({ authToken: apiKey, baseURL }).languageModel(
-          modelId
-        ),
-      };
-    }
-    return { model: createOpenAI({ apiKey, baseURL }).chat(modelId) };
   }
 
   private resolveAgentType(agentType: string): AgentType {

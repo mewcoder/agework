@@ -22,29 +22,25 @@ import {
   TERMINAL_RUN_STATUSES,
 } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
+import { RunFinalizationStore } from "../status/run-finalization.store";
+import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
 import { WorkerAgUiEventHandler } from "./agui-event.handler";
-
-/** 终态完成后保留记录的时长，用于阻止 exit handler 等延迟事件覆盖已终态 */
-const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class WorkerEventService
   implements RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
 {
   private readonly logger = new Logger(WorkerEventService.name);
-  private readonly lastSeqMap = new Map<string, number>();
-  /** 防止同一 run 被并发处理多次终态 */
-  private readonly finalizingRuns = new Set<string>();
-  /** 已完成终态的 run，TTL 后自动清除，用于阻止 exit handler 覆盖 */
-  private readonly completedRuns = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
     private readonly executionService: ExecutionService,
-    private readonly aguiEvents: WorkerAgUiEventHandler
+    private readonly aguiEvents: WorkerAgUiEventHandler,
+    private readonly finalization: RunFinalizationStore,
+    private readonly seqGate: WorkerSeqStore
   ) {}
 
   async sendEvent(
@@ -105,37 +101,37 @@ export class WorkerEventService
       return;
     }
 
-    const lastSeq = this.lastSeqMap.get(runId) ?? 0;
+    const decision = this.seqGate.accept(runId, seq);
     this.logger.debug(
       `publish message ${safeLogJson({
         runId,
         seq,
-        lastSeq,
+        lastSeq: decision.lastSeq,
         type: message.type,
         payload: summarizeMessagePayload(message.payload),
       })}`
     );
 
     // Dedup: drop if seq <= lastSeq
-    if (seq <= lastSeq) {
+    if (decision.action === "drop") {
       this.logger.warn(
         `drop duplicate message ${safeLogJson({
           runId,
           seq,
-          lastSeq,
+          lastSeq: decision.lastSeq,
           origin: "worker",
           type: message.type,
         })}`
       );
       return;
     }
-    if (seq > lastSeq + 1) {
-      const expected = lastSeq + 1;
+    if (decision.gap) {
+      const { expected, got } = decision.gap;
       this.logger.warn(
         `seq gap detected ${safeLogJson({
           runId,
           expected,
-          got: seq,
+          got,
           origin: "worker",
           type: message.type,
         })}`
@@ -144,11 +140,10 @@ export class WorkerEventService
       this.recordSeqGap({
         runId,
         expected,
-        got: seq,
+        got,
         messageType: message.type,
       });
     }
-    this.lastSeqMap.set(runId, seq);
 
     switch (message.type) {
       case "run.status":
@@ -195,7 +190,7 @@ export class WorkerEventService
 
   /** run 是否已在终态处理中或已完成终态（供 provider 的 exit handler 判断是否跳过 error 发布）。 */
   isTerminalOrFinalizing(runId: string): boolean {
-    return this.finalizingRuns.has(runId) || this.completedRuns.has(runId);
+    return this.finalization.isTerminalOrFinalizing(runId);
   }
 
   private async handleRunStatus(runId: string, payload: RunStatusPayload) {
@@ -219,7 +214,7 @@ export class WorkerEventService
       })}`
     );
     if (isTerminal) {
-      this.finalizingRuns.add(runId);
+      this.finalization.beginFinalizing(runId);
     }
     this.recordRunStatus(runId, payload);
 
@@ -228,14 +223,9 @@ export class WorkerEventService
 
       // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
       // 必须在 saveRun/stream write 等可能抛异常的操作之前设置，
-      // 否则异常会跳过 completedRuns.set，导致终态 guard 失效。
-      if (isTerminal && !this.completedRuns.has(runId)) {
-        const timer = setTimeout(
-          () => this.completedRuns.delete(runId),
-          COMPLETED_RUN_TTL_MS
-        );
-        timer.unref();
-        this.completedRuns.set(runId, timer);
+      // 否则异常会跳过记录，导致终态 guard 失效。
+      if (isTerminal) {
+        this.finalization.markCompleted(runId);
       }
 
       await this.runStatusService.apply({
@@ -246,8 +236,8 @@ export class WorkerEventService
       });
     } finally {
       if (isTerminal) {
-        this.finalizingRuns.delete(runId);
-        this.lastSeqMap.delete(runId);
+        this.finalization.endFinalizing(runId);
+        this.seqGate.forget(runId);
         this.aguiEvents.clearRun(runId);
         this.runEvents.forgetRun(runId);
       }

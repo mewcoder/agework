@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach, vi } from "vitest";
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
-import { TitleService } from "./title.service";
+import { TitleGenerator } from "./title-generator";
 
 vi.mock("ai", () => ({
   generateText: vi.fn(),
@@ -39,11 +39,11 @@ function createService(
 
   return {
     modelProviderService,
-    service: new TitleService(modelProviderService as never),
+    service: new TitleGenerator(modelProviderService as never),
   };
 }
 
-describe("TitleService", () => {
+describe("TitleGenerator", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(generateText).mockResolvedValue({
@@ -60,7 +60,7 @@ describe("TitleService", () => {
   it("generates a normalized title from user text", async () => {
     const { service, modelProviderService } = createService();
 
-    const title = await service.generateTitle({
+    const title = await service.generateLLMTitle({
       agentType: "claude",
       modelProviderId: "mp-1",
       userText: "帮我重构参数校验",
@@ -77,7 +77,7 @@ describe("TitleService", () => {
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "anthropic-title-model",
-        prompt: expect.stringContaining("帮我重构参数校验"),
+        prompt: expect.stringContaining("帮我重构参数校验") as string,
         maxOutputTokens: 64,
         temperature: 0,
       })
@@ -88,7 +88,7 @@ describe("TitleService", () => {
   it("skips title generation for empty user text", async () => {
     const { service, modelProviderService } = createService();
 
-    const title = await service.generateTitle({
+    const title = await service.generateLLMTitle({
       agentType: "claude",
       modelProviderId: "mp-1",
       userText: "   ",
@@ -104,7 +104,7 @@ describe("TitleService", () => {
       resolvedProvider: { source: "system" },
     });
 
-    const title = await service.generateTitle({
+    const title = await service.generateLLMTitle({
       agentType: "claude",
       modelProviderId: "system:claude",
       userText: "hello",
@@ -112,5 +112,26 @@ describe("TitleService", () => {
 
     expect(generateText).not.toHaveBeenCalled();
     expect(title).toBeNull();
+  });
+});
+
+describe("generateFallbackTitle", () => {
+  it("collapses whitespace and keeps short text as-is", () => {
+    expect(
+      TitleGenerator.generateFallbackTitle("  帮我  重构\n参数校验 ")
+    ).toBe("帮我 重构 参数校验");
+  });
+
+  it("truncates to 40 chars and strips trailing punctuation left by the cut", () => {
+    const text = "请帮我重构这个超长的会话标题文本，".repeat(5);
+    const title = TitleGenerator.generateFallbackTitle(text);
+    expect(title).not.toBeNull();
+    expect(title!.length).toBeLessThanOrEqual(40);
+    expect(title!).not.toMatch(/[，。、；！？,.;!?\s]$/u);
+  });
+
+  it("returns null for empty or whitespace-only text", () => {
+    expect(TitleGenerator.generateFallbackTitle("")).toBeNull();
+    expect(TitleGenerator.generateFallbackTitle("   \n  ")).toBeNull();
   });
 });

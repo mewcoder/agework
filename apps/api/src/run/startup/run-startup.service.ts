@@ -13,7 +13,7 @@ export class RunStartupService implements OnModuleInit {
     private readonly workerEvents: WorkerEventService
   ) {}
 
-  async onModuleInit(): Promise<void> {
+  onModuleInit(): void {
     this.executionService.setRunEventPort(this.workerEvents);
     this.workerHost.setUpstreamPort(this.workerEvents);
     this.liveRuns.setTimeoutErrorPort(this.workerEvents);

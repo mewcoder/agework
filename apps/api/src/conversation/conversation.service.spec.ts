@@ -131,7 +131,7 @@ describe("ConversationService", () => {
 
   it("generates an AI title from the first stored user message", async () => {
     const titleService = {
-      generateTitle: vi.fn().mockResolvedValue("重构参数校验"),
+      generateLLMTitle: vi.fn().mockResolvedValue("重构参数校验"),
     };
     const repo = makeRepo({
       findContentsByConversation: vi.fn().mockResolvedValue([
@@ -154,7 +154,7 @@ describe("ConversationService", () => {
       modelProviderId: "mp-1",
     });
 
-    expect(titleService.generateTitle).toHaveBeenCalledWith({
+    expect(titleService.generateLLMTitle).toHaveBeenCalledWith({
       agentType: "claude",
       modelProviderId: "mp-1",
       userText: "帮我重构参数校验",
@@ -167,7 +167,7 @@ describe("ConversationService", () => {
 
   it("skips AI title generation after multiple stored user messages", async () => {
     const titleService = {
-      generateTitle: vi.fn().mockResolvedValue("不会生成"),
+      generateLLMTitle: vi.fn().mockResolvedValue("不会生成"),
     };
     const repo = makeRepo({
       findContentsByConversation: vi
@@ -189,7 +189,7 @@ describe("ConversationService", () => {
       modelProviderId: "mp-1",
     });
 
-    expect(titleService.generateTitle).not.toHaveBeenCalled();
+    expect(titleService.generateLLMTitle).not.toHaveBeenCalled();
   });
 
   it("normalizes message format and fills parent_id from previous message order", async () => {
