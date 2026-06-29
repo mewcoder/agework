@@ -1,43 +1,41 @@
 import { Injectable } from "@nestjs/common";
-import type { RunConversationPort } from "../run-service.types";
+import { ConversationService } from "../../conversation/conversation.service";
 
 /**
- * runs 对 conversation 聚合的写入端口。
+ * run 对 conversation 聚合的写入边界（run 内部 provider）。
  *
- * run 层决定何时更新会话状态；ConversationService 仍然拥有实际字段写入。
+ * run 层决定何时更新会话状态（markRunning / markError 等 run 语义），
+ * 实际字段写入仍归 ConversationService。依赖方向 run → conversation（向下），
+ * 不再经反向 Port。
  */
 @Injectable()
 export class RunConversationEffects {
-  private port?: RunConversationPort;
+  constructor(private readonly conversations: ConversationService) {}
 
-  setPort(port: RunConversationPort): void {
-    this.port = port;
-  }
-
-  assertOwned(userId: string, conversationId: string): Promise<void> {
-    return this.requirePort().assertOwned(userId, conversationId);
+  async assertOwned(userId: string, conversationId: string): Promise<void> {
+    await this.conversations.findOne(userId, conversationId);
   }
 
   markRunning(conversationId: string): Promise<boolean> {
-    return this.requirePort().markRunning(conversationId);
+    return this.conversations.setActiveRunStatus(conversationId, "running");
   }
 
   markError(conversationId: string): Promise<boolean> {
-    return this.requirePort().markError(conversationId);
+    return this.conversations.setActiveRunStatus(conversationId, "error");
   }
 
   setActiveRunStatus(
     conversationId: string,
-    status: Parameters<RunConversationPort["setActiveRunStatus"]>[1]
+    status: Parameters<ConversationService["setActiveRunStatus"]>[1]
   ): Promise<boolean> {
-    return this.requirePort().setActiveRunStatus(conversationId, status);
+    return this.conversations.setActiveRunStatus(conversationId, status);
   }
 
   setPendingUserAction(
     conversationId: string,
-    pendingUserAction: Parameters<RunConversationPort["setPendingUserAction"]>[1]
+    pendingUserAction: Parameters<ConversationService["setPendingUserAction"]>[1]
   ): Promise<void> {
-    return this.requirePort().setPendingUserAction(
+    return this.conversations.setPendingUserAction(
       conversationId,
       pendingUserAction
     );
@@ -47,30 +45,27 @@ export class RunConversationEffects {
     conversationId: string,
     agentSessionId: string
   ): Promise<void> {
-    return this.requirePort().saveAgentSessionId(
-      conversationId,
-      agentSessionId
-    );
+    return this.conversations.setAgentSessionId(conversationId, agentSessionId);
   }
 
   saveUserMessage(
     conversationId: string,
-    userMessage: Parameters<RunConversationPort["saveUserMessage"]>[1]
+    userMessage: Parameters<ConversationService["saveUserMessage"]>[1]
   ): Promise<void> {
-    return this.requirePort().saveUserMessage(conversationId, userMessage);
+    return this.conversations.saveUserMessage(conversationId, userMessage);
   }
 
   generateTitleIfNeeded(
-    input: Parameters<RunConversationPort["generateTitleIfNeeded"]>[0]
+    input: Parameters<ConversationService["generateTitleIfNeeded"]>[0]
   ): Promise<void> {
-    return this.requirePort().generateTitleIfNeeded(input);
+    return this.conversations.generateTitleIfNeeded(input);
   }
 
   upsertMessage(
     conversationId: string,
-    data: Parameters<RunConversationPort["upsertMessage"]>[1]
+    data: Parameters<ConversationService["upsertMessage"]>[1]
   ): Promise<void> {
-    return this.requirePort().upsertMessage(conversationId, data);
+    return this.conversations.upsertMessage(conversationId, data);
   }
 
   attachMessageToRun(
@@ -78,17 +73,10 @@ export class RunConversationEffects {
     messageId: string,
     runId: string
   ): Promise<unknown> {
-    return this.requirePort().attachMessageToRun(
+    return this.conversations.attachMessageToRun(
       conversationId,
       messageId,
       runId
     );
-  }
-
-  private requirePort(): RunConversationPort {
-    if (!this.port) {
-      throw new Error("Run conversation port has not been configured");
-    }
-    return this.port;
   }
 }

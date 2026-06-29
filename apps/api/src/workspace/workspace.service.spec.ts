@@ -86,17 +86,9 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeRunService(overrides: Record<string, unknown> = {}) {
-  return {
-    hasActiveRunForWorkspace: vi.fn().mockResolvedValue(false),
-    ...overrides,
-  };
-}
-
 function makeService(
   repo: ReturnType<typeof makeRepo>,
-  config: ReturnType<typeof makeConfig>,
-  runService: ReturnType<typeof makeRunService> = makeRunService()
+  config: ReturnType<typeof makeConfig>
 ) {
   const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
   const directoryHandler = new WorkspaceDirectoryHandler(
@@ -107,7 +99,6 @@ function makeService(
   return new WorkspaceService(
     repo as never,
     { emit: vi.fn() } as never,
-    runService as never,
     runtimePolicy,
     directoryHandler
   );
@@ -373,7 +364,6 @@ describe("WorkspaceService", () => {
       const service = new WorkspaceService(
         repo as never,
         { emit } as never,
-        makeRunService() as never,
         runtimePolicy,
         new WorkspaceDirectoryHandler(
           repo as never,
@@ -391,23 +381,6 @@ describe("WorkspaceService", () => {
       );
     });
 
-    it("refuses to delete when runs module reports an active run", async () => {
-      const repo = makeRepo({
-        findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
-      });
-      const runService = makeRunService({
-        hasActiveRunForWorkspace: vi.fn().mockResolvedValue(true),
-      });
-      const service = makeService(repo, makeConfig(), runService);
-
-      await expect(service.delete(userId, workspaceId)).rejects.toThrow(
-        "工作空间有正在运行的任务，不能删除"
-      );
-      expect(runService.hasActiveRunForWorkspace).toHaveBeenCalledWith(
-        workspaceId
-      );
-      expect(repo.softDeleteCascade).not.toHaveBeenCalled();
-    });
   });
 
   describe("getRunView", () => {

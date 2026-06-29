@@ -7,7 +7,6 @@ import {
 import { generateId } from "@agework/shared";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
-import { RunService } from "../run/run.service";
 import type { RunWorkspaceView } from "../run/run-service.types";
 import {
   WORKSPACE_DELETED_EVENT,
@@ -39,7 +38,6 @@ export class WorkspaceService {
   constructor(
     private readonly repo: WorkspaceRepository,
     private readonly events: EventEmitter2,
-    private readonly runService: RunService,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler
   ) {}
@@ -203,18 +201,16 @@ export class WorkspaceService {
   }
 
   /**
-   * 用户侧删除自己拥有的工作空间。删除前通过 RunService 阻止活跃 run,删除后发出 workspace deleted fact event。
+   * 用户侧删除自己拥有的工作空间。软删后发出 workspace deleted fact event,
+   * 下游据此级联(runtime 清理绑定资源、run 停止该 workspace 的活跃任务);
+   * workspace 不感知下游(方案 B:总能删,任务被停)。
    */
   async delete(userId: string, id: string) {
     const workspace = await this.repo.findOwnedId(userId, id);
     if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
-    if (await this.runService.hasActiveRunForWorkspace(id)) {
-      throw new BadRequestException("工作空间有正在运行的任务，不能删除");
-    }
 
     await this.repo.softDeleteCascade(id);
 
-    // 下游（runtime）据此清理与该 workspace 绑定的资源；workspace 不感知下游。
     this.events.emit(WORKSPACE_DELETED_EVENT, new WorkspaceDeletedEvent(id));
   }
 

@@ -89,7 +89,8 @@ describe("RunModule wiring", () => {
     expect(setReceiver).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorSink).toHaveBeenCalledWith(workerEvents);
     expect(setOwnerSessionCleanup).toHaveBeenCalledWith(expect.any(Function));
-    expect(runRecovery.recoverInterruptedRuns).not.toHaveBeenCalled();
+    // run 自身在 onApplicationBootstrap 触发一次性重启恢复（不再依赖反向端口接线）
+    expect(runRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
   });
 
   it("exports RunService to downstream modules", async () => {

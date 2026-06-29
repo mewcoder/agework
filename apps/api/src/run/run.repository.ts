@@ -102,16 +102,19 @@ export class RunRepository {
     });
   }
 
-  /** workspace 删除守卫用：该 workspace 下是否存在活跃 run。 */
-  async hasActiveRunForWorkspace(workspaceId: string): Promise<boolean> {
-    const activeRun = await this.prisma.run.findFirst({
+  /** workspace 删除级联用：该 workspace 下所有活跃 run 的会话 id（去重）。 */
+  async findActiveConversationIdsForWorkspace(
+    workspaceId: string
+  ): Promise<string[]> {
+    const rows = await this.prisma.run.findMany({
       where: {
         conversation: { workspaceId },
         status: { in: ACTIVE_RUN_STATUSES },
       },
-      select: { id: true },
+      select: { conversationId: true },
+      distinct: ["conversationId"],
     });
-    return activeRun !== null;
+    return rows.map((row) => row.conversationId);
   }
 
   async listAdmin(params: { status?: string; take: number; skip: number }) {

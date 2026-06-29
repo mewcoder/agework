@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnApplicationBootstrap,
+} from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import { RunRepository } from "./run.repository";
@@ -8,14 +13,13 @@ import { RuntimeService } from "../runtime/runtime.service";
 import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
-import type { RunConversationPort, StartRunInput } from "./run-service.types";
+import type { StartRunInput } from "./run-service.types";
 import { RunStream } from "./streaming/run-stream";
 import { RunLauncher } from "./launch/run-launcher";
-import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 @Injectable()
-export class RunService {
+export class RunService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RunService.name);
   private recoveryStarted = false;
 
@@ -26,16 +30,14 @@ export class RunService {
     private readonly runEvents: RunEventService,
     private readonly runLauncher: RunLauncher,
     private readonly runtimeService: RuntimeService,
-    private readonly runConversation: RunConversationEffects,
     private readonly runRecovery: RunRecoveryService
   ) {}
 
   /**
-   * 注入 conversation 写入端口；由 ConversationModule 启动时绑定，避免模块环。
-   * 依赖 conversation 写回的重启恢复也必须等端口就绪后再执行。
+   * 应用启动后触发一次性重启恢复。run 现在直接依赖 ConversationService
+   *（经 RunConversationEffects 向下写入），不再需要运行期绑定反向端口。
    */
-  async setConversationPort(port: RunConversationPort): Promise<void> {
-    this.runConversation.setPort(port);
+  async onApplicationBootstrap(): Promise<void> {
     if (this.recoveryStarted) return;
     this.recoveryStarted = true;
     await this.runRecovery.recoverInterruptedRuns();
@@ -65,9 +67,26 @@ export class RunService {
     return this.runEvents.listAdminEvents(params);
   }
 
-  /** workspace 删除前的活跃任务守卫：该 workspace 是否有正在进行的 run。 */
-  hasActiveRunForWorkspace(workspaceId: string) {
-    return this.runRepository.hasActiveRunForWorkspace(workspaceId);
+  /**
+   * workspace 删除级联：停止该 workspace 下所有活跃 run（best-effort，逐个吞错）。
+   * 由 RunWorkspaceListener 监听 WORKSPACE_DELETED 触发。
+   */
+  async stopRunsForWorkspace(workspaceId: string): Promise<void> {
+    const conversationIds =
+      await this.runRepository.findActiveConversationIdsForWorkspace(
+        workspaceId
+      );
+    await Promise.all(
+      conversationIds.map((conversationId) =>
+        this.stop(conversationId).catch((err) => {
+          this.logger.warn(
+            `stop run for conversation ${conversationId} failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        })
+      )
+    );
   }
 
   /**

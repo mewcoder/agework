@@ -7,6 +7,7 @@ import { WorkerEventService } from "./worker-event/worker-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunStartupService } from "./startup/run-startup.service";
+import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { RunConversationEffects } from "./conversation/run-conversation.effects";
@@ -27,6 +28,7 @@ import { AdminRunController } from "./admin/admin-run.controller";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { WorkerHostModule } from "../worker-host/worker-host.module";
 import { RunEventModule } from "../run-event/run-event.module";
+import { ConversationModule } from "../conversation/conversation.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。单向依赖 runtime / worker-host，
@@ -34,7 +36,7 @@ import { RunEventModule } from "../run-event/run-event.module";
  * WorkerUpstreamReceiver → worker-host 的 WorkerRunController。
  */
 @Module({
-  imports: [RuntimeModule, WorkerHostModule, RunEventModule],
+  imports: [RuntimeModule, WorkerHostModule, RunEventModule, ConversationModule],
   controllers: [AdminRunController],
   providers: [
     RunRepository,
@@ -56,6 +58,7 @@ import { RunEventModule } from "../run-event/run-event.module";
     ExecutionService,
     WorkerAgUiEventHandler,
     RunStartupService,
+    RunWorkspaceListener,
   ],
   exports: [RunService],
 })

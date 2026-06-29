@@ -252,14 +252,17 @@ describe("RunRepository", () => {
     expect(run?.id).toBe("run-1");
   });
 
-  it("reports whether a workspace has any active run", async () => {
-    const findFirst = vi.fn().mockResolvedValue({ id: "run-1" });
-    const service = new RunRepository({ run: { findFirst } } as never);
+  it("lists active run conversation ids for a workspace (deduped)", async () => {
+    const findMany = vi.fn().mockResolvedValue([
+      { conversationId: "conversation-1" },
+      { conversationId: "conversation-2" },
+    ]);
+    const service = new RunRepository({ run: { findMany } } as never);
 
-    const active = await service.hasActiveRunForWorkspace("ws-1");
+    const ids = await service.findActiveConversationIdsForWorkspace("ws-1");
 
-    expect(active).toBe(true);
-    expect(findFirst).toHaveBeenCalledWith({
+    expect(ids).toEqual(["conversation-1", "conversation-2"]);
+    expect(findMany).toHaveBeenCalledWith({
       where: {
         conversation: { workspaceId: "ws-1" },
         status: {
@@ -272,7 +275,8 @@ describe("RunRepository", () => {
           ],
         },
       },
-      select: { id: true },
+      select: { conversationId: true },
+      distinct: ["conversationId"],
     });
   });
 });

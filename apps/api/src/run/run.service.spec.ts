@@ -6,7 +6,6 @@ import { ExecutionService } from "./execution/execution.service";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { RuntimeService } from "../runtime/runtime.service";
-import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 describe("RunService", () => {
@@ -17,7 +16,6 @@ describe("RunService", () => {
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
   let mockRuntimeService: Partial<RuntimeService>;
-  let mockRunConversation: Partial<RunConversationEffects>;
   let mockRunRecovery: Partial<RunRecoveryService>;
 
   beforeEach(() => {
@@ -41,9 +39,6 @@ describe("RunService", () => {
     mockRuntimeService = {
       getRunInstanceView: vi.fn().mockResolvedValue(null),
     };
-    mockRunConversation = {
-      setPort: vi.fn(),
-    };
     mockRunRecovery = {
       recoverInterruptedRuns: vi.fn().mockResolvedValue(undefined),
     };
@@ -55,7 +50,6 @@ describe("RunService", () => {
       mockRunEvents,
       mockRunLauncher as RunLauncher,
       mockRuntimeService as RuntimeService,
-      mockRunConversation as RunConversationEffects,
       mockRunRecovery as RunRecoveryService
     );
   });
@@ -72,15 +66,29 @@ describe("RunService", () => {
     });
   });
 
-  describe("setConversationPort()", () => {
-    it("binds the conversation port before running startup recovery once", async () => {
-      const port = {} as never;
+  describe("onApplicationBootstrap()", () => {
+    it("runs startup recovery once even if invoked again", async () => {
+      await service.onApplicationBootstrap();
+      await service.onApplicationBootstrap();
 
-      await service.setConversationPort(port);
-      await service.setConversationPort(port);
-
-      expect(mockRunConversation.setPort).toHaveBeenCalledWith(port);
       expect(mockRunRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("stopRunsForWorkspace()", () => {
+    it("stops every active run conversation for the workspace", async () => {
+      mockRunRepository.findActiveConversationIdsForWorkspace = vi
+        .fn()
+        .mockResolvedValue(["conversation-1", "conversation-2"]);
+      const stop = vi.spyOn(service, "stop").mockResolvedValue(true);
+
+      await service.stopRunsForWorkspace("ws-1");
+
+      expect(
+        mockRunRepository.findActiveConversationIdsForWorkspace
+      ).toHaveBeenCalledWith("ws-1");
+      expect(stop).toHaveBeenCalledWith("conversation-1");
+      expect(stop).toHaveBeenCalledWith("conversation-2");
     });
   });
 
