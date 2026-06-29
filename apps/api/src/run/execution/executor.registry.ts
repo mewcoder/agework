@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import type { RunEventReceiver, RunExecutor } from "./executor";
+import type { RunEventPort, RunExecutor } from "./executor";
 
 export const RUN_EXECUTORS = Symbol("RUN_EXECUTORS");
 
@@ -27,9 +27,9 @@ export class RunExecutorRegistry {
     return executor;
   }
 
-  setRunEventReceiver(receiver: RunEventReceiver): void {
+  setRunEventPort(receiver: RunEventPort): void {
     for (const executor of this.executors.values()) {
-      executor.setRunEventReceiver(receiver);
+      executor.setRunEventPort(receiver);
     }
   }
 }

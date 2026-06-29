@@ -23,7 +23,7 @@ function makeExecutor() {
 function makeRegistry(executor: ReturnType<typeof makeExecutor>) {
   return {
     resolve: vi.fn().mockReturnValue(executor),
-    setRunEventReceiver: vi.fn(),
+    setRunEventPort: vi.fn(),
   } as unknown as RunExecutorRegistry;
 }
 
@@ -113,8 +113,8 @@ describe("ExecutionService", () => {
     const service = new ExecutionService(registry);
     const receiver = {} as never;
 
-    service.setRunEventReceiver(receiver);
+    service.setRunEventPort(receiver);
 
-    expect(registry.setRunEventReceiver).toHaveBeenCalledWith(receiver);
+    expect(registry.setRunEventPort).toHaveBeenCalledWith(receiver);
   });
 });

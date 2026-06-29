@@ -44,7 +44,7 @@ describe("RuntimeService", () => {
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");
     const sandboxWorker = {
-      setEventSink: vi.fn(),
+      setEventPort: vi.fn(),
       start: vi.fn(),
       sendCommand: vi.fn(),
       cancel: vi.fn(),

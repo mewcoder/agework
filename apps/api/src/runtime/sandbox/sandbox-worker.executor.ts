@@ -16,10 +16,10 @@ import {
 
 /**
  * sandbox 执行回流端口：执行过程中的异常事实通过它通知 run 层。
- * 由 run 在启动期经 RuntimeService.setSandboxWorkerEventSink 注入实现，
- * 避免 runtime 反向依赖 run（结构上由 run 的 RunEventReceiver 满足）。
+ * 由 run 在启动期经 RuntimeService.setSandboxWorkerEventPort 注入实现，
+ * 避免 runtime 反向依赖 run（结构上由 run 的 RunEventPort 满足）。
  */
-export interface SandboxWorkerEventSink {
+export interface SandboxWorkerEventPort {
   notifyWorkerError(runId: string, error: string): Promise<void>;
   notifyCancelledBeforeReady(runId: string): Promise<void>;
 }
@@ -42,14 +42,14 @@ export class SandboxWorkerExecutor {
   private readonly type = "sandbox" as const;
   private readonly logger = new Logger(SandboxWorkerExecutor.name);
   private readonly states = new Map<string, SandboxRunState>();
-  private sink!: SandboxWorkerEventSink;
+  private sink!: SandboxWorkerEventPort;
 
   constructor(
     private readonly runtimeInstances: SandboxRuntimeInstanceService,
     private readonly workerHost: WorkerHostService
   ) {}
 
-  setEventSink(sink: SandboxWorkerEventSink): void {
+  setEventPort(sink: SandboxWorkerEventPort): void {
     this.sink = sink;
   }
 

@@ -11,7 +11,7 @@ import { ConfigService } from "../../config/config.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import type { RunStream } from "../streaming/run-stream";
 
-export interface RunTimeoutErrorSink {
+export interface RunTimeoutErrorPort {
   markRunTimedOut(
     runId: string,
     runtimeHandle: WorkerExecutionHandle
@@ -41,11 +41,11 @@ export class LiveRunRegistry implements OnApplicationShutdown {
   private readonly logger = new Logger(LiveRunRegistry.name);
   private readonly handles = new Map<string, LiveRunHandle>();
   private readonly timeoutTimers = new Map<string, NodeJS.Timeout>();
-  private timeoutErrorSink?: RunTimeoutErrorSink;
+  private timeoutErrorSink?: RunTimeoutErrorPort;
 
   constructor(private readonly configService: ConfigService) {}
 
-  setTimeoutErrorSink(sink: RunTimeoutErrorSink): void {
+  setTimeoutErrorPort(sink: RunTimeoutErrorPort): void {
     this.timeoutErrorSink = sink;
   }
 

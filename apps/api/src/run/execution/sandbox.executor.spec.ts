@@ -13,7 +13,7 @@ import type {
  */
 describe("SandboxRunExecutor — delegates to RuntimeService", () => {
   let runtimeService: {
-    setSandboxWorkerEventSink: ReturnType<typeof vi.fn>;
+    setSandboxWorkerEventPort: ReturnType<typeof vi.fn>;
     startSandboxWorker: ReturnType<typeof vi.fn>;
     sendSandboxCommand: ReturnType<typeof vi.fn>;
     cancelSandboxRun: ReturnType<typeof vi.fn>;
@@ -32,7 +32,7 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
 
   beforeEach(() => {
     runtimeService = {
-      setSandboxWorkerEventSink: vi.fn(),
+      setSandboxWorkerEventPort: vi.fn(),
       startSandboxWorker: vi.fn().mockReturnValue(handle),
       sendSandboxCommand: vi.fn(),
       cancelSandboxRun: vi.fn(),
@@ -49,8 +49,8 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
 
   it("forwards the run event receiver as the sandbox worker event sink", () => {
     const receiver = { notifyWorkerError: vi.fn() } as never;
-    executor.setRunEventReceiver(receiver);
-    expect(runtimeService.setSandboxWorkerEventSink).toHaveBeenCalledWith(
+    executor.setRunEventPort(receiver);
+    expect(runtimeService.setSandboxWorkerEventPort).toHaveBeenCalledWith(
       receiver
     );
   });

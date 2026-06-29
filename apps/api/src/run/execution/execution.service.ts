@@ -5,7 +5,7 @@ import type {
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { RunExecutorRegistry } from "./executor.registry";
-import type { RunEventReceiver } from "./executor";
+import type { RunEventPort } from "./executor";
 
 /**
  * runs 到 per-run executor 的应用层入口：按 runtimeType 解析 executor，并统一转发
@@ -55,7 +55,7 @@ export class ExecutionService {
     ).then(() => undefined);
   }
 
-  setRunEventReceiver(receiver: RunEventReceiver): void {
-    this.executorRegistry.setRunEventReceiver(receiver);
+  setRunEventPort(receiver: RunEventPort): void {
+    this.executorRegistry.setRunEventPort(receiver);
   }
 }

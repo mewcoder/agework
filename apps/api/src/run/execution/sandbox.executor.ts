@@ -4,7 +4,7 @@ import type {
   WorkerExecutionStartInput,
   CommandPayload,
 } from "@agework/shared/protocol";
-import type { RunEventReceiver, RunExecutor } from "./executor";
+import type { RunEventPort, RunExecutor } from "./executor";
 import { RuntimeService } from "../../runtime/runtime.service";
 
 /**
@@ -17,8 +17,8 @@ export class SandboxRunExecutor implements RunExecutor {
 
   constructor(private readonly runtimeService: RuntimeService) {}
 
-  setRunEventReceiver(receiver: RunEventReceiver): void {
-    this.runtimeService.setSandboxWorkerEventSink(receiver);
+  setRunEventPort(receiver: RunEventPort): void {
+    this.runtimeService.setSandboxWorkerEventPort(receiver);
   }
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {

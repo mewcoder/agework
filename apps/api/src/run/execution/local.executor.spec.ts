@@ -73,7 +73,7 @@ describe("LocalRunExecutor", () => {
     childProcessMock.child.killed = false;
 
     provider = new LocalRunExecutor();
-    provider.setRunEventReceiver({
+    provider.setRunEventPort({
       sendEvent: vi.fn().mockResolvedValue(undefined),
       notifyWorkerError: vi.fn().mockResolvedValue(undefined),
       notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
@@ -162,7 +162,7 @@ describe("LocalRunExecutor", () => {
 
   it("normalizes worker RPC notifications and responses before forwarding", () => {
     const sendEvent = vi.fn().mockResolvedValue(undefined);
-    provider.setRunEventReceiver({
+    provider.setRunEventPort({
       sendEvent,
       notifyWorkerError: vi.fn().mockResolvedValue(undefined),
       notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),

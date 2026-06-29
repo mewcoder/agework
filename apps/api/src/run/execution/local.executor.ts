@@ -20,7 +20,7 @@ import {
   rpcResponseToCommandResultMessage,
   runConfigMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import type { RunEventReceiver, RunExecutor } from "./executor";
+import type { RunEventPort, RunExecutor } from "./executor";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 
 /** Internal state for a local worker process (not part of the protocol handle). */
@@ -51,9 +51,9 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
   private readonly logger = new Logger(LocalRunExecutor.name);
   private readonly states = new Map<string, LocalRunState>();
   private readonly commandSeqs = new Map<string, number>();
-  private receiver!: RunEventReceiver;
+  private receiver!: RunEventPort;
 
-  setRunEventReceiver(receiver: RunEventReceiver): void {
+  setRunEventPort(receiver: RunEventPort): void {
     this.receiver = receiver;
   }
 

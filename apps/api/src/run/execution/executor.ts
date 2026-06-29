@@ -13,7 +13,7 @@ import type {
  */
 export interface RunExecutor {
   readonly type: string;
-  setRunEventReceiver(receiver: RunEventReceiver): void;
+  setRunEventPort(receiver: RunEventPort): void;
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle;
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void;
   cancel(handle: WorkerExecutionHandle): void;
@@ -24,7 +24,7 @@ export interface RunExecutor {
   cleanupInterruptedExecution?(runtimeInstanceId: string): Promise<void>;
 }
 
-export interface RunEventReceiver {
+export interface RunEventPort {
   /** 转发上行 event（local 模式 IPC 入口；sandbox 模式直走 worker-host）。 */
   sendEvent(runId: string, message: RunChannelMessage<unknown>): Promise<void>;
   /**

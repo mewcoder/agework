@@ -17,7 +17,7 @@ import {
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import {
   SandboxWorkerExecutor,
-  type SandboxWorkerEventSink,
+  type SandboxWorkerEventPort,
 } from "./sandbox/sandbox-worker.executor";
 import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
 import { runtimeInstanceDiagnostics } from "./instances/runtime-instance-metadata";
@@ -74,9 +74,9 @@ export class RuntimeService {
   // run 层的 SandboxRunExecutor 只经下列方法驱动 sandbox 执行，不直接持有
   // SandboxWorkerExecutor / SandboxRuntimeInstanceService 等 runtime 内部 provider。
 
-  /** 注入 sandbox 执行回流端口（run 的 RunEventReceiver 结构上满足）。 */
-  setSandboxWorkerEventSink(sink: SandboxWorkerEventSink): void {
-    this.sandboxWorker.setEventSink(sink);
+  /** 注入 sandbox 执行回流端口（run 的 RunEventPort 结构上满足）。 */
+  setSandboxWorkerEventPort(sink: SandboxWorkerEventPort): void {
+    this.sandboxWorker.setEventPort(sink);
   }
 
   /** 启动一次 sandbox run：绑定 runtime owner、打开 worker session、attach/start 实例。 */

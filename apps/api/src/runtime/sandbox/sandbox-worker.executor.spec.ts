@@ -68,7 +68,7 @@ function makeProvider(engineOverride?: SandboxEngine) {
     runtimeInstances,
     workerHost as unknown as WorkerHostService
   );
-  provider.setEventSink(eventProcessor);
+  provider.setEventPort(eventProcessor);
 
   return {
     provider,

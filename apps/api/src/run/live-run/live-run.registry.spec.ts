@@ -60,7 +60,7 @@ describe("LiveRunRegistry", () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
     const registry = new LiveRunRegistry(makeConfig(1));
-    registry.setTimeoutErrorSink({ markRunTimedOut });
+    registry.setTimeoutErrorPort({ markRunTimedOut });
 
     const handle = makeHandle();
     registry.register("run-1", handle);
@@ -74,7 +74,7 @@ describe("LiveRunRegistry", () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
     const registry = new LiveRunRegistry(makeConfig(1));
-    registry.setTimeoutErrorSink({ markRunTimedOut });
+    registry.setTimeoutErrorPort({ markRunTimedOut });
 
     registry.register("run-1", makeHandle());
     registry.unregister("run-1");
@@ -87,7 +87,7 @@ describe("LiveRunRegistry", () => {
     vi.useFakeTimers();
     const markRunTimedOut = vi.fn().mockResolvedValue(undefined);
     const registry = new LiveRunRegistry(makeConfig(1));
-    registry.setTimeoutErrorSink({ markRunTimedOut });
+    registry.setTimeoutErrorPort({ markRunTimedOut });
 
     registry.register("run-1", makeHandle("run-1"));
     registry.register("run-2", makeHandle("run-2"));

@@ -7,11 +7,11 @@ import type {
   WorkerExecutionHandle,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import type { RunEventReceiver } from "../execution/executor";
+import type { RunEventPort } from "../execution/executor";
 import type { WorkerUpstreamPort } from "../../worker-host/worker-host.types";
 import {
   LiveRunRegistry,
-  type RunTimeoutErrorSink,
+  type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
 import { ExecutionService } from "../execution/execution.service";
 import { safeLogJson } from "../../common/logging";
@@ -30,7 +30,7 @@ const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
 export class WorkerEventService
-  implements RunEventReceiver, WorkerUpstreamPort, RunTimeoutErrorSink
+  implements RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
 {
   private readonly logger = new Logger(WorkerEventService.name);
   private readonly lastSeqMap = new Map<string, number>();
