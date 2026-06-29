@@ -12,6 +12,7 @@
 - Repository = DB boundary,也是业务数据访问 Prisma 的唯一入口。
 - Internal provider = private capability owner,只服务本 module 内部稳定子能力。
 - Event = fact-only notification,只通知已发生事实。
+- Port = 窄反向回调契约,仅用于下层基础设施/执行层向上回流执行事件/结果/错误(可带返回值);平级业务领域之间的反向需求不用 Port,改 flip 方向 / 参数喂 / 上提用例 owner。
 - Dependency = strictly downward or cross-service only。
 - 禁止 DDD / Clean Architecture 重型分层体系。
 - 后端命名细则见 [`backend-naming.md`](backend-naming.md),本文只保留架构边界与组织规则。
@@ -257,16 +258,32 @@ Feature Service
 - 具体谁在上谁在下,先按用例拥有者 / 状态拥有者 / 基础设施边界判断;调用方向必须服从这个判断。
 - 不维护固定全局模块链,避免和实现耦合、随重构漂移。
 
-拆环动作:
+反向关系处理:
 
-| 场景 | 处理 |
-|---|---|
-| 多数“同级”其实有天然低者 | 定序,只允许上层调下层 |
-| 一个用例需要协调两个领域 | 上提到拥有该用例的更上层 Service,它向下调两边 |
-| 两边共享低层概念 | 下沉成更低 module,两边都向下调它 |
-| 只是通知已发生事实 | 使用 domain event |
+总纲:**反向信息流可以存在,反向 `Service` 依赖不可以存在。**
 
-反向通知只允许三种机制:`EventEmitter2` domain event(跨域事实通知)、回调端口 `set*Sink`(结果回灌)、Registry(多态注册)。
+下层需要上层的东西时,按下面的决策链从上往下试,命中即停。Port 是最后手段,不是平级三选一:
+
+```
+1. 能 flip 吗?上层其实是更基础的领域(数据 / 容器)→ 沉到下面,正向直调。   ← 首选
+   (若两边共享一个更低概念,则下沉成更低 module,两边都向下调它。)
+2. 调用前能算出来吗?→ 由当前用例 owner 算好,当参数传入下层;下层因此不依赖上层。
+3. 是跨两个领域的同步用例吗?→ 上提到拥有该用例的更上层 Service,它正向调两边。
+4. 只是通知已发生事实、不要答案?→ domain event(过去式语义)。
+5. 下层是基础设施 / 传输 / 执行层、本就不能认识上层领域,且必须运行时回流?→ 窄 Port(最后手段)。
+6. 要注册多个多态实现?→ Registry(多态注册)。
+```
+
+Port 纪律:
+
+- Port 只配第 5 条:下层基础设施 / 执行层把执行事件 / 结果 / 错误回流给上层领域。平级业务领域之间的反向需求,回决策链第 1-3 条,不准做 Port。
+- **跨模块 Port 接口由下层(调用方)定义**,放在下层公开 `*.types.ts`;**上层实现**并在启动期 `setXxxPort(...)` 接线。如此编译依赖仍是上层→下层(向下),运行时调用是下层→上层,因而无环。
+- 同模块 internal provider 之间的 Port 放在所属子能力目录内,不要提升到 module root `*.types.ts`,避免把内部实现契约误变成跨模块公开类型。
+- 新增 Port 方法 ≤3 且语义具体,可带返回值用于执行层同步回流查询。历史超限 Port 视为 boundary debt:不继续加方法,优先回决策链第 1-3 条收敛。
+- Port 不能引用实现方的 `Service` / repository / internal provider 类型,也不能把对方根 `Service` 的公开方法整套搬过来。
+- Port 方法持续变多 = 信号:回决策链第 1-3 条(多半该 flip 或上提),不要继续加方法。
+- `Sink` / `Receiver` / `Recorder` 不再作为新增反向回调契约命名,统一 `XxxPort`;历史命名可在专项迁移中收敛,普通改动不要继续扩散。
+- 允许 `XxxPort` 契约类型,但不允许引入 Clean Architecture / Hexagonal 的 `ports/`、`adapters/` 分层目录。
 
 ### 2.3 Service 规则 (P0)
 
@@ -310,7 +327,7 @@ Root Service 拆分判断:
   - 少量响应形状转换。
   - 对 internal provider 的一行或几行薄转发。
 
-Root Service 是 module facade / use-case orchestrator,但不是承载全部 application 细节的容器。Service 方法里一旦出现明显的 execution/status/recovery/registry/sandbox 等子能力细节,应下沉到 internal provider,Service 只保留用例编排和对外契约。
+Root Service 是 module facade / 用例编排入口,但不是承载全部 application 细节的容器。Service 方法里一旦出现明显的 execution/status/recovery/registry/sandbox 等子能力细节,应下沉到 internal provider,Service 只保留用例编排和对外契约。
 
 ### 2.4 Repository 规则 (P0)
 
@@ -353,12 +370,16 @@ Root Service 是 module facade / use-case orchestrator,但不是承载全部 app
 
 ### 2.7 Event 规则 (P1)
 
+- 本仓库 domain event 使用 `@nestjs/event-emitter` / `EventEmitter2`。
 - Event 只表示已发生事实,命名用过去式语义。
 - Event 只用于通知,不用于同步控制流。
 - Handler 可以根据事实决定本领域状态变化。
 - 禁止用 event 命令另一个模块改状态。
 - 禁止把 event 当跨模块 method call 的替代品。
 - Event handler 必须遵守同样的模块边界;禁止调用跨模块 internal provider。
+- Event 适合派生状态、资源清理、审计、通知等不要求同步返回的场景。
+- Event handler 默认按 best-effort 理解:失败应记录日志,不能破坏事件来源操作的业务语义。
+- 如果来源操作必须强一致等待结果,不要用 event;应由用例 owner / 更上层 Service 同步编排。
 
 ### 2.8 Module 提升规则 (P2)
 
@@ -479,7 +500,7 @@ DDD / Hexagonal / Clean Architecture 重型套路:
 - [ ] 响应里会不会漏出敏感字段?
 - [ ] 有没有新增独立 mapper layer?
 - [ ] Event 是否被用于控制流或命令别的模块改状态?Event handler 是否调用了跨模块 internal provider?
-- [ ] 反向通知是否走 setter 端口 / registry / domain event,而不是反向注入上层 Service?
+- [ ] 反向需求是否先跑过 §2.2 决策链,优先 flip / 参数喂 / 上提用例 owner / domain event / registry,且只有 infra/execution 运行时回流才用 Port?
 - [ ] 有没有不知不觉加了 anti-pattern 里的重型套路 / 别栈 ism?
 
 ## 5. AI Bootstrap 机器语义
@@ -493,6 +514,7 @@ DDD / Hexagonal / Clean Architecture 重型套路:
 - `*.types.ts` = backend cross-module contract。
 - `@agework/shared` = frontend/backend shared contract。
 - Event = fact-only notification。
+- Port = narrow reverse callback for infra/execution→domain feedback (may return a value); business modules must prefer owner direction / params / higher use-case owner / event。
 - Dependency = strictly downward or exported-service only。
 - Module exports = public API。
 - Unexported provider/file = internal implementation。

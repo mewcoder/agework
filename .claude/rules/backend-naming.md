@@ -80,7 +80,7 @@
 | 后缀 | 用途 | 示例 |
 |---|---|---|
 | `XxxHandler` | 处理入口流程或事件入口 | `WorkerEndpointHandler` |
-| `XxxRegistry` | 维护注册表、回调端口、实例映射 | `LiveRunRegistry` |
+| `XxxRegistry` | 维护注册表、port 实例映射或多态实现表 | `LiveRunRegistry` |
 | `XxxStore` | 模块内状态存储 | `WorkerConfigStore` |
 | `XxxDispatcher` | 下发命令、分发消息或投递动作 | `WorkerCommandDispatcher` |
 | `XxxPolicy` | 封装策略判断,不做 I/O 编排 | `RuntimePlacementPolicy` |
@@ -90,7 +90,14 @@
 | `XxxParser` | 协议 / 文本解析 | `WorkerEventParser` |
 | `XxxFactory` | 创建复杂对象或 provider 实例 | `RuntimeTargetFactory` |
 | `XxxGuard` | Nest guard | `WorkerAuthGuard` |
-| `XxxPort` | 端口接口 / 契约类型 | `CommandSentRecorder` |
+| `XxxPort` | 下层基础设施/执行层向上回流的窄反向契约 | `WorkerUpstreamPort` |
+
+Port 命名:
+
+- 新增反向回调契约统一叫 `XxxPort`,接线方法统一叫 `setXxxPort(...)`。
+- 不新增 `XxxSink` / `XxxReceiver` / `XxxRecorder` 作为反向回调契约名;历史命名可在专项迁移中收敛。
+- `Port` 只表示窄契约类型,不要因此新增 `ports/`、`adapters/` 分层目录。
+- Port 仅用于下层基础设施/执行层向上回流;平级业务领域之间的反向需求改 flip / 参数喂 / 上提用例 owner(判定见架构 §2.2 决策链)。
 
 ## 3. Web 命名
 
@@ -238,6 +245,8 @@ type PaginatedListResponse<T> = {
 - `GET /api/v1/admin/workspaces/all` -> `GET /api/v1/admin/workspaces/list`
 - ~~`GET /api/v1/admin/runs/events` -> `GET /api/v1/admin/runs/events/list`~~（已完成 2026-06-28，前后端同步改、无兼容旧端点）
 - `GET /api/v1/admin/runtime/resources` -> `GET /api/v1/admin/runtime/resources/list`
+- 反向契约改名:`WorkerUpstreamReceiver` / `RunEventReceiver` / `*Sink` / `*Recorder` -> `*Port`(随反向依赖整改一并收敛)
+- `RunConversationPort` 是历史 broad port debt:方法数超出新规则,普通改动不继续加方法;后续随 agent-run 用例 owner 上提或 run/conversation 边界收敛拆解。
 
 迁移时优先后端和前端 API client 同步改;如果需要兼容旧调用,短期保留旧 endpoint 并在代码注释中标明移除条件。
 
