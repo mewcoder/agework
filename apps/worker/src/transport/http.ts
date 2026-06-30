@@ -12,7 +12,7 @@ import {
   rpcRequestToCommandMessage,
   upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import { errorDetails, workerLog } from "../logs/worker.js";
+import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
  * Keep-alive worker 的 worker-host HTTP 客户端。

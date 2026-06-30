@@ -23,7 +23,7 @@ import {
   registerWorkerRunLog,
   unregisterWorkerRunLog,
   workerLog,
-} from "./logs/worker.js";
+} from "./logging/worker-log.js";
 
 type UserMessageCommand = Extract<CommandPayload, { type: "user_message" }>;
 type CancelCommand = Extract<CommandPayload, { type: "cancel" }>;

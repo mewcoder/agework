@@ -15,7 +15,7 @@ import {
   rpcRequestToCommandMessage,
   upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import { errorDetails, workerLog } from "../logs/worker.js";
+import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 const CONFIG_TIMEOUT_MS = 10_000;
 

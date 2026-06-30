@@ -1,5 +1,5 @@
 import { runWorker } from "./worker.js";
-import { errorDetails, workerLog } from "./logs/worker.js";
+import { errorDetails, workerLog } from "./logging/worker-log.js";
 
 async function main() {
   return runWorker(resolveWorkerKeepAlive(process.env));

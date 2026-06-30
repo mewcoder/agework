@@ -16,8 +16,8 @@ import {
   setWorkerLogContext,
   setWorkerLogFilePath,
   workerLog,
-} from "./logs/worker.js";
-import { TraceLogWriter } from "./logs/trace.js";
+} from "./logging/worker-log.js";
+import { TraceLogWriter } from "./logging/trace.js";
 import { createAgentDriver, toAgentRunInput } from "./agent/index.js";
 
 const COMMAND_LONG_POLL_MS = 25_000;
