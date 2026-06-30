@@ -3,10 +3,7 @@ import type { Response } from "express";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../auth/decorators/current-user.decorator";
 import { AgentService } from "./agent.service";
-import {
-  AgentConversationIdDto,
-  AgentReplyDto,
-} from "./dto/agent-control.dto";
+import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
 import { AgentRunRequestDto } from "./dto/agent-run.dto";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 
@@ -47,10 +44,7 @@ export class AgentController {
   }
 
   @Post("agent/reply")
-  async replyAgent(
-    @Body() body: AgentReplyDto,
-    @CurrentUser() user: JwtUser
-  ) {
+  async replyAgent(@Body() body: AgentReplyDto, @CurrentUser() user: JwtUser) {
     await this.agentService.reply(body.id, body.answers, user);
   }
 

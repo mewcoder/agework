@@ -97,15 +97,11 @@ describe("module boundary", () => {
     const offenders = crossImports.filter((c) =>
       c.target.endsWith(".repository")
     );
-    expect(
-      offenders.map((c) => `${c.from} -> ${c.target}`).sort()
-    ).toEqual([]);
+    expect(offenders.map((c) => `${c.from} -> ${c.target}`).sort()).toEqual([]);
   });
 
   it("only reaches another module's public surface", () => {
     const offenders = crossImports.filter((c) => !isPublicSurface(c.target));
-    expect(
-      offenders.map((c) => `${c.from} -> ${c.target}`).sort()
-    ).toEqual([]);
+    expect(offenders.map((c) => `${c.from} -> ${c.target}`).sort()).toEqual([]);
   });
 });

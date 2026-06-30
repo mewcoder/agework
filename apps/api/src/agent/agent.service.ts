@@ -12,7 +12,10 @@ import { WorkspaceService } from "../workspace/workspace.service";
 import { safeLogJson } from "../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
 import type { CreateConversationDto } from "./dto/create-conversation.dto";
-import { getAgentOptions, getAgentOptionsByType } from "./options/agent-options";
+import {
+  getAgentOptions,
+  getAgentOptionsByType,
+} from "./options/agent-options";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 
 type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
@@ -223,9 +226,9 @@ export class AgentService {
   }
 
   private normalizeMessageId(messageId: unknown): string | undefined {
-    return messageId === undefined || messageId === null
-      ? undefined
-      : String(messageId);
+    if (typeof messageId === "string") return messageId;
+    if (typeof messageId === "number") return String(messageId);
+    return undefined;
   }
 
   private normalizePermissionForwardedProps(

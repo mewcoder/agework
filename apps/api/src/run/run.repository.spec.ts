@@ -253,10 +253,12 @@ describe("RunRepository", () => {
   });
 
   it("lists active run conversation ids for a workspace (deduped)", async () => {
-    const findMany = vi.fn().mockResolvedValue([
-      { conversationId: "conversation-1" },
-      { conversationId: "conversation-2" },
-    ]);
+    const findMany = vi
+      .fn()
+      .mockResolvedValue([
+        { conversationId: "conversation-1" },
+        { conversationId: "conversation-2" },
+      ]);
     const service = new RunRepository({ run: { findMany } } as never);
 
     const ids = await service.findActiveConversationIdsForWorkspace("ws-1");

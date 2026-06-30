@@ -9,8 +9,6 @@ import {
   type WorkerExecutionStartInput,
   type CommandPayload,
   type RunChannelMessage,
-  type RpcResponse,
-  type WorkerCommandResult,
 } from "@agework/shared/protocol";
 import {
   commandMessageToRpcRequest,
@@ -261,15 +259,17 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
-  async cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
+  cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
     const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
-    if (!Number.isInteger(pid)) return;
-    try {
-      process.kill(pid, "SIGTERM");
-    } catch {
-      // ESRCH: process already gone
+    if (Number.isInteger(pid)) {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // ESRCH: process already gone
+      }
     }
+    return Promise.resolve();
   }
 }
 

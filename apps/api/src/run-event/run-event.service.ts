@@ -37,9 +37,7 @@ export class RunEventService {
   constructor(private readonly repository: RunEventRepository) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
-  listForAdmin(
-    params: Parameters<RunEventRepository["listAdminEvents"]>[0]
-  ) {
+  listForAdmin(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
     return this.repository.listAdminEvents(params);
   }
 
@@ -645,6 +643,9 @@ function jsonSafe(value: unknown): RunEventData[string] {
     }
     return output;
   }
+  // 残余类型(bigint / symbol / function)非 JSON 值,统一转字符串保留可读信息;
+  // 此处不会是普通对象(已在上面 object 分支处理),no-base-to-string 是误报。
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   return String(value);
 }
 
@@ -678,7 +679,8 @@ function contentPreview(value: unknown): string | undefined {
   try {
     return JSON.stringify(value).slice(0, 300);
   } catch {
-    return String(value).slice(0, 300);
+    // 循环引用等无法序列化:回退到稳定标记,避免 "[object Object]"。
+    return "[unserializable]";
   }
 }
 

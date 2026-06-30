@@ -34,13 +34,13 @@ describe("AdminRuntimeController", () => {
     expect(stopRuntimeInstance).toHaveBeenCalledWith("rr-1");
   });
 
-  it("delegates policy and stats to the runtime service", () => {
+  it("delegates policy and stats to the runtime service", async () => {
     const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "local" });
     const getRuntimeStats = vi.fn().mockResolvedValue({ activeRuntimes: 0 });
     const controller = makeController({ getRuntimePolicy, getRuntimeStats });
 
     controller.getRuntimePolicy();
-    controller.getRuntimeStats();
+    await controller.getRuntimeStats();
 
     expect(getRuntimePolicy).toHaveBeenCalled();
     expect(getRuntimeStats).toHaveBeenCalled();

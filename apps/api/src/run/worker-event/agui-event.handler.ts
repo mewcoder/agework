@@ -22,7 +22,7 @@ export class WorkerAgUiEventHandler {
     private readonly runEvents: RunEventService
   ) {}
 
-  async handle(runId: string, event: unknown): Promise<void> {
+  handle(runId: string, event: unknown): void {
     const handle = this.liveRuns.get(runId);
     if (!handle) {
       this.logger.warn(

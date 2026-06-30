@@ -61,9 +61,7 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */
-  listEventsForAdmin(
-    params: Parameters<RunEventService["listForAdmin"]>[0]
-  ) {
+  listEventsForAdmin(params: Parameters<RunEventService["listForAdmin"]>[0]) {
     return this.runEvents.listForAdmin(params);
   }
 

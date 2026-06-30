@@ -46,19 +46,13 @@ describe("getLLMClient", () => {
   });
 
   it("returns an error when required config is missing", () => {
-    expect(
-      getLLMClient("claude", { ...CONFIG, apiKey: "  " })
-    ).toEqual({
+    expect(getLLMClient("claude", { ...CONFIG, apiKey: "  " })).toEqual({
       error: "未配置 apiKey",
     });
-    expect(
-      getLLMClient("claude", { ...CONFIG, models: [] })
-    ).toEqual({
+    expect(getLLMClient("claude", { ...CONFIG, models: [] })).toEqual({
       error: "未配置 models",
     });
-    expect(
-      getLLMClient("claude", { ...CONFIG, baseUrl: "" })
-    ).toEqual({
+    expect(getLLMClient("claude", { ...CONFIG, baseUrl: "" })).toEqual({
       error: "未配置 baseUrl",
     });
     expect(createAnthropic).not.toHaveBeenCalled();

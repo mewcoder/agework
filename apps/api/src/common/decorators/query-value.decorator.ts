@@ -1,7 +1,7 @@
 import { Transform } from "class-transformer";
 
 export function OptionalTrimmedString() {
-  return Transform(({ value }) => {
+  return Transform(({ value }: { value: unknown }) => {
     if (value === undefined || value === null) return undefined;
     if (typeof value !== "string") return value;
     const trimmed = value.trim();
@@ -10,17 +10,19 @@ export function OptionalTrimmedString() {
 }
 
 export function OptionalStringArrayQuery() {
-  return Transform(({ value }) => {
+  return Transform(({ value }: { value: unknown }) => {
     if (value === undefined || value === null || value === "") {
       return undefined;
     }
-    const values = Array.isArray(value) ? value : [value];
-    if (values.some((item) => typeof item !== "string")) {
+    const values: unknown[] = Array.isArray(value) ? value : [value];
+    const strings = values.filter(
+      (item): item is string => typeof item === "string"
+    );
+    if (strings.length !== values.length) {
       return value;
     }
-    const items = values.flatMap((item) => item.split(","));
-    const normalized = items
-      .filter((item): item is string => typeof item === "string")
+    const normalized = strings
+      .flatMap((item) => item.split(","))
       .map((item) => item.trim())
       .filter(Boolean);
     return normalized.length > 0 ? normalized : undefined;

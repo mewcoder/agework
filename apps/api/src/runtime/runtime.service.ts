@@ -69,14 +69,13 @@ export class RuntimeService {
     return resolveRuntimeTarget(input, this.defaults);
   }
 
-
   // ── sandbox per-run 执行门面 ──────────────────────────────────────────
   // run 层的 SandboxRunExecutor 只经下列方法驱动 sandbox 执行，不直接持有
   // SandboxWorkerExecutor / SandboxRuntimeInstanceService 等 runtime 内部 provider。
 
   /** 注入 sandbox 执行回流端口（run 的 RunEventPort 结构上满足）。 */
-  setSandboxWorkerEventPort(sink: SandboxWorkerEventPort): void {
-    this.sandboxWorker.setEventPort(sink);
+  setSandboxWorkerEventPort(eventPort: SandboxWorkerEventPort): void {
+    this.sandboxWorker.setEventPort(eventPort);
   }
 
   /** 启动一次 sandbox run：绑定 runtime owner、打开 worker session、attach/start 实例。 */

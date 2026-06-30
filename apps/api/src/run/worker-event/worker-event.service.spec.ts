@@ -355,10 +355,7 @@ describe("WorkerEventService", () => {
 
   it("persists agent.sessionId only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.(
-        "conversation-1",
-        sessionId
-      );
+      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
     });
     liveRuns.register("run-1", {
       runtimeHandle: {
@@ -401,10 +398,7 @@ describe("WorkerEventService", () => {
 
   it("persists system:init session_id only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.(
-        "conversation-1",
-        sessionId
-      );
+      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
     });
     liveRuns.register("run-1", {
       runtimeHandle: {

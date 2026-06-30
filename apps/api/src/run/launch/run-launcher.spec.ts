@@ -333,7 +333,9 @@ describe("RunLauncher", () => {
         return handle;
       });
     await launch(
-      makeStartInput({ workspace: makeWorkspaceView({ runtimeType: "sandbox" }) })
+      makeStartInput({
+        workspace: makeWorkspaceView({ runtimeType: "sandbox" }),
+      })
     );
     await new Promise<void>((resolve) => queueMicrotask(resolve));
 
@@ -368,7 +370,10 @@ describe("RunLauncher", () => {
       "run-1",
       "Failed to start worker"
     );
-    expect(mockConversations.setRunStatus).toHaveBeenCalledWith("conversation-1", "error");
+    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
+      "conversation-1",
+      "error"
+    );
     await Promise.resolve();
     expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
   });

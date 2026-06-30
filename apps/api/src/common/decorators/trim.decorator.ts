@@ -1,7 +1,7 @@
 import { Transform } from "class-transformer";
 
 export function Trim() {
-  return Transform(({ value }) =>
+  return Transform(({ value }: { value: unknown }) =>
     typeof value === "string" ? value.trim() : value
   );
 }

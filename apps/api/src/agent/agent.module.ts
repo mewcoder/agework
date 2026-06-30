@@ -12,7 +12,12 @@ import { AgentService } from "./agent.service";
  * 不持有数据,也不接管 run 生命周期 / runtime / model-provider 配置 ownership。
  */
 @Module({
-  imports: [ConversationModule, WorkspaceModule, ModelProviderModule, RunModule],
+  imports: [
+    ConversationModule,
+    WorkspaceModule,
+    ModelProviderModule,
+    RunModule,
+  ],
   controllers: [AgentController],
   providers: [AgentService],
 })

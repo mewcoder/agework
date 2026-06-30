@@ -150,7 +150,7 @@ describe("ConversationService", () => {
 
     await service.saveUserMessage(
       "conversation-1",
-      { id: "msg-1", content: "帮我重构参数校验" } as never,
+      { id: "msg-1", content: "帮我重构参数校验" },
       { agentType: "claude", modelProviderId: "mp-1" }
     );
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -186,7 +186,7 @@ describe("ConversationService", () => {
 
     await service.saveUserMessage(
       "conversation-1",
-      { id: "msg-1", content: "first" } as never,
+      { id: "msg-1", content: "first" },
       { agentType: "claude", modelProviderId: "mp-1" }
     );
     await new Promise<void>((resolve) => setImmediate(resolve));

@@ -131,10 +131,7 @@ export class RunStatusService {
     }
 
     await this.conversations
-      .setRunStatus(
-        handle.conversationId,
-        effect.terminalConversationStatus
-      )
+      .setRunStatus(handle.conversationId, effect.terminalConversationStatus)
       .catch(
         swallow(
           this.logger,

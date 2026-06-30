@@ -4,7 +4,6 @@ import { RuntimeService } from "../../runtime/runtime.service";
 import type { RunEventPort } from "./executor";
 import type {
   CommandPayload,
-  WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 
@@ -31,7 +30,7 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
     runtimeType: "sandbox",
     runtimeInstanceId: "",
     conversationId: "conversation-1",
-  } as WorkerExecutionHandle;
+  };
 
   beforeEach(() => {
     runtimeService = {
@@ -54,7 +53,7 @@ describe("SandboxRunExecutor — delegates to RuntimeService", () => {
     expect(executor.type).toBe("sandbox");
   });
 
-  it("forwards the run event receiver as the sandbox worker event sink", () => {
+  it("forwards the run event receiver as the sandbox worker event port", () => {
     expect(runtimeService.setSandboxWorkerEventPort).toHaveBeenCalledWith(
       receiver
     );

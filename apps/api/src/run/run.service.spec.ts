@@ -97,9 +97,7 @@ describe("RunService", () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue(null);
-      await expect(
-        service.reply("conversation-1", {})
-      ).rejects.toThrow();
+      await expect(service.reply("conversation-1", {})).rejects.toThrow();
     });
 
     it("should send approval control through worker execution when an live handle exists", async () => {

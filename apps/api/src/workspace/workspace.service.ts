@@ -48,7 +48,10 @@ export class WorkspaceService {
    * 查询工作空间是否存在且属于该用户;返回 null 表示不存在或非属主。
    * 供上层入口(如 agent 建会话)做归属校验,由调用方决定如何处理 null。
    */
-  getOwnedId(userId: string, workspaceId: string): Promise<{ id: string } | null> {
+  getOwnedId(
+    userId: string,
+    workspaceId: string
+  ): Promise<{ id: string } | null> {
     return this.repo.getOwnedId(userId, workspaceId);
   }
 

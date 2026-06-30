@@ -157,7 +157,9 @@ describe("SandboxWorkerExecutor — executor contract", () => {
         runtimeTarget: makeRuntimeTarget({ runtimeType: "local" }),
         runConfig: baseRun as never,
       })
-    ).toThrow("SandboxWorkerExecutor cannot start worker for runtime type: local");
+    ).toThrow(
+      "SandboxWorkerExecutor cannot start worker for runtime type: local"
+    );
     expect(engine.getOrCreate).not.toHaveBeenCalled();
   });
 });
@@ -320,7 +322,7 @@ describe("SandboxWorkerExecutor — workspace scope", () => {
         runtimeType: "sandbox",
         runtimeInstanceId: "",
         conversationId: "conversation-1",
-      } as never,
+      },
       { type: "user_message", commandId: "cmd-1", runId: "run-unknown" }
     );
 
@@ -357,11 +359,10 @@ describe("SandboxWorkerExecutor — workspace scope", () => {
   it("cancel during sandbox startup publishes cancelled status immediately", async () => {
     const engine = makeMockEngine("docker");
     let resolveGetOrCreate: (value: SandboxRuntime) => void;
-    (engine.getOrCreate as ReturnType<typeof vi.fn>).mockImplementation(
-      () =>
-        new Promise<SandboxRuntime>((resolve) => {
-          resolveGetOrCreate = resolve;
-        })
+    (engine.getOrCreate as ReturnType<typeof vi.fn>).mockReturnValue(
+      new Promise<SandboxRuntime>((resolve) => {
+        resolveGetOrCreate = resolve;
+      })
     );
     const { provider, eventProcessor } = makeProvider(engine);
 

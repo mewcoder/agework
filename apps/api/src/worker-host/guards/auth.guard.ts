@@ -25,7 +25,7 @@ export class WorkerAuthGuard implements CanActivate {
 
   constructor(private readonly runtimeAccess: WorkerAccessService) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<RequestWithRunId>();
 
     const accessKey = extractBearerToken(request.headers);

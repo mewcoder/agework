@@ -128,10 +128,7 @@ export class WorkspaceDirectoryHandler {
     if (!trimmedRootPath) {
       const rootPath =
         input.isolationScope === "workspace"
-          ? join(
-              this.config.getWorkspace(),
-              `${username}_${input.workspaceId}`
-            )
+          ? join(this.config.getWorkspace(), `${username}_${input.workspaceId}`)
           : join(this.config.getUserWorkspace(username), input.workspaceId);
       return {
         rootPath,

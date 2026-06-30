@@ -41,12 +41,12 @@ export class LiveRunRegistry implements OnApplicationShutdown {
   private readonly logger = new Logger(LiveRunRegistry.name);
   private readonly handles = new Map<string, LiveRunHandle>();
   private readonly timeoutTimers = new Map<string, NodeJS.Timeout>();
-  private timeoutErrorSink?: RunTimeoutErrorPort;
+  private timeoutErrorPort?: RunTimeoutErrorPort;
 
   constructor(private readonly configService: ConfigService) {}
 
-  setTimeoutErrorPort(sink: RunTimeoutErrorPort): void {
-    this.timeoutErrorSink = sink;
+  setTimeoutErrorPort(port: RunTimeoutErrorPort): void {
+    this.timeoutErrorPort = port;
   }
 
   register(runId: string, handle: LiveRunHandle): void {
@@ -66,7 +66,7 @@ export class LiveRunRegistry implements OnApplicationShutdown {
 
   /**
    * 进程退出时清掉所有 run 超时 timer。timer 虽已 unref（不阻塞退出），
-   * 但清掉可避免 shutdown 过程中误触发 timeout sink 去改 run 状态。
+   * 但清掉可避免 shutdown 过程中误触发 timeout port 去改 run 状态。
    * run 状态由重启后 RunRecoveryService 收敛。
    */
   onApplicationShutdown(): void {
@@ -83,14 +83,14 @@ export class LiveRunRegistry implements OnApplicationShutdown {
       this.timeoutTimers.delete(runId);
       const handle = this.handles.get(runId);
       if (!handle) return;
-      const timeoutErrorSink = this.timeoutErrorSink;
-      if (!timeoutErrorSink) {
+      const timeoutErrorPort = this.timeoutErrorPort;
+      if (!timeoutErrorPort) {
         this.logger.error(
-          `run timeout error sink missing ${safeLogJson({ runId })}`
+          `run timeout error port missing ${safeLogJson({ runId })}`
         );
         return;
       }
-      timeoutErrorSink
+      timeoutErrorPort
         .markRunTimedOut(runId, handle.runtimeHandle)
         .catch((err) => {
           this.logger.error(

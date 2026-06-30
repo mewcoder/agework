@@ -240,10 +240,7 @@ describe("AgentService", () => {
         "user-1",
         "conversation-1"
       );
-      expect(mockRunService.resume).toHaveBeenCalledWith(
-        "conversation-1",
-        res
-      );
+      expect(mockRunService.resume).toHaveBeenCalledWith("conversation-1", res);
     });
 
     it("throws when conversationId is missing", async () => {
@@ -260,10 +257,9 @@ describe("AgentService", () => {
         "user-1",
         "conversation-1"
       );
-      expect(mockRunService.reply).toHaveBeenCalledWith(
-        "conversation-1",
-        { q1: "yes" }
-      );
+      expect(mockRunService.reply).toHaveBeenCalledWith("conversation-1", {
+        q1: "yes",
+      });
     });
   });
 

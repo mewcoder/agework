@@ -13,7 +13,13 @@ function runMiddleware(): Promise<Map<string, string>> {
 
   return new Promise((resolve, reject) => {
     securityHeaders()(req as never, res as never, (err?: unknown) =>
-      err ? reject(err) : resolve(headers)
+      err
+        ? reject(
+            err instanceof Error
+              ? err
+              : new Error("security headers middleware failed")
+          )
+        : resolve(headers)
     );
   });
 }

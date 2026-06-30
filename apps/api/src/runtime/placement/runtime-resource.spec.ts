@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import type { IsolationScope } from "@agework/shared/protocol";
 import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,

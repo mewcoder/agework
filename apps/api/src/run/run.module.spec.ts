@@ -61,10 +61,7 @@ describe("RunModule wiring", () => {
     expect(testingModule.get(RunStartupService)).toBeInstanceOf(
       RunStartupService
     );
-    const setRunEventPort = vi.spyOn(
-      executionService,
-      "setRunEventPort"
-    );
+    const setRunEventPort = vi.spyOn(executionService, "setRunEventPort");
     const workerHost = testingModule.get(WorkerHostService);
     const setUpstreamPort = vi.spyOn(workerHost, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);

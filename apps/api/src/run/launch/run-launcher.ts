@@ -22,11 +22,17 @@ import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
 } from "../worker-event/assistant-message.aggregator";
-import { ConfigService, type IsolationScope } from "../../config/config.service";
+import {
+  ConfigService,
+  type IsolationScope,
+} from "../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
 import { errorLogFields, safeLogJson } from "../../common/logging";
-import { RunEventService, compactData } from "../../run-event/run-event.service";
+import {
+  RunEventService,
+  compactData,
+} from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run-service.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { safePathPart } from "../../common/safe-path";
@@ -283,7 +289,10 @@ export class RunLauncher {
   }): Promise<void> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
-    const activated = await this.conversations.setRunStatus(conversationId, "running");
+    const activated = await this.conversations.setRunStatus(
+      conversationId,
+      "running"
+    );
     if (activated) return;
 
     try {

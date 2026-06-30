@@ -31,6 +31,6 @@ export function clearRefreshCookie(res: Response): void {
 export function readRefreshCookie(req: Request): string | undefined {
   const cookies = (req as Request & { cookies?: Record<string, string> })
     .cookies;
-  const value = cookies?.[REFRESH_COOKIE_NAME];
+  const value: unknown = cookies?.[REFRESH_COOKIE_NAME];
   return typeof value === "string" && value ? value : undefined;
 }

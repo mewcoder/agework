@@ -398,7 +398,6 @@ describe("WorkspaceService", () => {
         new WorkspaceDeletedEvent(workspaceId)
       );
     });
-
   });
 
   describe("getRunContext", () => {

@@ -29,6 +29,11 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-floating-promises': 'warn',
       '@typescript-eslint/no-unsafe-argument': 'warn',
+      // 下划线前缀表示「有意未使用」(占位参数 / 解构丢弃)。
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
@@ -59,6 +64,21 @@ export default tseslint.config(
           ],
         },
       ],
+    },
+  },
+  // 测试文件用手搓 mock,会大量产生 `any`;type-aware 的 unsafe-* 与 unbound-method
+  // 在 mock 上几乎全是噪音,对 *.spec.ts 关闭(其余规则仍生效)。
+  {
+    files: ['**/*.spec.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      // mock 常以 async 签名对齐被测接口,体内无 await 属正常。
+      '@typescript-eslint/require-await': 'off',
     },
   },
 );

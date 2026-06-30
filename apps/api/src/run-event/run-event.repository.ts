@@ -183,7 +183,8 @@ function normalizeData(
       };
     }
   } catch {
-    return { value: String(redacted) };
+    // 循环引用等无法序列化:回退到稳定标记,避免 "[object Object]"。
+    return { value: "[unserializable]" };
   }
   return redacted;
 }

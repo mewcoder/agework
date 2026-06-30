@@ -256,8 +256,7 @@ export class ConversationService {
     return {
       list: conversations.map((conversation) => ({
         conversationId: conversation.id,
-        runStatus:
-          conversation.runStatus as ConversationRunStatus,
+        runStatus: conversation.runStatus as ConversationRunStatus,
         pendingUserAction: this.normalizePendingUserAction(
           conversation.pendingUserAction
         ),
@@ -361,7 +360,10 @@ export class ConversationService {
     );
     if (titleContext) {
       this.generateLLMTitle({ conversationId, ...titleContext }).catch(
-        swallow(this.logger, `generate LLM title for conversation ${conversationId}`)
+        swallow(
+          this.logger,
+          `generate LLM title for conversation ${conversationId}`
+        )
       );
     }
   }
@@ -374,10 +376,7 @@ export class ConversationService {
     return this.repo.attachMessageToRun(conversationId, messageId, runId);
   }
 
-  private async generateDefaultTitle(
-    conversationId: string,
-    content: unknown
-  ) {
+  private async generateDefaultTitle(conversationId: string, content: unknown) {
     const conversation = await this.repo.findTitle(conversationId);
     if (conversation?.title) return;
     const title = TitleGenerator.generateDefaultTitle(extractText(content));

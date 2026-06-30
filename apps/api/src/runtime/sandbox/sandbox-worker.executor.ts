@@ -42,15 +42,15 @@ export class SandboxWorkerExecutor {
   private readonly type = "sandbox" as const;
   private readonly logger = new Logger(SandboxWorkerExecutor.name);
   private readonly states = new Map<string, SandboxRunState>();
-  private sink!: SandboxWorkerEventPort;
+  private eventPort!: SandboxWorkerEventPort;
 
   constructor(
     private readonly runtimeInstances: SandboxRuntimeInstanceService,
     private readonly workerHost: WorkerHostService
   ) {}
 
-  setEventPort(sink: SandboxWorkerEventPort): void {
-    this.sink = sink;
+  setEventPort(eventPort: SandboxWorkerEventPort): void {
+    this.eventPort = eventPort;
   }
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
@@ -176,7 +176,7 @@ export class SandboxWorkerExecutor {
     if (!state) return;
     if (state.cancelledBeforeReady) {
       this.cleanup(runId);
-      this.sink
+      this.eventPort
         .notifyCancelledBeforeReady(runId)
         .catch(
           swallow(this.logger, `notify cancelled before ready for run ${runId}`)
@@ -215,10 +215,11 @@ export class SandboxWorkerExecutor {
     return {
       runtimeReady: (runId, runtimeInstanceId) =>
         this.markRuntimeReady(runId, runtimeInstanceId),
-      publishWorkerError: (runId, error) =>
-        this.sink
+      publishWorkerError: (runId, error) => {
+        this.eventPort
           .notifyWorkerError(runId, error)
-          .catch(swallow(this.logger, `notify worker error for run ${runId}`)),
+          .catch(swallow(this.logger, `notify worker error for run ${runId}`));
+      },
       cleanupByOwnerId: (ownerId) => this.cleanupByOwnerId(ownerId),
     };
   }

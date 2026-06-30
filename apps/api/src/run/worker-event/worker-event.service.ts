@@ -150,7 +150,7 @@ export class WorkerEventService
         await this.handleRunStatus(runId, message.payload as RunStatusPayload);
         break;
       case "agui.event":
-        await this.aguiEvents.handle(runId, message.payload);
+        this.aguiEvents.handle(runId, message.payload);
         break;
       case "sdk.raw":
         this.recordSdkRaw(runId, message.payload);

@@ -38,9 +38,7 @@ describe("WorkerAuthGuard", () => {
   it("rejects when no bearer token is provided", async () => {
     const { guard } = makeGuard();
     const { context } = makeContext({ runId: "run-1" });
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException
-    );
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 
   it("verifies run access key when runId is in params", async () => {
@@ -52,7 +50,7 @@ describe("WorkerAuthGuard", () => {
       "Bearer key-123"
     );
 
-    const result = await guard.canActivate(context);
+    const result = guard.canActivate(context);
 
     expect(result).toBe(true);
     expect(runtimeAccess.verifyAccessKey).toHaveBeenCalledWith(
@@ -71,7 +69,7 @@ describe("WorkerAuthGuard", () => {
       "Bearer owner-key"
     );
 
-    const result = await guard.canActivate(context);
+    const result = guard.canActivate(context);
 
     expect(result).toBe(true);
     expect(runtimeAccess.verifyOwnerKey).toHaveBeenCalledWith(
@@ -84,8 +82,6 @@ describe("WorkerAuthGuard", () => {
   it("rejects when no key matches", async () => {
     const { guard } = makeGuard();
     const { context } = makeContext({ runId: "run-1" }, "Bearer wrong-key");
-    await expect(guard.canActivate(context)).rejects.toThrow(
-      UnauthorizedException
-    );
+    expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
 });

@@ -117,9 +117,9 @@ describe("TitleGenerator", () => {
 
 describe("generateDefaultTitle", () => {
   it("collapses whitespace and keeps short text as-is", () => {
-    expect(
-      TitleGenerator.generateDefaultTitle("  帮我  重构\n参数校验 ")
-    ).toBe("帮我 重构 参数校验");
+    expect(TitleGenerator.generateDefaultTitle("  帮我  重构\n参数校验 ")).toBe(
+      "帮我 重构 参数校验"
+    );
   });
 
   it("truncates to 40 chars and strips trailing punctuation left by the cut", () => {
