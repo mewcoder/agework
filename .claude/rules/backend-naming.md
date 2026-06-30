@@ -45,6 +45,8 @@
 ### 2.2 方法
 
 - Service 方法默认不带模块名: 在 `UserService` 中写 `create()`、`list()`、`update()`,不写 `createUser()`。
+- **单动词（`create`、`list`、`update`、`delete`）只在操作对象就是本模块主实体时允许省略名词**；其他情况必须带名词，如 `getProfile()`、`getRunContext()`、`getAuthConfig()`。裸的 `get()` / `find()` 不允许。
+- **Admin 专用方法统一用 `ForAdmin` 后缀**：`listForAdmin()`、`updateForAdmin()`、`getDetailForAdmin()`、`listEventsForAdmin()`。不用 `listAll`、`updateAny`、`listAdmin...` 等非统一写法。
 - Controller 方法优先贴合路由语义;同一 Controller 暴露多个读取端点时,可以补对象名,如 `getRunConfig()`、`getRuntimePolicy()`、`queryStatuses()`。
 - 只有在同一个类中确实存在多个同类对象时,才在方法名中补对象名。
 - `list` 表示列表查询。

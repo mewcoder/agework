@@ -67,7 +67,7 @@ export class AuthService {
   /** 用 refresh token 轮换出新的 access token，并下发新的 refresh token。 */
   async refreshToken(rawRefreshToken: string) {
     const rotated = await this.sessions.rotate(rawRefreshToken);
-    const user = await this.users.me(rotated.userId);
+    const user = await this.users.getProfile(rotated.userId);
     return {
       token: this.signToken(user),
       refreshToken: rotated.rawToken,
@@ -87,7 +87,7 @@ export class AuthService {
   }
 
   getUserInfo(userId: string) {
-    return this.users.me(userId);
+    return this.users.getProfile(userId);
   }
 
   async changePassword(

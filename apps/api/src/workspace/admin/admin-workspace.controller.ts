@@ -13,12 +13,12 @@ export class AdminWorkspaceController {
   @Get("all")
   listAll(@Query() query: AdminWorkspaceListQueryDto) {
     const { take, skip } = pageWindow(query);
-    return this.workspaceService.listAll({ take, skip });
+    return this.workspaceService.listForAdmin({ take, skip });
   }
 
   @Post("update")
   update(@Body() body: UpdateWorkspaceDto) {
-    return this.workspaceService.updateAny(
+    return this.workspaceService.updateForAdmin(
       body.id,
       body.name,
       body.description

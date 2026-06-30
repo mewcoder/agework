@@ -21,10 +21,10 @@ export class RunWorkspaceListener {
     workspaceId,
   }: WorkspaceDeletedEvent): Promise<void> {
     try {
-      await this.runService.stopRunsForWorkspace(workspaceId);
+      await this.runService.stopForWorkspace(workspaceId);
     } catch (err) {
       this.logger.warn(
-        `stopRunsForWorkspace failed for ${workspaceId}: ${
+        `stopForWorkspace failed for ${workspaceId}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );

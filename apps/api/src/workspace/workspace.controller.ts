@@ -17,7 +17,7 @@ export class WorkspaceController {
 
   @Get("capabilities")
   capabilities() {
-    return this.workspaceService.capabilities();
+    return this.workspaceService.getCapabilities();
   }
 
   @Post("create")

@@ -4,8 +4,8 @@ import type { WorkspaceService } from "../workspace.service";
 
 function makeController() {
   const service = {
-    listAll: vi.fn().mockResolvedValue({ list: [] }),
-    updateAny: vi.fn().mockResolvedValue({}),
+    listForAdmin: vi.fn().mockResolvedValue({ list: [] }),
+    updateForAdmin: vi.fn().mockResolvedValue({}),
   };
   return {
     controller: new AdminWorkspaceController(
@@ -17,28 +17,28 @@ function makeController() {
 
 describe("AdminWorkspaceController", () => {
   describe("listAll()", () => {
-    it("passes pagination to workspaceService.listAll", async () => {
+    it("passes pagination to workspaceService.listForAdmin", async () => {
       const { controller, service } = makeController();
       await controller.listAll({ pageNo: 3, pageSize: 15 });
-      expect(service.listAll).toHaveBeenCalledWith({ take: 15, skip: 30 });
+      expect(service.listForAdmin).toHaveBeenCalledWith({ take: 15, skip: 30 });
     });
 
     it("uses defaults when pagination is omitted", async () => {
       const { controller, service } = makeController();
       await controller.listAll({});
-      expect(service.listAll).toHaveBeenCalledWith({ take: 10, skip: 0 });
+      expect(service.listForAdmin).toHaveBeenCalledWith({ take: 10, skip: 0 });
     });
   });
 
   describe("update()", () => {
-    it("delegates to workspaceService.updateAny", async () => {
+    it("delegates to workspaceService.updateForAdmin", async () => {
       const { controller, service } = makeController();
       await controller.update({
         id: "ws-1",
         name: "new",
         description: "d",
       });
-      expect(service.updateAny).toHaveBeenCalledWith("ws-1", "new", "d");
+      expect(service.updateForAdmin).toHaveBeenCalledWith("ws-1", "new", "d");
     });
   });
 });

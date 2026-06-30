@@ -33,9 +33,6 @@ export const workspacesApi = {
   rename: (id: string, data: UpdateWorkspaceInput) =>
     apiPost<WorkspaceResponse>('/api/v1/workspaces/update', { id, ...data }),
 
-  adminRename: (id: string, data: UpdateWorkspaceInput) =>
-    apiPost<WorkspaceResponse>('/api/v1/admin/workspaces/update', { id, ...data }),
-
   delete: (id: string) =>
     apiPost('/api/v1/workspaces/remove', { id }),
 };

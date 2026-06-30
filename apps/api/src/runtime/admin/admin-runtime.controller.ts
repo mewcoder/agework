@@ -21,7 +21,7 @@ export class AdminRuntimeController {
 
   @Get("resources")
   listResources(@Query() query: AdminRuntimeResourcesQueryDto) {
-    return this.runtimeService.listRuntimeResources(query);
+    return this.runtimeService.listResources(query);
   }
 
   @Post("resources/stop")

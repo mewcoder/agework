@@ -55,7 +55,7 @@ export class WorkspaceService {
   /**
    * Admin 查询工作空间列表,包含 owner username 和会话数量等管理视图字段。
    */
-  async listAll(pagination?: { take: number; skip: number }) {
+  async listForAdmin(pagination?: { take: number; skip: number }) {
     const { list, total } = await this.repo.listAllWithMeta(pagination);
     const mapped = list.map((p) => {
       const { _count, ...rest } = p;
@@ -109,7 +109,7 @@ export class WorkspaceService {
   /**
    * 返回当前部署允许创建工作空间时选择的 runtime / isolation 能力。
    */
-  capabilities() {
+  getCapabilities() {
     return this.runtimePolicy.capabilities();
   }
 
@@ -185,7 +185,7 @@ export class WorkspaceService {
   /**
    * Admin 更新任意工作空间基础信息;权限由 AdminWorkspaceController 保证。
    */
-  async updateAny(id: string, name: string, description?: string | null) {
+  async updateForAdmin(id: string, name: string, description?: string | null) {
     const patch = this.normalizePatch(name, description);
     const updated = await this.repo.updateById(id, patch);
     if (!updated) throw new NotFoundException(`Workspace ${id} not found`);

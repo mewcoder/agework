@@ -44,15 +44,15 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /** 管理端：分页查询 run 列表。 */
-  listAdminRuns(params: { status?: string; take: number; skip: number }) {
+  listForAdmin(params: { status?: string; take: number; skip: number }) {
     return this.runRepository.listAdmin(params);
   }
 
   /** 管理端：单个 run 详情；runtime 实例视图经 RuntimeService 补齐。 */
-  async getAdminRunDetail(id: string) {
+  async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const runtimeInstance = detail.runtimeInstanceId
-      ? await this.runtimeService.getRunInstanceView(
+      ? await this.runtimeService.getRuntimeInstanceForAdmin(
           detail.runtimeType,
           detail.runtimeInstanceId
         )
@@ -61,17 +61,17 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */
-  listAdminRunEvents(
-    params: Parameters<RunEventService["listAdminEvents"]>[0]
+  listEventsForAdmin(
+    params: Parameters<RunEventService["listForAdmin"]>[0]
   ) {
-    return this.runEvents.listAdminEvents(params);
+    return this.runEvents.listForAdmin(params);
   }
 
   /**
    * workspace 删除级联：停止该 workspace 下所有活跃 run（best-effort，逐个吞错）。
    * 由 RunWorkspaceListener 监听 WORKSPACE_DELETED 触发。
    */
-  async stopRunsForWorkspace(workspaceId: string): Promise<void> {
+  async stopForWorkspace(workspaceId: string): Promise<void> {
     const conversationIds =
       await this.runRepository.findActiveConversationIdsForWorkspace(
         workspaceId

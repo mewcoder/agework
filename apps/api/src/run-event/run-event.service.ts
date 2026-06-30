@@ -37,7 +37,7 @@ export class RunEventService {
   constructor(private readonly repository: RunEventRepository) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
-  listAdminEvents(
+  listForAdmin(
     params: Parameters<RunEventRepository["listAdminEvents"]>[0]
   ) {
     return this.repository.listAdminEvents(params);

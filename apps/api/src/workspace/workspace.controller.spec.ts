@@ -6,7 +6,7 @@ import type { JwtUser } from "../auth/decorators/current-user.decorator";
 function makeController(overrides?: { service?: Partial<WorkspaceService> }) {
   const service = {
     list: vi.fn().mockResolvedValue([]),
-    capabilities: vi.fn().mockResolvedValue({}),
+    getCapabilities: vi.fn().mockResolvedValue({}),
     create: vi.fn().mockResolvedValue({ id: "ws-1" }),
     update: vi.fn().mockResolvedValue({ id: "ws-1" }),
     delete: vi.fn().mockResolvedValue(undefined),
@@ -40,7 +40,7 @@ describe("WorkspaceController", () => {
     it("delegates to workspaceService.capabilities", () => {
       const { controller, service } = makeController();
       void controller.capabilities();
-      expect(service.capabilities).toHaveBeenCalled();
+      expect(service.getCapabilities).toHaveBeenCalled();
     });
   });
 

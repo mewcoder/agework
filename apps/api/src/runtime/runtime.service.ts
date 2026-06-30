@@ -137,7 +137,7 @@ export class RuntimeService {
     return { activeRuntimes: await this.repository.countRunning() };
   }
 
-  async listRuntimeResources(query: {
+  async listResources(query: {
     status?: string;
     pageNo?: number;
     pageSize?: number;
@@ -160,7 +160,7 @@ export class RuntimeService {
    * 管理端 run 详情用：按 run 持久化的 runtime handle 取运行实例视图。
    * runtime 资源归属本领域，run 层经此方法获取，不直接查 runtimeInstance 表。
    */
-  async getRunInstanceView(
+  async getRuntimeInstanceForAdmin(
     runtimeType: string,
     runtimeInstanceId: string
   ): Promise<AdminRunRuntimeInstanceResponse | null> {

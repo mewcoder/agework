@@ -4,9 +4,9 @@ import type { RunService } from "../run.service";
 
 function makeController() {
   const runService = {
-    listAdminRuns: vi.fn().mockResolvedValue({ list: [] }),
-    getAdminRunDetail: vi.fn().mockResolvedValue({}),
-    listAdminRunEvents: vi.fn().mockResolvedValue({ list: [] }),
+    listForAdmin: vi.fn().mockResolvedValue({ list: [] }),
+    getDetailForAdmin: vi.fn().mockResolvedValue({}),
+    listEventsForAdmin: vi.fn().mockResolvedValue({ list: [] }),
   };
   return {
     controller: new AdminRunController(runService as unknown as RunService),
@@ -23,7 +23,7 @@ describe("AdminRunController", () => {
         pageNo: 2,
         pageSize: 25,
       });
-      expect(runService.listAdminRuns).toHaveBeenCalledWith({
+      expect(runService.listForAdmin).toHaveBeenCalledWith({
         status: "running",
         take: 25,
         skip: 25,
@@ -33,7 +33,7 @@ describe("AdminRunController", () => {
     it("uses defaults when params are omitted", async () => {
       const { controller, runService } = makeController();
       await controller.listAdmin({});
-      expect(runService.listAdminRuns).toHaveBeenCalledWith({
+      expect(runService.listForAdmin).toHaveBeenCalledWith({
         status: undefined,
         take: 10,
         skip: 0,
@@ -42,10 +42,10 @@ describe("AdminRunController", () => {
   });
 
   describe("query()", () => {
-    it("delegates to runService.getAdminRunDetail", async () => {
+    it("delegates to runService.getDetailForAdmin", async () => {
       const { controller, runService } = makeController();
       await controller.query({ id: "run-1" });
-      expect(runService.getAdminRunDetail).toHaveBeenCalledWith("run-1");
+      expect(runService.getDetailForAdmin).toHaveBeenCalledWith("run-1");
     });
   });
 
@@ -59,7 +59,7 @@ describe("AdminRunController", () => {
         pageNo: 2,
         pageSize: 50,
       });
-      expect(runService.listAdminRunEvents).toHaveBeenCalledWith(
+      expect(runService.listEventsForAdmin).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: "run-1",
           type: ["run.status"],
@@ -76,7 +76,7 @@ describe("AdminRunController", () => {
         runId: "run-1",
         type: ["run.status", "command.trace"],
       });
-      expect(runService.listAdminRunEvents).toHaveBeenCalledWith(
+      expect(runService.listEventsForAdmin).toHaveBeenCalledWith(
         expect.objectContaining({
           type: ["run.status", "command.trace"],
         })

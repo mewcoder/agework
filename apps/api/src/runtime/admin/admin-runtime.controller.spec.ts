@@ -5,7 +5,7 @@ function makeController(runtimeService: Record<string, unknown> = {}) {
   return new AdminRuntimeController({
     getRuntimePolicy: vi.fn(),
     getRuntimeStats: vi.fn(),
-    listRuntimeResources: vi.fn(),
+    listResources: vi.fn(),
     stopRuntimeInstance: vi.fn(),
     ...runtimeService,
   } as never);
@@ -13,15 +13,15 @@ function makeController(runtimeService: Record<string, unknown> = {}) {
 
 describe("AdminRuntimeController", () => {
   it("delegates resource listing to the runtime service", async () => {
-    const listRuntimeResources = vi
+    const listResources = vi
       .fn()
       .mockResolvedValue({ list: [], total: 0, pageNo: 1, pageSize: 10 });
-    const controller = makeController({ listRuntimeResources });
+    const controller = makeController({ listResources });
 
     const query = { status: "running", pageNo: 1, pageSize: 10 };
     await controller.listResources(query as never);
 
-    expect(listRuntimeResources).toHaveBeenCalledWith(query);
+    expect(listResources).toHaveBeenCalledWith(query);
   });
 
   it("delegates stop to the runtime service by id", async () => {

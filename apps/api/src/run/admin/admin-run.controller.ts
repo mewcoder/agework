@@ -16,12 +16,12 @@ export class AdminRunController {
   @Get("list")
   listAdmin(@Query() query: AdminRunListQueryDto) {
     const { take, skip } = pageWindow(query);
-    return this.runService.listAdminRuns({ status: query.status, take, skip });
+    return this.runService.listForAdmin({ status: query.status, take, skip });
   }
 
   @Get("query")
   query(@Query() query: AdminRunIdQueryDto) {
-    return this.runService.getAdminRunDetail(query.id);
+    return this.runService.getDetailForAdmin(query.id);
   }
 
   @Get("events/list")
@@ -31,7 +31,7 @@ export class AdminRunController {
       defaultPageSize: 20,
       maxPageSize: 5000,
     });
-    return this.runService.listAdminRunEvents({
+    return this.runService.listEventsForAdmin({
       runId: query.runId,
       type: query.type,
       typePrefix: query.typePrefix,

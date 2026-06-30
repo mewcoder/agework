@@ -69,15 +69,6 @@ describe('workspacesApi', () => {
     });
   });
 
-  describe('adminRename', () => {
-    it('发送 admin update 请求', async () => {
-      const data = { name: 'renamed-by-admin' };
-      await workspacesApi.adminRename('ws-1', data);
-
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/workspaces/update', { id: 'ws-1', name: 'renamed-by-admin' });
-    });
-  });
-
   describe('delete', () => {
     it('发送 remove 请求', async () => {
       await workspacesApi.delete('ws-1');

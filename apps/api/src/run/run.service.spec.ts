@@ -37,7 +37,7 @@ describe("RunService", () => {
       launch: vi.fn().mockResolvedValue(undefined),
     };
     mockRuntimeService = {
-      getRunInstanceView: vi.fn().mockResolvedValue(null),
+      getRuntimeInstanceForAdmin: vi.fn().mockResolvedValue(null),
     };
     mockRunRecovery = {
       recoverInterruptedRuns: vi.fn().mockResolvedValue(undefined),
@@ -75,14 +75,14 @@ describe("RunService", () => {
     });
   });
 
-  describe("stopRunsForWorkspace()", () => {
+  describe("stopForWorkspace()", () => {
     it("stops every active run conversation for the workspace", async () => {
       mockRunRepository.findActiveConversationIdsForWorkspace = vi
         .fn()
         .mockResolvedValue(["conversation-1", "conversation-2"]);
       const stop = vi.spyOn(service, "stop").mockResolvedValue(true);
 
-      await service.stopRunsForWorkspace("ws-1");
+      await service.stopForWorkspace("ws-1");
 
       expect(
         mockRunRepository.findActiveConversationIdsForWorkspace

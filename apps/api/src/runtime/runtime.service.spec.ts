@@ -94,7 +94,7 @@ describe("RuntimeService", () => {
     });
   });
 
-  it("listRuntimeResources maps rows to the admin response shape", async () => {
+  it("listResources maps rows to the admin response shape", async () => {
     repository.listResourcesPage.mockResolvedValue({
       items: [
         {
@@ -125,7 +125,7 @@ describe("RuntimeService", () => {
       total: 1,
     });
 
-    const result = await service.listRuntimeResources({
+    const result = await service.listResources({
       status: "running",
       pageNo: 1,
       pageSize: 10,

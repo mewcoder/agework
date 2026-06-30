@@ -326,7 +326,7 @@ export class UserService {
     return this.toUserDto(updated);
   }
 
-  async me(userId: string) {
+  async getProfile(userId: string) {
     const user = await this.users.findById(userId);
     if (!user) throw new UnauthorizedException();
     return this.toUserDto(user);
