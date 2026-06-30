@@ -51,10 +51,3 @@ export function runStatusBadgeClassName(status: string) {
   return "border-amber-500/30 bg-amber-500/10 text-amber-700";
 }
 
-export function runStatusBadgeClassName(status: string) {
-  if (status === "error") return undefined;
-  if (status === "running") {
-    return "border-primary/30 bg-primary/10 text-primary";
-  }
-  return "border-muted-foreground/30 bg-muted text-muted-foreground";
-}
