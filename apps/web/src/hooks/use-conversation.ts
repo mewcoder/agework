@@ -104,7 +104,7 @@ function markConversationRunIdleInCache(
     ...old,
     conversations: old.conversations.map((conversation) =>
       conversation.conversationId === conversationId
-        ? { ...conversation, activeRunStatus: 'idle' as const }
+        ? { ...conversation, runStatus: 'idle' as const }
         : conversation,
     ),
   };

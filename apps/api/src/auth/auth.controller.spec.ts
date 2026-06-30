@@ -9,13 +9,13 @@ function makeController(overrides?: { auth?: Partial<AuthService> }) {
     login: vi.fn().mockResolvedValue(session),
     register: vi.fn().mockResolvedValue({ id: "1", username: "new" }),
     setupSuperAdmin: vi.fn().mockResolvedValue(session),
-    me: vi.fn().mockResolvedValue({ id: "1", username: "me" }),
+    getUserInfo: vi.fn().mockResolvedValue({ id: "1", username: "me" }),
     changePassword: vi.fn().mockResolvedValue(session),
     completePasswordChange: vi.fn().mockResolvedValue(session),
-    refresh: vi.fn().mockResolvedValue(session),
+    refreshToken: vi.fn().mockResolvedValue(session),
     logout: vi.fn().mockResolvedValue(undefined),
-    isSetupRequired: vi.fn().mockResolvedValue(false),
-    config: vi.fn().mockResolvedValue({
+    isNoSuperAdmin: vi.fn().mockResolvedValue(false),
+    getAuthConfig: vi.fn().mockResolvedValue({
       authRequired: true,
       appName: "AgeWork",
       registrationMode: "approval",
@@ -95,7 +95,7 @@ describe("AuthController", () => {
       const { controller, auth } = makeController();
       const res = makeRes();
       await controller.refresh(makeReq("old-rt"), res);
-      expect(auth.refresh).toHaveBeenCalledWith("old-rt");
+      expect(auth.refreshToken).toHaveBeenCalledWith("old-rt");
       expect(res.cookie).toHaveBeenCalledWith(
         "agework_rt",
         "rt",
@@ -107,7 +107,7 @@ describe("AuthController", () => {
       const { controller, auth } = makeController();
       const res = makeRes();
       await expect(controller.refresh(makeReq(), res)).rejects.toThrow();
-      expect(auth.refresh).not.toHaveBeenCalled();
+      expect(auth.refreshToken).not.toHaveBeenCalled();
       expect(res.clearCookie).toHaveBeenCalledWith(
         "agework_rt",
         expect.any(Object)
@@ -133,7 +133,7 @@ describe("AuthController", () => {
     it("delegates to authService.me with userId", async () => {
       const { controller, auth } = makeController();
       await controller.me(mockUser);
-      expect(auth.me).toHaveBeenCalledWith("user-1");
+      expect(auth.getUserInfo).toHaveBeenCalledWith("user-1");
     });
   });
 
@@ -173,7 +173,7 @@ describe("AuthController", () => {
       const { controller, auth } = makeController();
       const result = await controller.config();
 
-      expect(auth.config).toHaveBeenCalled();
+      expect(auth.getAuthConfig).toHaveBeenCalled();
       expect(result).toMatchObject({
         appName: "AgeWork",
         registrationMode: "approval",

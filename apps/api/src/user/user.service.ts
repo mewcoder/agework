@@ -206,14 +206,14 @@ export class UserService {
     this.events.emit(USER_DELETED_EVENT, new UserDeletedEvent(id));
   }
 
-  async isSetupRequired(): Promise<boolean> {
+  async isNoSuperAdmin(): Promise<boolean> {
     const superAdmins = await this.users.findSuperAdmins();
     this.assertSingleFixedSuperAdmin(superAdmins);
     return superAdmins.length === 0;
   }
 
   async setupSuperAdmin(newPassword: string) {
-    if (!(await this.isSetupRequired())) {
+    if (!(await this.isNoSuperAdmin())) {
       throw new BadRequestException("系统已初始化");
     }
 

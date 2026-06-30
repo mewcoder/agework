@@ -15,7 +15,7 @@ function toMetadata(c: Conversation) {
     custom: {
       workspaceId: c.workspaceId,
       agentType: c.agentType,
-      activeRunStatus: c.activeRunStatus,
+      runStatus: c.runStatus,
       pendingUserAction: c.pendingUserAction,
     },
   };

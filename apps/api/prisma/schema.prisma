@@ -93,7 +93,7 @@ model Conversation {
   id                String    @id
   title             String?
   status            String    @default("regular")
-  activeRunStatus   String    @default("idle")
+  runStatus         String    @default("idle")
   pendingUserAction String?
   workspaceId       String
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)

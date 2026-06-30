@@ -9,7 +9,7 @@ import { generateId, isAgentType, type AgentType } from "@agework/shared";
 import type {
   ConversationPendingUserAction,
   ConversationResponse,
-  ConversationActiveRunStatus,
+  ConversationRunStatus,
   ConversationSearchHit,
   ConversationSearchResponse,
   ConversationStatus,
@@ -63,7 +63,7 @@ export class ConversationService {
   private toConversationDto(c: {
     id: string;
     status: string;
-    activeRunStatus: string;
+    runStatus: string;
     pendingUserAction?: string | null;
     title: string | null;
     workspaceId: string;
@@ -75,7 +75,7 @@ export class ConversationService {
     return {
       conversationId: c.id,
       status: c.status as ConversationStatus,
-      activeRunStatus: c.activeRunStatus as ConversationActiveRunStatus,
+      runStatus: c.runStatus as ConversationRunStatus,
       pendingUserAction: this.normalizePendingUserAction(c.pendingUserAction),
       title: c.title ?? undefined,
       workspaceId: c.workspaceId,
@@ -236,7 +236,7 @@ export class ConversationService {
     return resolvedAgentType;
   }
 
-  async findOne(userId: string, conversationId: string) {
+  async findById(userId: string, conversationId: string) {
     const c = await this.repo.findOwnedById(userId, conversationId);
     if (!c) {
       throw new NotFoundException(`对话不存在: ${conversationId}`);
@@ -256,8 +256,8 @@ export class ConversationService {
     return {
       list: conversations.map((conversation) => ({
         conversationId: conversation.id,
-        activeRunStatus:
-          conversation.activeRunStatus as ConversationActiveRunStatus,
+        runStatus:
+          conversation.runStatus as ConversationRunStatus,
         pendingUserAction: this.normalizePendingUserAction(
           conversation.pendingUserAction
         ),
@@ -270,7 +270,7 @@ export class ConversationService {
     await this.repo.setAgentSessionId(conversationId, agentSessionId);
   }
 
-  async generateTitleIfNeeded(input: {
+  private async generateLLMTitle(input: {
     conversationId: string;
     agentType: AgentType;
     modelProviderId?: string | null;
@@ -306,11 +306,11 @@ export class ConversationService {
     await this.repo.updateOwned(userId, conversationId, { title, status });
   }
 
-  async setActiveRunStatus(
+  async setRunStatus(
     conversationId: string,
-    activeRunStatus: "idle" | "running" | "error"
+    runStatus: "idle" | "running" | "error"
   ): Promise<boolean> {
-    return this.repo.setActiveRunStatus(conversationId, activeRunStatus);
+    return this.repo.setRunStatus(conversationId, runStatus);
   }
 
   async setPendingUserAction(
@@ -322,7 +322,8 @@ export class ConversationService {
 
   async saveUserMessage(
     conversationId: string,
-    userMessage: AssistantUserMessage
+    userMessage: AssistantUserMessage,
+    titleContext?: { agentType: AgentType; modelProviderId?: string | null }
   ) {
     const messageId =
       typeof userMessage.id === "string"
@@ -355,9 +356,14 @@ export class ConversationService {
       )
     );
     // 首条用户消息时自动生成标题（conversation 创建时不带 firstMessage）
-    await this.ensureTitleFromMessage(conversationId, content).catch(
+    await this.generateDefaultTitle(conversationId, content).catch(
       swallow(this.logger, `generate title for conversation ${conversationId}`)
     );
+    if (titleContext) {
+      this.generateLLMTitle({ conversationId, ...titleContext }).catch(
+        swallow(this.logger, `generate LLM title for conversation ${conversationId}`)
+      );
+    }
   }
 
   async attachMessageToRun(
@@ -368,13 +374,13 @@ export class ConversationService {
     return this.repo.attachMessageToRun(conversationId, messageId, runId);
   }
 
-  private async ensureTitleFromMessage(
+  private async generateDefaultTitle(
     conversationId: string,
     content: unknown
   ) {
     const conversation = await this.repo.findTitle(conversationId);
     if (conversation?.title) return;
-    const title = TitleGenerator.generateFallbackTitle(extractText(content));
+    const title = TitleGenerator.generateDefaultTitle(extractText(content));
     if (!title) return;
     await this.repo.updateTitle(conversationId, title);
   }
@@ -414,8 +420,8 @@ export class ConversationService {
    * Workspace 删除后的会话级联软删入口。由 WorkspaceService 编排调用，
    * conversation 自己持有 conversation/message 持久化边界。
    */
-  async softDeleteByWorkspace(workspaceId: string, deletedAt = new Date()) {
-    await this.repo.softDeleteByWorkspace(workspaceId, deletedAt);
+  async deleteByWorkspace(workspaceId: string, deletedAt = new Date()) {
+    await this.repo.deleteByWorkspace(workspaceId, deletedAt);
   }
 
   async clearArchived(userId: string) {

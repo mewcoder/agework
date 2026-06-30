@@ -48,8 +48,8 @@ export class WorkspaceService {
    * 查询工作空间是否存在且属于该用户;返回 null 表示不存在或非属主。
    * 供上层入口(如 agent 建会话)做归属校验,由调用方决定如何处理 null。
    */
-  findOwnedId(userId: string, workspaceId: string): Promise<{ id: string } | null> {
-    return this.repo.findOwnedId(userId, workspaceId);
+  getOwnedId(userId: string, workspaceId: string): Promise<{ id: string } | null> {
+    return this.repo.getOwnedId(userId, workspaceId);
   }
 
   /**
@@ -208,12 +208,12 @@ export class WorkspaceService {
    * workspace 不感知下游(方案 B:总能删,任务被停)。
    */
   async delete(userId: string, id: string) {
-    const workspace = await this.repo.findOwnedId(userId, id);
+    const workspace = await this.repo.getOwnedId(userId, id);
     if (!workspace) throw new NotFoundException(`Workspace ${id} not found`);
 
     const deletedAt = new Date();
     await this.repo.softDelete(id, deletedAt);
-    await this.conversations.softDeleteByWorkspace(id, deletedAt);
+    await this.conversations.deleteByWorkspace(id, deletedAt);
 
     this.events.emit(WORKSPACE_DELETED_EVENT, new WorkspaceDeletedEvent(id));
   }

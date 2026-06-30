@@ -51,7 +51,7 @@ export function useAgentChatRuntime(): AssistantRuntime {
   // useAgUiRuntime 的 coreRef 在首次渲染时创建并绑定 historyAdapter，
   // 若此时 runtimeAdapters.history 尚未就绪，core 会缺少 history，
   // __internal_load 的 _loadPromise 守卫又会阻止后续重跑，导致 load 不触发。
-  // qc 一并传入：resume 流结束后要手动刷新 conversation.activeRunStatus
+  // qc 一并传入：resume 流结束后要手动刷新 conversation.runStatus
   // （resume 绕过了 agent middleware，RUN_FINISHED 不会自动刷新缓存）。
   const history = useMemo(() => createThreadHistoryAdapter(aui, qc), [aui, qc]);
 

@@ -17,7 +17,7 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
@@ -60,7 +60,7 @@ export class RunLauncher {
     private readonly liveRuns: LiveRunRegistry,
     private readonly runtimeService: RuntimeService,
     private readonly executionService: ExecutionService,
-    private readonly runConversation: RunConversationEffects,
+    private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
   ) {}
@@ -283,11 +283,11 @@ export class RunLauncher {
   }): Promise<void> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
-    const activated = await this.runConversation.markRunning(conversationId);
+    const activated = await this.conversations.setRunStatus(conversationId, "running");
     if (activated) return;
 
     try {
-      await this.runConversation.assertOwned(userId, conversationId);
+      await this.conversations.findById(userId, conversationId);
       if (interruptReason === "user_steered") {
         await stopActiveRun(conversationId, {
           reason: "user_steered",
@@ -320,15 +320,10 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.runConversation.saveUserMessage(conversationId, userMessage);
-    this.runConversation
-      .generateTitleIfNeeded({ conversationId, agentType, modelProviderId })
-      .catch(
-        swallow(
-          this.logger,
-          `generate title for conversation ${conversationId}`
-        )
-      );
+    await this.conversations.saveUserMessage(conversationId, userMessage, {
+      agentType,
+      modelProviderId,
+    });
   }
 
   private makeSaveRun(input: {
@@ -345,7 +340,7 @@ export class RunLauncher {
           const snap = aggregator.build(complete, incompleteReason);
           if (snap.content.length === 0) return;
           const contentId = snap.messageId ?? runId;
-          return this.runConversation.upsertMessage(conversationId, {
+          return this.conversations.upsertMessage(conversationId, {
             id: runId,
             runId,
             parent_id: null,
@@ -369,8 +364,8 @@ export class RunLauncher {
 
   private saveSession(conversationId: string): (sessionId: string) => void {
     return (sessionId) => {
-      this.runConversation
-        .saveAgentSessionId(conversationId, sessionId)
+      this.conversations
+        .setAgentSessionId(conversationId, sessionId)
         .catch(
           swallow(this.logger, `persist agent session for ${conversationId}`)
         );
@@ -420,7 +415,7 @@ export class RunLauncher {
         )
         .catch(swallow(this.logger, `record run created for run ${runId}`));
       if (userMessageId) {
-        await this.runConversation
+        await this.conversations
           .attachMessageToRun(conversationId, userMessageId, runId)
           .catch(
             swallow(
@@ -542,8 +537,8 @@ export class RunLauncher {
           swallow(this.logger, `record runtime start failure for run ${runId}`)
         )
         .finally(() => this.runEvents.forgetRun(runId));
-      await this.runConversation
-        .markError(conversationId)
+      await this.conversations
+        .setRunStatus(conversationId, "error")
         .catch(
           swallow(
             this.logger,

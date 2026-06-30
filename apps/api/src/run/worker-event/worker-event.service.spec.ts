@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WorkerEventService } from "./worker-event.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-event/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
@@ -38,7 +38,7 @@ describe("WorkerEventService", () => {
   let workerEventsService: WorkerEventService;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
-  let mockRunConversation: Partial<RunConversationEffects>;
+  let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockExecutionService: Partial<ExecutionService>;
 
@@ -53,10 +53,10 @@ describe("WorkerEventService", () => {
       recordUsage: vi.fn().mockResolvedValue(undefined),
     };
 
-    mockRunConversation = {
+    mockConversations = {
       setPendingUserAction: vi.fn().mockResolvedValue(undefined),
-      setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
-      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
+      setRunStatus: vi.fn().mockResolvedValue(undefined),
+      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -69,7 +69,7 @@ describe("WorkerEventService", () => {
     liveRuns = new LiveRunRegistry(makeConfig());
     const runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
-      mockRunConversation as RunConversationEffects,
+      mockConversations as ConversationService,
       liveRuns
     );
     const aguiEvents = new WorkerAgUiEventHandler(
@@ -355,7 +355,7 @@ describe("WorkerEventService", () => {
 
   it("persists agent.sessionId only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockRunConversation.saveAgentSessionId?.(
+      void mockConversations.setAgentSessionId?.(
         "conversation-1",
         sessionId
       );
@@ -392,8 +392,8 @@ describe("WorkerEventService", () => {
 
     expect(onAgentSessionId).toHaveBeenCalledTimes(1);
     expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
-    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledTimes(1);
-    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledWith(
+    expect(mockConversations.setAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(mockConversations.setAgentSessionId).toHaveBeenCalledWith(
       "conversation-1",
       "session-1"
     );
@@ -401,7 +401,7 @@ describe("WorkerEventService", () => {
 
   it("persists system:init session_id only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockRunConversation.saveAgentSessionId?.(
+      void mockConversations.setAgentSessionId?.(
         "conversation-1",
         sessionId
       );
@@ -438,8 +438,8 @@ describe("WorkerEventService", () => {
 
     expect(onAgentSessionId).toHaveBeenCalledTimes(1);
     expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
-    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledTimes(1);
-    expect(mockRunConversation.saveAgentSessionId).toHaveBeenCalledWith(
+    expect(mockConversations.setAgentSessionId).toHaveBeenCalledTimes(1);
+    expect(mockConversations.setAgentSessionId).toHaveBeenCalledWith(
       "conversation-1",
       "session-1"
     );

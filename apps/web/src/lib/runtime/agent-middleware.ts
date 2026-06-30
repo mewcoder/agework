@@ -40,7 +40,7 @@ function updateRegularConversationCaches(
 function setConversationRunStatus(
   qc: QC,
   conversationId: string,
-  activeRunStatus: Conversation["activeRunStatus"],
+  runStatus: Conversation["runStatus"],
 ) {
   updateRegularConversationCaches(qc, (old) => {
     if (!old) return old;
@@ -48,7 +48,7 @@ function setConversationRunStatus(
       ...old,
       conversations: old.conversations.map((conversation) =>
         conversation.conversationId === conversationId
-          ? { ...conversation, activeRunStatus }
+          ? { ...conversation, runStatus }
           : conversation,
       ),
     };
@@ -101,7 +101,7 @@ export function createAgentMiddleware(
                 title: fallbackTitle,
                 workspaceId,
                 agentType,
-                activeRunStatus: "running" as const,
+                runStatus: "running" as const,
                 pendingUserAction: null,
                 status: "regular" as const,
                 createdAt: now,

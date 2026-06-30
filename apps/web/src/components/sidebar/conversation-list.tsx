@@ -60,7 +60,7 @@ export function ConversationList() {
       conversations
         .filter(
           (conversation) =>
-            conversation.activeRunStatus === "running" &&
+            conversation.runStatus === "running" &&
             conversation.pendingUserAction !== "question" &&
             conversation.conversationId !== activeConversationId,
         )
@@ -88,7 +88,7 @@ export function ConversationList() {
             if (!status || status.updatedAt <= conversation.updatedAt) return conversation;
             return {
               ...conversation,
-              activeRunStatus: status.activeRunStatus,
+              runStatus: status.runStatus,
               pendingUserAction: status.pendingUserAction,
               updatedAt: status.updatedAt,
             };

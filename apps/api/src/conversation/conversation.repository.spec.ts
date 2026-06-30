@@ -80,18 +80,18 @@ describe("ConversationRepository", () => {
     }
   );
 
-  it("setActiveRunStatus guards the running transition and reports whether a row changed", async () => {
+  it("setRunStatus guards the running transition and reports whether a row changed", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const repo = new ConversationRepository(
       makePrisma({ conversation: { updateMany } }) as never
     );
 
-    const changed = await repo.setActiveRunStatus("conv-1", "running");
+    const changed = await repo.setRunStatus("conv-1", "running");
 
     expect(changed).toBe(true);
     expect(updateMany).toHaveBeenCalledWith({
-      where: { id: "conv-1", activeRunStatus: { in: ["idle", "error"] } },
-      data: { activeRunStatus: "running", pendingUserAction: null },
+      where: { id: "conv-1", runStatus: { in: ["idle", "error"] } },
+      data: { runStatus: "running", pendingUserAction: null },
     });
   });
 

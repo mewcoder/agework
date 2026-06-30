@@ -234,7 +234,7 @@ function useConversationRunning(conversationId: string | undefined) {
   const isConversationRunning =
     conversationId !== undefined &&
     conversationsData?.conversations.find((conversation) => conversation.conversationId === conversationId)
-      ?.activeRunStatus === "running";
+      ?.runStatus === "running";
 
   return isRuntimeRunning || isConversationRunning;
 }

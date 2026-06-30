@@ -41,7 +41,7 @@ export class TitleGenerator {
    * 截断兜底标题：把用户消息文本硬截到 TITLE_MAX_LEN，去掉因截断残留的结尾标点和空白。
    * 不依赖模型,供 ConversationService 在首条用户消息时即时落一个标题（不经 DI）。
    */
-  static generateFallbackTitle(text: string): string | null {
+  static generateDefaultTitle(text: string): string | null {
     const normalized = text.replace(/\s+/g, " ").trim();
     if (!normalized) return null;
     const title = normalized

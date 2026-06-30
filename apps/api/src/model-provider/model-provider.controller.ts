@@ -19,6 +19,6 @@ export class ModelProviderController {
 
   @Post("ping")
   ping(@Body() body: ModelProviderIdDto) {
-    return this.modelProviderService.test(body.id);
+    return this.modelProviderService.ping(body.id);
   }
 }

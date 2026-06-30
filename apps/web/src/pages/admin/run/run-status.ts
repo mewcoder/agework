@@ -24,14 +24,14 @@ export function statusVariant(status: string) {
   return "outline" as const;
 }
 
-export function activeRunStatusLabel(status: string) {
+export function runStatusLabel(status: string) {
   if (status === "idle") return "空闲";
   if (status === "running") return "运行中";
   if (status === "error") return "出错";
   return status;
 }
 
-export function activeRunStatusVariant(status: string) {
+export function runStatusVariant(status: string) {
   if (status === "error") return "destructive" as const;
   if (status === "running") return "default" as const;
   return "secondary" as const;
@@ -51,7 +51,7 @@ export function runStatusBadgeClassName(status: string) {
   return "border-amber-500/30 bg-amber-500/10 text-amber-700";
 }
 
-export function activeRunStatusBadgeClassName(status: string) {
+export function runStatusBadgeClassName(status: string) {
   if (status === "error") return undefined;
   if (status === "running") {
     return "border-primary/30 bg-primary/10 text-primary";

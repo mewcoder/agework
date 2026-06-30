@@ -47,6 +47,6 @@ export class AdminModelProviderController {
 
   @Post("ping")
   ping(@Body() body: ModelProviderIdDto) {
-    return this.modelProviderService.test(body.id, true);
+    return this.modelProviderService.ping(body.id, true);
   }
 }

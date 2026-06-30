@@ -16,11 +16,11 @@ export function useConversationRunStatusMonitor(
   useEffect(() => {
     if (conversations.length === 0 && previousRunningConversationIdsRef.current === null) return;
 
-    const runStatusById = new Map<string, Conversation["activeRunStatus"]>();
+    const runStatusById = new Map<string, Conversation["runStatus"]>();
     const runningConversationIds = new Set<string>();
     for (const conversation of conversations) {
-      runStatusById.set(conversation.conversationId, conversation.activeRunStatus);
-      if (conversation.activeRunStatus === "running") runningConversationIds.add(conversation.conversationId);
+      runStatusById.set(conversation.conversationId, conversation.runStatus);
+      if (conversation.runStatus === "running") runningConversationIds.add(conversation.conversationId);
     }
 
     const previousRunningConversationIds = previousRunningConversationIdsRef.current;

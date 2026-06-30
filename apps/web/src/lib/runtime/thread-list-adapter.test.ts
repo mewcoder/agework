@@ -6,7 +6,7 @@ vi.mock("@/api/conversations", () => ({
     list: vi.fn().mockResolvedValue({ conversations: [] }),
     create: vi.fn().mockResolvedValue({
       conversationId: "t1", workspaceId: "p1", status: "regular",
-      activeRunStatus: "idle", pendingUserAction: null, createdAt: "", updatedAt: "",
+      runStatus: "idle", pendingUserAction: null, createdAt: "", updatedAt: "",
     }),
     archive: vi.fn().mockResolvedValue(undefined),
     unarchive: vi.fn().mockResolvedValue(undefined),

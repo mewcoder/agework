@@ -21,17 +21,17 @@ export class AuthService {
     private readonly sessions: SessionService
   ) {}
 
-  isSetupRequired(): Promise<boolean> {
-    return this.users.isSetupRequired();
+  async isNoSuperAdmin(): Promise<boolean> {
+    return this.users.isNoSuperAdmin();
   }
 
-  async config() {
+  async getAuthConfig() {
     const authRequired = !this.configService.isDevAuthDisabled();
     return {
       authRequired,
       appName: this.configService.getAppName(),
       registrationMode: "approval",
-      setupRequired: authRequired ? await this.users.isSetupRequired() : false,
+      setupRequired: authRequired ? await this.users.isNoSuperAdmin() : false,
     };
   }
 
@@ -65,7 +65,7 @@ export class AuthService {
   }
 
   /** 用 refresh token 轮换出新的 access token，并下发新的 refresh token。 */
-  async refresh(rawRefreshToken: string) {
+  async refreshToken(rawRefreshToken: string) {
     const rotated = await this.sessions.rotate(rawRefreshToken);
     const user = await this.users.me(rotated.userId);
     return {
@@ -86,7 +86,7 @@ export class AuthService {
     return this.users.register(username, password);
   }
 
-  me(userId: string) {
+  getUserInfo(userId: string) {
     return this.users.me(userId);
   }
 

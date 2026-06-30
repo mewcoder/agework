@@ -25,17 +25,17 @@ describe("AgentService", () => {
       }),
     };
     mockConversationService = {
-      findOne: vi.fn().mockResolvedValue({
+      findById: vi.fn().mockResolvedValue({
         agentType: "claude",
         agentSessionId: undefined,
         workspaceId: "proj-1",
-        activeRunStatus: "idle",
+        runStatus: "idle",
       }),
     };
     mockRunService = {
       start: vi.fn().mockResolvedValue(undefined),
-      resumeStream: vi.fn().mockResolvedValue(undefined),
-      resolveApproval: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue(undefined),
+      reply: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(false),
     };
     mockWorkspaceService = {
@@ -76,11 +76,11 @@ describe("AgentService", () => {
   }
 
   it("throws BadRequestException when conversation has no associated workspace", async () => {
-    mockConversationService.findOne = vi.fn().mockResolvedValue({
+    mockConversationService.findById = vi.fn().mockResolvedValue({
       agentType: "claude",
       agentSessionId: undefined,
       workspaceId: undefined,
-      activeRunStatus: "idle",
+      runStatus: "idle",
     });
 
     await expect(
@@ -205,11 +205,11 @@ describe("AgentService", () => {
   });
 
   it("passes resume props when the conversation has an agentSessionId", async () => {
-    mockConversationService.findOne = vi.fn().mockResolvedValue({
+    mockConversationService.findById = vi.fn().mockResolvedValue({
       agentType: "claude",
       agentSessionId: "session-1",
       workspaceId: "proj-1",
-      activeRunStatus: "idle",
+      runStatus: "idle",
     });
     const body = baseBody();
 
@@ -234,13 +234,13 @@ describe("AgentService", () => {
   });
 
   describe("resume()", () => {
-    it("verifies ownership then delegates to RunService.resumeStream", async () => {
+    it("verifies ownership then delegates to RunService.resume", async () => {
       await service.resume("conversation-1", res as Response, user);
-      expect(mockConversationService.findOne).toHaveBeenCalledWith(
+      expect(mockConversationService.findById).toHaveBeenCalledWith(
         "user-1",
         "conversation-1"
       );
-      expect(mockRunService.resumeStream).toHaveBeenCalledWith(
+      expect(mockRunService.resume).toHaveBeenCalledWith(
         "conversation-1",
         res
       );
@@ -254,13 +254,13 @@ describe("AgentService", () => {
   });
 
   describe("reply()", () => {
-    it("verifies ownership then delegates to RunService.resolveApproval", async () => {
+    it("verifies ownership then delegates to RunService.reply", async () => {
       await service.reply("conversation-1", { q1: "yes" }, user);
-      expect(mockConversationService.findOne).toHaveBeenCalledWith(
+      expect(mockConversationService.findById).toHaveBeenCalledWith(
         "user-1",
         "conversation-1"
       );
-      expect(mockRunService.resolveApproval).toHaveBeenCalledWith(
+      expect(mockRunService.reply).toHaveBeenCalledWith(
         "conversation-1",
         { q1: "yes" }
       );
@@ -269,10 +269,10 @@ describe("AgentService", () => {
 
   describe("stop()", () => {
     it("resets a stale running conversation to idle when no in-memory handle existed", async () => {
-      mockConversationService.findOne = vi
+      mockConversationService.findById = vi
         .fn()
-        .mockResolvedValue({ activeRunStatus: "running" });
-      mockConversationService.setActiveRunStatus = vi
+        .mockResolvedValue({ runStatus: "running" });
+      mockConversationService.setRunStatus = vi
         .fn()
         .mockResolvedValue({ count: 1 });
       mockRunService.stop = vi.fn().mockResolvedValue(false);
@@ -280,39 +280,39 @@ describe("AgentService", () => {
       await service.stop("conversation-1", user);
 
       expect(mockRunService.stop).toHaveBeenCalledWith("conversation-1");
-      expect(mockConversationService.setActiveRunStatus).toHaveBeenCalledWith(
+      expect(mockConversationService.setRunStatus).toHaveBeenCalledWith(
         "conversation-1",
         "idle"
       );
     });
 
     it("does not reset status when an active handle was stopped", async () => {
-      mockConversationService.findOne = vi
+      mockConversationService.findById = vi
         .fn()
-        .mockResolvedValue({ activeRunStatus: "running" });
-      mockConversationService.setActiveRunStatus = vi
+        .mockResolvedValue({ runStatus: "running" });
+      mockConversationService.setRunStatus = vi
         .fn()
         .mockResolvedValue({ count: 1 });
       mockRunService.stop = vi.fn().mockResolvedValue(true);
 
       await service.stop("conversation-1", user);
 
-      expect(mockConversationService.setActiveRunStatus).not.toHaveBeenCalled();
+      expect(mockConversationService.setRunStatus).not.toHaveBeenCalled();
     });
   });
 
-  // run 没有独立的用户接口，全部通过 conversationService.findOne(userId, …) 做归属闸门。
-  // 别人的 conversationId 会让 findOne 抛 NotFound，后续 runService 一律不得被调用。
+  // run 没有独立的用户接口，全部通过 conversationService.findById(userId, …) 做归属闸门。
+  // 别人的 conversationId 会让 findById 抛 NotFound，后续 runService 一律不得被调用。
   describe("ownership gate (run access scoped to the caller)", () => {
     beforeEach(() => {
-      mockConversationService.findOne = vi
+      mockConversationService.findById = vi
         .fn()
         .mockRejectedValue(new NotFoundException("对话不存在"));
     });
 
     it("reply does not resolve approval for a conversation the caller does not own", async () => {
       await expect(service.reply("conv-x", {}, user)).rejects.toThrow();
-      expect(mockRunService.resolveApproval).not.toHaveBeenCalled();
+      expect(mockRunService.reply).not.toHaveBeenCalled();
     });
 
     it("stop does not stop the run for a conversation the caller does not own", async () => {
@@ -324,7 +324,7 @@ describe("AgentService", () => {
       await expect(
         service.resume("conv-x", res as Response, user)
       ).rejects.toThrow();
-      expect(mockRunService.resumeStream).not.toHaveBeenCalled();
+      expect(mockRunService.resume).not.toHaveBeenCalled();
     });
   });
 });

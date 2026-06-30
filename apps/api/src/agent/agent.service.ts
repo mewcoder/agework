@@ -43,7 +43,7 @@ export class AgentService {
    * 再委托 ConversationService 持久化会话。conversation 不再自行接触 workspace。
    */
   async createConversation(userId: string, input: CreateConversationDto) {
-    const owned = await this.workspaceService.findOwnedId(
+    const owned = await this.workspaceService.getOwnedId(
       userId,
       input.workspaceId
     );
@@ -89,7 +89,7 @@ export class AgentService {
       })}`
     );
 
-    const conversation = await this.conversationService.findOne(
+    const conversation = await this.conversationService.findById(
       userId,
       conversationId
     );
@@ -163,7 +163,7 @@ export class AgentService {
 
   /**
    * 刷新网页后续接进行中的 run：校验 conversation 归属后，把 SSE response
-   * 交给 RunService.resumeStream 接到活跃 run 上。
+   * 交给 RunService.resume 接到活跃 run 上。
    */
   async resume(
     conversationId: string,
@@ -174,8 +174,8 @@ export class AgentService {
       throw new BadRequestException("conversationId is required");
     }
     // 校验归属：找不到会抛 NotFound，等价于官方 assertStreamOwner
-    await this.conversationService.findOne(user.userId, conversationId);
-    await this.runService.resumeStream(conversationId, res);
+    await this.conversationService.findById(user.userId, conversationId);
+    await this.runService.resume(conversationId, res);
   }
 
   /** 回应一次审批（approval_resolved 控制指令）。 */
@@ -184,19 +184,19 @@ export class AgentService {
     answers: Record<string, string | string[]>,
     user: JwtUser
   ): Promise<void> {
-    await this.conversationService.findOne(user.userId, conversationId);
-    await this.runService.resolveApproval(conversationId, answers);
+    await this.conversationService.findById(user.userId, conversationId);
+    await this.runService.reply(conversationId, answers);
   }
 
   /** 停止 conversation 的活跃 run；若无内存 handle 但状态仍为 running 则重置为 idle。 */
   async stop(conversationId: string, user: JwtUser): Promise<void> {
-    const conversation = await this.conversationService.findOne(
+    const conversation = await this.conversationService.findById(
       user.userId,
       conversationId
     );
     const hadHandle = await this.runService.stop(conversationId);
-    if (!hadHandle && conversation.activeRunStatus === "running") {
-      await this.conversationService.setActiveRunStatus(conversationId, "idle");
+    if (!hadHandle && conversation.runStatus === "running") {
+      await this.conversationService.setRunStatus(conversationId, "idle");
     }
   }
 

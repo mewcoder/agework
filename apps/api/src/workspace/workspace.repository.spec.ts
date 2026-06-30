@@ -119,12 +119,12 @@ describe("WorkspaceRepository", () => {
     );
   });
 
-  it("findOwnedId only matches the caller's non-deleted workspace", async () => {
+  it("getOwnedId only matches the caller's non-deleted workspace", async () => {
     const findFirst = vi.fn().mockResolvedValue({ id: "ws-1" });
     const prisma = makePrisma({ workspace: { findFirst } });
     const repo = new WorkspaceRepository(prisma as never);
 
-    await repo.findOwnedId("user-1", "ws-1");
+    await repo.getOwnedId("user-1", "ws-1");
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: "ws-1", userId: "user-1", deletedAt: null },

@@ -9,7 +9,7 @@ function makeController() {
     update: vi.fn().mockResolvedValue({}),
     setEnabled: vi.fn().mockResolvedValue({}),
     delete: vi.fn().mockResolvedValue(undefined),
-    test: vi.fn().mockResolvedValue({ ok: true }),
+    ping: vi.fn().mockResolvedValue({ ok: true }),
   };
   return {
     controller: new AdminModelProviderController(
@@ -58,9 +58,9 @@ describe("AdminModelProviderController", () => {
     expect(service.delete).toHaveBeenCalledWith("mp-1");
   });
 
-  it("ping() delegates to service.test", async () => {
+  it("ping() delegates to service.ping", async () => {
     const { controller, service } = makeController();
     await controller.ping({ id: "mp-1" });
-    expect(service.test).toHaveBeenCalledWith("mp-1", true);
+    expect(service.ping).toHaveBeenCalledWith("mp-1", true);
   });
 });

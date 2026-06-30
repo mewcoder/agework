@@ -15,14 +15,14 @@ type QC = ReturnType<typeof useQueryClient>;
 type ConversationsCache = { conversations: Conversation[] };
 
 /**
- * 直接更新 conversations 缓存中指定会话的 activeRunStatus（乐观更新）。
+ * 直接更新 conversations 缓存中指定会话的 runStatus（乐观更新）。
  * resume 流绕过了 agent middleware，RUN_FINISHED 时不会自动刷新 conversation 状态，
- * 这里根据终态快照推断 activeRunStatus 并写入缓存，避免 UI 卡在"运行中"。
+ * 这里根据终态快照推断 runStatus 并写入缓存，避免 UI 卡在"运行中"。
  */
 function setConversationRunStatusInCache(
   qc: QC,
   conversationId: string,
-  activeRunStatus: Conversation["activeRunStatus"],
+  runStatus: Conversation["runStatus"],
 ) {
   for (const [queryKey, old] of qc.getQueriesData<ConversationsCache>({
     queryKey: ["conversations"],
@@ -33,7 +33,7 @@ function setConversationRunStatusInCache(
       ...old,
       conversations: old.conversations.map((c) =>
         c.conversationId === conversationId
-          ? { ...c, activeRunStatus }
+          ? { ...c, runStatus }
           : c,
       ),
     });
@@ -41,15 +41,15 @@ function setConversationRunStatusInCache(
 }
 
 /**
- * 从终态快照 status 推断 conversation.activeRunStatus。
+ * 从终态快照 status 推断 conversation.runStatus。
  *  - complete → idle
  *  - incomplete/cancelled → idle（用户取消，后端也设 idle）
  *  - incomplete/error → error
  *  - 其它（如 incomplete/streaming，理论上不应作为终态）→ undefined，由 invalidate 兜底
  */
-function activeRunStatusFromSnapshot(
+function runStatusFromSnapshot(
   status: { type?: string; reason?: string } | undefined,
-): Conversation["activeRunStatus"] | undefined {
+): Conversation["runStatus"] | undefined {
   if (!status) return undefined;
   if (status.type === "complete") return "idle";
   if (status.type === "incomplete") {
@@ -79,27 +79,27 @@ export function createThreadHistoryAdapter(
       if (!remoteId) return { messages: [] };
       const raw = await conversationsApi.listMessages(remoteId);
 
-      // 判断是否有进行中的 run：优先用 thread list 透传的 activeRunStatus，
+      // 判断是否有进行中的 run：优先用 thread list 透传的 runStatus，
       // 缺失时回退到 conversationsApi.get 拿权威状态。
       const custom = aui.threadListItem().getState().custom as
-        | { activeRunStatus?: string; pendingUserAction?: string }
+        | { runStatus?: string; pendingUserAction?: string }
         | undefined;
-      let activeRunStatus = custom?.activeRunStatus;
+      let runStatus = custom?.runStatus;
       let pendingUserAction = custom?.pendingUserAction;
-      if (!activeRunStatus) {
+      if (!runStatus) {
         const conv = await conversationsApi.get(remoteId);
-        activeRunStatus = conv.activeRunStatus;
+        runStatus = conv.runStatus;
         pendingUserAction = conv.pendingUserAction ?? undefined;
       }
 
-      // requires_action 的 run：后端 conversation.activeRunStatus 仍是 "running"，
+      // requires_action 的 run：后端 conversation.runStatus 仍是 "running"，
       // 但 pendingUserAction="question"。这种情况后端 resume 会返回 409 不续接
       // stream，所以不触发 resume，也不应过滤进行中的 assistant 消息——否则
       // 刷新后 AskUserQuestion 等内容会从正文消失。把进行中消息的 status
       // 归一化成 running，让 PendingQuestionPanel 能接管交互（和 resume 流的
       // normalizeResumeSnapshot 逻辑一致）。
       const isPendingQuestion = pendingUserAction === "question";
-      const isRunning = activeRunStatus === "running" && !isPendingQuestion;
+      const isRunning = runStatus === "running" && !isPendingQuestion;
 
       let items = raw.map(toThreadMessageItem).filter(isThreadMessageItem);
 
@@ -190,11 +190,11 @@ export function createThreadHistoryAdapter(
         }
       } finally {
         // resume 流绕过了 agent middleware（RUN_FINISHED 时 middleware 会刷新
-        // conversation.activeRunStatus），这里必须手动补上，否则 conversations
+        // conversation.runStatus），这里必须手动补上，否则 conversations
         // 缓存会一直停留在 running，composer/侧边栏持续显示"运行中"，直到刷新页面。
-        // 优先用终态快照推断 activeRunStatus 做乐观更新，再 invalidate 拉权威值兜底。
+        // 优先用终态快照推断 runStatus 做乐观更新，再 invalidate 拉权威值兜底。
         if (!options.abortSignal.aborted) {
-          const inferred = activeRunStatusFromSnapshot(lastStatus);
+          const inferred = runStatusFromSnapshot(lastStatus);
           if (inferred) {
             setConversationRunStatusInCache(qc, remoteId, inferred);
           }

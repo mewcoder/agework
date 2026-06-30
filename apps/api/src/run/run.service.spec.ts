@@ -92,13 +92,13 @@ describe("RunService", () => {
     });
   });
 
-  describe("resolveApproval()", () => {
+  describe("reply()", () => {
     it("should throw NotFoundException when no active run found", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue(null);
       await expect(
-        service.resolveApproval("conversation-1", {})
+        service.reply("conversation-1", {})
       ).rejects.toThrow();
     });
 
@@ -116,7 +116,7 @@ describe("RunService", () => {
       };
       mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
 
-      await service.resolveApproval("conversation-1", { decision: "yes" });
+      await service.reply("conversation-1", { decision: "yes" });
 
       expect(mockExecutionService.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
@@ -167,7 +167,7 @@ describe("RunService", () => {
     });
   });
 
-  describe("resumeStream()", () => {
+  describe("resume()", () => {
     it("无活跃 run 时发终态 complete 快照并 end", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
@@ -180,7 +180,7 @@ describe("RunService", () => {
         on: vi.fn(),
       } as any;
 
-      await service.resumeStream("conversation-1", res);
+      await service.resume("conversation-1", res);
 
       const writes = (res.write as ReturnType<typeof vi.fn>).mock.calls.map(
         (c) => c[0] as string
@@ -205,7 +205,7 @@ describe("RunService", () => {
         status: vi.fn().mockReturnThis(),
       } as any;
 
-      await service.resumeStream("conversation-1", res);
+      await service.resume("conversation-1", res);
 
       expect(res.status).toHaveBeenCalledWith(409);
       expect(res.write).not.toHaveBeenCalled();

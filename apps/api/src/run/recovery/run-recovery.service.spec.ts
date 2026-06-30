@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
 
@@ -29,8 +29,8 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockRunConversation: Partial<RunConversationEffects> = {
-      markError: vi.fn().mockResolvedValue(undefined),
+    const mockConversations: Partial<ConversationService> = {
+      setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn().mockResolvedValue(undefined),
@@ -39,7 +39,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockRunConversation as RunConversationEffects,
+      mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
       runtimeService as RuntimeService
     );
@@ -57,8 +57,9 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       "run-1",
       "服务重启导致运行中断"
     );
-    expect(mockRunConversation.markError).toHaveBeenCalledWith(
-      "conversation-1"
+    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
+      "conversation-1",
+      "error"
     );
     // 运行环境资源的恢复委托给 runtime 领域
     expect(runtimeService.recoverOrphanRuntimeInstances).toHaveBeenCalled();
@@ -77,8 +78,8 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockRunConversation: Partial<RunConversationEffects> = {
-      markError: vi.fn().mockResolvedValue(undefined),
+    const mockConversations: Partial<ConversationService> = {
+      setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn(),
@@ -87,7 +88,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockRunConversation as RunConversationEffects,
+      mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
       runtimeService as RuntimeService
     );
@@ -115,8 +116,8 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockRunConversation: Partial<RunConversationEffects> = {
-      markError: vi.fn().mockResolvedValue(undefined),
+    const mockConversations: Partial<ConversationService> = {
+      setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn(),
@@ -127,7 +128,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockRunConversation as RunConversationEffects,
+      mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
       runtimeService as RuntimeService
     );

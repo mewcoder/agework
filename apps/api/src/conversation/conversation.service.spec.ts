@@ -16,13 +16,13 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateTitle: vi.fn().mockResolvedValue(undefined),
     renameOwned: vi.fn().mockResolvedValue(undefined),
     updateOwned: vi.fn().mockResolvedValue(undefined),
-    setActiveRunStatus: vi.fn().mockResolvedValue(true),
+    setRunStatus: vi.fn().mockResolvedValue(true),
     setPendingUserAction: vi.fn().mockResolvedValue(undefined),
     attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
     archiveOwned: vi.fn().mockResolvedValue(undefined),
     unarchiveOwned: vi.fn().mockResolvedValue(undefined),
     softDeleteOwned: vi.fn().mockResolvedValue(undefined),
-    softDeleteByWorkspace: vi.fn().mockResolvedValue(undefined),
+    deleteByWorkspace: vi.fn().mockResolvedValue(undefined),
     clearArchivedOwned: vi.fn().mockResolvedValue(undefined),
     findMessages: vi.fn().mockResolvedValue([]),
     upsertMessage: vi.fn().mockResolvedValue(undefined),
@@ -39,7 +39,7 @@ describe("ConversationService", () => {
         {
           id: "conversation-new",
           status: "regular",
-          activeRunStatus: "idle",
+          runStatus: "idle",
           pendingUserAction: null,
           title: "New conversation",
           workspaceId: "workspace-1",
@@ -65,7 +65,7 @@ describe("ConversationService", () => {
     expect(result.list).toEqual([
       {
         status: "regular",
-        activeRunStatus: "idle",
+        runStatus: "idle",
         pendingUserAction: null,
         conversationId: "conversation-new",
         title: "New conversation",
@@ -121,9 +121,9 @@ describe("ConversationService", () => {
     const service = new ConversationService(repo as never);
     const deletedAt = new Date("2026-06-29T10:00:00.000Z");
 
-    await service.softDeleteByWorkspace("workspace-1", deletedAt);
+    await service.deleteByWorkspace("workspace-1", deletedAt);
 
-    expect(repo.softDeleteByWorkspace).toHaveBeenCalledWith(
+    expect(repo.deleteByWorkspace).toHaveBeenCalledWith(
       "workspace-1",
       deletedAt
     );
@@ -148,11 +148,12 @@ describe("ConversationService", () => {
       titleService as never
     );
 
-    await service.generateTitleIfNeeded({
-      conversationId: "conversation-1",
-      agentType: "claude",
-      modelProviderId: "mp-1",
-    });
+    await service.saveUserMessage(
+      "conversation-1",
+      { id: "msg-1", content: "帮我重构参数校验" } as never,
+      { agentType: "claude", modelProviderId: "mp-1" }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(titleService.generateLLMTitle).toHaveBeenCalledWith({
       agentType: "claude",
@@ -183,11 +184,12 @@ describe("ConversationService", () => {
       titleService as never
     );
 
-    await service.generateTitleIfNeeded({
-      conversationId: "conversation-1",
-      agentType: "claude",
-      modelProviderId: "mp-1",
-    });
+    await service.saveUserMessage(
+      "conversation-1",
+      { id: "msg-1", content: "first" } as never,
+      { agentType: "claude", modelProviderId: "mp-1" }
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(titleService.generateLLMTitle).not.toHaveBeenCalled();
   });
@@ -244,7 +246,7 @@ describe("ConversationService", () => {
       return {
         id: "conv-1",
         status: "regular",
-        activeRunStatus: "idle",
+        runStatus: "idle",
         pendingUserAction: null,
         title: "hello world",
         workspaceId: "ws-1",
@@ -348,7 +350,7 @@ describe("ConversationService", () => {
       const repo = makeRepo({ findOwnedById: vi.fn().mockResolvedValue(null) });
       const service = new ConversationService(repo as never);
 
-      await expect(service.findOne(mockUserId, "conv-x")).rejects.toThrow(
+      await expect(service.findById(mockUserId, "conv-x")).rejects.toThrow(
         "对话不存在"
       );
       expect(repo.findOwnedById).toHaveBeenCalledWith(mockUserId, "conv-x");

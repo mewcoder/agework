@@ -392,7 +392,7 @@ describe("auth and user management security flows", () => {
   it("allows startup before setup and creates admin only after setup", async () => {
     const { auth, prisma } = makeServices();
 
-    await expect(auth.isSetupRequired()).resolves.toBe(true);
+    await expect(auth.isNoSuperAdmin()).resolves.toBe(true);
     expect(prisma.getUser("admin")).toBeUndefined();
 
     const session = await auth.setupSuperAdmin("AdminInitPass1");
@@ -409,7 +409,7 @@ describe("auth and user management security flows", () => {
       role: "super_admin",
       status: "active",
     });
-    await expect(auth.isSetupRequired()).resolves.toBe(false);
+    await expect(auth.isNoSuperAdmin()).resolves.toBe(false);
     await expect(auth.setupSuperAdmin("AdminInitPass2")).rejects.toThrow(
       "系统已初始化"
     );
@@ -417,7 +417,7 @@ describe("auth and user management security flows", () => {
 
   it("converts a concurrent super-admin creation race into 系统已初始化", async () => {
     const { auth } = makeServices();
-    // 模拟两个请求都通过 isSetupRequired 后，另一个先一步落库（P2002 -> null）
+    // 模拟两个请求都通过 isNoSuperAdmin 后，另一个先一步落库（P2002 -> null）
     vi.spyOn(
       UserRepository.prototype,
       "createSuperAdmin"

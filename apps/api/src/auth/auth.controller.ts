@@ -71,7 +71,7 @@ export class AuthController {
       clearRefreshCookie(res);
       throw new UnauthorizedException();
     }
-    const result = await this.authService.refresh(rawToken);
+    const result = await this.authService.refreshToken(rawToken);
     return this.issueSession(res, result);
   }
 
@@ -86,7 +86,7 @@ export class AuthController {
   @SkipThrottle()
   @Get("query")
   me(@CurrentUser() user: JwtUser) {
-    return this.authService.me(user.userId);
+    return this.authService.getUserInfo(user.userId);
   }
 
   @Post("update-password")
@@ -113,7 +113,7 @@ export class AuthController {
   @Public()
   @Get("config")
   config() {
-    return this.authService.config();
+    return this.authService.getAuthConfig();
   }
 
   /** 把 refresh token 写进 HttpOnly cookie，响应体只回 access token 与用户信息。 */

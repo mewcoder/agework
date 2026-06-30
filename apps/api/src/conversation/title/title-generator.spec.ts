@@ -115,23 +115,23 @@ describe("TitleGenerator", () => {
   });
 });
 
-describe("generateFallbackTitle", () => {
+describe("generateDefaultTitle", () => {
   it("collapses whitespace and keeps short text as-is", () => {
     expect(
-      TitleGenerator.generateFallbackTitle("  帮我  重构\n参数校验 ")
+      TitleGenerator.generateDefaultTitle("  帮我  重构\n参数校验 ")
     ).toBe("帮我 重构 参数校验");
   });
 
   it("truncates to 40 chars and strips trailing punctuation left by the cut", () => {
     const text = "请帮我重构这个超长的会话标题文本，".repeat(5);
-    const title = TitleGenerator.generateFallbackTitle(text);
+    const title = TitleGenerator.generateDefaultTitle(text);
     expect(title).not.toBeNull();
     expect(title!.length).toBeLessThanOrEqual(40);
     expect(title!).not.toMatch(/[，。、；！？,.;!?\s]$/u);
   });
 
   it("returns null for empty or whitespace-only text", () => {
-    expect(TitleGenerator.generateFallbackTitle("")).toBeNull();
-    expect(TitleGenerator.generateFallbackTitle("   \n  ")).toBeNull();
+    expect(TitleGenerator.generateDefaultTitle("")).toBeNull();
+    expect(TitleGenerator.generateDefaultTitle("   \n  ")).toBeNull();
   });
 });

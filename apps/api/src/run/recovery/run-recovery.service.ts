@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "../run.repository";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import { swallow } from "../../common/swallow";
 
 /**
@@ -16,7 +16,7 @@ export class RunRecoveryService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly runConversation: RunConversationEffects,
+    private readonly conversations: ConversationService,
     private readonly executionService: ExecutionService,
     private readonly runtimeService: RuntimeService
   ) {}
@@ -58,8 +58,8 @@ export class RunRecoveryService {
           }
 
           await this.runRepository.markError(run.id, "服务重启导致运行中断");
-          await this.runConversation
-            .markError(run.conversationId)
+          await this.conversations
+            .setRunStatus(run.conversationId, "error")
             .catch(
               swallow(
                 this.logger,

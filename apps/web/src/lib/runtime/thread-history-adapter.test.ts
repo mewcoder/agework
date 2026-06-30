@@ -107,7 +107,7 @@ describe("normalizeResumeSnapshot", () => {
   });
 });
 
-describe("resume 结束时刷新 conversation.activeRunStatus", () => {
+describe("resume 结束时刷新 conversation.runStatus", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function makeAdapter(qc: any, remoteId: string, snapshots: Snapshot[]) {
     const aui = {
@@ -135,11 +135,11 @@ describe("resume 结束时刷新 conversation.activeRunStatus", () => {
     return { adapter, restore };
   }
 
-  it("终态 complete 时把 activeRunStatus 乐观更新为 idle 并 invalidate", async () => {
+  it("终态 complete 时把 runStatus 乐观更新为 idle 并 invalidate", async () => {
     const setQueryData = vi.fn();
     const getQueriesData = vi.fn().mockReturnValue([
       [{ queryKey: ["conversations"] }, {
-        conversations: [{ conversationId: "c1", activeRunStatus: "running" }],
+        conversations: [{ conversationId: "c1", runStatus: "running" }],
       }],
     ]);
     const invalidateQueries = vi.fn();
@@ -163,19 +163,19 @@ describe("resume 结束时刷新 conversation.activeRunStatus", () => {
     // 终态快照保持 complete
     expect(results[1].status).toEqual({ type: "complete", reason: "stop" });
 
-    // 乐观更新：把 c1 的 activeRunStatus 置为 idle
+    // 乐观更新：把 c1 的 runStatus 置为 idle
     expect(setQueryData).toHaveBeenCalledTimes(1);
     const [, nextData] = setQueryData.mock.calls[0];
-    expect(nextData.conversations[0].activeRunStatus).toBe("idle");
+    expect(nextData.conversations[0].runStatus).toBe("idle");
     // invalidate 拉权威值兜底
     expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ["conversations"] });
   });
 
-  it("终态 error 时把 activeRunStatus 乐观更新为 error", async () => {
+  it("终态 error 时把 runStatus 乐观更新为 error", async () => {
     const setQueryData = vi.fn();
     const getQueriesData = vi.fn().mockReturnValue([
       [{ queryKey: ["conversations"] }, {
-        conversations: [{ conversationId: "c1", activeRunStatus: "running" }],
+        conversations: [{ conversationId: "c1", runStatus: "running" }],
       }],
     ]);
     const invalidateQueries = vi.fn();
@@ -194,7 +194,7 @@ describe("resume 结束时刷新 conversation.activeRunStatus", () => {
     restore();
 
     const [, nextData] = setQueryData.mock.calls[0];
-    expect(nextData.conversations[0].activeRunStatus).toBe("error");
+    expect(nextData.conversations[0].runStatus).toBe("error");
   });
 
   it("abort 时不触发乐观更新 / invalidate", async () => {
@@ -226,16 +226,16 @@ describe("load() requires_action 场景", () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function makeLoadAdapter(opts: {
     remoteId: string;
-    activeRunStatus: string;
+    runStatus: string;
     pendingUserAction?: string | null;
     messages: unknown[];
   }) {
-    const { remoteId, activeRunStatus, pendingUserAction, messages } = opts;
+    const { remoteId, runStatus, pendingUserAction, messages } = opts;
     const aui = {
       threadListItem: () => ({
         getState: () => ({
           remoteId,
-          custom: { activeRunStatus, pendingUserAction: pendingUserAction ?? null },
+          custom: { runStatus, pendingUserAction: pendingUserAction ?? null },
         }),
       }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -280,7 +280,7 @@ describe("load() requires_action 场景", () => {
   it("pendingUserAction=question 时不触发 resume，不过滤进行中消息，status 归一化成 running", async () => {
     const { adapter } = makeLoadAdapter({
       remoteId: "c1",
-      activeRunStatus: "running",
+      runStatus: "running",
       pendingUserAction: "question",
       messages: [
         userMsg("u1"),
@@ -305,7 +305,7 @@ describe("load() requires_action 场景", () => {
   it("正常 running（无 pendingUserAction）时触发 resume，过滤进行中消息", async () => {
     const { adapter } = makeLoadAdapter({
       remoteId: "c1",
-      activeRunStatus: "running",
+      runStatus: "running",
       pendingUserAction: null,
       messages: [
         userMsg("u1"),
@@ -328,7 +328,7 @@ describe("load() requires_action 场景", () => {
   it("idle 时不过滤、不 resume", async () => {
     const { adapter } = makeLoadAdapter({
       remoteId: "c1",
-      activeRunStatus: "idle",
+      runStatus: "idle",
       pendingUserAction: null,
       messages: [
         userMsg("u1"),

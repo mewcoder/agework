@@ -101,7 +101,7 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /** 把审批结果通过活跃 run 的 worker 通道下发；无活跃 run 时抛 NotFound。 */
-  async resolveApproval(
+  async reply(
     conversationId: string,
     answers: Record<string, string | string[]>
   ): Promise<void> {
@@ -132,7 +132,7 @@ export class RunService implements OnApplicationBootstrap {
    *  - 无活跃 run / 无内存 handle（已结束）：发一个终态 complete 快照并 end，
    *    让前端 resume 流正常收尾，不卡在 running。
    */
-  async resumeStream(conversationId: string, res: Response): Promise<void> {
+  async resume(conversationId: string, res: Response): Promise<void> {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord

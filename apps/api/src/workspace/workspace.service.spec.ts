@@ -63,7 +63,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     ),
     updateOwned: vi.fn().mockResolvedValue(null),
     updateById: vi.fn().mockResolvedValue(null),
-    findOwnedId: vi.fn().mockResolvedValue(null),
+    getOwnedId: vi.fn().mockResolvedValue(null),
     findRunView: vi.fn().mockResolvedValue(null),
     softDelete: vi.fn().mockResolvedValue(undefined),
     findDirectoryByRootPath: vi.fn().mockResolvedValue(null),
@@ -74,7 +74,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
 
 function makeConversationService(overrides: Record<string, unknown> = {}) {
   return {
-    softDeleteByWorkspace: vi.fn().mockResolvedValue(undefined),
+    deleteByWorkspace: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   } as unknown as ConversationService;
 }
@@ -366,7 +366,7 @@ describe("WorkspaceService", () => {
     it("emits WorkspaceDeletedEvent so downstream can clean up runtime resources", async () => {
       const emit = vi.fn();
       const repo = makeRepo({
-        findOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
+        getOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
       });
       const conversations = makeConversationService();
       const config = makeConfig();
@@ -389,7 +389,7 @@ describe("WorkspaceService", () => {
         workspaceId,
         expect.any(Date)
       );
-      expect(conversations.softDeleteByWorkspace).toHaveBeenCalledWith(
+      expect(conversations.deleteByWorkspace).toHaveBeenCalledWith(
         workspaceId,
         expect.any(Date)
       );
@@ -460,14 +460,14 @@ describe("WorkspaceService", () => {
   describe("ownership scoping", () => {
     it("delete 404s and never soft-deletes a workspace the caller does not own", async () => {
       const repo = makeRepo({
-        findOwnedId: vi.fn().mockResolvedValue(null),
+        getOwnedId: vi.fn().mockResolvedValue(null),
       });
       const service = makeService(repo, makeConfig());
 
       await expect(service.delete("intruder", "ws-x")).rejects.toThrow(
         "Workspace ws-x not found"
       );
-      expect(repo.findOwnedId).toHaveBeenCalledWith("intruder", "ws-x");
+      expect(repo.getOwnedId).toHaveBeenCalledWith("intruder", "ws-x");
       expect(repo.softDelete).not.toHaveBeenCalled();
     });
 

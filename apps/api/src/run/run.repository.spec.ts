@@ -181,7 +181,7 @@ describe("RunRepository", () => {
       conversation: {
         id: "conversation-1",
         title: "Fix login",
-        activeRunStatus: "running",
+        runStatus: "running",
         pendingUserAction: null,
         agentSessionId: "session-1",
         workspaceId: "workspace-1",
@@ -214,7 +214,7 @@ describe("RunRepository", () => {
       runtimeInstanceId: "container-abc",
       conversation: {
         id: "conversation-1",
-        activeRunStatus: "running",
+        runStatus: "running",
         agentSessionId: "session-1",
       },
       workspace: { id: "workspace-1", name: "AgeWork" },

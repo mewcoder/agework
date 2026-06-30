@@ -169,7 +169,7 @@ export class RunRepository {
           select: {
             id: true,
             title: true,
-            activeRunStatus: true,
+            runStatus: true,
             pendingUserAction: true,
             agentSessionId: true,
             workspaceId: true,
@@ -204,7 +204,7 @@ export class RunRepository {
       conversation: {
         id: conversation.id,
         title: conversation.title,
-        activeRunStatus: conversation.activeRunStatus,
+        runStatus: conversation.runStatus,
         pendingUserAction: conversation.pendingUserAction,
         agentSessionId: conversation.agentSessionId,
       },

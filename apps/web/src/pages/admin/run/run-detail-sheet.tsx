@@ -18,9 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatDateTime, formatDateTimeMs } from "@/utils/format";
 import { cn } from "@/lib/utils";
 import {
-  activeRunStatusBadgeClassName,
-  activeRunStatusLabel,
-  activeRunStatusVariant,
+  runStatusBadgeClassName,
+  runStatusLabel,
+  runStatusVariant,
   runStatusBadgeClassName,
   statusLabel,
   statusVariant,
@@ -106,12 +106,12 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                         {run.conversationTitle || run.conversationId}
                       </span>
                       <Badge
-                        variant={activeRunStatusVariant(run.conversation.activeRunStatus)}
-                        className={activeRunStatusBadgeClassName(
-                          run.conversation.activeRunStatus
+                        variant={runStatusVariant(run.conversation.runStatus)}
+                        className={runStatusBadgeClassName(
+                          run.conversation.runStatus
                         )}
                       >
-                        {activeRunStatusLabel(run.conversation.activeRunStatus)}
+                        {runStatusLabel(run.conversation.runStatus)}
                       </Badge>
                     </div>
                     {run.conversationTitle && (

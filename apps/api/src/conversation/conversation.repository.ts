@@ -87,7 +87,7 @@ export class ConversationRepository {
       },
       select: {
         id: true,
-        activeRunStatus: true,
+        runStatus: true,
         pendingUserAction: true,
         updatedAt: true,
       },
@@ -151,17 +151,17 @@ export class ConversationRepository {
     });
   }
 
-  async setActiveRunStatus(
+  async setRunStatus(
     conversationId: string,
-    activeRunStatus: "idle" | "running" | "error"
+    runStatus: "idle" | "running" | "error"
   ): Promise<boolean> {
     const where =
-      activeRunStatus === "running"
-        ? { id: conversationId, activeRunStatus: { in: ["idle", "error"] } }
+      runStatus === "running"
+        ? { id: conversationId, runStatus: { in: ["idle", "error"] } }
         : { id: conversationId };
     const result = await this.prisma.conversation.updateMany({
       where,
-      data: { activeRunStatus, pendingUserAction: null },
+      data: { runStatus, pendingUserAction: null },
     });
     return result.count > 0;
   }
@@ -216,7 +216,7 @@ export class ConversationRepository {
     });
   }
 
-  async softDeleteByWorkspace(workspaceId: string, deletedAt: Date) {
+  async deleteByWorkspace(workspaceId: string, deletedAt: Date) {
     await this.prisma.conversation.updateMany({
       where: { workspaceId, deletedAt: null },
       data: { deletedAt },

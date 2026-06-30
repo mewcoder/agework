@@ -3,7 +3,7 @@ import {
   LiveRunRegistry,
   type LiveRunHandle,
 } from "../live-run/live-run.registry";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
@@ -63,7 +63,7 @@ function makeSubject(input?: {
   };
   const runConversation = {
     setPendingUserAction: vi.fn().mockResolvedValue(undefined),
-    setActiveRunStatus: vi.fn().mockResolvedValue(undefined),
+    setRunStatus: vi.fn().mockResolvedValue(undefined),
   };
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   return {
@@ -72,7 +72,7 @@ function makeSubject(input?: {
     registry,
     handler: new RunStatusService(
       runRepository as unknown as RunRepository,
-      runConversation as unknown as RunConversationEffects,
+      runConversation as unknown as ConversationService,
       registry
     ),
   };
@@ -116,7 +116,7 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markError).toHaveBeenCalledWith("run-1", "boom");
-    expect(runConversation.setActiveRunStatus).toHaveBeenCalledWith(
+    expect(runConversation.setRunStatus).toHaveBeenCalledWith(
       "conversation-1",
       "error"
     );
@@ -141,7 +141,7 @@ describe("RunStatusService", () => {
       handle,
     });
 
-    expect(runConversation.setActiveRunStatus).not.toHaveBeenCalled();
+    expect(runConversation.setRunStatus).not.toHaveBeenCalled();
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 

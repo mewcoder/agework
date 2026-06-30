@@ -58,7 +58,7 @@ export type AdminRunDetailResponse = AdminRunResponse & {
   conversation: {
     id: string;
     title: string | null;
-    activeRunStatus: string;
+    runStatus: string;
     pendingUserAction: string | null;
     agentSessionId: string | null;
   };

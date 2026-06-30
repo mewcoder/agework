@@ -1,14 +1,14 @@
 import type { AgentType, PendingAction, ListResponse } from "../common";
 
 export type ConversationStatus = "regular" | "archived";
-export type ConversationActiveRunStatus = "idle" | "running" | "error";
+export type ConversationRunStatus = "idle" | "running" | "error";
 export type ConversationPendingUserAction = PendingAction;
 
 /** 对应 api 端 ConversationService.toConversationDto 的输出。 */
 export type ConversationResponse = {
   conversationId: string;
   status: ConversationStatus;
-  activeRunStatus: ConversationActiveRunStatus;
+  runStatus: ConversationRunStatus;
   pendingUserAction: ConversationPendingUserAction;
   title?: string;
   workspaceId: string;
@@ -24,7 +24,7 @@ export type ConversationListResponse = ListResponse<ConversationResponse>;
 
 export type ConversationRunStatusResponse = {
   conversationId: string;
-  activeRunStatus: ConversationActiveRunStatus;
+  runStatus: ConversationRunStatus;
   pendingUserAction: ConversationPendingUserAction;
   /** ISO 8601 */
   updatedAt: string;

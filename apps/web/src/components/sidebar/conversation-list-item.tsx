@@ -50,13 +50,13 @@ export const ConversationListItem = memo(function ConversationListItem({
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const isActive = conversation.conversationId === activeConversationId;
   const isPending = conversation.pendingUserAction === "question";
-  const isRunning = conversation.activeRunStatus === "running" && !isPending;
+  const isRunning = conversation.runStatus === "running" && !isPending;
   const hasCompletedRun = useRuntimeUiStore((s) =>
     s.completedRunConversationIds.has(conversation.conversationId),
   );
   const hasFailedRun =
     useRuntimeUiStore((s) => s.failedRunConversationIds.has(conversation.conversationId)) ||
-    conversation.activeRunStatus === "error";
+    conversation.runStatus === "error";
   const statusDot = isPending
     ? {
         label: "待处理",

@@ -183,7 +183,7 @@ describe("external API route convention", () => {
   it("uses RPC action paths for conversations", () => {
     expect(controllerPath(ConversationController)).toBe("conversations");
     expectRoute(ConversationController, "list", "get", "list");
-    expectRoute(ConversationController, "findOne", "get", "query");
+    expectRoute(ConversationController, "findById", "get", "query");
     expectRoute(
       ConversationController,
       "queryStatuses",

@@ -5,7 +5,7 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { ExecutionService } from "../execution/execution.service";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run-service.types";
@@ -81,7 +81,7 @@ describe("RunLauncher", () => {
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockRuntimeService: Partial<RuntimeService>;
   let mockExecutionService: Partial<ExecutionService>;
-  let mockRunConversation: Partial<RunConversationEffects>;
+  let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
@@ -152,15 +152,13 @@ describe("RunLauncher", () => {
       cancel: vi.fn(),
       cleanup: vi.fn(),
     };
-    mockRunConversation = {
-      assertOwned: vi.fn().mockResolvedValue(undefined),
-      markRunning: vi.fn().mockResolvedValue(true),
-      markError: vi.fn().mockResolvedValue(true),
-      saveAgentSessionId: vi.fn().mockResolvedValue(undefined),
+    mockConversations = {
+      findById: vi.fn().mockResolvedValue(undefined),
+      setRunStatus: vi.fn().mockResolvedValue(true),
+      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
       attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       upsertMessage: vi.fn().mockResolvedValue(undefined),
-      generateTitleIfNeeded: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -183,7 +181,7 @@ describe("RunLauncher", () => {
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeService as RuntimeService,
       mockExecutionService as ExecutionService,
-      mockRunConversation as RunConversationEffects,
+      mockConversations as ConversationService,
       mockRunEvents,
       mockConfigService as ConfigService
     );
@@ -257,8 +255,9 @@ describe("RunLauncher", () => {
 
   it("marks the conversation running before starting", async () => {
     await launch();
-    expect(mockRunConversation.markRunning).toHaveBeenCalledWith(
-      "conversation-1"
+    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
+      "conversation-1",
+      "running"
     );
   });
 
@@ -266,15 +265,11 @@ describe("RunLauncher", () => {
     const userMessage = { id: "msg-1", role: "user", content: "hi" } as any;
     await launch(makeStartInput({ userMessage, userMessageId: "msg-1" }));
 
-    expect(mockRunConversation.saveUserMessage).toHaveBeenCalledWith(
+    expect(mockConversations.saveUserMessage).toHaveBeenCalledWith(
       "conversation-1",
-      userMessage
+      userMessage,
+      { agentType: "claude", modelProviderId: "mp-1" }
     );
-    expect(mockRunConversation.generateTitleIfNeeded).toHaveBeenCalledWith({
-      conversationId: "conversation-1",
-      agentType: "claude",
-      modelProviderId: "mp-1",
-    });
   });
 
   it("throws BadRequestException when the runtime type is not allowed", async () => {
@@ -295,7 +290,7 @@ describe("RunLauncher", () => {
   it("attaches the accepted user message to the created run", async () => {
     await launch(makeStartInput({ userMessageId: "msg-1" }));
 
-    expect(mockRunConversation.attachMessageToRun).toHaveBeenCalledWith(
+    expect(mockConversations.attachMessageToRun).toHaveBeenCalledWith(
       "conversation-1",
       "msg-1",
       "run-1"
@@ -373,7 +368,7 @@ describe("RunLauncher", () => {
       "run-1",
       "Failed to start worker"
     );
-    expect(mockRunConversation.markError).toHaveBeenCalledWith("conversation-1");
+    expect(mockConversations.setRunStatus).toHaveBeenCalledWith("conversation-1", "error");
     await Promise.resolve();
     expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
   });

@@ -12,7 +12,6 @@ import { RunStartupService } from "./startup/run-startup.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
-import { RunConversationEffects } from "./conversation/run-conversation.effects";
 import { ExecutionService } from "./execution/execution.service";
 import {
   RUN_EXECUTORS,
@@ -34,7 +33,7 @@ import { ConversationModule } from "../conversation/conversation.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。向下依赖 runtime / worker-host /
- * run-event / conversation（执行中经 RunConversationEffects 写回会话状态），并在
+ * run-event / conversation（直接写回会话状态），并在
  * 启动时把 worker 事件统一入口注入 run executor；
  * WorkerUpstreamPort → worker-host 的 WorkerRunController。
  */
@@ -52,7 +51,6 @@ import { ConversationModule } from "../conversation/conversation.module";
     WorkerEventService,
     WorkerSeqStore,
     RunRecoveryService,
-    RunConversationEffects,
     RunStatusService,
     RunFinalizationStore,
     RunService,

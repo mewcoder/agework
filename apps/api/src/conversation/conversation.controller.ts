@@ -35,8 +35,8 @@ export class ConversationController {
   }
 
   @Get("query")
-  findOne(@Query() query: ConversationIdDto, @CurrentUser() user: JwtUser) {
-    return this.conversationService.findOne(user.userId, query.id);
+  findById(@Query() query: ConversationIdDto, @CurrentUser() user: JwtUser) {
+    return this.conversationService.findById(user.userId, query.id);
   }
 
   @Post("statuses/query")

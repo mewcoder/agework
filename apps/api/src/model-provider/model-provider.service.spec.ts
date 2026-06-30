@@ -325,7 +325,7 @@ describe("ModelProviderService", () => {
   describe("test", () => {
     it("rejects connectivity tests for the system provider", async () => {
       const { service } = createService();
-      await expect(service.test("system:claude")).rejects.toThrow(
+      await expect(service.ping("system:claude")).rejects.toThrow(
         "系统环境不支持连通性测试"
       );
     });
@@ -344,7 +344,7 @@ describe("ModelProviderService", () => {
         }),
       });
 
-      await expect(service.test("mp-1")).resolves.toEqual({
+      await expect(service.ping("mp-1")).resolves.toEqual({
         success: false,
         latency: 0,
         error: "未配置 models",

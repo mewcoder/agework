@@ -3,7 +3,7 @@ import type { RunStatusPayload } from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import type { LiveRunHandle } from "../live-run/live-run.registry";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RunConversationEffects } from "../conversation/run-conversation.effects";
+import { ConversationService } from "../../conversation/conversation.service";
 import type {
   RunStatusEffect,
   RunStatusPersistenceAction,
@@ -16,7 +16,7 @@ export class RunStatusService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly runConversation: RunConversationEffects,
+    private readonly conversations: ConversationService,
     private readonly liveRuns: LiveRunRegistry
   ) {}
 
@@ -36,7 +36,7 @@ export class RunStatusService {
     }
 
     if (handle && payload.pendingAction !== undefined) {
-      await this.runConversation
+      await this.conversations
         .setPendingUserAction(handle.conversationId, payload.pendingAction)
         .catch(
           swallow(
@@ -130,8 +130,8 @@ export class RunStatusService {
       return;
     }
 
-    await this.runConversation
-      .setActiveRunStatus(
+    await this.conversations
+      .setRunStatus(
         handle.conversationId,
         effect.terminalConversationStatus
       )

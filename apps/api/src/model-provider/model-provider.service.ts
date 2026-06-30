@@ -409,7 +409,7 @@ export class ModelProviderService implements OnModuleInit {
     };
   }
 
-  async test(
+  async ping(
     modelProviderId: string,
     includeDisabled = false
   ): Promise<{ success: boolean; latency: number; error?: string }> {
