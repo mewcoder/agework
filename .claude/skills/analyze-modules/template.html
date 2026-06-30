@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="project-root" content="{{PROJECT_ROOT}}">
+<title>{{SCOPE}} 模块关系分析</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; max-width: 1200px; margin: 24px auto; padding: 0 16px; color: #1f2937; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin-top: 32px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+  .legend { display: flex; gap: 20px; font-size: 13px; margin: 12px 0; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { display: inline-block; width: 30px; height: 0; border-top: 3px solid #3b82f6; }
+  .swatch.rev { border-top-color: #ef4444; }
+  .swatch.evt { border-top: 3px dashed #7c3aed; }
+  .mermaid { background: #fafafa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 12px; }
+  th, td { border: 1px solid #e5e7eb; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #f3f4f6; white-space: nowrap; }
+  td.idx { width: 40px; text-align: center; font-weight: 600; }
+  td.dir { white-space: nowrap; font-weight: 600; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; white-space: nowrap; }
+  .tag.fwd { background: #dbeafe; color: #1e40af; }
+  .tag.rev { background: #fee2e2; color: #991b1b; }
+  .tag.evt { background: #ede9fe; color: #5b21b6; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+  .muted { color: #6b7280; }
+  .call { margin: 5px 0; padding: 4px 0 4px 16px; line-height: 1.55; position: relative; }
+  .call:first-child { margin-top: 0; }
+  .call:last-child { margin-bottom: 0; }
+  .call::before { content: ""; position: absolute; left: 5px; top: 11px; width: 5px; height: 5px; border-radius: 50%; background: #6b7280; }
+  .call b { color: #111827; }
+  .call .what { color: #4b5563; }
+  .edge-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin: 10px 0; background: #fff; }
+  .edge-card .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .edge-card .num { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: #1f2937; color: #fff; font-size: 12px; font-weight: 600; }
+  .edge-card .dir { font-weight: 600; font-size: 14px; }
+  .edge-card .evidence { margin-top: 10px; font-size: 13px; color: #6b7280; }
+  .edge-card .evidence code { font-size: 12px; }
+  a.ev { color: #1e40af; text-decoration: underline; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; cursor: pointer; }
+  a.ev:hover { background: #e0e7ff; }
+  .calls { margin-top: 4px; }
+  .caller { margin: 6px 0; }
+  .caller-name { font-weight: 600; color: #111827; font-size: 13px; }
+  .callee { margin: 3px 0 3px 18px; padding-left: 14px; border-left: 2px solid #e5e7eb; font-size: 13px; line-height: 1.5; position: relative; }
+  .callee::before { content: "→"; position: absolute; left: 0; top: 0; color: #6b7280; font-weight: 600; }
+  .callee b { color: #1e40af; }
+  .callee .what { color: #4b5563; }
+  .filters { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .filters .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .filters label { font-size: 13px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+  .filters .actions { font-size: 12px; color: #2563eb; }
+  .filters .actions a { cursor: pointer; margin-left: 12px; text-decoration: underline; }
+</style>
+</head>
+<body>
+<h1>{{SCOPE}} 模块关系分析</h1>
+<p class="muted">分析范围:{{MODULES}}。生成依据:.claude/rules/backend-architecture.md §4 依赖与反向依赖 / §5 Event / Port 纪律。</p>
+
+<div class="legend">
+  <span><i class="swatch"></i> 正向依赖(注入/调用)</span>
+  <span><i class="swatch rev"></i> 反向回流(Port)</span>
+  <span><i class="swatch evt"></i> 事件(emit→@OnEvent)</span>
+</div>
+
+<div class="filters">
+  <div class="row">
+    <b style="font-size:13px;margin-right:4px">模块筛选:</b>
+    {{MODULES_CHECKBOX}}
+    <span class="actions">
+      <a id="all-on">全选</a><a id="all-off">全不选</a>
+    </span>
+  </div>
+</div>
+
+<h2>关系图</h2>
+<div class="mermaid" id="graph">
+{{MERMAID}}
+</div>
+
+<h2>调用关系明细</h2>
+<div id="detail">
+{{ROWS}}
+</div>
+
+<script id="mermaid-src" type="text/plain">{{MERMAID}}</script>
+<script>
+mermaid.initialize({ startOnLoad: false, flowchart: { curve: 'basis' } });
+
+// mermaid 节点 id 不能含连字符,故约定:id = 模块名去掉连字符,label = 原模块名。
+// 这里从声明行 id[label] 建立双向映射:模块名 <-> 节点 id。
+function buildModuleMap() {
+  const src = document.getElementById('mermaid-src').textContent;
+  const idToMod = {};
+  const re = /([A-Za-z][A-Za-z0-9_]*)\[([^\]]+)\]/g;
+  let m;
+  while ((m = re.exec(src)) !== null) idToMod[m[1]] = m[2]; // id -> 模块名(label)
+  return idToMod;
+}
+const nodeToModule = buildModuleMap();
+
+function checkedModules() {
+  return [...document.querySelectorAll('input.mf')].filter(c => c.checked).map(c => c.value);
+}
+
+let renderSeq = 0;
+function renderGraph() {
+  const src = document.getElementById('mermaid-src').textContent;
+  const kept = new Set(checkedModules());
+  const rawLines = src.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+  // 分离:节点声明 / 边 / linkStyle(按原边顺序)
+  const nodeDecls = [];
+  const edges = [];
+  const colors = [];
+  for (const l of rawLines) {
+    if (l.startsWith('graph ') || l.startsWith('linkStyle')) continue;
+    if (/(?:-->|-\.->)/.test(l)) edges.push(l);
+    else nodeDecls.push(l);
+  }
+  let li = 0;
+  for (const l of rawLines) {
+    if (l.startsWith('linkStyle')) {
+      colors[li] = l.replace(/^linkStyle\s*\d+\s*/, '');
+      li++;
+    }
+  }
+
+  // 过滤边 + 重建 linkStyle 索引
+  const keptEdges = [];
+  const keptColors = [];
+  const usedNodes = new Set();
+  edges.forEach((e, i) => {
+    const stripped = e.replace(/\|[^|]*\|/g, ' ');
+    const em = stripped.match(/^([A-Za-z0-9_]+)\s*(?:-->|-\.->)\s*([A-Za-z0-9_]+)/);
+    if (!em) return;
+    const ma = nodeToModule[em[1]], mb = nodeToModule[em[2]];
+    if (ma && mb && kept.has(ma) && kept.has(mb)) {
+      keptEdges.push(e);
+      keptColors.push(colors[i] || '');
+      usedNodes.add(em[1]);
+      usedNodes.add(em[2]);
+    }
+  });
+  // 只保留仍有边相连的节点声明,去掉孤立节点
+  const keptDecls = nodeDecls.filter((d) => {
+    const m = d.match(/^([A-Za-z0-9_]+)\[/);
+    return m && usedNodes.has(m[1]);
+  });
+
+  const finalText =
+    'graph LR\n' +
+    keptDecls.join('\n') + '\n' +
+    keptEdges.join('\n') + '\n' +
+    keptColors.map((c, i) => `linkStyle ${i} ${c}`).join('\n');
+
+  const host = document.getElementById('graph');
+  host.innerHTML = '';
+  renderSeq++;
+  mermaid.render('graph_' + renderSeq, finalText)
+    .then(({ svg }) => { host.innerHTML = svg; })
+    .catch(err => console.warn('mermaid render', err));
+}
+
+function filterCards() {
+  const kept = new Set(checkedModules());
+  document.querySelectorAll('#detail .edge-card').forEach(card => {
+    const a = card.dataset.from, b = card.dataset.to;
+    card.style.display = (kept.has(a) && kept.has(b)) ? '' : 'none';
+  });
+}
+
+function refresh() { renderGraph(); filterCards(); }
+
+document.addEventListener('change', e => {
+  if (e.target.classList.contains('mf')) refresh();
+});
+document.getElementById('all-on').onclick = () => {
+  document.querySelectorAll('input.mf').forEach(c => c.checked = true); refresh();
+};
+document.getElementById('all-off').onclick = () => {
+  document.querySelectorAll('input.mf').forEach(c => c.checked = false); refresh();
+};
+
+// 首次渲染(默认全选)
+renderGraph();
+
+// 函数名 → vscode:// 可点击跳转
+// caller-name / callee 用 <a class="ev" data-file="相对项目根路径" data-line="行号"> 包裹。
+// 项目根绝对路径由生成时写入 <meta name="project-root">,这里直接拼接,
+// 不依赖 location.href(避免从 webview/Live Preview 打开时路径解析残缺)。
+function linkifyEvidence() {
+  const root = (document.querySelector('meta[name="project-root"]').content || '').replace(/\/+$/, '');
+  document.querySelectorAll('#detail a.ev').forEach(a => {
+    const filePath = a.dataset.file, line = a.dataset.line;
+    if (!filePath || !line) return;
+    const rel = filePath.replace(/\\/g, '/');
+    a.href = `vscode://file/${root}/${rel}:${line}`;
+  });
+  // 每个 edge-card 底部汇总展示该边涉及的文件(去重,仅文件名不带行号)
+  document.querySelectorAll('#detail .edge-card').forEach(card => {
+    const seen = new Set();
+    const files = [];
+    card.querySelectorAll('a.ev').forEach(a => {
+      const rel = a.dataset.file.replace(/\\/g, '/');
+      if (!seen.has(rel)) { seen.add(rel); files.push(rel); }
+    });
+    if (!files.length) return;
+    const ev = document.createElement('div');
+    ev.className = 'evidence';
+    ev.innerHTML = '证据:' + files.map(f => `<code>${f}</code>`).join(' · ');
+    card.appendChild(ev);
+  });
+}
+linkifyEvidence();
+</script>
+</body>
+</html>

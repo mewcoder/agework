@@ -48,3 +48,6 @@ reference-desktop
 
 # test coverage
 coverage
+
+# check-module 报告输出
+reports/
