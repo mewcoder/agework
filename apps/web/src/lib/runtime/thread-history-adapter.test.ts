@@ -223,7 +223,6 @@ describe("resume 结束时刷新 conversation.runStatus", () => {
 // ── load() requires_action（pendingUserAction=question）场景 ─────────────────
 
 describe("load() requires_action 场景", () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function makeLoadAdapter(opts: {
     remoteId: string;
     runStatus: string;

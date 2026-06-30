@@ -60,6 +60,7 @@ export type {
   RuntimeTarget,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
+  AcquireInstanceResult,
   IsolationScope,
   RuntimePlacement,
   LocalRuntimePlacement,

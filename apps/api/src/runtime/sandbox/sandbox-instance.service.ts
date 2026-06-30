@@ -1,11 +1,13 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type {
+  AcquireInstanceResult,
   IsolationScope,
   RuntimeTarget,
   SandboxRuntimePlacement,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { isSandboxPlacement } from "../placement/runtime-resource";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { ConfigService } from "../../config/config.service";
 import {
   CONTAINER_RUNTIME_LOG_DIR,
@@ -50,11 +52,6 @@ export type SandboxWorkerExecutionContext = {
 export type SandboxRuntimeInstanceAttachment = {
   context: SandboxWorkerExecutionContext;
   ownerState: SandboxOwnerState;
-  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
-};
-
-export type SandboxOwnerAccessKeyIssuer = {
-  issueOwnerAccessKey(ownerId: string): string;
 };
 
 export type SandboxRuntimeInstanceCallbacks = {
@@ -63,11 +60,23 @@ export type SandboxRuntimeInstanceCallbacks = {
   cleanupByOwnerId(ownerId: string): void;
 };
 
+/**
+ * 一次 run 对持久容器实例的「取得」状态：在容器就绪/失败/早取消之前持有 acquire 的
+ * resolve（settle）；settle 调用后置空表示已结算，state 仍保留以便 release 释放 owner
+ * 引用计数。cancelled 标记取消请求早于就绪到达（由 releaseInstanceForRun 在 pending 期设置）。
+ */
+type AcquireRunState = {
+  ownerId: string;
+  cancelled: boolean;
+  settle?: (result: AcquireInstanceResult) => void;
+};
+
 @Injectable()
 export class SandboxRuntimeInstanceService {
   private readonly logger = new Logger(SandboxRuntimeInstanceService.name);
 
   private readonly ownerStates = new Map<string, SandboxOwnerState>();
+  private readonly acquireStates = new Map<string, AcquireRunState>();
   private readonly pendingSandboxes = new Map<
     string,
     Promise<SandboxRuntime>
@@ -78,9 +87,110 @@ export class SandboxRuntimeInstanceService {
   constructor(
     private readonly configService: ConfigService,
     private readonly workspaceRuntimeService: WorkspaceRuntimeInstanceRepository,
+    private readonly workerHost: WorkerHostService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.engines = new Map(engines.map((e) => [e.type, e]));
+  }
+
+  /**
+   * 为一次 run 取得持久容器实例（创建/复用/attach），把就绪结果一次性回传 run 层执行编排。
+   * 自身只管资源生命周期：发 owner accessKey、retain 引用计数、attach/start 实例；
+   * worker session 的 openSession / 命令下发由 run 层在 ready 后自行对 worker-host 完成。
+   */
+  acquireInstanceForRun(
+    input: WorkerExecutionStartInput
+  ): Promise<AcquireInstanceResult> {
+    const context = this.resolveWorkerExecutionContext(input);
+    this.logWorkerExecutionStart(context);
+    const ownerState = this.ensureOwnerState(context);
+    this.retainOwnerRun(context.ownerId);
+    return new Promise<AcquireInstanceResult>((resolve) => {
+      this.acquireStates.set(context.runId, {
+        ownerId: context.ownerId,
+        cancelled: false,
+        settle: resolve,
+      });
+      this.attachOrStartRuntimeInstance(
+        { context, ownerState },
+        this.acquireCallbacks()
+      );
+    });
+  }
+
+  /**
+   * 释放一次 run 对持久容器的引用。run 层在 run 终态 cleanup 时调用。
+   * 若取得尚未结算（容器未就绪），仅标记 cancelled，待就绪那刻 settle 为
+   * cancelledBeforeReady 并释放引用；已结算则直接释放 owner 引用计数。幂等。
+   */
+  releaseInstanceForRun(runId: string): void {
+    const state = this.acquireStates.get(runId);
+    if (!state) return;
+    if (state.settle) {
+      state.cancelled = true;
+      return;
+    }
+    this.releaseOwnerRun(state.ownerId);
+    this.acquireStates.delete(runId);
+  }
+
+  private acquireCallbacks(): SandboxRuntimeInstanceCallbacks {
+    return {
+      runtimeReady: (runId, runtimeInstanceId) =>
+        this.settleReady(runId, runtimeInstanceId),
+      publishWorkerError: (runId, error) => this.settleError(runId, error),
+      cleanupByOwnerId: (ownerId) => this.cleanupOwner(ownerId),
+    };
+  }
+
+  private settleReady(runId: string, runtimeInstanceId: string): void {
+    const state = this.acquireStates.get(runId);
+    if (!state?.settle) return;
+    const settle = state.settle;
+    state.settle = undefined;
+    if (state.cancelled) {
+      this.releaseOwnerRun(state.ownerId);
+      this.acquireStates.delete(runId);
+      settle({ outcome: "cancelledBeforeReady" });
+      return;
+    }
+    const accessKey = this.ownerStates.get(state.ownerId)?.accessKey ?? "";
+    settle({ outcome: "ready", runtimeInstanceId, accessKey });
+  }
+
+  private settleError(runId: string, error: string): void {
+    const state = this.acquireStates.get(runId);
+    if (!state?.settle) return;
+    const settle = state.settle;
+    state.settle = undefined;
+    settle({ outcome: "error", error });
+  }
+
+  /** owner 容器被拆除（创建失败 / 主动停止）：结算并清掉该 owner 下所有未释放的 acquire。 */
+  private cleanupOwner(ownerId: string): void {
+    for (const [runId, state] of this.acquireStates) {
+      if (state.ownerId !== ownerId) continue;
+      const settle = state.settle;
+      state.settle = undefined;
+      this.acquireStates.delete(runId);
+      settle?.({ outcome: "error", error: "sandbox owner torn down" });
+    }
+    this.workerHost.cleanupByOwnerId(ownerId);
+  }
+
+  private logWorkerExecutionStart(
+    context: SandboxWorkerExecutionContext
+  ): void {
+    this.logger.log(
+      `sandbox run starting ${safeLogJson({
+        runId: context.runId,
+        conversationId: context.runConfig.conversationId,
+        workspaceId: context.workspaceId,
+        ownerId: context.ownerId,
+        isolationScope: context.isolationScope,
+        engineType: context.engineType,
+      })}`
+    );
   }
 
   resolveWorkerExecutionContext(
@@ -108,13 +218,12 @@ export class SandboxRuntimeInstanceService {
     };
   }
 
-  ensureOwnerState(
-    context: SandboxWorkerExecutionContext,
-    accessKeys: SandboxOwnerAccessKeyIssuer
+  private ensureOwnerState(
+    context: SandboxWorkerExecutionContext
   ): SandboxOwnerState {
     let ownerState = this.ownerStates.get(context.ownerId);
     if (!ownerState) {
-      const accessKey = accessKeys.issueOwnerAccessKey(context.ownerId);
+      const accessKey = this.workerHost.issueOwnerKey(context.ownerId);
       ownerState = {
         runtimeInstanceId: "",
         accessKey,
@@ -132,7 +241,7 @@ export class SandboxRuntimeInstanceService {
       !this.pendingSandboxes.has(context.ownerId) &&
       !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      ownerState.accessKey = accessKeys.issueOwnerAccessKey(context.ownerId);
+      ownerState.accessKey = this.workerHost.issueOwnerKey(context.ownerId);
       ownerState.engineType = context.engineType;
     }
 
@@ -140,14 +249,14 @@ export class SandboxRuntimeInstanceService {
     return ownerState;
   }
 
-  retainOwnerRun(ownerId: string): void {
+  private retainOwnerRun(ownerId: string): void {
     const ownerState = this.ownerStates.get(ownerId);
     if (!ownerState) return;
     ownerState.activeRunCount += 1;
     this.idleWatchdog.cancel(ownerId);
   }
 
-  releaseOwnerRun(ownerId: string): void {
+  private releaseOwnerRun(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     if (!state) return;
     state.activeRunCount = Math.max(0, state.activeRunCount - 1);
@@ -159,7 +268,7 @@ export class SandboxRuntimeInstanceService {
     }
   }
 
-  attachOrStartRuntimeInstance(
+  private attachOrStartRuntimeInstance(
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
@@ -178,14 +287,8 @@ export class SandboxRuntimeInstanceService {
     this.startRuntimeInstanceForOwner(attachment, callbacks);
   }
 
-  getOwnerState(ownerId: string): SandboxOwnerState | undefined {
-    return this.ownerStates.get(ownerId);
-  }
-
-  shutdownRuntimeInstance(
-    ownerId: string,
-    callbacks: Pick<SandboxRuntimeInstanceCallbacks, "cleanupByOwnerId">
-  ): void {
+  /** 停止并删除某 owner 的持久容器/沙箱，并清掉其 worker-host 资源。 */
+  shutdownRuntimeInstance(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     this.idleWatchdog.cancel(ownerId);
     if (state?.runtimeInstanceId) {
@@ -206,7 +309,7 @@ export class SandboxRuntimeInstanceService {
           )
         );
     }
-    callbacks.cleanupByOwnerId(ownerId);
+    this.cleanupOwner(ownerId);
     this.ownerStates.delete(ownerId);
     this.pendingSandboxes.delete(ownerId);
   }
@@ -225,14 +328,13 @@ export class SandboxRuntimeInstanceService {
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, ownerState, onRuntimeInstanceIdReady } = attachment;
+    const { context, ownerState } = attachment;
     void this.recordWorkspaceRuntime(
       context.placement,
       context.ownerId,
       ownerState.runtimeInstanceId
     );
     callbacks.runtimeReady(context.runId, ownerState.runtimeInstanceId);
-    onRuntimeInstanceIdReady?.(ownerState.runtimeInstanceId);
   }
 
   private attachPendingRuntimeInstance(
@@ -240,7 +342,7 @@ export class SandboxRuntimeInstanceService {
     runtimePromise: Promise<SandboxRuntime>,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, onRuntimeInstanceIdReady } = attachment;
+    const { context } = attachment;
     void runtimePromise
       .then((runtime) => {
         void this.recordWorkspaceRuntime(
@@ -249,7 +351,6 @@ export class SandboxRuntimeInstanceService {
           runtime.runtimeInstanceId
         );
         callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
-        onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
       })
       .catch((err) => {
         callbacks.publishWorkerError(
@@ -351,7 +452,7 @@ export class SandboxRuntimeInstanceService {
     runtime: SandboxRuntime,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, onRuntimeInstanceIdReady } = attachment;
+    const { context } = attachment;
     this.pendingSandboxes.delete(context.ownerId);
     const state = this.ownerStates.get(context.ownerId);
     if (!state) return;
@@ -373,7 +474,6 @@ export class SandboxRuntimeInstanceService {
     );
 
     callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
-    onRuntimeInstanceIdReady?.(runtime.runtimeInstanceId);
   }
 
   private onRuntimeInstanceStartFailed(

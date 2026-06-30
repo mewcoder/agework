@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
-import { SandboxWorkerExecutor } from "./sandbox/sandbox-worker.executor";
+import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { ConfigService } from "../config/config.service";
 import type { RuntimeProvider } from "./providers/provider-contracts";
 
@@ -12,6 +12,11 @@ describe("RuntimeService", () => {
   let sandboxProvider: RuntimeProvider;
   let shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
   let repository: Record<string, ReturnType<typeof vi.fn>>;
+  let sandboxInstances: {
+    acquireInstanceForRun: ReturnType<typeof vi.fn>;
+    releaseInstanceForRun: ReturnType<typeof vi.fn>;
+    recoverOrphan: ReturnType<typeof vi.fn>;
+  };
   let service: RuntimeService;
 
   beforeEach(() => {
@@ -43,21 +48,37 @@ describe("RuntimeService", () => {
     };
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");
-    const sandboxWorker = {
-      setEventPort: vi.fn(),
-      start: vi.fn(),
-      sendCommand: vi.fn(),
-      cancel: vi.fn(),
-      terminateExecution: vi.fn(),
-      cleanup: vi.fn(),
-      cleanupInterruptedExecution: vi.fn().mockResolvedValue(undefined),
-    } as unknown as SandboxWorkerExecutor;
+    sandboxInstances = {
+      acquireInstanceForRun: vi
+        .fn()
+        .mockResolvedValue({ outcome: "cancelledBeforeReady" }),
+      releaseInstanceForRun: vi.fn(),
+      recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    };
     service = new RuntimeService(
       configService as ConfigService,
       providerRegistry,
       repository as never,
-      sandboxWorker
+      sandboxInstances as unknown as SandboxRuntimeInstanceService
     );
+  });
+
+  it("acquireInstanceForRun delegates to the sandbox instance service", async () => {
+    const input = { runConfig: { runId: "run-1" } } as never;
+    await service.acquireInstanceForRun(input);
+    expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+  });
+
+  it("releaseInstanceForRun delegates to the sandbox instance service", () => {
+    service.releaseInstanceForRun("run-1");
+    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
+      "run-1"
+    );
+  });
+
+  it("recoverOrphanInstance delegates to the sandbox instance service", async () => {
+    await service.recoverOrphanInstance("inst-1");
+    expect(sandboxInstances.recoverOrphan).toHaveBeenCalledWith("inst-1");
   });
 
   it("resolveRuntimeTarget delegates to the pure resolver with config", () => {

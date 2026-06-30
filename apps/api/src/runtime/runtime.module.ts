@@ -9,7 +9,6 @@ import { DockerSandboxEngine } from "./sandbox/docker-engine";
 import { OpenSandboxEngine } from "./sandbox/opensandbox-engine";
 import { SandboxRuntimeInstanceManager } from "./sandbox/sandbox-runtime-instance.manager";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
-import { SandboxWorkerExecutor } from "./sandbox/sandbox-worker.executor";
 import {
   OpenSandboxClient,
   OPENSANDBOX_CLIENT,
@@ -65,7 +64,6 @@ import { WorkerHostModule } from "../worker-host/worker-host.module";
       inject: [SandboxRuntimeInstanceManager],
     },
     RuntimeProviderRegistry,
-    SandboxWorkerExecutor,
     RuntimeService,
   ],
   exports: [

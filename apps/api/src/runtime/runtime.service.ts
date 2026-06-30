@@ -1,8 +1,7 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type {
-  CommandPayload,
+  AcquireInstanceResult,
   RuntimeTarget,
-  WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
@@ -15,10 +14,7 @@ import {
   type RuntimeTargetDefaults,
 } from "./placement/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
-import {
-  SandboxWorkerExecutor,
-  type SandboxWorkerEventPort,
-} from "./sandbox/sandbox-worker.executor";
+import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
 import { runtimeInstanceDiagnostics } from "./instances/runtime-instance-metadata";
 
@@ -55,7 +51,7 @@ export class RuntimeService {
     private readonly configService: ConfigService,
     private readonly providerRegistry: RuntimeProviderRegistry,
     private readonly repository: WorkspaceRuntimeInstanceRepository,
-    private readonly sandboxWorker: SandboxWorkerExecutor
+    private readonly sandboxInstances: SandboxRuntimeInstanceService
   ) {
     this.defaults = {
       runtimeType: configService.getDefaultRuntimeType(),
@@ -69,50 +65,29 @@ export class RuntimeService {
     return resolveRuntimeTarget(input, this.defaults);
   }
 
-  // ── sandbox per-run 执行门面 ──────────────────────────────────────────
-  // run 层的 SandboxRunExecutor 只经下列方法驱动 sandbox 执行，不直接持有
-  // SandboxWorkerExecutor / SandboxRuntimeInstanceService 等 runtime 内部 provider。
-
-  /** 注入 sandbox 执行回流端口（run 的 RunEventPort 结构上满足）。 */
-  setSandboxWorkerEventPort(eventPort: SandboxWorkerEventPort): void {
-    this.sandboxWorker.setEventPort(eventPort);
-  }
-
-  /** 启动一次 sandbox run：绑定 runtime owner、打开 worker session、attach/start 实例。 */
-  startSandboxWorker(input: WorkerExecutionStartInput): WorkerExecutionHandle {
-    return this.sandboxWorker.start(input);
-  }
-
-  /** 向 sandbox run 下发命令；返回是否真的入队（drop 时 false），供 run 侧据此记 trace。 */
-  sendSandboxCommand(
-    handle: WorkerExecutionHandle,
-    command: CommandPayload
-  ): boolean {
-    return this.sandboxWorker.sendCommand(handle, command);
-  }
+  // ── sandbox per-run 资源门面 ──────────────────────────────────────────
+  // run 层的 SandboxRunExecutor 经下列方法为一次 run 取得/释放持久容器实例；
+  // worker session 的 openSession / 命令下发由 run 直接对 worker-host 完成，
+  // runtime 不再触碰 per-run 执行。
 
   /**
-   * 取消 sandbox run（不停止可复用的 runtime 实例）。
-   * 返回实际下发的 cancel 命令供 run 侧记 command.sent trace；
-   * 实例 ready 前到达的取消不下发命令，返回 undefined。
+   * 为一次 sandbox run 取得持久容器实例，把就绪结果（ready/cancelledBeforeReady/error）
+   * 一次性回传给 run 层执行编排。ready 附带 runtimeInstanceId 与 owner accessKey。
    */
-  cancelSandboxRun(handle: WorkerExecutionHandle): CommandPayload | undefined {
-    return this.sandboxWorker.cancel(handle);
+  acquireInstanceForRun(
+    input: WorkerExecutionStartInput
+  ): Promise<AcquireInstanceResult> {
+    return this.sandboxInstances.acquireInstanceForRun(input);
   }
 
-  /** 强制终止 sandbox run 执行会话。 */
-  terminateSandboxRun(runId: string, reason: string): void {
-    this.sandboxWorker.terminateExecution(runId, reason);
+  /** 释放一次 run 对持久容器的引用（不停止可复用的 runtime 实例）。run 终态时调用。 */
+  releaseInstanceForRun(runId: string): void {
+    this.sandboxInstances.releaseInstanceForRun(runId);
   }
 
-  /** 清理 sandbox run 级资源（不停止 runtime 实例）。 */
-  cleanupSandboxRun(runId: string): void {
-    this.sandboxWorker.cleanup(runId);
-  }
-
-  /** 服务重启后清理中断 sandbox 执行的残留 runtime 实例。 */
-  recoverSandboxOrphan(runtimeInstanceId: string): Promise<void> {
-    return this.sandboxWorker.cleanupInterruptedExecution(runtimeInstanceId);
+  /** 服务重启后清理中断执行残留的 sandbox runtime 实例。 */
+  recoverOrphanInstance(runtimeInstanceId: string): Promise<void> {
+    return this.sandboxInstances.recoverOrphan(runtimeInstanceId);
   }
 
   /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
