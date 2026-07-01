@@ -1,10 +1,11 @@
-import { describe, it, expect, vi } from "vitest";
+import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerHostService } from "./worker-host.service";
+import type { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 
 /**
  * WorkerHostService 是 worker-host 唯一 export 的公开面,所有跨模块调用方
@@ -124,5 +125,102 @@ describe("WorkerHostService — facade routing", () => {
     service.setUpstreamPort(receiver);
 
     expect(upstream.setUpstreamPort).toHaveBeenCalledWith(receiver);
+  });
+});
+
+function makeRepositoryMock() {
+  return {
+    findActiveByWorkspace: vi.fn(),
+    upsertRunning: vi.fn(),
+    markStoppedByOwner: vi.fn(),
+    markErrorByOwner: vi.fn(),
+    isRuntimeInstanceBoundToWorkspace: vi.fn(),
+    countRunning: vi.fn(),
+    findAllRunning: vi.fn(),
+    findByRuntimeId: vi.fn(),
+    findRunInstanceView: vi.fn(),
+    userExists: vi.fn(),
+    listResourcesPage: vi.fn(),
+    findById: vi.fn(),
+    findBindingWithResource: vi.fn(),
+    findWorkspaceIdsByUser: vi.fn(),
+    findRunningByOwners: vi.fn(),
+    markStoppedById: vi.fn(),
+    deleteWorkspaceBinding: vi.fn(),
+  } as unknown as WorkerRegistryRepository;
+}
+
+describe("WorkerHostService WorkerRegistry pass-through methods", () => {
+  let repository: ReturnType<typeof makeRepositoryMock>;
+  let service: WorkerHostService;
+
+  beforeEach(() => {
+    repository = makeRepositoryMock();
+    service = new WorkerHostService(
+      {} as any,
+      {} as any,
+      {} as any,
+      repository
+    );
+  });
+
+  it("upsertRunningRuntime forwards to repository.upsertRunning", async () => {
+    const placement = { runtimeType: "sandbox" } as any;
+    (repository.upsertRunning as any).mockResolvedValue({
+      resource: { id: "x" },
+    });
+    const result = await service.upsertRunningRuntime(
+      placement,
+      "ws-1",
+      "inst-1"
+    );
+    expect(repository.upsertRunning).toHaveBeenCalledWith(
+      placement,
+      "ws-1",
+      "inst-1",
+      undefined
+    );
+    expect(result).toEqual({ resource: { id: "x" } });
+  });
+
+  it("markRuntimeStoppedByOwner forwards args to repository.markStoppedByOwner", async () => {
+    await service.markRuntimeStoppedByOwner("sandbox", "workspace", "ws-1");
+    expect(repository.markStoppedByOwner).toHaveBeenCalledWith(
+      "sandbox",
+      "workspace",
+      "ws-1"
+    );
+  });
+
+  it("isRuntimeInstanceBoundToWorkspace forwards to repository and returns its result", async () => {
+    (repository.isRuntimeInstanceBoundToWorkspace as any).mockResolvedValue(
+      true
+    );
+    const result = await service.isRuntimeInstanceBoundToWorkspace(
+      "sandbox",
+      "ws-1",
+      "inst-1"
+    );
+    expect(result).toBe(true);
+    expect(repository.isRuntimeInstanceBoundToWorkspace).toHaveBeenCalledWith(
+      "sandbox",
+      "ws-1",
+      "inst-1"
+    );
+  });
+
+  it("countRunningRuntimes forwards to repository.countRunning", async () => {
+    (repository.countRunning as any).mockResolvedValue(3);
+    expect(await service.countRunningRuntimes()).toBe(3);
+  });
+
+  it("findRuntimeInstanceView forwards args and result", async () => {
+    (repository.findRunInstanceView as any).mockResolvedValue({ id: "x" });
+    const result = await service.findRuntimeInstanceView("sandbox", "inst-1");
+    expect(repository.findRunInstanceView).toHaveBeenCalledWith(
+      "sandbox",
+      "inst-1"
+    );
+    expect(result).toEqual({ id: "x" });
   });
 });
