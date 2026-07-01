@@ -24,7 +24,11 @@ describe("worker-registry-metadata", () => {
         userId: "user-1",
         hostPath: "/host",
         runtimePath: "/container",
-        sandbox: { isolationScope: "workspace", mountTarget: "/container", sandboxEngineType: "docker" },
+        sandbox: {
+          isolationScope: "workspace",
+          mountTarget: "/container",
+          sandboxEngineType: "docker",
+        },
       } as any,
       ownerId: "ws-1",
       runtimeInstanceId: "inst-1",
@@ -45,7 +49,11 @@ describe("worker-registry-metadata", () => {
         userId: "user-1",
         hostPath: "/host",
         runtimePath: "/container",
-        sandbox: { isolationScope: "workspace", mountTarget: "/container", sandboxEngineType: "docker" },
+        sandbox: {
+          isolationScope: "workspace",
+          mountTarget: "/container",
+          sandboxEngineType: "docker",
+        },
       } as any,
       ownerId: "ws-1",
       runtimeInstanceId: "inst-1",
@@ -92,7 +100,11 @@ describe("worker-registry-metadata", () => {
       runtimeInstanceId: undefined,
     });
     expect(
-      runtimeInstanceDiagnostics({ ownerId: "ws-1", statusReason: "running", extra: 1 })
+      runtimeInstanceDiagnostics({
+        ownerId: "ws-1",
+        statusReason: "running",
+        extra: 1,
+      })
     ).toMatchObject({ ownerId: "ws-1", statusReason: "running" });
   });
 });

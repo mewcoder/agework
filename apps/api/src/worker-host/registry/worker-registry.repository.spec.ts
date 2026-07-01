@@ -26,18 +26,24 @@ function makePrismaMock() {
   };
 }
 
-function makePrismaWithTransaction(runtimeInstanceMocks: {
-  findFirst: ReturnType<typeof vi.fn>;
-  create: ReturnType<typeof vi.fn>;
-  update: ReturnType<typeof vi.fn>;
-}, workspaceRuntimeInstanceMocks: {
-  upsert: ReturnType<typeof vi.fn>;
-}) {
+function makePrismaWithTransaction(
+  runtimeInstanceMocks: {
+    findFirst: ReturnType<typeof vi.fn>;
+    create: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+  },
+  workspaceRuntimeInstanceMocks: {
+    upsert: ReturnType<typeof vi.fn>;
+  }
+) {
   const baseMock = makePrismaMock();
   return {
     ...baseMock,
     runtimeInstance: { ...baseMock.runtimeInstance, ...runtimeInstanceMocks },
-    workspaceRuntimeInstance: { ...baseMock.workspaceRuntimeInstance, ...workspaceRuntimeInstanceMocks },
+    workspaceRuntimeInstance: {
+      ...baseMock.workspaceRuntimeInstance,
+      ...workspaceRuntimeInstanceMocks,
+    },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
       fn({
         runtimeInstance: runtimeInstanceMocks,
@@ -164,7 +170,11 @@ describe("WorkerRegistryRepository", () => {
       prisma.runtimeInstance.updateMany.mockResolvedValue({ count: 1 });
       await repository.markStoppedByOwner("sandbox", "workspace", "ws-1");
       expect(prisma.runtimeInstance.updateMany).toHaveBeenCalledWith({
-        where: { runtimeType: "sandbox", isolationScope: "workspace", ownerId: "ws-1" },
+        where: {
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+        },
         data: expect.objectContaining({ status: "stopped" }),
       });
     });
