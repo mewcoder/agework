@@ -4,6 +4,7 @@ import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { ConfigService } from "../config/config.service";
 import type { RuntimeProvider } from "./providers/provider-contracts";
+import type { SandboxEngine } from "./sandbox/sandbox-engine";
 
 describe("RuntimeService", () => {
   let configService: Partial<ConfigService>;
@@ -17,6 +18,7 @@ describe("RuntimeService", () => {
     releaseInstanceForRun: ReturnType<typeof vi.fn>;
     recoverOrphan: ReturnType<typeof vi.fn>;
   };
+  let engine: SandboxEngine;
   let service: RuntimeService;
 
   beforeEach(() => {
@@ -49,6 +51,22 @@ describe("RuntimeService", () => {
       // (那部分已在 worker-registry-metadata.spec.ts 里测过)。
       buildRuntimeDiagnostics: vi.fn((metadata) => metadata as never),
     };
+    engine = {
+      type: "docker",
+      getOrCreate: vi.fn().mockResolvedValue({
+        engineType: "docker",
+        runtimeInstanceId: "container-1",
+        workspaceMountPath: "/workspace",
+      }),
+      startWorker: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue({
+        engineType: "docker",
+        runtimeInstanceId: "container-1",
+        workspaceMountPath: "/workspace",
+      }),
+      recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    };
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");
     sandboxInstances = {
@@ -62,7 +80,8 @@ describe("RuntimeService", () => {
       configService as ConfigService,
       providerRegistry,
       workerHost as never,
-      sandboxInstances as unknown as SandboxRuntimeInstanceService
+      sandboxInstances as unknown as SandboxRuntimeInstanceService,
+      [engine]
     );
   });
 
@@ -216,5 +235,74 @@ describe("RuntimeService", () => {
     await expect(
       service.isRuntimeInstanceUserScoped("sandbox", "container-1")
     ).resolves.toBe(false);
+  });
+
+  describe("sandbox engine facade", () => {
+    it("getOrCreateSandbox delegates to the resolved engine", async () => {
+      const input = { placement: {} } as never;
+      await expect(service.getOrCreateSandbox("docker", input)).resolves.toEqual({
+        engineType: "docker",
+        runtimeInstanceId: "container-1",
+        workspaceMountPath: "/workspace",
+      });
+      expect(engine.getOrCreate).toHaveBeenCalledWith(input);
+    });
+
+    it("resumeSandbox delegates to the resolved engine's resume method", async () => {
+      const input = { placement: {} } as never;
+      await expect(
+        service.resumeSandbox("docker", "container-1", input)
+      ).resolves.toEqual({
+        engineType: "docker",
+        runtimeInstanceId: "container-1",
+        workspaceMountPath: "/workspace",
+      });
+      expect(engine.resume).toHaveBeenCalledWith("container-1", input);
+    });
+
+    it("resumeSandbox returns undefined when the engine has no resume support", () => {
+      engine.resume = undefined;
+      const result = service.resumeSandbox("docker", "container-1", {} as never);
+      expect(result).toBeUndefined();
+    });
+
+    it("startSandboxWorker delegates to the resolved engine", async () => {
+      const runtime = {
+        engineType: "docker",
+        runtimeInstanceId: "container-1",
+        workspaceMountPath: "/workspace",
+      } as never;
+      const input = {} as never;
+      await service.startSandboxWorker("docker", runtime, input);
+      expect(engine.startWorker).toHaveBeenCalledWith(runtime, input);
+    });
+
+    it("stopSandbox delegates to the resolved engine", async () => {
+      await service.stopSandbox("docker", "container-1");
+      expect(engine.stop).toHaveBeenCalledWith("container-1");
+    });
+
+    it("recoverOrphanSandbox loops all registered engines and swallows individual failures", async () => {
+      const secondEngine: SandboxEngine = {
+        type: "opensandbox",
+        getOrCreate: vi.fn(),
+        startWorker: vi.fn(),
+        stop: vi.fn(),
+        recoverOrphan: vi.fn().mockRejectedValue(new Error("boom")),
+      };
+      service = new RuntimeService(
+        configService as ConfigService,
+        providerRegistry,
+        workerHost as never,
+        sandboxInstances as unknown as SandboxRuntimeInstanceService,
+        [engine, secondEngine]
+      );
+
+      await expect(
+        service.recoverOrphanSandbox("resource-abc")
+      ).resolves.toBeUndefined();
+      expect(engine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
+      expect(secondEngine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
+    });
   });
 });

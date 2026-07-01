@@ -1,7 +1,6 @@
 import { isAbsolute, relative, sep } from "node:path";
 import type {
   LocalRuntimePlacement,
-  RuntimePlacement,
   RuntimeTarget,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
@@ -27,13 +26,6 @@ export type RuntimeTargetDefaults = {
   isolationScope: IsolationScope;
   sandboxEngine: "docker" | "opensandbox";
 };
-
-/** 类型守卫：narrow 出 sandbox 分支（placement.sandbox 必填）。 */
-export function isSandboxPlacement(
-  placement: RuntimePlacement
-): placement is SandboxRuntimePlacement {
-  return placement.runtimeType === "sandbox";
-}
 
 /**
  * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、

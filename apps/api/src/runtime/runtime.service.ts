@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import type {
   AcquireInstanceResult,
   RuntimeTarget,
@@ -15,6 +15,13 @@ import {
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
+import { SANDBOX_ENGINES, type SandboxEngine } from "./sandbox/sandbox-engine";
+import type {
+  SandboxEngineType,
+  SandboxRuntime,
+  SandboxStartInput,
+} from "./runtime.types";
+import { swallow } from "../common/swallow";
 
 type RuntimeInstanceRow = {
   id: string;
@@ -42,24 +49,82 @@ type RuntimeInstanceRow = {
  */
 @Injectable()
 export class RuntimeService {
+  private readonly logger = new Logger(RuntimeService.name);
   private readonly defaults: RuntimeTargetDefaults;
+  private readonly sandboxEngines: Map<SandboxEngineType, SandboxEngine>;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly providerRegistry: RuntimeProviderRegistry,
     private readonly workerHost: WorkerHostService,
-    private readonly sandboxInstances: SandboxRuntimeInstanceService
+    private readonly sandboxInstances: SandboxRuntimeInstanceService,
+    @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
     this.defaults = {
       runtimeType: configService.getDefaultRuntimeType(),
       isolationScope: configService.getDefaultIsolationScope(),
       sandboxEngine: configService.getSandboxEngine(),
     };
+    this.sandboxEngines = new Map(engines.map((e) => [e.type, e]));
   }
 
   /** 从 run 输入解析出目标运行环境（纯计算，不启动 worker）。 */
   resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
     return resolveRuntimeTarget(input, this.defaults);
+  }
+
+  // ── sandbox engine 引擎面(worker-host 的 SandboxInstanceExecutor 经此驱动物理
+  // sandbox 操作;runtime 只知道怎么调 engine,不认识 owner 复用/idle 决策) ──
+
+  /** 获取或创建一个 sandbox 运行环境(docker/opensandbox 由 engineType 决定)。 */
+  getOrCreateSandbox(
+    engineType: SandboxEngineType,
+    input: SandboxStartInput
+  ): Promise<SandboxRuntime> {
+    return this.resolveSandboxEngine(engineType).getOrCreate(input);
+  }
+
+  /** 恢复一个此前被 stop() 的 sandbox 运行环境;engine 不支持 resume 时返回 undefined。 */
+  resumeSandbox(
+    engineType: SandboxEngineType,
+    runtimeInstanceId: string,
+    input: SandboxStartInput
+  ): Promise<SandboxRuntime> | undefined {
+    return this.resolveSandboxEngine(engineType).resume?.(
+      runtimeInstanceId,
+      input
+    );
+  }
+
+  /** 在已有 sandbox 运行环境中启动 worker 进程。 */
+  startSandboxWorker(
+    engineType: SandboxEngineType,
+    runtime: SandboxRuntime,
+    input: SandboxStartInput
+  ): Promise<void> {
+    return this.resolveSandboxEngine(engineType).startWorker(runtime, input);
+  }
+
+  /** 停止(不销毁)一个 sandbox 运行环境。 */
+  stopSandbox(engineType: SandboxEngineType, runtimeInstanceId: string): Promise<void> {
+    return this.resolveSandboxEngine(engineType).stop(runtimeInstanceId);
+  }
+
+  /** 服务重启后清理中断执行残留的 sandbox 资源,遍历所有已注册 engine(不知道具体是哪个)。 */
+  async recoverOrphanSandbox(runtimeInstanceId: string): Promise<void> {
+    for (const engine of this.sandboxEngines.values()) {
+      await engine
+        .recoverOrphan(runtimeInstanceId)
+        .catch(swallow(this.logger, `recover orphan via ${engine.type} engine`));
+    }
+  }
+
+  private resolveSandboxEngine(engineType: SandboxEngineType): SandboxEngine {
+    const engine = this.sandboxEngines.get(engineType);
+    if (!engine) {
+      throw new Error(`Unknown sandbox engine: ${engineType}`);
+    }
+    return engine;
   }
 
   // ── sandbox per-run 资源门面 ──────────────────────────────────────────

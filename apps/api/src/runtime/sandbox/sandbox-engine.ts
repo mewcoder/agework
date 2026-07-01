@@ -1,44 +1,16 @@
-// ── SandboxEngine 类型标识 ──────────────────────────────────────────────
+export type {
+  SandboxEngineType,
+  SandboxPlacement,
+  SandboxStartInput,
+  SandboxRuntime,
+} from "../runtime.types";
 
-export type SandboxEngineType = "docker" | "opensandbox";
-
-// ── Sandbox 放置信息（从 RuntimePlacement 提取） ──────────────────────────
-
-export type SandboxPlacement = {
-  isolationScope: import("@agework/shared/protocol").IsolationScope;
-  ownerId: string;
-  workspaceId: string;
-  workspaceHostPath: string;
-  workspaceMountPath: string;
-};
-
-// ── Engine 启动输入 ────────────────────────────────────────────────────
-
-export type SandboxStartInput = {
-  placement: SandboxPlacement;
-  image: string;
-  apiBaseUrl: string;
-  env: Record<string, string>;
-  metadata: Record<string, string>;
-  runtimeLogHostPath?: string;
-  runtimeLogMountPath?: string;
-  /**
-   * DB-backed ownership check supplied by the provider. Engines may use a
-   * Docker/OpenSandbox resource id as a lookup key, but must not infer binding
-   * from names or labels.
-   */
-  isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
-  /** OpenSandbox 专用：resource 恢复时传已有的 RuntimeTarget.id */
-  runtimeInstanceId?: string;
-};
-
-// ── Engine 返回的运行时信息 ────────────────────────────────────────────
-
-export type SandboxRuntime = {
-  engineType: SandboxEngineType;
-  runtimeInstanceId: string;
-  workspaceMountPath: string;
-};
+import type {
+  SandboxEngineType,
+  SandboxPlacement,
+  SandboxStartInput,
+  SandboxRuntime,
+} from "../runtime.types";
 
 // ── SandboxEngine 接口 ─────────────────────────────────────────────────
 
