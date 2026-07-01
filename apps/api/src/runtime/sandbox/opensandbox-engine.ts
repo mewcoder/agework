@@ -24,7 +24,7 @@ export class OpenSandboxEngine implements SandboxEngine {
   ) {}
 
   async getOrCreate(input: SandboxStartInput): Promise<SandboxRuntime> {
-    const { placement, image, apiBaseUrl, accessKey, env, metadata } = input;
+    const { placement, image, apiBaseUrl, env, metadata } = input;
     const { workspaceHostPath, workspaceMountPath, ownerId, isolationScope } =
       placement;
 
@@ -41,7 +41,6 @@ export class OpenSandboxEngine implements SandboxEngine {
         AGEWORK_WORKER_KEEP_ALIVE: "true",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
-        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
@@ -133,7 +132,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     sandbox: OpenSandboxSandboxLike,
     input: SandboxStartInput
   ): Promise<void> {
-    const { placement, apiBaseUrl, accessKey, env } = input;
+    const { placement, apiBaseUrl, env } = input;
     const { ownerId, isolationScope, workspaceMountPath } = placement;
 
     try {
@@ -142,7 +141,6 @@ export class OpenSandboxEngine implements SandboxEngine {
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
-        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
         ...env,
       };

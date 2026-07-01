@@ -1,15 +1,14 @@
-import { Controller, Get, Post, Param, Body, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, Param, Body } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerAuthGuard } from "./guards/auth.guard";
 import { WorkerHostService } from "./worker-host.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 
 /**
  * Worker run API（run-scoped）— 仅供 worker 调用，不暴露给前端。
- * 所有端点需要 run-scoped worker access key，与用户登录态无关，因此标记 @Public()
- * 跳过全局 JwtAuthGuard，鉴权完全交由 WorkerAuthGuard。
+ * 与用户登录态无关，因此标记 @Public() 跳过全局 JwtAuthGuard。
+ * 开发阶段暂时移除了 run-scoped worker access key 鉴权，待生命周期管理理清后再补。
  *
  * config 下发与事件上报都经 WorkerHostService facade 进入 worker-host，
  * controller 不直接依赖内部 store / registry。
@@ -17,7 +16,6 @@ import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 @Public()
 @RawResponse()
 @Controller("worker/runs")
-@UseGuards(WorkerAuthGuard)
 export class WorkerRunController {
   constructor(private readonly workerHost: WorkerHostService) {}
 

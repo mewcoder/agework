@@ -24,7 +24,6 @@ const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export class HttpTransport {
   private readonly apiBase: string;
   private readonly ownerId: string;
-  private readonly accessKey: string;
   private commandSeq = 0;
   private emptyPolls = 0;
   private readonly eventSeqs = new Map<string, number>();
@@ -34,27 +33,18 @@ export class HttpTransport {
   constructor() {
     this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
     this.ownerId = process.env.AGEWORK_WORKER_OWNER_ID ?? "";
-    this.accessKey = process.env.AGEWORK_WORKER_RUNTIME_ACCESS_KEY ?? "";
 
     if (!this.ownerId) {
       throw new Error("AGEWORK_WORKER_OWNER_ID is required for keep-alive worker");
-    }
-    if (!this.accessKey) {
-      throw new Error("AGEWORK_WORKER_RUNTIME_ACCESS_KEY is required for keep-alive worker");
     }
 
     workerLog("worker host http client initialized", {
       apiBase: this.apiBase,
       ownerId: this.ownerId,
-      accessKeyPresent: Boolean(this.accessKey),
       logFile:
         process.env.AGEWORK_WORKER_LOG_FILE ??
         "/tmp/agework-worker.log",
     });
-  }
-
-  private get authHeaders() {
-    return { Authorization: `Bearer ${this.accessKey}` };
   }
 
   async pollCommands(waitMs = 0): Promise<RunChannelMessage<CommandPayload>[]> {
@@ -66,7 +56,7 @@ export class HttpTransport {
     const url = `${this.apiBase}${commandsPath}?${params.toString()}`;
     let res: Response;
     try {
-      res = await fetch(url, { headers: this.authHeaders });
+      res = await fetch(url);
     } catch (err) {
       workerLog("command poll failed", {
         ownerId: this.ownerId,
@@ -134,9 +124,7 @@ export class HttpTransport {
       runId,
       ownerId: this.ownerId,
     }, "debug");
-    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
-      headers: this.authHeaders,
-    });
+    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`);
     if (!res.ok) {
       const body = await safeText(res);
       workerLog("fetch run config returned non-ok", {
@@ -190,7 +178,6 @@ export class HttpTransport {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            ...this.authHeaders,
           },
           body,
         });

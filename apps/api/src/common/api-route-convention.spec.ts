@@ -1,7 +1,6 @@
 import "reflect-metadata";
 import { RequestMethod } from "@nestjs/common";
 import {
-  GUARDS_METADATA,
   METHOD_METADATA,
   PATH_METADATA,
   RESPONSE_PASSTHROUGH_METADATA,
@@ -23,7 +22,6 @@ import { AdminRuntimeController } from "../runtime/admin/admin-runtime.controlle
 import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../user/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-host/command.controller";
-import { WorkerAuthGuard } from "../worker-host/guards/auth.guard";
 import { WorkerRunController } from "../worker-host/worker-run.controller";
 import { AdminWorkspaceController } from "../workspace/admin/admin-workspace.controller";
 import { WorkspaceController } from "../workspace/workspace.controller";
@@ -131,10 +129,6 @@ function expectRoute(
 
 function rolesFor(controller: ControllerClass): string[] {
   return Reflect.getMetadata(ROLES_KEY, controller) ?? [];
-}
-
-function guardsFor(controller: ControllerClass): unknown[] {
-  return Reflect.getMetadata(GUARDS_METADATA, controller) ?? [];
 }
 
 function isPublic(target: object) {
@@ -312,7 +306,7 @@ describe("external API route convention", () => {
     ).toEqual([]);
   });
 
-  it("keeps worker callbacks public but protected by WorkerAuthGuard", () => {
+  it("keeps worker callbacks public", () => {
     const workerControllers = CONTROLLERS.filter((controller) =>
       controllerPath(controller).startsWith("worker/")
     );
@@ -324,13 +318,6 @@ describe("external API route convention", () => {
     expect(
       workerControllers
         .filter((controller) => !isPublic(controller))
-        .map(controllerPath)
-    ).toEqual([]);
-    expect(
-      workerControllers
-        .filter(
-          (controller) => !guardsFor(controller).includes(WorkerAuthGuard)
-        )
         .map(controllerPath)
     ).toEqual([]);
   });

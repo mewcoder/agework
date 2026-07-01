@@ -54,7 +54,7 @@ export class RuntimeInstanceLifecycleService {
         resource.runtimeType
       );
       await Promise.resolve(
-        provider.shutdownRuntimeInstance?.(resource.ownerId)
+        provider.shutdownRuntimeInstanceByOwnerId?.(resource.ownerId)
       );
       await this.repository.markStoppedById(resource, "owner_released");
     } catch (err) {

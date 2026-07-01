@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
-import { WorkerAccessService } from "./access/access.service";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
@@ -29,16 +28,12 @@ function makeService() {
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
-  const access = {
-    issueOwnerKey: vi.fn(),
-  };
   const service = new WorkerHostService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
-    commandDispatcher as unknown as WorkerCommandDispatcher,
-    access as unknown as WorkerAccessService
+    commandDispatcher as unknown as WorkerCommandDispatcher
   );
-  return { service, endpointHandler, upstream, commandDispatcher, access };
+  return { service, endpointHandler, upstream, commandDispatcher };
 }
 
 describe("WorkerHostService — facade routing", () => {
@@ -74,20 +69,11 @@ describe("WorkerHostService — facade routing", () => {
     });
   });
 
-  it("routes issueOwnerKey to the access service", () => {
-    const { service, access } = makeService();
-    access.issueOwnerKey.mockReturnValue("owner-key");
-
-    expect(service.issueOwnerKey("owner-1")).toBe("owner-key");
-    expect(access.issueOwnerKey).toHaveBeenCalledWith("owner-1");
-  });
-
   it("routes openSession to the command dispatcher with passthrough params", () => {
     const { service, commandDispatcher } = makeService();
     const params = {
       runId: "run-1",
       ownerId: "owner-1",
-      accessKey: "owner-key",
       runConfig: { runId: "run-1" } as unknown as RunConfig,
     };
 

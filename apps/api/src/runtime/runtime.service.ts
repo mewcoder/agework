@@ -91,10 +91,10 @@ export class RuntimeService {
   }
 
   /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
-  shutdownRuntimeInstance(runtimeType: string, ownerId: string): void {
+  shutdownRuntimeInstanceByOwnerId(runtimeType: string, ownerId: string): void {
     this.providerRegistry
       .resolve(runtimeType)
-      .shutdownRuntimeInstance?.(ownerId);
+      .shutdownRuntimeInstanceByOwnerId?.(ownerId);
   }
 
   getRuntimePolicy() {
@@ -242,7 +242,10 @@ export class RuntimeService {
         `Runtime resource ${id} not found or not running`
       );
     }
-    this.shutdownRuntimeInstance(resource.runtimeType, resource.ownerId);
+    this.shutdownRuntimeInstanceByOwnerId(
+      resource.runtimeType,
+      resource.ownerId
+    );
     await this.repository.markStoppedById(resource, "manual_stop");
     return { ok: true };
   }

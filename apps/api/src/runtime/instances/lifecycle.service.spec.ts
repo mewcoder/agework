@@ -27,7 +27,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
 describe("RuntimeInstanceLifecycleService", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned runtime resource and deletes the workspace binding", async () => {
-      const shutdownRuntimeInstance = vi.fn();
+      const shutdownRuntimeInstanceByOwnerId = vi.fn();
       const repo = makeRepo({
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
@@ -36,7 +36,7 @@ describe("RuntimeInstanceLifecycleService", () => {
         }),
       });
       const registry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
+        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
       };
       const service = new RuntimeInstanceLifecycleService(
         repo as never,
@@ -47,7 +47,7 @@ describe("RuntimeInstanceLifecycleService", () => {
 
       expect(repo.findBindingWithResource).toHaveBeenCalledWith("ws-1");
       expect(registry.resolve).toHaveBeenCalledWith("sandbox");
-      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
+      expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-1");
       expect(repo.markStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1" }),
         "owner_released"
@@ -101,7 +101,7 @@ describe("RuntimeInstanceLifecycleService", () => {
 
   describe("shutdownForUser", () => {
     it("shuts down all runtime resources owned by the user (user-scope + workspace-scope)", async () => {
-      const shutdownRuntimeInstance = vi.fn();
+      const shutdownRuntimeInstanceByOwnerId = vi.fn();
       const repo = makeRepo({
         findWorkspaceIdsByUser: vi.fn().mockResolvedValue([{ id: "ws-2" }]),
         findRunningByOwners: vi.fn().mockResolvedValue([
@@ -114,7 +114,7 @@ describe("RuntimeInstanceLifecycleService", () => {
         ]),
       });
       const registry: Partial<RuntimeProviderRegistry> = {
-        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
+        resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
       };
       const service = new RuntimeInstanceLifecycleService(
         repo as never,
@@ -125,9 +125,9 @@ describe("RuntimeInstanceLifecycleService", () => {
 
       expect(repo.findWorkspaceIdsByUser).toHaveBeenCalledWith("user-1");
       expect(repo.findRunningByOwners).toHaveBeenCalledWith(["user-1", "ws-2"]);
-      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("user-1");
-      expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-2");
-      expect(shutdownRuntimeInstance).toHaveBeenCalledTimes(2);
+      expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("user-1");
+      expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-2");
+      expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledTimes(2);
       expect(repo.markStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-user" }),
         "owner_released"
@@ -148,14 +148,14 @@ describe("RuntimeInstanceLifecycleService", () => {
           makeResource({ id: "rr-2", ownerId: "ws-2" }),
         ]),
     });
-    const shutdownRuntimeInstance = vi
+    const shutdownRuntimeInstanceByOwnerId = vi
       .fn()
       .mockImplementationOnce(() => {
         throw new Error("boom");
       })
       .mockImplementationOnce(() => undefined);
     const registry: Partial<RuntimeProviderRegistry> = {
-      resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstance }),
+      resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
     };
     const service = new RuntimeInstanceLifecycleService(
       repo as never,
@@ -163,6 +163,6 @@ describe("RuntimeInstanceLifecycleService", () => {
     );
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
-    expect(shutdownRuntimeInstance).toHaveBeenCalledTimes(2);
+    expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledTimes(2);
   });
 });

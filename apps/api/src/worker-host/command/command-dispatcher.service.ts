@@ -5,16 +5,15 @@ import {
   type RunConfig,
 } from "@agework/shared/protocol";
 import { WorkerConfigStore } from "../config/config-store";
-import { WorkerAccessService } from "../access/access.service";
 import { WorkerCommandQueue } from "./command-queue";
 
 /**
- * worker command 下发侧（local/sandbox 共用）：登记 runConfig、绑定 run 的 access key、
+ * worker command 下发侧（local/sandbox 共用）：登记 runConfig、
  * 维护 command seq 计数器，并把命令塞入 command queue。不持有 runtime 实例状态，
  * 所有入参均为原始值，便于在 worker-host 层独立存在。
  *
  * 由 SandboxRunExecutor 经 WorkerHostService facade 调用；runtime 层只依赖
- * worker-host facade，不直接依赖命令队列，也不负责签发或撤销 worker access key。
+ * worker-host facade，不直接依赖命令队列。
  */
 @Injectable()
 export class WorkerCommandDispatcher {
@@ -22,23 +21,20 @@ export class WorkerCommandDispatcher {
 
   constructor(
     private readonly runConfigStore: WorkerConfigStore,
-    private readonly runtimeAccess: WorkerAccessService,
     private readonly commandQueue: WorkerCommandQueue
   ) {}
 
   /**
-   * 打开一次 run 的会话：登记 runConfig 与 access key。
+   * 打开一次 run 的会话：登记 runConfig。
    * 首个 user_message 由 run 侧 SandboxRunExecutor 在 start 后显式下发，
    * worker-host 不再代为生成命令，因此也不需要知道 run-event。
    */
   openSession(params: {
     runId: string;
     ownerId: string;
-    accessKey: string;
     runConfig: RunConfig;
   }): void {
     this.runConfigStore.register(params.runId, params.runConfig);
-    this.runtimeAccess.registerRun(params.runId, params.accessKey);
   }
 
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
@@ -53,12 +49,10 @@ export class WorkerCommandDispatcher {
 
   cleanupRun(runId: string): void {
     this.runConfigStore.unregister(runId);
-    this.runtimeAccess.revokeAccess(runId);
   }
 
   cleanupByOwnerId(ownerId: string): void {
     this.commandQueue.cleanupByOwnerId(ownerId);
     this.commandSeqs.delete(ownerId);
-    this.runtimeAccess.revokeOwner(ownerId);
   }
 }

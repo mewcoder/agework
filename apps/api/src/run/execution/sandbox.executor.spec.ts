@@ -43,7 +43,6 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
   const ready: AcquireInstanceResult = {
     outcome: "ready",
     runtimeInstanceId: "inst-1",
-    accessKey: "key-1",
   };
 
   beforeEach(() => {
@@ -92,7 +91,6 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     expect(workerHost.openSession).toHaveBeenCalledWith({
       runId: "run-1",
       ownerId: "owner-1",
-      accessKey: "key-1",
       runConfig: input.runConfig,
     });
     expect(workerHost.sendCommand).toHaveBeenCalledWith(

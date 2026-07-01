@@ -18,7 +18,6 @@ export type SandboxStartInput = {
   placement: SandboxPlacement;
   image: string;
   apiBaseUrl: string;
-  accessKey: string;
   env: Record<string, string>;
   metadata: Record<string, string>;
   runtimeLogHostPath?: string;

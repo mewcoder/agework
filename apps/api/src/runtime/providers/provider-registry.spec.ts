@@ -21,7 +21,9 @@ describe("RuntimeProviderRegistry", () => {
     await expect(
       provider.recoverOrphan("legacy-local")
     ).resolves.toBeUndefined();
-    expect(() => provider.shutdownRuntimeInstance?.("ws-1")).not.toThrow();
+    expect(() =>
+      provider.shutdownRuntimeInstanceByOwnerId?.("ws-1")
+    ).not.toThrow();
   });
 
   it("should resolve sandbox provider", () => {

@@ -31,7 +31,6 @@ export type SandboxOwnerState = {
   runtimeInstanceId: string;
   /** 上次 idle/心跳超时释放时的容器 ID，供下次 start() resume；resume 成功或全新创建后清空。 */
   lastStoppedRuntimeInstanceId?: string;
-  accessKey: string;
   activeRunCount: number;
   isolationScope: IsolationScope;
   engineType: SandboxEngineType;
@@ -154,8 +153,7 @@ export class SandboxRuntimeInstanceService {
       settle({ outcome: "cancelledBeforeReady" });
       return;
     }
-    const accessKey = this.ownerStates.get(state.ownerId)?.accessKey ?? "";
-    settle({ outcome: "ready", runtimeInstanceId, accessKey });
+    settle({ outcome: "ready", runtimeInstanceId });
   }
 
   private settleError(runId: string, error: string): void {
@@ -223,10 +221,8 @@ export class SandboxRuntimeInstanceService {
   ): SandboxOwnerState {
     let ownerState = this.ownerStates.get(context.ownerId);
     if (!ownerState) {
-      const accessKey = this.workerHost.issueOwnerKey(context.ownerId);
       ownerState = {
         runtimeInstanceId: "",
-        accessKey,
         activeRunCount: 0,
         isolationScope: context.isolationScope,
         engineType: context.engineType,
@@ -241,7 +237,6 @@ export class SandboxRuntimeInstanceService {
       !this.pendingSandboxes.has(context.ownerId) &&
       !ownerState.lastStoppedRuntimeInstanceId
     ) {
-      ownerState.accessKey = this.workerHost.issueOwnerKey(context.ownerId);
       ownerState.engineType = context.engineType;
     }
 
@@ -288,7 +283,7 @@ export class SandboxRuntimeInstanceService {
   }
 
   /** 停止并删除某 owner 的持久容器/沙箱，并清掉其 worker-host 资源。 */
-  shutdownRuntimeInstance(ownerId: string): void {
+  shutdownRuntimeInstanceByOwnerId(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     this.idleWatchdog.cancel(ownerId);
     if (state?.runtimeInstanceId) {
@@ -373,10 +368,7 @@ export class SandboxRuntimeInstanceService {
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
     const { context, ownerState } = attachment;
-    const engineInput = this.buildSandboxStartInput(
-      context,
-      ownerState.accessKey
-    );
+    const engineInput = this.buildSandboxStartInput(context);
     const resumeRuntimeInstanceId = ownerState.lastStoppedRuntimeInstanceId;
     ownerState.lastStoppedRuntimeInstanceId = undefined;
 
@@ -398,8 +390,7 @@ export class SandboxRuntimeInstanceService {
   }
 
   private buildSandboxStartInput(
-    context: SandboxWorkerExecutionContext,
-    accessKey: string
+    context: SandboxWorkerExecutionContext
   ): SandboxStartInput {
     const apiBase = resolveDockerApiBase();
     const sandboxPlacement: SandboxPlacement = {
@@ -414,12 +405,10 @@ export class SandboxRuntimeInstanceService {
       placement: sandboxPlacement,
       image: DEFAULT_WORKER_IMAGE,
       apiBaseUrl: apiBase,
-      accessKey,
       env: {
         AGEWORK_WORKER_KEEP_ALIVE: "true",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBase,
-        AGEWORK_WORKER_RUNTIME_ACCESS_KEY: accessKey,
         AGEWORK_WORKER_OWNER_ID: context.ownerId,
         AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
         AGEWORK_WORKER_SANDBOX_ENGINE: context.engineType,

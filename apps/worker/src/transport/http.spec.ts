@@ -6,7 +6,6 @@ describe("HttpTransport", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
     vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
-    vi.stubEnv("AGEWORK_WORKER_RUNTIME_ACCESS_KEY", "owner-key");
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -41,8 +40,7 @@ describe("HttpTransport", () => {
     const commands = await client.pollCommands();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0",
-      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
+      "http://api/worker/owners/ws-1/commands?afterSeq=0"
     );
     expect(commands[0].payload).toMatchObject({
       type: "user_message",
@@ -52,8 +50,7 @@ describe("HttpTransport", () => {
     // 下一次 poll 用更新后的 afterSeq
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=3",
-      expect.anything()
+      "http://api/worker/owners/ws-1/commands?afterSeq=3"
     );
   });
 
@@ -101,8 +98,7 @@ describe("HttpTransport", () => {
 
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=4",
-      expect.anything()
+      "http://api/worker/owners/ws-1/commands?afterSeq=4"
     );
   });
 
@@ -116,10 +112,7 @@ describe("HttpTransport", () => {
 
     const config = await client.fetchRunConfig("run-1");
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/runs/run-1",
-      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
-    );
+    expect(fetchMock).toHaveBeenCalledWith("http://api/worker/runs/run-1");
     expect(config).toMatchObject({ runId: "run-1" });
   });
 
@@ -134,8 +127,7 @@ describe("HttpTransport", () => {
     await client.pollCommands(25_000);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000",
-      expect.objectContaining({ headers: { Authorization: "Bearer owner-key" } })
+      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000"
     );
   });
 

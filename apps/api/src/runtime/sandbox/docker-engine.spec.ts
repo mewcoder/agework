@@ -27,7 +27,6 @@ function makeInput(overrides?: Partial<SandboxStartInput>): SandboxStartInput {
     placement: makePlacement(),
     image: "agework/worker:latest",
     apiBaseUrl: "http://host.docker.internal:3000/api/v1",
-    accessKey: "test-key",
     env: {},
     metadata: {},
     ...overrides,

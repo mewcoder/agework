@@ -10,8 +10,8 @@ export class SandboxRuntimeInstanceManager implements RuntimeInstanceManager {
     private readonly runtimeInstances: SandboxRuntimeInstanceService
   ) {}
 
-  shutdownRuntimeInstance(ownerId: string): void {
-    this.runtimeInstances.shutdownRuntimeInstance(ownerId);
+  shutdownRuntimeInstanceByOwnerId(ownerId: string): void {
+    this.runtimeInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
   }
 
   recoverOrphan(runtimeInstanceId: string): Promise<void> {

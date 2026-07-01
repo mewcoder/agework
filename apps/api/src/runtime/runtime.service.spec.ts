@@ -10,7 +10,7 @@ describe("RuntimeService", () => {
   let providerRegistry: RuntimeProviderRegistry;
   let resolveSpy: ReturnType<typeof vi.spyOn>;
   let sandboxProvider: RuntimeProvider;
-  let shutdownRuntimeInstance: ReturnType<typeof vi.fn>;
+  let shutdownRuntimeInstanceByOwnerId: ReturnType<typeof vi.fn>;
   let repository: Record<string, ReturnType<typeof vi.fn>>;
   let sandboxInstances: {
     acquireInstanceForRun: ReturnType<typeof vi.fn>;
@@ -20,11 +20,11 @@ describe("RuntimeService", () => {
   let service: RuntimeService;
 
   beforeEach(() => {
-    shutdownRuntimeInstance = vi.fn((_ownerId: string) => undefined);
+    shutdownRuntimeInstanceByOwnerId = vi.fn((_ownerId: string) => undefined);
     sandboxProvider = {
       type: "sandbox",
       recoverOrphan: vi.fn(async (_runtimeInstanceId: string) => undefined),
-      shutdownRuntimeInstance: shutdownRuntimeInstance as (
+      shutdownRuntimeInstanceByOwnerId: shutdownRuntimeInstanceByOwnerId as (
         ownerId: string
       ) => void,
     };
@@ -94,18 +94,18 @@ describe("RuntimeService", () => {
     expect(configService.getDefaultRuntimeType).toHaveBeenCalled();
   });
 
-  it("shutdownRuntimeInstance dispatches to the resolved provider by type", () => {
-    service.shutdownRuntimeInstance("sandbox", "ws-1");
+  it("shutdownRuntimeInstanceByOwnerId dispatches to the resolved provider by type", () => {
+    service.shutdownRuntimeInstanceByOwnerId("sandbox", "ws-1");
     expect(resolveSpy).toHaveBeenCalledWith("sandbox");
-    expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
+    expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-1");
   });
 
-  it("shutdownRuntimeInstance resolves local to the registry no-op provider", () => {
-    shutdownRuntimeInstance.mockClear();
+  it("shutdownRuntimeInstanceByOwnerId resolves local to the registry no-op provider", () => {
+    shutdownRuntimeInstanceByOwnerId.mockClear();
 
-    service.shutdownRuntimeInstance("local", "ws-1");
+    service.shutdownRuntimeInstanceByOwnerId("local", "ws-1");
     expect(resolveSpy).toHaveBeenCalledWith("local");
-    expect(shutdownRuntimeInstance).not.toHaveBeenCalled();
+    expect(shutdownRuntimeInstanceByOwnerId).not.toHaveBeenCalled();
   });
 
   it("getRuntimeStats reports the running resource count", async () => {
@@ -185,7 +185,7 @@ describe("RuntimeService", () => {
       ok: true,
     });
     expect(resolveSpy).toHaveBeenCalledWith("sandbox");
-    expect(shutdownRuntimeInstance).toHaveBeenCalledWith("ws-1");
+    expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-1");
     expect(repository.markStoppedById).toHaveBeenCalledWith(
       expect.objectContaining({ id: "rr-1" }),
       "manual_stop"

@@ -6,7 +6,7 @@ const LOCAL_RUNTIME_PROVIDER: RuntimeProvider = {
   async recoverOrphan(): Promise<void> {
     // local 没有持久 runtime resource；残留 DB 行只需要上层标记 stopped。
   },
-  shutdownRuntimeInstance(): void {
+  shutdownRuntimeInstanceByOwnerId(): void {
     // no-op
   },
 };

@@ -4,7 +4,6 @@ import type {
   RunConfig,
   WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
-import { WorkerAccessService } from "./access/access.service";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
@@ -15,8 +14,7 @@ export class WorkerHostService {
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
-    private readonly commandDispatcher: WorkerCommandDispatcher,
-    private readonly access: WorkerAccessService
+    private readonly commandDispatcher: WorkerCommandDispatcher
   ) {}
 
   async pollCommands(
@@ -34,14 +32,9 @@ export class WorkerHostService {
     return this.endpointHandler.postEvent(runId, body);
   }
 
-  issueOwnerKey(ownerId: string): string {
-    return this.access.issueOwnerKey(ownerId);
-  }
-
   openSession(params: {
     runId: string;
     ownerId: string;
-    accessKey: string;
     runConfig: RunConfig;
   }): void {
     this.commandDispatcher.openSession(params);

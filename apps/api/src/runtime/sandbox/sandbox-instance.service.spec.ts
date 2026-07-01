@@ -72,7 +72,6 @@ function makeService(engine = makeEngine()) {
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const workerHost = {
-    issueOwnerKey: vi.fn().mockReturnValue("owner-key"),
     cleanupByOwnerId: vi.fn(),
   };
   const service = new SandboxRuntimeInstanceService(
@@ -112,19 +111,16 @@ describe("SandboxRuntimeInstanceService", () => {
     vi.useRealTimers();
   });
 
-  it("acquire creates the resource, issues an owner key, and resolves ready", async () => {
-    const { service, engine, workspaceRuntimeService, workerHost } =
-      makeService();
+  it("acquire creates the resource and resolves ready", async () => {
+    const { service, engine, workspaceRuntimeService } = makeService();
 
     const result = await service.acquireInstanceForRun(makeStartInput());
 
-    expect(workerHost.issueOwnerKey).toHaveBeenCalledWith("ws-1");
     expect(engine.getOrCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         placement: expect.objectContaining({ ownerId: "ws-1" }),
         env: expect.objectContaining({
           AGEWORK_WORKER_OWNER_ID: "ws-1",
-          AGEWORK_WORKER_RUNTIME_ACCESS_KEY: "owner-key",
         }),
       })
     );
@@ -132,7 +128,6 @@ describe("SandboxRuntimeInstanceService", () => {
     expect(result).toEqual({
       outcome: "ready",
       runtimeInstanceId: "docker-resource-1",
-      accessKey: "owner-key",
     });
     expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
       expect.objectContaining({ ownerId: "ws-1" }),
@@ -225,12 +220,12 @@ describe("SandboxRuntimeInstanceService", () => {
     );
   });
 
-  it("shutdownRuntimeInstance stops the resource and cleans worker-host owner state", async () => {
+  it("shutdownRuntimeInstanceByOwnerId stops the resource and cleans worker-host owner state", async () => {
     const { service, engine, workerHost, workspaceRuntimeService } =
       makeService();
 
     await service.acquireInstanceForRun(makeStartInput());
-    service.shutdownRuntimeInstance("ws-1");
+    service.shutdownRuntimeInstanceByOwnerId("ws-1");
     await flushPromises();
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");

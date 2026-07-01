@@ -1,7 +1,6 @@
-import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerAuthGuard } from "./guards/auth.guard";
 import { WorkerHostService } from "./worker-host.service";
 import {
   WorkerCommandQueryDto,
@@ -16,7 +15,6 @@ import {
 @Public()
 @RawResponse()
 @Controller("worker/owners")
-@UseGuards(WorkerAuthGuard)
 export class WorkerCommandController {
   constructor(private readonly workerHost: WorkerHostService) {}
 

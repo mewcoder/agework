@@ -111,7 +111,6 @@ export class SandboxRunExecutor implements RunExecutor {
     this.workerHost.openSession({
       runId,
       ownerId: state.ownerId,
-      accessKey: result.accessKey,
       runConfig: input.runConfig,
     });
     this.sendCommand(state.handle, {

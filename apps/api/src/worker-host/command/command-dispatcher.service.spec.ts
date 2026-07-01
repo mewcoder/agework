@@ -13,36 +13,28 @@ function makeRunConfig(): RunConfig {
 
 function makeService() {
   const configStore = { register: vi.fn(), unregister: vi.fn() };
-  const access = {
-    registerRun: vi.fn(),
-    revokeAccess: vi.fn(),
-    revokeOwner: vi.fn(),
-  };
   const commandQueue = {
     pushByOwnerId: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
   const service = new WorkerCommandDispatcher(
     configStore as never,
-    access as never,
     commandQueue as never
   );
-  return { service, configStore, access, commandQueue };
+  return { service, configStore, commandQueue };
 }
 
 describe("WorkerCommandDispatcher", () => {
-  it("opens a session: stores config and binds access without enqueuing a command", () => {
-    const { service, configStore, access, commandQueue } = makeService();
+  it("opens a session: stores config without enqueuing a command", () => {
+    const { service, configStore, commandQueue } = makeService();
 
     service.openSession({
       runId: "run-1",
       ownerId: "owner-1",
-      accessKey: "owner-key",
       runConfig: makeRunConfig(),
     });
 
     expect(configStore.register).toHaveBeenCalledWith("run-1", makeRunConfig());
-    expect(access.registerRun).toHaveBeenCalledWith("run-1", "owner-key");
     // 首个 user_message 由 run 侧 SandboxRunExecutor 显式下发，openSession 不再代发。
     expect(commandQueue.pushByOwnerId).not.toHaveBeenCalled();
   });
@@ -79,14 +71,12 @@ describe("WorkerCommandDispatcher", () => {
   });
 
   it("cleans run and owner session state", () => {
-    const { service, configStore, access, commandQueue } = makeService();
+    const { service, configStore, commandQueue } = makeService();
 
     service.cleanupRun("run-1");
     service.cleanupByOwnerId("owner-1");
 
     expect(configStore.unregister).toHaveBeenCalledWith("run-1");
-    expect(access.revokeAccess).toHaveBeenCalledWith("run-1");
     expect(commandQueue.cleanupByOwnerId).toHaveBeenCalledWith("owner-1");
-    expect(access.revokeOwner).toHaveBeenCalledWith("owner-1");
   });
 });
