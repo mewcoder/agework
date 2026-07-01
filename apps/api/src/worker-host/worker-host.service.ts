@@ -193,4 +193,26 @@ export class WorkerHostService {
   buildRuntimeDiagnostics(metadata: unknown) {
     return runtimeInstanceDiagnostics(metadata);
   }
+
+  // ── Admin 方法(Task 7 实现) ──────────────────────────────────────────
+
+  /** 查询 runtime 策略配置。Task 7 实现。 */
+  getRuntimePolicy(): unknown {
+    throw new Error("Not implemented yet");
+  }
+
+  /** 查询 runtime 统计信息。Task 7 实现。 */
+  getRuntimeStats(): Promise<unknown> {
+    throw new Error("Not implemented yet");
+  }
+
+  /** 管理端分页列出 runtime 资源。Task 7 实现。 */
+  listResources(_query: unknown): Promise<unknown> {
+    throw new Error("Not implemented yet");
+  }
+
+  /** 停止指定 runtime 实例。Task 7 实现。 */
+  stopRuntimeInstance(_id: string): Promise<unknown> {
+    throw new Error("Not implemented yet");
+  }
 }
