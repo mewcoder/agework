@@ -214,6 +214,7 @@ model RuntimeInstance {
   isolationScope    String
   ownerId           String
   runtimeInstanceId String
+  transport         String             @default("http")
   status            String             @default("running")
   expiresAt         DateTime?
   metadata          Json
