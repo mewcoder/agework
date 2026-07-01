@@ -5,27 +5,28 @@ import type {
   RuntimeTarget,
 } from "@agework/shared/protocol";
 import { LocalRunExecutor } from "./local.executor";
+import type { RuntimeService } from "../../runtime/runtime.service";
 
-const childProcessMock = vi.hoisted(() => {
-  const child = {
-    pid: 12345,
-    send: vi.fn(),
-    on: vi.fn(),
-    stdout: { on: vi.fn() },
-    stderr: { on: vi.fn() },
-    kill: vi.fn(),
-    killed: false,
-  };
-
-  return {
-    child,
-    fork: vi.fn(() => child),
-  };
-});
-
-vi.mock("node:child_process", () => ({
-  fork: childProcessMock.fork,
+const childMock = vi.hoisted(() => ({
+  pid: 12345,
+  send: vi.fn(),
+  on: vi.fn(),
+  stdout: { on: vi.fn() },
+  stderr: { on: vi.fn() },
+  kill: vi.fn(),
+  killed: false,
 }));
+
+function makeRuntimeService(overrides: Record<string, unknown> = {}) {
+  return {
+    launchLocal: vi.fn(() => ({
+      runtimeInstanceId: "12345:test-token",
+      channel: childMock,
+    })),
+    recoverOrphanLocal: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
 
 function makePlacement(
   overrides: Partial<LocalRuntimePlacement> = {}
@@ -62,17 +63,20 @@ function makeRuntimeTarget(
 
 describe("LocalRunExecutor", () => {
   let provider: LocalRunExecutor;
+  let runtimeService: ReturnType<typeof makeRuntimeService>;
 
   beforeEach(() => {
-    childProcessMock.fork.mockClear();
-    childProcessMock.child.send.mockClear();
-    childProcessMock.child.on.mockClear();
-    childProcessMock.child.stdout.on.mockClear();
-    childProcessMock.child.stderr.on.mockClear();
-    childProcessMock.child.kill.mockClear();
-    childProcessMock.child.killed = false;
+    childMock.send.mockClear();
+    childMock.on.mockClear();
+    childMock.stdout.on.mockClear();
+    childMock.stderr.on.mockClear();
+    childMock.kill.mockClear();
+    childMock.killed = false;
 
-    provider = new LocalRunExecutor();
+    runtimeService = makeRuntimeService();
+    provider = new LocalRunExecutor(
+      runtimeService as unknown as RuntimeService
+    );
     provider.setRunEventPort({
       sendEvent: vi.fn().mockResolvedValue(undefined),
       notifyWorkerError: vi.fn().mockResolvedValue(undefined),
@@ -89,34 +93,33 @@ describe("LocalRunExecutor", () => {
     expect(provider).toBeDefined();
   });
 
-  it("start forks a local worker and sends the run config as RPC", () => {
+  it("start launches a local runtime instance via RuntimeService and sends the run config as RPC", () => {
     const runConfig = makeRunConfig();
     const runtimeTarget = makeRuntimeTarget();
 
-    const handle = provider.start({
-      runtimeTarget,
-      runConfig,
-    });
+    const handle = provider.start({ runtimeTarget, runConfig });
 
     try {
-      expect(childProcessMock.fork).toHaveBeenCalled();
-      expect(childProcessMock.child.send).toHaveBeenCalledWith(
+      expect(runtimeService.launchLocal).toHaveBeenCalledWith({
+        runId: "run-1",
+        env: expect.objectContaining({
+          AGEWORK_WORKER_KEEP_ALIVE: "false",
+          AGEWORK_WORKER_CHANNEL: "ipc",
+          AGEWORK_WORKER_RUN_ID: "run-1",
+        }),
+      });
+      expect(childMock.send).toHaveBeenCalledWith(
         expect.objectContaining({
           jsonrpc: "2.0",
           method: "run.config",
-          params: {
-            runId: "run-1",
-            config: runConfig,
-          },
-          meta: expect.objectContaining({
-            runId: "run-1",
-            seq: 0,
-          }),
+          params: { runId: "run-1", config: runConfig },
+          meta: expect.objectContaining({ runId: "run-1", seq: 0 }),
         })
       );
       expect(handle).toMatchObject({
         runId: "run-1",
         runtimeType: "local",
+        runtimeInstanceId: "12345:test-token",
         conversationId: "conversation-1",
       });
     } finally {
@@ -131,7 +134,7 @@ describe("LocalRunExecutor", () => {
         runConfig: makeRunConfig(),
       })
     ).toThrow("LocalRunExecutor cannot start worker for runtime type: sandbox");
-    expect(childProcessMock.fork).not.toHaveBeenCalled();
+    expect(runtimeService.launchLocal).not.toHaveBeenCalled();
   });
 
   it("sendCommand sends JSON-RPC requests over IPC", () => {
@@ -139,23 +142,17 @@ describe("LocalRunExecutor", () => {
       runtimeTarget: makeRuntimeTarget(),
       runConfig: makeRunConfig(),
     });
-    childProcessMock.child.send.mockClear();
+    childMock.send.mockClear();
 
-    provider.sendCommand(handle, {
-      type: "interrupt",
-      commandId: "cmd-1",
-    });
+    provider.sendCommand(handle, { type: "interrupt", commandId: "cmd-1" });
 
-    expect(childProcessMock.child.send).toHaveBeenCalledWith(
+    expect(childMock.send).toHaveBeenCalledWith(
       expect.objectContaining({
         jsonrpc: "2.0",
         id: "cmd-1",
         method: "run.interrupt",
         params: { runId: "run-1" },
-        meta: expect.objectContaining({
-          runId: "run-1",
-          seq: 1,
-        }),
+        meta: expect.objectContaining({ runId: "run-1", seq: 1 }),
       })
     );
   });
@@ -172,7 +169,7 @@ describe("LocalRunExecutor", () => {
       runtimeTarget: makeRuntimeTarget(),
       runConfig: makeRunConfig(),
     });
-    const messageHandler = childProcessMock.child.on.mock.calls.find(
+    const messageHandler = childMock.on.mock.calls.find(
       ([event]) => event === "message"
     )?.[1] as ((message: unknown) => void) | undefined;
     expect(messageHandler).toBeTypeOf("function");
@@ -180,28 +177,14 @@ describe("LocalRunExecutor", () => {
     messageHandler?.({
       jsonrpc: "2.0",
       method: "run.status",
-      params: {
-        runId: "run-1",
-        status: { status: "running" },
-      },
-      meta: {
-        runId: "run-1",
-        seq: 1,
-        ts: "2026-06-27T00:00:00.000Z",
-      },
+      params: { runId: "run-1", status: { status: "running" } },
+      meta: { runId: "run-1", seq: 1, ts: "2026-06-27T00:00:00.000Z" },
     });
     messageHandler?.({
       jsonrpc: "2.0",
       id: "cmd-1",
-      result: {
-        ok: true,
-        commandType: "cancel",
-      },
-      meta: {
-        runId: "run-1",
-        seq: 2,
-        ts: "2026-06-27T00:00:01.000Z",
-      },
+      result: { ok: true, commandType: "cancel" },
+      meta: { runId: "run-1", seq: 2, ts: "2026-06-27T00:00:01.000Z" },
     });
 
     expect(sendEvent).toHaveBeenNthCalledWith(
@@ -219,11 +202,7 @@ describe("LocalRunExecutor", () => {
       expect.objectContaining({
         type: "command.result",
         seq: 2,
-        payload: {
-          commandId: "cmd-1",
-          commandType: "cancel",
-          status: "ok",
-        },
+        payload: { commandId: "cmd-1", commandType: "cancel", status: "ok" },
       })
     );
   });
@@ -236,12 +215,9 @@ describe("LocalRunExecutor", () => {
 
     provider.terminateExecution("run-1", "run timeout");
 
-    expect(childProcessMock.child.kill).toHaveBeenCalledWith("SIGTERM");
-    provider.sendCommand(handle, {
-      type: "interrupt",
-      commandId: "command-1",
-    });
-    expect(childProcessMock.child.send).toHaveBeenCalledTimes(1);
+    expect(childMock.kill).toHaveBeenCalledWith("SIGTERM");
+    provider.sendCommand(handle, { type: "interrupt", commandId: "command-1" });
+    expect(childMock.send).toHaveBeenCalledTimes(1);
   });
 
   it("onApplicationShutdown terminates all in-flight local workers", () => {
@@ -252,8 +228,7 @@ describe("LocalRunExecutor", () => {
 
     provider.onApplicationShutdown();
 
-    expect(childProcessMock.child.kill).toHaveBeenCalledWith("SIGTERM");
-    // state cleared: a follow-up command for the terminated run is dropped
+    expect(childMock.kill).toHaveBeenCalledWith("SIGTERM");
     provider.sendCommand(
       {
         runId: "run-1",
@@ -263,34 +238,15 @@ describe("LocalRunExecutor", () => {
       },
       { type: "interrupt", commandId: "command-1" }
     );
-    expect(childProcessMock.child.send).toHaveBeenCalledTimes(1); // only the run.config send
+    expect(childMock.send).toHaveBeenCalledTimes(1); // only the run.config send
   });
 
   describe("cleanupInterruptedExecution()", () => {
-    it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
-      const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
-
+    it("delegates to RuntimeService.recoverOrphanLocal", async () => {
       await provider.cleanupInterruptedExecution("12345:some-token");
-
-      expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
-    });
-
-    it("does nothing for a malformed runtimeInstanceId", async () => {
-      const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
-
-      await provider.cleanupInterruptedExecution("not-a-valid-runtime-id");
-
-      expect(killSpy).not.toHaveBeenCalled();
-    });
-
-    it("ignores ESRCH when the process is already gone", async () => {
-      vi.spyOn(process, "kill").mockImplementation(() => {
-        throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
-      });
-
-      await expect(
-        provider.cleanupInterruptedExecution("12345:some-token")
-      ).resolves.toBeUndefined();
+      expect(runtimeService.recoverOrphanLocal).toHaveBeenCalledWith(
+        "12345:some-token"
+      );
     });
   });
 });

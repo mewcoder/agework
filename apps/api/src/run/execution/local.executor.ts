@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
-import { fork, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import type { ChildProcess } from "node:child_process";
 import { generateId } from "@agework/shared";
+import { RuntimeService } from "../../runtime/runtime.service";
 import {
   nextCommandMessage,
   type RunConfig,
@@ -27,16 +27,6 @@ type LocalRunState = {
   child: ChildProcess;
 };
 
-// Worker entry point (TS source, executed via tsx), resolved via the
-// `@agework/worker` workspace package so it works regardless of dev/dist
-// layout or process cwd.
-const WORKER_MAIN = require.resolve("@agework/worker");
-
-// Run the worker through the tsx CLI rather than `node --import tsx/esm`:
-// on Node 22.12+ the latter throws ERR_REQUIRE_CYCLE_MODULE for any TS entry
-// file that has imports (https://github.com/privatenumber/tsx, tsx 4.22.4).
-const TSX_CLI = require.resolve("tsx/cli");
-
 /**
  * Local run executor：one run = one child process，无容器、无跨 run 复用。
  *
@@ -51,6 +41,8 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
   private readonly commandSeqs = new Map<string, number>();
   private receiver!: RunEventPort;
 
+  constructor(private readonly runtimeService: RuntimeService) {}
+
   setRunEventPort(receiver: RunEventPort): void {
     this.receiver = receiver;
   }
@@ -62,22 +54,20 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
         `LocalRunExecutor cannot start worker for runtime type: ${runtimeTarget.runtimeType}`
       );
     }
-    const startToken = randomUUID();
     const { runId } = runConfig;
 
-    const child = fork(TSX_CLI, [WORKER_MAIN], {
-      env: {
-        ...process.env,
-        AGEWORK_WORKER_KEEP_ALIVE: "false",
-        AGEWORK_WORKER_CHANNEL: "ipc",
-        AGEWORK_WORKER_RUN_ID: runId,
-        AGEWORK_WORKER_RUN_START_TOKEN: startToken,
-        ...(runConfig.workerLogFilePath
-          ? { AGEWORK_WORKER_LOG_FILE: runConfig.workerLogFilePath }
-          : {}),
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    });
+    const { runtimeInstanceId, channel: child } =
+      this.runtimeService.launchLocal({
+        runId,
+        env: {
+          AGEWORK_WORKER_KEEP_ALIVE: "false",
+          AGEWORK_WORKER_CHANNEL: "ipc",
+          AGEWORK_WORKER_RUN_ID: runId,
+          ...(runConfig.workerLogFilePath
+            ? { AGEWORK_WORKER_LOG_FILE: runConfig.workerLogFilePath }
+            : {}),
+        },
+      });
     this.logger.log(
       `local worker started ${safeLogJson({
         runId,
@@ -90,7 +80,7 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
     const handle: WorkerExecutionHandle = {
       runId,
       runtimeType: runtimeTarget.runtimeType,
-      runtimeInstanceId: `${child.pid}:${startToken}`,
+      runtimeInstanceId,
       conversationId: runConfig.conversationId,
     };
 
@@ -258,18 +248,8 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
     }
   }
 
-  /** runtimeInstanceId 格式为 `pid:startToken`；向 pid 发送 SIGTERM，进程已退出（ESRCH）时忽略。 */
   cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
-    const [pidStr] = runtimeInstanceId.split(":");
-    const pid = Number(pidStr);
-    if (Number.isInteger(pid)) {
-      try {
-        process.kill(pid, "SIGTERM");
-      } catch {
-        // ESRCH: process already gone
-      }
-    }
-    return Promise.resolve();
+    return this.runtimeService.recoverOrphanLocal(runtimeInstanceId);
   }
 }
 
