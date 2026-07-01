@@ -3,7 +3,6 @@ import type {
   AcquireInstanceResult,
   CommandPayload,
   RunConfig,
-  SandboxRuntimePlacement,
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
@@ -98,34 +97,6 @@ export class WorkerHostService {
     return this.registry.findActiveByWorkspace(workspaceId);
   }
 
-  /** 记录一个 runtime 实例进入 running 状态,不存在则创建、存在则更新。 */
-  upsertRunningRuntime(
-    placement: SandboxRuntimePlacement,
-    ownerId: string,
-    runtimeInstanceId: string,
-    metadata?: object
-  ) {
-    return this.registry.upsertRunning(
-      placement,
-      ownerId,
-      runtimeInstanceId,
-      metadata
-    );
-  }
-
-  /** 按 owner 把 runtime 资源标记为 stopped。 */
-  markRuntimeStoppedByOwner(
-    runtimeType: string,
-    isolationScope: string,
-    ownerId: string
-  ) {
-    return this.registry.markStoppedByOwner(
-      runtimeType,
-      isolationScope,
-      ownerId
-    );
-  }
-
   /** 按 owner 把 runtime 资源标记为 error。 */
   markRuntimeErrorByOwner(
     runtimeType: string,
@@ -138,19 +109,6 @@ export class WorkerHostService {
       isolationScope,
       ownerId,
       errorMessage
-    );
-  }
-
-  /** 校验某个 runtimeInstanceId 是否确实绑定到指定 workspace,防伪造/串扰。 */
-  isRuntimeInstanceBoundToWorkspace(
-    runtimeType: string,
-    workspaceId: string,
-    runtimeInstanceId: string
-  ) {
-    return this.registry.isRuntimeInstanceBoundToWorkspace(
-      runtimeType,
-      workspaceId,
-      runtimeInstanceId
     );
   }
 

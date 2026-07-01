@@ -167,51 +167,6 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
     );
   });
 
-  it("upsertRunningRuntime forwards to repository.upsertRunning", async () => {
-    const placement = { runtimeType: "sandbox" } as any;
-    (repository.upsertRunning as any).mockResolvedValue({
-      resource: { id: "x" },
-    });
-    const result = await service.upsertRunningRuntime(
-      placement,
-      "ws-1",
-      "inst-1"
-    );
-    expect(repository.upsertRunning).toHaveBeenCalledWith(
-      placement,
-      "ws-1",
-      "inst-1",
-      undefined
-    );
-    expect(result).toEqual({ resource: { id: "x" } });
-  });
-
-  it("markRuntimeStoppedByOwner forwards args to repository.markStoppedByOwner", async () => {
-    await service.markRuntimeStoppedByOwner("sandbox", "workspace", "ws-1");
-    expect(repository.markStoppedByOwner).toHaveBeenCalledWith(
-      "sandbox",
-      "workspace",
-      "ws-1"
-    );
-  });
-
-  it("isRuntimeInstanceBoundToWorkspace forwards to repository and returns its result", async () => {
-    (repository.isRuntimeInstanceBoundToWorkspace as any).mockResolvedValue(
-      true
-    );
-    const result = await service.isRuntimeInstanceBoundToWorkspace(
-      "sandbox",
-      "ws-1",
-      "inst-1"
-    );
-    expect(result).toBe(true);
-    expect(repository.isRuntimeInstanceBoundToWorkspace).toHaveBeenCalledWith(
-      "sandbox",
-      "ws-1",
-      "inst-1"
-    );
-  });
-
   it("countRunningRuntimes forwards to repository.countRunning", async () => {
     (repository.countRunning as any).mockResolvedValue(3);
     expect(await service.countRunningRuntimes()).toBe(3);
