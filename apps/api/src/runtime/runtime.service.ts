@@ -16,10 +16,13 @@ import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
 import { SANDBOX_ENGINES, type SandboxEngine } from "./sandbox/sandbox-engine";
+import { LocalRuntimeProvider } from "./local/local-runtime.provider";
 import type {
   SandboxEngineType,
   SandboxRuntime,
   SandboxStartInput,
+  LocalInstanceHandle,
+  LocalLaunchInput,
 } from "./runtime.types";
 import { swallow } from "../common/swallow";
 
@@ -58,7 +61,8 @@ export class RuntimeService {
     private readonly providerRegistry: RuntimeProviderRegistry,
     private readonly workerHost: WorkerHostService,
     private readonly sandboxInstances: SandboxRuntimeInstanceService,
-    @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
+    @Inject(SANDBOX_ENGINES) engines: SandboxEngine[],
+    private readonly localProvider: LocalRuntimeProvider
   ) {
     this.defaults = {
       runtimeType: configService.getDefaultRuntimeType(),
@@ -122,6 +126,18 @@ export class RuntimeService {
           swallow(this.logger, `recover orphan via ${engine.type} engine`)
         );
     }
+  }
+
+  // ── local Provider 门面(run 模块的 LocalRunExecutor 经此拿到 fork 出的进程) ──
+
+  /** fork 一个本地 worker 子进程,返回逻辑实例标识与 IPC channel。 */
+  launchLocal(input: LocalLaunchInput): LocalInstanceHandle {
+    return this.localProvider.launch(input);
+  }
+
+  /** 服务重启后清理中断执行残留的 local 进程。 */
+  recoverOrphanLocal(runtimeInstanceId: string): Promise<void> {
+    return this.localProvider.recoverOrphan(runtimeInstanceId);
   }
 
   private resolveSandboxEngine(engineType: SandboxEngineType): SandboxEngine {

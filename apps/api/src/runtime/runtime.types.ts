@@ -3,6 +3,7 @@ import type {
   RuntimePlacement,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
+import type { ChildProcess } from "node:child_process";
 
 // ── Sandbox engine 契约类型(worker-host 的 SandboxInstanceExecutor 与 runtime 的
 // DockerSandboxEngine/OpenSandboxEngine 共用,是这两个模块之间唯一合法的类型契约面) ──
@@ -47,3 +48,17 @@ export function isSandboxPlacement(
 ): placement is SandboxRuntimePlacement {
   return placement.runtimeType === "sandbox";
 }
+
+// ── Local Provider 契约类型(run 模块的 LocalRunExecutor 与 runtime 的
+// LocalRuntimeProvider 之间唯一合法的类型契约面) ──
+
+export type LocalLaunchInput = {
+  runId: string;
+  env: Record<string, string>;
+};
+
+export type LocalInstanceHandle = {
+  runtimeInstanceId: string;
+  /** fork() 返回的 ChildProcess——调用方(目前是 run 模块)自行接手后续 IPC 收发。 */
+  channel: ChildProcess;
+};

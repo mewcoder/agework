@@ -5,6 +5,7 @@ import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.servic
 import { ConfigService } from "../config/config.service";
 import type { RuntimeProvider } from "./providers/provider-contracts";
 import type { SandboxEngine } from "./sandbox/sandbox-engine";
+import type { LocalRuntimeProvider } from "./local/local-runtime.provider";
 
 describe("RuntimeService", () => {
   let configService: Partial<ConfigService>;
@@ -19,6 +20,10 @@ describe("RuntimeService", () => {
     recoverOrphan: ReturnType<typeof vi.fn>;
   };
   let engine: SandboxEngine;
+  let localProvider: {
+    launch: ReturnType<typeof vi.fn>;
+    recoverOrphan: ReturnType<typeof vi.fn>;
+  };
   let service: RuntimeService;
 
   beforeEach(() => {
@@ -76,12 +81,20 @@ describe("RuntimeService", () => {
       releaseInstanceForRun: vi.fn(),
       recoverOrphan: vi.fn().mockResolvedValue(undefined),
     };
+    localProvider = {
+      launch: vi.fn().mockReturnValue({
+        runtimeInstanceId: "12345:token",
+        channel: {} as never,
+      }),
+      recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    };
     service = new RuntimeService(
       configService as ConfigService,
       providerRegistry,
       workerHost as never,
       sandboxInstances as unknown as SandboxRuntimeInstanceService,
-      [engine]
+      [engine],
+      localProvider as unknown as LocalRuntimeProvider
     );
   });
 
@@ -301,7 +314,8 @@ describe("RuntimeService", () => {
         providerRegistry,
         workerHost as never,
         sandboxInstances as unknown as SandboxRuntimeInstanceService,
-        [engine, secondEngine]
+        [engine, secondEngine],
+        localProvider as unknown as LocalRuntimeProvider
       );
 
       await expect(
@@ -309,6 +323,20 @@ describe("RuntimeService", () => {
       ).resolves.toBeUndefined();
       expect(engine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
       expect(secondEngine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
+    });
+  });
+
+  describe("local provider facade", () => {
+    it("launchLocal delegates to the local provider", () => {
+      const input = { runId: "run-1", env: {} };
+      const result = service.launchLocal(input);
+      expect(localProvider.launch).toHaveBeenCalledWith(input);
+      expect(result).toEqual({ runtimeInstanceId: "12345:token", channel: {} });
+    });
+
+    it("recoverOrphanLocal delegates to the local provider", async () => {
+      await service.recoverOrphanLocal("12345:token");
+      expect(localProvider.recoverOrphan).toHaveBeenCalledWith("12345:token");
     });
   });
 });

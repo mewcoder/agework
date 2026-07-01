@@ -20,6 +20,7 @@ import { SANDBOX_ENGINES } from "./sandbox/sandbox-engine";
 import type { RuntimeProvider } from "./providers/provider-contracts";
 import type { SandboxEngine } from "./sandbox/sandbox-engine";
 
+import { LocalRuntimeProvider } from "./local/local-runtime.provider";
 import { RuntimeService } from "./runtime.service";
 
 // admin
@@ -62,6 +63,7 @@ import { WorkerHostModule } from "../worker-host/worker-host.module";
       inject: [SandboxRuntimeInstanceManager],
     },
     RuntimeProviderRegistry,
+    LocalRuntimeProvider,
     RuntimeService,
   ],
   exports: [
