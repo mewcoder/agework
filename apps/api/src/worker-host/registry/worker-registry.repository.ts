@@ -7,7 +7,7 @@ import {
   runningInstanceMetadata,
   statusInstanceMetadata,
   stoppedInstanceMetadata,
-} from "./runtime-instance-metadata";
+} from "./worker-registry-metadata";
 
 function ownerWhere(
   runtimeType: string,
@@ -18,11 +18,14 @@ function ownerWhere(
 }
 
 /**
- * 维护 workspace -> runtime resource 的绑定关系。
- * WorkspaceRuntime 表达业务绑定，RuntimeTarget 表达容器/沙箱资源生命周期。
+ * WorkerRegistry 的 repository 层:维护 workspace -> runtime resource 的绑定关系,
+ * 以及实例本身的生命周期数据。数据表继续叫 RuntimeInstance/WorkspaceRuntimeInstance
+ * (不改名),只是 repository 归属从 runtime 模块搬到 worker-host 模块——WorkerRegistry
+ * 数据天然是 worker-host 自注册/心跳端点要读写的东西,归 runtime 会导致 worker-host
+ * 反过来依赖 runtime,破坏 runtime 的零依赖身份。
  */
 @Injectable()
-export class WorkspaceRuntimeInstanceRepository {
+export class WorkerRegistryRepository {
   constructor(private prisma: PrismaService) {}
 
   async findActiveByWorkspace(workspaceId: string) {
@@ -169,12 +172,6 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  async deleteStaleResources() {
-    return this.prisma.runtimeInstance.deleteMany({
-      where: { status: "stale" },
-    });
-  }
-
   countRunning(): Promise<number> {
     return this.prisma.runtimeInstance.count({ where: { status: "running" } });
   }
@@ -193,7 +190,7 @@ export class WorkspaceRuntimeInstanceRepository {
     });
   }
 
-  /** 管理端 run 详情用：运行实例视图 + 绑定的 workspace。 */
+  /** 管理端 run 详情用:运行实例视图 + 绑定的 workspace。 */
   findRunInstanceView(runtimeType: string, runtimeInstanceId: string) {
     return this.prisma.runtimeInstance.findUnique({
       where: {
@@ -252,7 +249,7 @@ export class WorkspaceRuntimeInstanceRepository {
     return this.prisma.runtimeInstance.findUnique({ where: { id } });
   }
 
-  /** 绑定 + 资源（不限状态），供生命周期清理判断隔离归属。 */
+  /** 绑定 + 资源(不限状态),供生命周期清理判断隔离归属。 */
   findBindingWithResource(workspaceId: string) {
     return this.prisma.workspaceRuntimeInstance.findUnique({
       where: { workspaceId },
