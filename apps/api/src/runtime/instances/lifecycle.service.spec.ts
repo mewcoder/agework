@@ -13,13 +13,13 @@ function makeResource(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeRepo(overrides: Record<string, unknown> = {}) {
+function makeWorkerHost(overrides: Record<string, unknown> = {}) {
   return {
-    findBindingWithResource: vi.fn().mockResolvedValue(null),
-    deleteWorkspaceBinding: vi.fn().mockResolvedValue(undefined),
+    findRuntimeBindingWithResource: vi.fn().mockResolvedValue(null),
+    deleteRuntimeWorkspaceBinding: vi.fn().mockResolvedValue(undefined),
     findWorkspaceIdsByUser: vi.fn().mockResolvedValue([]),
-    findRunningByOwners: vi.fn().mockResolvedValue([]),
-    markStoppedById: vi.fn().mockResolvedValue(undefined),
+    findRunningRuntimesByOwners: vi.fn().mockResolvedValue([]),
+    markRuntimeStoppedById: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -28,8 +28,8 @@ describe("RuntimeInstanceLifecycleService", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned runtime resource and deletes the workspace binding", async () => {
       const shutdownRuntimeInstanceByOwnerId = vi.fn();
-      const repo = makeRepo({
-        findBindingWithResource: vi.fn().mockResolvedValue({
+      const workerHost = makeWorkerHost({
+        findRuntimeBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
           resource: makeResource(),
@@ -39,25 +39,29 @@ describe("RuntimeInstanceLifecycleService", () => {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
       };
       const service = new RuntimeInstanceLifecycleService(
-        repo as never,
+        workerHost as never,
         registry as RuntimeProviderRegistry
       );
 
       await service.shutdownForWorkspace("ws-1");
 
-      expect(repo.findBindingWithResource).toHaveBeenCalledWith("ws-1");
+      expect(workerHost.findRuntimeBindingWithResource).toHaveBeenCalledWith(
+        "ws-1"
+      );
       expect(registry.resolve).toHaveBeenCalledWith("sandbox");
       expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-1");
-      expect(repo.markStoppedById).toHaveBeenCalledWith(
+      expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1" }),
         "owner_released"
       );
-      expect(repo.deleteWorkspaceBinding).toHaveBeenCalledWith("ws-1");
+      expect(workerHost.deleteRuntimeWorkspaceBinding).toHaveBeenCalledWith(
+        "ws-1"
+      );
     });
 
     it("does not stop a shared user-isolated resource when one workspace is deleted", async () => {
-      const repo = makeRepo({
-        findBindingWithResource: vi.fn().mockResolvedValue({
+      const workerHost = makeWorkerHost({
+        findRuntimeBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
           resource: makeResource({ isolationScope: "user", ownerId: "user-1" }),
@@ -65,46 +69,50 @@ describe("RuntimeInstanceLifecycleService", () => {
       });
       const registry: Partial<RuntimeProviderRegistry> = { resolve: vi.fn() };
       const service = new RuntimeInstanceLifecycleService(
-        repo as never,
+        workerHost as never,
         registry as RuntimeProviderRegistry
       );
 
       await service.shutdownForWorkspace("ws-1");
 
       expect(registry.resolve).not.toHaveBeenCalled();
-      expect(repo.markStoppedById).not.toHaveBeenCalled();
-      expect(repo.deleteWorkspaceBinding).toHaveBeenCalledWith("ws-1");
+      expect(workerHost.markRuntimeStoppedById).not.toHaveBeenCalled();
+      expect(workerHost.deleteRuntimeWorkspaceBinding).toHaveBeenCalledWith(
+        "ws-1"
+      );
     });
 
     it("marks legacy local runtime resources stopped without a registered provider", async () => {
-      const repo = makeRepo({
-        findBindingWithResource: vi.fn().mockResolvedValue({
+      const workerHost = makeWorkerHost({
+        findRuntimeBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
           resource: makeResource({ runtimeType: "local" }),
         }),
       });
       const service = new RuntimeInstanceLifecycleService(
-        repo as never,
+        workerHost as never,
         new RuntimeProviderRegistry([])
       );
 
       await service.shutdownForWorkspace("ws-1");
 
-      expect(repo.markStoppedById).toHaveBeenCalledWith(
+      expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1", runtimeType: "local" }),
         "owner_released"
       );
-      expect(repo.deleteWorkspaceBinding).toHaveBeenCalledWith("ws-1");
+      expect(workerHost.deleteRuntimeWorkspaceBinding).toHaveBeenCalledWith(
+        "ws-1"
+      );
     });
   });
 
   describe("shutdownForUser", () => {
     it("shuts down all runtime resources owned by the user (user-scope + workspace-scope)", async () => {
       const shutdownRuntimeInstanceByOwnerId = vi.fn();
-      const repo = makeRepo({
+      const workerHost = makeWorkerHost({
         findWorkspaceIdsByUser: vi.fn().mockResolvedValue([{ id: "ws-2" }]),
-        findRunningByOwners: vi.fn().mockResolvedValue([
+        findRunningRuntimesByOwners: vi.fn().mockResolvedValue([
           makeResource({
             id: "rr-user",
             isolationScope: "user",
@@ -117,22 +125,27 @@ describe("RuntimeInstanceLifecycleService", () => {
         resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
       };
       const service = new RuntimeInstanceLifecycleService(
-        repo as never,
+        workerHost as never,
         registry as RuntimeProviderRegistry
       );
 
       await service.shutdownForUser("user-1");
 
-      expect(repo.findWorkspaceIdsByUser).toHaveBeenCalledWith("user-1");
-      expect(repo.findRunningByOwners).toHaveBeenCalledWith(["user-1", "ws-2"]);
+      expect(workerHost.findWorkspaceIdsByUser).toHaveBeenCalledWith(
+        "user-1"
+      );
+      expect(workerHost.findRunningRuntimesByOwners).toHaveBeenCalledWith([
+        "user-1",
+        "ws-2",
+      ]);
       expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("user-1");
       expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-2");
       expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledTimes(2);
-      expect(repo.markStoppedById).toHaveBeenCalledWith(
+      expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-user" }),
         "owner_released"
       );
-      expect(repo.markStoppedById).toHaveBeenCalledWith(
+      expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-ws" }),
         "owner_released"
       );
@@ -140,8 +153,8 @@ describe("RuntimeInstanceLifecycleService", () => {
   });
 
   it("logs a warning and continues when a provider throws", async () => {
-    const repo = makeRepo({
-      findRunningByOwners: vi
+    const workerHost = makeWorkerHost({
+      findRunningRuntimesByOwners: vi
         .fn()
         .mockResolvedValue([
           makeResource({ id: "rr-1", ownerId: "ws-1" }),
@@ -158,7 +171,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       resolve: vi.fn().mockReturnValue({ shutdownRuntimeInstanceByOwnerId }),
     };
     const service = new RuntimeInstanceLifecycleService(
-      repo as never,
+      workerHost as never,
       registry as RuntimeProviderRegistry
     );
 
