@@ -132,11 +132,6 @@ export class WorkerHostService {
     return this.registry.countRunning();
   }
 
-  /** 列出所有 running 状态的 runtime 资源(不分页,内部维护用)。 */
-  findAllRunningRuntimes() {
-    return this.registry.findAllRunning();
-  }
-
   /** 按 (runtimeType, runtimeInstanceId) 查找 runtime 资源行。 */
   findRuntimeByRuntimeId(runtimeType: string, runtimeInstanceId: string) {
     return this.registry.findByRuntimeId(runtimeType, runtimeInstanceId);
@@ -145,11 +140,6 @@ export class WorkerHostService {
   /** 管理端 run 详情用:运行实例视图 + 绑定的 workspace 列表。 */
   findRuntimeInstanceView(runtimeType: string, runtimeInstanceId: string) {
     return this.registry.findRunInstanceView(runtimeType, runtimeInstanceId);
-  }
-
-  /** 某个用户是否仍然存在(未删除),供级联清理判断用。 */
-  userExistsForRuntime(userId: string) {
-    return this.registry.userExists(userId);
   }
 
   /** 管理端分页列出 runtime 资源。 */

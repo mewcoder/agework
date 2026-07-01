@@ -20,9 +20,6 @@ function makePrismaMock() {
     workspace: {
       findMany: vi.fn(),
     },
-    user: {
-      findFirst: vi.fn(),
-    },
   };
 }
 
@@ -203,18 +200,6 @@ describe("WorkerRegistryRepository", () => {
         "inst-1"
       );
       expect(result).toBe(false);
-    });
-  });
-
-  describe("userExists", () => {
-    it("returns true when a non-deleted user row is found", async () => {
-      prisma.user.findFirst.mockResolvedValue({ id: "user-1" });
-      expect(await repository.userExists("user-1")).toBe(true);
-    });
-
-    it("returns false when no row is found", async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
-      expect(await repository.userExists("user-1")).toBe(false);
     });
   });
 

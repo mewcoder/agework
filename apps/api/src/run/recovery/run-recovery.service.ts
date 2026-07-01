@@ -7,8 +7,8 @@ import { swallow } from "../../common/swallow";
 
 /**
  * 服务重启后恢复中断 run：找到所有仍处于 active 状态的 run，
- * 让对应 run executor 清理底层进程/容器，并将 run/thread 状态标记为 error。
- * 运行环境资源（孤儿容器 / stale 资源）的恢复属于 runtime 领域，委托给 RuntimeService。
+ * 对非 user-scope 的 runtime 资源清理其底层执行（execution），
+ * 并将 run/thread 状态标记为 error。是否 user-scope 通过 RuntimeService 判断。
  */
 @Injectable()
 export class RunRecoveryService {
