@@ -131,9 +131,7 @@ describe("RuntimeInstanceLifecycleService", () => {
 
       await service.shutdownForUser("user-1");
 
-      expect(workerHost.findWorkspaceIdsByUser).toHaveBeenCalledWith(
-        "user-1"
-      );
+      expect(workerHost.findWorkspaceIdsByUser).toHaveBeenCalledWith("user-1");
       expect(workerHost.findRunningRuntimesByOwners).toHaveBeenCalledWith([
         "user-1",
         "ws-2",
