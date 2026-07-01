@@ -63,24 +63,21 @@ function makeService(engine = makeEngine()) {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-logs/runtime"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(5),
   };
-  const workspaceRuntimeService = {
-    upsertRunning: vi.fn().mockResolvedValue({
+  const workerHost = {
+    cleanupByOwnerId: vi.fn(),
+    upsertRunningRuntime: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
-    markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
+    markRuntimeStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
-  };
-  const workerHost = {
-    cleanupByOwnerId: vi.fn(),
   };
   const service = new SandboxRuntimeInstanceService(
     config as never,
-    workspaceRuntimeService as never,
     workerHost as never,
     [engine]
   );
-  return { service, engine, config, workspaceRuntimeService, workerHost };
+  return { service, engine, config, workerHost };
 }
 
 function makeStartInput(placement = makePlacement(), runId = "run-1") {
@@ -112,7 +109,7 @@ describe("SandboxRuntimeInstanceService", () => {
   });
 
   it("acquire creates the resource and resolves ready", async () => {
-    const { service, engine, workspaceRuntimeService } = makeService();
+    const { service, engine, workerHost } = makeService();
 
     const result = await service.acquireInstanceForRun(makeStartInput());
 
@@ -129,7 +126,7 @@ describe("SandboxRuntimeInstanceService", () => {
       outcome: "ready",
       runtimeInstanceId: "docker-resource-1",
     });
-    expect(workspaceRuntimeService.upsertRunning).toHaveBeenCalledWith(
+    expect(workerHost.upsertRunningRuntime).toHaveBeenCalledWith(
       expect.objectContaining({ ownerId: "ws-1" }),
       "ws-1",
       "docker-resource-1"
@@ -206,14 +203,14 @@ describe("SandboxRuntimeInstanceService", () => {
   });
 
   it("release after ready lets the idle watchdog stop the container", async () => {
-    const { service, engine, workspaceRuntimeService } = makeService();
+    const { service, engine, workerHost } = makeService();
 
     await service.acquireInstanceForRun(makeStartInput());
     service.releaseInstanceForRun("run-1");
     await vi.advanceTimersByTimeAsync(5_500);
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
-    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
+    expect(workerHost.markRuntimeStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"
@@ -221,8 +218,7 @@ describe("SandboxRuntimeInstanceService", () => {
   });
 
   it("shutdownRuntimeInstanceByOwnerId stops the resource and cleans worker-host owner state", async () => {
-    const { service, engine, workerHost, workspaceRuntimeService } =
-      makeService();
+    const { service, engine, workerHost } = makeService();
 
     await service.acquireInstanceForRun(makeStartInput());
     service.shutdownRuntimeInstanceByOwnerId("ws-1");
@@ -230,7 +226,7 @@ describe("SandboxRuntimeInstanceService", () => {
 
     expect(engine.stop).toHaveBeenCalledWith("docker-resource-1");
     expect(workerHost.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
-    expect(workspaceRuntimeService.markStoppedByOwner).toHaveBeenCalledWith(
+    expect(workerHost.markRuntimeStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"

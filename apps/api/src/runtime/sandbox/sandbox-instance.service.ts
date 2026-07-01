@@ -13,7 +13,6 @@ import {
   CONTAINER_RUNTIME_LOG_DIR,
   DEFAULT_WORKER_IMAGE,
 } from "../../config/registry/defaults";
-import { WorkspaceRuntimeInstanceRepository } from "../instances/workspace-runtime-instance.repository";
 import { swallow } from "../../common/swallow";
 import { IdleWatchdog, resolveDockerApiBase } from "./sandbox-utils";
 import type {
@@ -85,7 +84,6 @@ export class SandboxRuntimeInstanceService {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly workspaceRuntimeService: WorkspaceRuntimeInstanceRepository,
     private readonly workerHost: WorkerHostService,
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[]
   ) {
@@ -295,8 +293,8 @@ export class SandboxRuntimeInstanceService {
         );
     }
     if (state) {
-      this.workspaceRuntimeService
-        .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
+      this.workerHost
+        .markRuntimeStoppedByOwner("sandbox", state.isolationScope, ownerId)
         .catch(
           swallow(
             this.logger,
@@ -428,7 +426,7 @@ export class SandboxRuntimeInstanceService {
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
       runtimeLogMountPath: CONTAINER_RUNTIME_LOG_DIR,
       isExpectedRuntimeInstance: (runtimeInstanceId: string) =>
-        this.workspaceRuntimeService.isRuntimeInstanceBoundToWorkspace(
+        this.workerHost.isRuntimeInstanceBoundToWorkspace(
           "sandbox",
           context.workspaceId,
           runtimeInstanceId
@@ -549,8 +547,8 @@ export class SandboxRuntimeInstanceService {
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
     state.runtimeInstanceId = "";
 
-    this.workspaceRuntimeService
-      .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
+    this.workerHost
+      .markRuntimeStoppedByOwner("sandbox", state.isolationScope, ownerId)
       .catch(
         swallow(
           this.logger,
@@ -564,8 +562,8 @@ export class SandboxRuntimeInstanceService {
     ownerId: string,
     runtimeInstanceId: string
   ): Promise<void> {
-    return this.workspaceRuntimeService
-      .upsertRunning(placement, ownerId, runtimeInstanceId)
+    return this.workerHost
+      .upsertRunningRuntime(placement, ownerId, runtimeInstanceId)
       .then(() => undefined)
       .catch(
         swallow(this.logger, `upsert workspace runtime for owner ${ownerId}`)
