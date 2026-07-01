@@ -48,7 +48,7 @@ export class RunService implements OnApplicationBootstrap {
     return this.runRepository.listAdmin(params);
   }
 
-  /** 管理端：单个 run 详情；runtime 实例视图经 RuntimeService 补齐。 */
+  /** 管理端：单个 run 详情；runtime 实例视图经 WorkerHostService 补齐。 */
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const runtimeInstance = detail.runtimeInstanceId
