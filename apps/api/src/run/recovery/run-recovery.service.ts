@@ -75,9 +75,6 @@ export class RunRecoveryService {
         `Failed to cleanup interrupted runs: ${err instanceof Error ? err.message : String(err)}`
       );
     }
-
-    await this.runtimeService.recoverOrphanRuntimeInstances();
-    await this.runtimeService.cleanupStaleRuntimeInstances();
   }
 
   /**

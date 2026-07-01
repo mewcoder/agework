@@ -10,8 +10,6 @@ function makeRuntimeService(
 ): Partial<RuntimeService> {
   return {
     isRuntimeInstanceUserScoped: vi.fn().mockResolvedValue(false),
-    recoverOrphanRuntimeInstances: vi.fn().mockResolvedValue(undefined),
-    cleanupStaleRuntimeInstances: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -61,9 +59,6 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       "conversation-1",
       "error"
     );
-    // 运行环境资源的恢复委托给 runtime 领域
-    expect(runtimeService.recoverOrphanRuntimeInstances).toHaveBeenCalled();
-    expect(runtimeService.cleanupStaleRuntimeInstances).toHaveBeenCalled();
   });
 
   it("skips interrupted execution cleanup when a run has no persisted runtimeInstanceId", async () => {
