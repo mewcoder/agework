@@ -11,7 +11,7 @@ describe("RuntimeService", () => {
   let resolveSpy: ReturnType<typeof vi.spyOn>;
   let sandboxProvider: RuntimeProvider;
   let shutdownRuntimeInstanceByOwnerId: ReturnType<typeof vi.fn>;
-  let repository: Record<string, ReturnType<typeof vi.fn>>;
+  let workerHost: Record<string, ReturnType<typeof vi.fn>>;
   let sandboxInstances: {
     acquireInstanceForRun: ReturnType<typeof vi.fn>;
     releaseInstanceForRun: ReturnType<typeof vi.fn>;
@@ -36,15 +36,14 @@ describe("RuntimeService", () => {
       getAllowedIsolationScopes: vi.fn().mockReturnValue(["user", "workspace"]),
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     };
-    repository = {
-      countRunning: vi.fn().mockResolvedValue(0),
-      listResourcesPage: vi.fn().mockResolvedValue({ items: [], total: 0 }),
-      findById: vi.fn().mockResolvedValue(null),
-      markStoppedById: vi.fn().mockResolvedValue(undefined),
-      findAllRunning: vi.fn().mockResolvedValue([]),
-      findByRuntimeId: vi.fn().mockResolvedValue(null),
-      userExists: vi.fn().mockResolvedValue(true),
-      deleteStaleResources: vi.fn().mockResolvedValue({ count: 0 }),
+    workerHost = {
+      countRunningRuntimes: vi.fn().mockResolvedValue(0),
+      listRuntimeResourcesPage: vi
+        .fn()
+        .mockResolvedValue({ items: [], total: 0 }),
+      findRuntimeById: vi.fn().mockResolvedValue(null),
+      markRuntimeStoppedById: vi.fn().mockResolvedValue(undefined),
+      findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
     };
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");
@@ -58,7 +57,7 @@ describe("RuntimeService", () => {
     service = new RuntimeService(
       configService as ConfigService,
       providerRegistry,
-      repository as never,
+      workerHost as never,
       sandboxInstances as unknown as SandboxRuntimeInstanceService
     );
   });
@@ -109,14 +108,14 @@ describe("RuntimeService", () => {
   });
 
   it("getRuntimeStats reports the running resource count", async () => {
-    repository.countRunning.mockResolvedValue(3);
+    workerHost.countRunningRuntimes.mockResolvedValue(3);
     await expect(service.getRuntimeStats()).resolves.toEqual({
       activeRuntimes: 3,
     });
   });
 
   it("listResources maps rows to the admin response shape", async () => {
-    repository.listResourcesPage.mockResolvedValue({
+    workerHost.listRuntimeResourcesPage.mockResolvedValue({
       items: [
         {
           id: "rr-1",
@@ -152,7 +151,7 @@ describe("RuntimeService", () => {
       pageSize: 10,
     });
 
-    expect(repository.listResourcesPage).toHaveBeenCalledWith(
+    expect(workerHost.listRuntimeResourcesPage).toHaveBeenCalledWith(
       expect.objectContaining({ status: "running" })
     );
     expect(result.total).toBe(1);
@@ -173,7 +172,7 @@ describe("RuntimeService", () => {
   });
 
   it("stopRuntimeInstance shuts down the provider and marks the row stopped", async () => {
-    repository.findById.mockResolvedValue({
+    workerHost.findRuntimeById.mockResolvedValue({
       id: "rr-1",
       runtimeType: "sandbox",
       isolationScope: "workspace",
@@ -186,79 +185,32 @@ describe("RuntimeService", () => {
     });
     expect(resolveSpy).toHaveBeenCalledWith("sandbox");
     expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledWith("ws-1");
-    expect(repository.markStoppedById).toHaveBeenCalledWith(
+    expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
       expect.objectContaining({ id: "rr-1" }),
       "manual_stop"
     );
   });
 
   it("stopRuntimeInstance throws when the resource is missing or not running", async () => {
-    repository.findById.mockResolvedValue({ status: "stopped" });
+    workerHost.findRuntimeById.mockResolvedValue({ status: "stopped" });
     await expect(service.stopRuntimeInstance("rr-1")).rejects.toThrow(
       "not found or not running"
     );
-    expect(repository.markStoppedById).not.toHaveBeenCalled();
+    expect(workerHost.markRuntimeStoppedById).not.toHaveBeenCalled();
   });
 
   it("isRuntimeInstanceUserScoped reports whether the resource is user-isolated", async () => {
-    repository.findByRuntimeId.mockResolvedValue({ isolationScope: "user" });
+    workerHost.findRuntimeByRuntimeId.mockResolvedValue({
+      isolationScope: "user",
+    });
     await expect(
       service.isRuntimeInstanceUserScoped("sandbox", "container-1")
     ).resolves.toBe(true);
-    repository.findByRuntimeId.mockResolvedValue({
+    workerHost.findRuntimeByRuntimeId.mockResolvedValue({
       isolationScope: "workspace",
     });
     await expect(
       service.isRuntimeInstanceUserScoped("sandbox", "container-1")
     ).resolves.toBe(false);
-  });
-
-  it("recoverOrphanRuntimeInstances stops running resources and marks them stopped", async () => {
-    repository.findAllRunning.mockResolvedValue([
-      {
-        id: "rr-1",
-        runtimeType: "sandbox",
-        isolationScope: "workspace",
-        ownerId: "ws-1",
-        runtimeInstanceId: "container-ws1",
-      },
-    ]);
-    const recoverOrphan = vi.fn().mockResolvedValue(undefined);
-    resolveSpy.mockReturnValue({ recoverOrphan });
-
-    await service.recoverOrphanRuntimeInstances();
-
-    expect(resolveSpy).toHaveBeenCalledWith("sandbox");
-    expect(recoverOrphan).toHaveBeenCalledWith("container-ws1");
-    expect(repository.markStoppedById).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "rr-1" }),
-      "orphan_recovered"
-    );
-  });
-
-  it("recoverOrphanRuntimeInstances keeps user-scope resources whose owner still exists", async () => {
-    repository.findAllRunning.mockResolvedValue([
-      {
-        id: "rr-user",
-        runtimeType: "sandbox",
-        isolationScope: "user",
-        ownerId: "user-1",
-        runtimeInstanceId: "container-user1",
-      },
-    ]);
-    repository.userExists.mockResolvedValue(true);
-    const recoverOrphan = vi.fn();
-    resolveSpy.mockReturnValue({ recoverOrphan });
-
-    await service.recoverOrphanRuntimeInstances();
-
-    expect(recoverOrphan).not.toHaveBeenCalled();
-    expect(repository.markStoppedById).not.toHaveBeenCalled();
-  });
-
-  it("cleanupStaleRuntimeInstances delegates to the repository", async () => {
-    repository.deleteStaleResources.mockResolvedValue({ count: 2 });
-    await service.cleanupStaleRuntimeInstances();
-    expect(repository.deleteStaleResources).toHaveBeenCalled();
   });
 });

@@ -7,7 +7,6 @@ import type {
 import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
 import { ConfigService } from "../config/config.service";
 import { pageWindow } from "../common/dto/pagination-query.dto";
-import { swallow } from "../common/swallow";
 import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
@@ -15,8 +14,8 @@ import {
 } from "./placement/runtime-resource";
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
-import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
-import { runtimeInstanceDiagnostics } from "./instances/runtime-instance-metadata";
+import { WorkerHostService } from "../worker-host/worker-host.service";
+import { runtimeInstanceDiagnostics } from "../worker-host/registry/worker-registry-metadata";
 
 type RuntimeInstanceRow = {
   id: string;
@@ -50,7 +49,7 @@ export class RuntimeService {
   constructor(
     private readonly configService: ConfigService,
     private readonly providerRegistry: RuntimeProviderRegistry,
-    private readonly repository: WorkspaceRuntimeInstanceRepository,
+    private readonly workerHost: WorkerHostService,
     private readonly sandboxInstances: SandboxRuntimeInstanceService
   ) {
     this.defaults = {
@@ -108,7 +107,7 @@ export class RuntimeService {
   }
 
   async getRuntimeStats() {
-    return { activeRuntimes: await this.repository.countRunning() };
+    return { activeRuntimes: await this.workerHost.countRunningRuntimes() };
   }
 
   async listResources(query: {
@@ -117,7 +116,7 @@ export class RuntimeService {
     pageSize?: number;
   }) {
     const { pageNo, pageSize, take, skip } = pageWindow(query);
-    const { items, total } = await this.repository.listResourcesPage({
+    const { items, total } = await this.workerHost.listRuntimeResourcesPage({
       status: query.status,
       take,
       skip,
@@ -138,7 +137,7 @@ export class RuntimeService {
     runtimeType: string,
     runtimeInstanceId: string
   ): Promise<AdminRunRuntimeInstanceResponse | null> {
-    const record = await this.repository.findRunInstanceView(
+    const record = await this.workerHost.findRuntimeInstanceView(
       runtimeType,
       runtimeInstanceId
     );
@@ -165,78 +164,15 @@ export class RuntimeService {
     runtimeType: string,
     runtimeInstanceId: string
   ): Promise<boolean> {
-    const resource = await this.repository.findByRuntimeId(
+    const resource = await this.workerHost.findRuntimeByRuntimeId(
       runtimeType,
       runtimeInstanceId
     );
     return resource?.isolationScope === "user";
   }
 
-  /**
-   * 服务重启后内存 scope 状态已丢失：把仍标记 running 的资源视为孤儿并停止底层容器/沙箱。
-   * user 级资源在属主用户仍存在时保留，用户已删除的一并清理；清理后标记 stopped。
-   */
-  async recoverOrphanRuntimeInstances(): Promise<void> {
-    try {
-      const running = await this.repository.findAllRunning();
-      if (running.length === 0) {
-        this.logger.log("No orphan runtime resources found.");
-        return;
-      }
-      this.logger.warn(
-        `Found ${running.length} orphan runtime resource(s) — stopping them`
-      );
-
-      for (const resource of running) {
-        if (resource.isolationScope === "user") {
-          const ownerExists = await this.repository.userExists(
-            resource.ownerId
-          );
-          if (ownerExists) {
-            this.logger.log(
-              `Skipping recoverOrphan for user-scope runtime resource ${resource.runtimeInstanceId} (user ${resource.ownerId} still exists)`
-            );
-            continue;
-          }
-          this.logger.log(
-            `User ${resource.ownerId} no longer exists — cleaning up orphan user-scope resource ${resource.runtimeInstanceId}`
-          );
-        }
-
-        const provider = this.providerRegistry.resolve(resource.runtimeType);
-        await provider
-          .recoverOrphan(resource.runtimeInstanceId)
-          .catch(
-            swallow(
-              this.logger,
-              `cleanup interrupted runtime resource ${resource.runtimeInstanceId}`
-            )
-          );
-        await this.repository.markStoppedById(resource, "orphan_recovered");
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to recover orphan containers: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-  }
-
-  /** 清理已明确标记为 stale 的 runtime 资源（running 资源可能仍在外部存活，不在此清理）。 */
-  async cleanupStaleRuntimeInstances(): Promise<void> {
-    try {
-      const result = await this.repository.deleteStaleResources();
-      if (result.count > 0) {
-        this.logger.log(`Deleted ${result.count} stale runtime resource(s)`);
-      }
-    } catch (err) {
-      this.logger.warn(
-        `Failed to cleanup stale runtime resources: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-  }
-
   async stopRuntimeInstance(id: string) {
-    const resource = await this.repository.findById(id);
+    const resource = await this.workerHost.findRuntimeById(id);
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(
         `Runtime resource ${id} not found or not running`
@@ -246,7 +182,7 @@ export class RuntimeService {
       resource.runtimeType,
       resource.ownerId
     );
-    await this.repository.markStoppedById(resource, "manual_stop");
+    await this.workerHost.markRuntimeStoppedById(resource, "manual_stop");
     return { ok: true };
   }
 
