@@ -10,11 +10,7 @@ import {
   OPENSANDBOX_CLIENT,
 } from "./sandbox/opensandbox-client";
 import { SANDBOX_ENGINES, type SandboxEngine } from "./sandbox/sandbox-engine";
-import {
-  RuntimeProviderRegistry,
-  RUNTIME_PROVIDERS,
-} from "./providers/provider-registry";
-import type { RuntimeProvider } from "./providers/provider-contracts";
+import { LocalRuntimeProvider } from "./local/local-runtime.provider";
 import { RuntimeService } from "./runtime.service";
 import { RuntimeModule } from "./runtime.module";
 
@@ -38,7 +34,7 @@ describe("RuntimeModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("compiles and resolves runtime provider tokens", async () => {
+  it("compiles with zero imports and resolves runtime provider tokens", async () => {
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 
     const engines = testingModule.get<SandboxEngine[]>(SANDBOX_ENGINES);
@@ -47,20 +43,13 @@ describe("RuntimeModule wiring", () => {
       "opensandbox",
     ]);
 
-    const runtimeProviders =
-      testingModule.get<RuntimeProvider[]>(RUNTIME_PROVIDERS);
-    expect(runtimeProviders.map((provider) => provider.type)).toEqual([
-      "sandbox",
-    ]);
-
     expect(testingModule.get(OPENSANDBOX_CLIENT)).toBeInstanceOf(
       OpenSandboxClient
     );
+    expect(testingModule.get(LocalRuntimeProvider)).toBeInstanceOf(
+      LocalRuntimeProvider
+    );
     expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);
-
-    const registry = testingModule.get(RuntimeProviderRegistry);
-    expect(registry.resolve("sandbox")).toBe(runtimeProviders[0]);
-    expect(registry.resolve("local").type).toBe("local");
   });
 
   it("exports only RuntimeService to downstream modules", async () => {

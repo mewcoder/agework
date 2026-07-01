@@ -9,7 +9,7 @@ import type { Response } from "express";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { ExecutionService } from "./execution/execution.service";
-import { RuntimeService } from "../runtime/runtime.service";
+import { WorkerHostService } from "../worker-host/worker-host.service";
 import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
@@ -29,7 +29,7 @@ export class RunService implements OnApplicationBootstrap {
     private readonly executionService: ExecutionService,
     private readonly runEvents: RunEventService,
     private readonly runLauncher: RunLauncher,
-    private readonly runtimeService: RuntimeService,
+    private readonly workerHost: WorkerHostService,
     private readonly runRecovery: RunRecoveryService
   ) {}
 
@@ -52,7 +52,7 @@ export class RunService implements OnApplicationBootstrap {
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const runtimeInstance = detail.runtimeInstanceId
-      ? await this.runtimeService.getRuntimeInstanceForAdmin(
+      ? await this.workerHost.getRuntimeInstanceForAdmin(
           detail.runtimeType,
           detail.runtimeInstanceId
         )

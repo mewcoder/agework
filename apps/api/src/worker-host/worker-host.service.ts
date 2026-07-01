@@ -1,16 +1,41 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
+  AcquireInstanceResult,
   CommandPayload,
   RunConfig,
   SandboxRuntimePlacement,
   WorkerCommandRpcRequest,
+  WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
+import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import { runtimeInstanceDiagnostics } from "./registry/worker-registry-metadata";
+import { pageWindow } from "../common/dto/pagination-query.dto";
+import { RuntimeService } from "../runtime/runtime.service";
+import { SandboxInstanceExecutor } from "./sandbox/sandbox-instance.executor";
+
+type RuntimeInstanceRow = {
+  id: string;
+  runtimeType: string;
+  isolationScope: string;
+  ownerId: string;
+  runtimeInstanceId: string;
+  status: string;
+  expiresAt: Date | string | null;
+  metadata: unknown;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  workspaceRuntimeInstances?: Array<{
+    id: string;
+    workspaceId: string;
+    createdAt: Date | string;
+    updatedAt: Date | string;
+  }>;
+};
 
 @Injectable()
 export class WorkerHostService {
@@ -18,7 +43,9 @@ export class WorkerHostService {
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
     private readonly commandDispatcher: WorkerCommandDispatcher,
-    private readonly registry: WorkerRegistryRepository
+    private readonly registry: WorkerRegistryRepository,
+    private readonly runtimeService: RuntimeService,
+    private readonly sandboxInstances: SandboxInstanceExecutor
   ) {}
 
   async pollCommands(
@@ -194,25 +221,156 @@ export class WorkerHostService {
     return runtimeInstanceDiagnostics(metadata);
   }
 
-  // ── Admin 方法(Task 7 实现) ──────────────────────────────────────────
+  // ── sandbox 实例编排(owner 复用/idle 决策在 worker-host,物理操作转发 runtime) ──
+  // 原 RuntimeService.acquireInstanceForRun 等方法随 SandboxInstanceExecutor 一起
+  // 搬过来:owner 是否已有活实例、要不要新建/复用/idle 回收,是 worker-host 自己的
+  // WorkerRegistry 数据决定的编排决策,不应该反过来让 runtime 依赖 worker-host。
 
-  /** 查询 runtime 策略配置。Task 7 实现。 */
-  getRuntimePolicy(): unknown {
-    throw new Error("Not implemented yet");
+  /** 为一次 sandbox run 取得持久容器实例,ready/cancelledBeforeReady/error 一次性回传。 */
+  acquireSandboxInstanceForRun(
+    input: WorkerExecutionStartInput
+  ): Promise<AcquireInstanceResult> {
+    return this.sandboxInstances.acquireInstanceForRun(input);
   }
 
-  /** 查询 runtime 统计信息。Task 7 实现。 */
-  getRuntimeStats(): Promise<unknown> {
-    throw new Error("Not implemented yet");
+  /** 释放一次 run 对持久容器的引用(不停止可复用的 runtime 实例)。run 终态时调用。 */
+  releaseSandboxInstanceForRun(runId: string): void {
+    this.sandboxInstances.releaseInstanceForRun(runId);
   }
 
-  /** 管理端分页列出 runtime 资源。Task 7 实现。 */
-  listResources(_query: unknown): Promise<unknown> {
-    throw new Error("Not implemented yet");
+  /** 服务重启后清理中断执行残留的 sandbox runtime 实例。 */
+  recoverOrphanSandboxInstance(runtimeInstanceId: string): Promise<void> {
+    return this.sandboxInstances.recoverOrphan(runtimeInstanceId);
   }
 
-  /** 停止指定 runtime 实例。Task 7 实现。 */
-  stopRuntimeInstance(_id: string): Promise<unknown> {
-    throw new Error("Not implemented yet");
+  /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
+  shutdownSandboxInstanceByOwnerId(ownerId: string): void {
+    this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
+  }
+
+  /** 该 runtime instance 是否为 user 级共享隔离(决定中断 run 是否可清理底层资源)。 */
+  async isRuntimeInstanceUserScoped(
+    runtimeType: string,
+    runtimeInstanceId: string
+  ): Promise<boolean> {
+    const resource = await this.findRuntimeByRuntimeId(
+      runtimeType,
+      runtimeInstanceId
+    );
+    return resource?.isolationScope === "user";
+  }
+
+  // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry
+  // 数据搬迁——admin 查询本来就是读这份数据,归属 worker-host 更直接) ──
+
+  getRuntimePolicy() {
+    return this.runtimeService.getRuntimePolicy();
+  }
+
+  async getRuntimeStats() {
+    return { activeRuntimes: await this.countRunningRuntimes() };
+  }
+
+  async listResources(query: {
+    status?: string;
+    pageNo?: number;
+    pageSize?: number;
+  }) {
+    const { pageNo, pageSize, take, skip } = pageWindow(query);
+    const { items, total } = await this.listRuntimeResourcesPage({
+      status: query.status,
+      take,
+      skip,
+    });
+    return {
+      list: items.map((item) => this.toRuntimeInstanceResponse(item)),
+      total,
+      pageNo,
+      pageSize,
+    };
+  }
+
+  /**
+   * 管理端 run 详情用:按 run 持久化的 runtime handle 取运行实例视图。
+   * runtime 资源归属本领域,run 层经此方法获取,不直接查 runtimeInstance 表。
+   */
+  async getRuntimeInstanceForAdmin(
+    runtimeType: string,
+    runtimeInstanceId: string
+  ): Promise<AdminRunRuntimeInstanceResponse | null> {
+    const record = await this.findRuntimeInstanceView(
+      runtimeType,
+      runtimeInstanceId
+    );
+    if (!record) return null;
+    const { workspaceRuntimeInstances, ...resource } = record;
+    return {
+      ...resource,
+      expiresAt: resource.expiresAt
+        ? this.toIsoString(resource.expiresAt)
+        : null,
+      createdAt: this.toIsoString(resource.createdAt),
+      updatedAt: this.toIsoString(resource.updatedAt),
+      workspaceRuntimes: workspaceRuntimeInstances.map((binding) => ({
+        id: binding.id,
+        workspaceId: binding.workspaceId,
+        createdAt: this.toIsoString(binding.createdAt),
+        updatedAt: this.toIsoString(binding.updatedAt),
+      })),
+    };
+  }
+
+  async stopRuntimeInstance(id: string) {
+    const resource = await this.findRuntimeById(id);
+    if (!resource || resource.status !== "running") {
+      throw new NotFoundException(
+        `Runtime resource ${id} not found or not running`
+      );
+    }
+    if (resource.runtimeType === "sandbox") {
+      this.shutdownSandboxInstanceByOwnerId(resource.ownerId);
+    }
+    await this.markRuntimeStoppedById(resource, "manual_stop");
+    return { ok: true };
+  }
+
+  private toRuntimeInstanceResponse(resource: RuntimeInstanceRow) {
+    const diagnostics = this.buildRuntimeDiagnostics(resource.metadata);
+    const workspaceRuntimes = resource.workspaceRuntimeInstances?.map(
+      (binding) => ({
+        id: binding.id,
+        workspaceId: binding.workspaceId,
+        createdAt: this.toIsoString(binding.createdAt),
+        updatedAt: this.toIsoString(binding.updatedAt),
+      })
+    );
+
+    return {
+      id: resource.id,
+      runtimeType: resource.runtimeType,
+      isolationScope: resource.isolationScope,
+      ownerId: resource.ownerId,
+      runtimeInstanceId: resource.runtimeInstanceId,
+      status: resource.status,
+      isReusable: resource.status === "running",
+      workspaceCount: workspaceRuntimes?.length ?? 0,
+      expiresAt: resource.expiresAt
+        ? this.toIsoString(resource.expiresAt)
+        : null,
+      metadata: resource.metadata,
+      diagnostics: {
+        ...diagnostics,
+        ownerId: diagnostics.ownerId ?? resource.ownerId,
+        runtimeInstanceId:
+          diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
+      },
+      createdAt: this.toIsoString(resource.createdAt),
+      updatedAt: this.toIsoString(resource.updatedAt),
+      workspaceRuntimes,
+    };
+  }
+
+  private toIsoString(value: Date | string): string {
+    return value instanceof Date ? value.toISOString() : value;
   }
 }

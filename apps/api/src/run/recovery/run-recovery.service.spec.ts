@@ -2,12 +2,12 @@ import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import { ConversationService } from "../../conversation/conversation.service";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { ExecutionService } from "../execution/execution.service";
 
-function makeRuntimeService(
+function makeWorkerHost(
   overrides: Record<string, unknown> = {}
-): Partial<RuntimeService> {
+): Partial<WorkerHostService> {
   return {
     isRuntimeInstanceUserScoped: vi.fn().mockResolvedValue(false),
     ...overrides,
@@ -33,18 +33,18 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn().mockResolvedValue(undefined),
     };
-    const runtimeService = makeRuntimeService();
+    const workerHost = makeWorkerHost();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
-      runtimeService as RuntimeService
+      workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();
 
-    expect(runtimeService.isRuntimeInstanceUserScoped).toHaveBeenCalledWith(
+    expect(workerHost.isRuntimeInstanceUserScoped).toHaveBeenCalledWith(
       "docker",
       "container-abc"
     );
@@ -79,13 +79,13 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn(),
     };
-    const runtimeService = makeRuntimeService();
+    const workerHost = makeWorkerHost();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
-      runtimeService as RuntimeService
+      workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();
@@ -117,7 +117,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockExecutionService: Partial<ExecutionService> = {
       cleanupInterruptedExecution: vi.fn(),
     };
-    const runtimeService = makeRuntimeService({
+    const workerHost = makeWorkerHost({
       isRuntimeInstanceUserScoped: vi.fn().mockResolvedValue(true),
     });
 
@@ -125,7 +125,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
       mockExecutionService as ExecutionService,
-      runtimeService as RuntimeService
+      workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();

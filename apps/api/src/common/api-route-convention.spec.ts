@@ -18,7 +18,7 @@ import { AgentController } from "../agent/agent.controller";
 import { AdminModelProviderController } from "../model-provider/admin/admin-model-provider.controller";
 import { ModelProviderController } from "../model-provider/model-provider.controller";
 import { AdminRunController } from "../run/admin/admin-run.controller";
-import { AdminRuntimeController } from "../runtime/admin/admin-runtime.controller";
+import { AdminRuntimeController } from "../worker-host/admin/admin-runtime.controller";
 import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../user/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-host/command.controller";

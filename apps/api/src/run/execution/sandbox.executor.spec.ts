@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { SandboxRunExecutor } from "./sandbox.executor";
-import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
 import type { RunEventPort } from "./executor";
 import type {
@@ -10,18 +9,16 @@ import type {
 } from "@agework/shared/protocol";
 
 /**
- * SandboxRunExecutor 是 sandbox 执行编排器:向 runtime 取得持久容器实例后,直接对
+ * SandboxRunExecutor 是 sandbox 执行编排器:向 worker-host 取得持久容器实例后,直接对
  * worker-host 完成 openSession / 命令下发 / cleanup;就绪/早取消/失败由 acquire 结果回流。
  */
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
-  let runtimeService: {
-    acquireInstanceForRun: ReturnType<typeof vi.fn>;
-    releaseInstanceForRun: ReturnType<typeof vi.fn>;
-    recoverOrphanInstance: ReturnType<typeof vi.fn>;
-  };
+describe("SandboxRunExecutor — orchestrates worker-host", () => {
   let workerHost: {
+    acquireSandboxInstanceForRun: ReturnType<typeof vi.fn>;
+    releaseSandboxInstanceForRun: ReturnType<typeof vi.fn>;
+    recoverOrphanSandboxInstance: ReturnType<typeof vi.fn>;
     openSession: ReturnType<typeof vi.fn>;
     sendCommand: ReturnType<typeof vi.fn>;
     cleanupRun: ReturnType<typeof vi.fn>;
@@ -46,12 +43,10 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
   };
 
   beforeEach(() => {
-    runtimeService = {
-      acquireInstanceForRun: vi.fn().mockResolvedValue(ready),
-      releaseInstanceForRun: vi.fn(),
-      recoverOrphanInstance: vi.fn().mockResolvedValue(undefined),
-    };
     workerHost = {
+      acquireSandboxInstanceForRun: vi.fn().mockResolvedValue(ready),
+      releaseSandboxInstanceForRun: vi.fn(),
+      recoverOrphanSandboxInstance: vi.fn().mockResolvedValue(undefined),
       openSession: vi.fn(),
       sendCommand: vi.fn(),
       cleanupRun: vi.fn(),
@@ -65,7 +60,6 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     (input as { onRuntimeInstanceIdReady?: unknown }).onRuntimeInstanceIdReady =
       onRuntimeInstanceIdReady;
     executor = new SandboxRunExecutor(
-      runtimeService as unknown as RuntimeService,
       workerHost as unknown as WorkerHostService
     );
     executor.setRunEventPort(receiver as unknown as RunEventPort);
@@ -79,7 +73,7 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     const handle = executor.start(input);
     expect(handle.runId).toBe("run-1");
     expect(handle.runtimeInstanceId).toBe("");
-    expect(runtimeService.acquireInstanceForRun).toHaveBeenCalledWith(input);
+    expect(workerHost.acquireSandboxInstanceForRun).toHaveBeenCalledWith(input);
   });
 
   it("on ready: opens the worker session and dispatches the first user_message", async () => {
@@ -104,7 +98,7 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
   });
 
   it("on cancelledBeforeReady: notifies run, never opens a session", async () => {
-    runtimeService.acquireInstanceForRun.mockResolvedValueOnce({
+    workerHost.acquireSandboxInstanceForRun.mockResolvedValueOnce({
       outcome: "cancelledBeforeReady",
     });
     executor.start(input);
@@ -115,7 +109,7 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
   });
 
   it("on error: notifies run, never opens a session", async () => {
-    runtimeService.acquireInstanceForRun.mockResolvedValueOnce({
+    workerHost.acquireSandboxInstanceForRun.mockResolvedValueOnce({
       outcome: "error",
       error: "sandbox create failed",
     });
@@ -131,7 +125,7 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
 
   it("cancel before ready: releases the instance and skips the session even if ready arrives later", async () => {
     let resolveAcquire!: (result: AcquireInstanceResult) => void;
-    runtimeService.acquireInstanceForRun.mockReturnValueOnce(
+    workerHost.acquireSandboxInstanceForRun.mockReturnValueOnce(
       new Promise<AcquireInstanceResult>((resolve) => {
         resolveAcquire = resolve;
       })
@@ -139,7 +133,9 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     const handle = executor.start(input);
 
     executor.cancel(handle);
-    expect(runtimeService.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+    expect(workerHost.releaseSandboxInstanceForRun).toHaveBeenCalledWith(
+      "run-1"
+    );
 
     resolveAcquire(ready);
     await flush();
@@ -218,7 +214,9 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     executor.cleanup("run-1");
 
     expect(workerHost.cleanupRun).toHaveBeenCalledWith("run-1");
-    expect(runtimeService.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+    expect(workerHost.releaseSandboxInstanceForRun).toHaveBeenCalledWith(
+      "run-1"
+    );
   });
 
   it("terminateExecution cleans up the run session", async () => {
@@ -228,11 +226,15 @@ describe("SandboxRunExecutor — orchestrates runtime + worker-host", () => {
     executor.terminateExecution("run-1", "shutdown");
 
     expect(workerHost.cleanupRun).toHaveBeenCalledWith("run-1");
-    expect(runtimeService.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+    expect(workerHost.releaseSandboxInstanceForRun).toHaveBeenCalledWith(
+      "run-1"
+    );
   });
 
   it("cleanupInterruptedExecution recovers the orphan runtime instance", async () => {
     await executor.cleanupInterruptedExecution("inst-9");
-    expect(runtimeService.recoverOrphanInstance).toHaveBeenCalledWith("inst-9");
+    expect(workerHost.recoverOrphanSandboxInstance).toHaveBeenCalledWith(
+      "inst-9"
+    );
   });
 });

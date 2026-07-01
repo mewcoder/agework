@@ -7,7 +7,6 @@ import type {
   CommandPayload,
 } from "@agework/shared/protocol";
 import type { RunEventPort, RunExecutor } from "./executor";
-import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
@@ -35,10 +34,7 @@ export class SandboxRunExecutor implements RunExecutor {
   private readonly states = new Map<string, SandboxRunState>();
   private receiver!: RunEventPort;
 
-  constructor(
-    private readonly runtimeService: RuntimeService,
-    private readonly workerHost: WorkerHostService
-  ) {}
+  constructor(private readonly workerHost: WorkerHostService) {}
 
   setRunEventPort(receiver: RunEventPort): void {
     this.receiver = receiver;
@@ -63,8 +59,8 @@ export class SandboxRunExecutor implements RunExecutor {
     // sandbox placement）；用 try/catch 把同步异常与 .catch 的异步 rejection 收敛到同一清理，
     // run 转 error 终态而非卡在 acquiring。
     try {
-      this.runtimeService
-        .acquireInstanceForRun(input)
+      this.workerHost
+        .acquireSandboxInstanceForRun(input)
         .then((result) => this.onAcquired(input, result))
         .catch((err) => this.onAcquireFailed(runConfig.runId, err));
     } catch (err) {
@@ -97,7 +93,7 @@ export class SandboxRunExecutor implements RunExecutor {
     // 兜底同 tick 竞态：settleReady 已结算为 ready、但本 onAcquired 尚未执行的微任务间隙里
     // cancel() 抢入，把 state.cancelled 置真（此时 status 仍为 acquiring，不会下发 cancel 命令）。
     if (state.cancelled) {
-      this.runtimeService.releaseInstanceForRun(runId);
+      this.workerHost.releaseSandboxInstanceForRun(runId);
       this.states.delete(runId);
       this.notifyCancelledBeforeReady(runId);
       return;
@@ -150,7 +146,7 @@ export class SandboxRunExecutor implements RunExecutor {
     }
     // 实例 ready 之前到达的取消不下发命令：标记 cancelled，由 acquire 就绪那刻转 cancelled 终态。
     state.cancelled = true;
-    this.runtimeService.releaseInstanceForRun(handle.runId);
+    this.workerHost.releaseSandboxInstanceForRun(handle.runId);
   }
 
   private recordCommandSent(runId: string, command: CommandPayload): void {
@@ -208,11 +204,11 @@ export class SandboxRunExecutor implements RunExecutor {
 
   cleanup(runId: string): void {
     this.workerHost.cleanupRun(runId);
-    this.runtimeService.releaseInstanceForRun(runId);
+    this.workerHost.releaseSandboxInstanceForRun(runId);
     this.states.delete(runId);
   }
 
   cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
-    return this.runtimeService.recoverOrphanInstance(runtimeInstanceId);
+    return this.workerHost.recoverOrphanSandboxInstance(runtimeInstanceId);
   }
 }

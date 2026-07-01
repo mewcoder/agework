@@ -7,7 +7,7 @@ export const RUN_EXECUTORS = Symbol("RUN_EXECUTORS");
  * runs 层的 run executor registry。
  *
  * 只负责 per-run execution：按 runtimeType 分发到 local/sandbox 的执行实现。
- * runtime resource 的 recover/shutdown 留在 RuntimeProviderRegistry。
+ * runtime resource 的 recover/shutdown 留在各 run executor 内部转发 worker-host / runtime。
  */
 @Injectable()
 export class RunExecutorRegistry {

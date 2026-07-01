@@ -33,7 +33,9 @@ function makeService() {
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
     commandDispatcher as unknown as WorkerCommandDispatcher,
-    {} as unknown as WorkerRegistryRepository
+    {} as unknown as WorkerRegistryRepository,
+    {} as never,
+    {} as never
   );
   return { service, endpointHandler, upstream, commandDispatcher };
 }
@@ -159,7 +161,9 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
       {} as any,
       {} as any,
       {} as any,
-      repository
+      repository,
+      {} as any,
+      {} as any
     );
   });
 
@@ -234,5 +238,76 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
       statusReason: "running",
       lastSeenAt: "2026-06-25T00:00:00.000Z",
     });
+  });
+});
+
+describe("WorkerHostService sandbox instance orchestration", () => {
+  function makeService() {
+    const runtimeService = { getRuntimePolicy: vi.fn() };
+    const sandboxInstances = {
+      acquireInstanceForRun: vi.fn(),
+      releaseInstanceForRun: vi.fn(),
+      recoverOrphan: vi.fn(),
+      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    };
+    const service = new WorkerHostService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {
+        findByRuntimeId: vi.fn().mockResolvedValue({ isolationScope: "user" }),
+      } as never,
+      runtimeService as never,
+      sandboxInstances as never
+    );
+    return { service, runtimeService, sandboxInstances };
+  }
+
+  it("acquireSandboxInstanceForRun forwards to the sandbox executor", async () => {
+    const { service, sandboxInstances } = makeService();
+    const input = { runConfig: { runId: "run-1" } } as never;
+    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+      outcome: "ready",
+    });
+
+    await expect(service.acquireSandboxInstanceForRun(input)).resolves.toEqual({
+      outcome: "ready",
+    });
+    expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+  });
+
+  it("releaseSandboxInstanceForRun forwards to the sandbox executor", () => {
+    const { service, sandboxInstances } = makeService();
+    service.releaseSandboxInstanceForRun("run-1");
+    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
+      "run-1"
+    );
+  });
+
+  it("recoverOrphanSandboxInstance forwards to the sandbox executor", async () => {
+    const { service, sandboxInstances } = makeService();
+    await service.recoverOrphanSandboxInstance("inst-1");
+    expect(sandboxInstances.recoverOrphan).toHaveBeenCalledWith("inst-1");
+  });
+
+  it("shutdownSandboxInstanceByOwnerId forwards to the sandbox executor", () => {
+    const { service, sandboxInstances } = makeService();
+    service.shutdownSandboxInstanceByOwnerId("ws-1");
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("isRuntimeInstanceUserScoped reports whether the resource is user-isolated", async () => {
+    const { service } = makeService();
+    await expect(
+      service.isRuntimeInstanceUserScoped("sandbox", "container-1")
+    ).resolves.toBe(true);
+  });
+
+  it("getRuntimePolicy forwards to RuntimeService", () => {
+    const { service, runtimeService } = makeService();
+    runtimeService.getRuntimePolicy.mockReturnValue({ runtimeType: "local" });
+    expect(service.getRuntimePolicy()).toEqual({ runtimeType: "local" });
   });
 });

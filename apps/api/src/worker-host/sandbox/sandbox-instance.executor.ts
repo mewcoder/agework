@@ -8,7 +8,8 @@ import type {
 } from "@agework/shared/protocol";
 import { isSandboxPlacement } from "../../runtime/runtime.types";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { WorkerHostService } from "../worker-host.service";
+import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
+import { WorkerCommandDispatcher } from "../command/command-dispatcher.service";
 import { ConfigService } from "../../config/config.service";
 import {
   CONTAINER_RUNTIME_LOG_DIR,
@@ -89,7 +90,8 @@ export class SandboxInstanceExecutor {
   constructor(
     private readonly configService: ConfigService,
     private readonly runtimeService: RuntimeService,
-    private readonly workerHost: WorkerHostService
+    private readonly registry: WorkerRegistryRepository,
+    private readonly commandDispatcher: WorkerCommandDispatcher
   ) {}
 
   /**
@@ -173,7 +175,7 @@ export class SandboxInstanceExecutor {
       this.acquireStates.delete(runId);
       settle?.({ outcome: "error", error: "sandbox owner torn down" });
     }
-    this.workerHost.cleanupByOwnerId(ownerId);
+    this.commandDispatcher.cleanupByOwnerId(ownerId);
   }
 
   private logWorkerExecutionStart(
@@ -293,8 +295,8 @@ export class SandboxInstanceExecutor {
         );
     }
     if (state) {
-      this.workerHost
-        .markRuntimeStoppedByOwner("sandbox", state.isolationScope, ownerId)
+      this.registry
+        .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
         .catch(
           swallow(
             this.logger,
@@ -420,7 +422,7 @@ export class SandboxInstanceExecutor {
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
       runtimeLogMountPath: CONTAINER_RUNTIME_LOG_DIR,
       isExpectedRuntimeInstance: (runtimeInstanceId: string) =>
-        this.workerHost.isRuntimeInstanceBoundToWorkspace(
+        this.registry.isRuntimeInstanceBoundToWorkspace(
           "sandbox",
           context.workspaceId,
           runtimeInstanceId
@@ -556,8 +558,8 @@ export class SandboxInstanceExecutor {
     state.lastStoppedRuntimeInstanceId = state.runtimeInstanceId;
     state.runtimeInstanceId = "";
 
-    this.workerHost
-      .markRuntimeStoppedByOwner("sandbox", state.isolationScope, ownerId)
+    this.registry
+      .markStoppedByOwner("sandbox", state.isolationScope, ownerId)
       .catch(
         swallow(
           this.logger,
@@ -571,8 +573,8 @@ export class SandboxInstanceExecutor {
     ownerId: string,
     runtimeInstanceId: string
   ): Promise<void> {
-    return this.workerHost
-      .upsertRunningRuntime(placement, ownerId, runtimeInstanceId)
+    return this.registry
+      .upsertRunning(placement, ownerId, runtimeInstanceId)
       .then(() => undefined)
       .catch(
         swallow(this.logger, `upsert workspace runtime for owner ${ownerId}`)

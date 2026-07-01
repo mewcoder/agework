@@ -57,21 +57,24 @@ function makeService(runtimeService = makeRuntimeService()) {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-logs/runtime"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(5),
   };
-  const workerHost = {
+  const commandDispatcher = {
     cleanupByOwnerId: vi.fn(),
-    upsertRunningRuntime: vi.fn().mockResolvedValue({
+  };
+  const registry = {
+    upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
-    markRuntimeStoppedByOwner: vi.fn().mockResolvedValue(undefined),
+    markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const executor = new SandboxInstanceExecutor(
     config as never,
     runtimeService as never,
-    workerHost as never
+    registry as never,
+    commandDispatcher as never
   );
-  return { executor, runtimeService, config, workerHost };
+  return { executor, runtimeService, config, registry, commandDispatcher };
 }
 
 function makeStartInput(placement = makePlacement(), runId = "run-1") {
@@ -103,7 +106,7 @@ describe("SandboxInstanceExecutor", () => {
   });
 
   it("acquire creates the resource via RuntimeService and resolves ready", async () => {
-    const { executor, runtimeService, workerHost } = makeService();
+    const { executor, runtimeService, registry } = makeService();
 
     const result = await executor.acquireInstanceForRun(makeStartInput());
 
@@ -119,7 +122,7 @@ describe("SandboxInstanceExecutor", () => {
       outcome: "ready",
       runtimeInstanceId: "docker-resource-1",
     });
-    expect(workerHost.upsertRunningRuntime).toHaveBeenCalledWith(
+    expect(registry.upsertRunning).toHaveBeenCalledWith(
       expect.objectContaining({ ownerId: "ws-1" }),
       "ws-1",
       "docker-resource-1"
@@ -184,16 +187,16 @@ describe("SandboxInstanceExecutor", () => {
   it("acquire resolves error when the container fails to create", async () => {
     const runtimeService = makeRuntimeService();
     runtimeService.getOrCreateSandbox.mockRejectedValue(new Error("boom"));
-    const { executor, workerHost } = makeService(runtimeService);
+    const { executor, commandDispatcher } = makeService(runtimeService);
 
     const result = await executor.acquireInstanceForRun(makeStartInput());
 
     expect(result.outcome).toBe("error");
-    expect(workerHost.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
+    expect(commandDispatcher.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
   });
 
   it("release after ready lets the idle watchdog stop the container", async () => {
-    const { executor, runtimeService, workerHost } = makeService();
+    const { executor, runtimeService, registry } = makeService();
 
     await executor.acquireInstanceForRun(makeStartInput());
     executor.releaseInstanceForRun("run-1");
@@ -203,7 +206,7 @@ describe("SandboxInstanceExecutor", () => {
       "docker",
       "docker-resource-1"
     );
-    expect(workerHost.markRuntimeStoppedByOwner).toHaveBeenCalledWith(
+    expect(registry.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"
@@ -211,7 +214,8 @@ describe("SandboxInstanceExecutor", () => {
   });
 
   it("shutdownRuntimeInstanceByOwnerId stops the resource and cleans worker-host owner state", async () => {
-    const { executor, runtimeService, workerHost } = makeService();
+    const { executor, runtimeService, registry, commandDispatcher } =
+      makeService();
 
     await executor.acquireInstanceForRun(makeStartInput());
     executor.shutdownRuntimeInstanceByOwnerId("ws-1");
@@ -221,8 +225,8 @@ describe("SandboxInstanceExecutor", () => {
       "docker",
       "docker-resource-1"
     );
-    expect(workerHost.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
-    expect(workerHost.markRuntimeStoppedByOwner).toHaveBeenCalledWith(
+    expect(commandDispatcher.cleanupByOwnerId).toHaveBeenCalledWith("ws-1");
+    expect(registry.markStoppedByOwner).toHaveBeenCalledWith(
       "sandbox",
       "workspace",
       "ws-1"

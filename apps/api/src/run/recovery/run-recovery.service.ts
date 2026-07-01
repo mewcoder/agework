@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { RunRepository } from "../run.repository";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { ExecutionService } from "../execution/execution.service";
 import { ConversationService } from "../../conversation/conversation.service";
 import { swallow } from "../../common/swallow";
@@ -18,7 +18,7 @@ export class RunRecoveryService {
     private readonly runRepository: RunRepository,
     private readonly conversations: ConversationService,
     private readonly executionService: ExecutionService,
-    private readonly runtimeService: RuntimeService
+    private readonly workerHost: WorkerHostService
   ) {}
 
   async recoverInterruptedRuns(): Promise<void> {
@@ -87,7 +87,7 @@ export class RunRecoveryService {
     runtimeInstanceId: string,
     runtimeType: string
   ): Promise<boolean> {
-    const userScoped = await this.runtimeService
+    const userScoped = await this.workerHost
       .isRuntimeInstanceUserScoped(runtimeType, runtimeInstanceId)
       .catch(() => true);
     return !userScoped;
