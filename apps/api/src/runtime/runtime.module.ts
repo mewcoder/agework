@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common";
 
 // core
-import { WorkspaceRuntimeInstanceRepository } from "./instances/workspace-runtime-instance.repository";
 import { RuntimeInstanceLifecycleService } from "./instances/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./instances/lifecycle.listener";
 
@@ -39,7 +38,6 @@ import { WorkerHostModule } from "../worker-host/worker-host.module";
   controllers: [AdminRuntimeController],
   providers: [
     // core
-    WorkspaceRuntimeInstanceRepository,
     RuntimeInstanceLifecycleService,
     RuntimeInstanceLifecycleListener,
     // providers
