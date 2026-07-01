@@ -240,7 +240,9 @@ describe("RuntimeService", () => {
   describe("sandbox engine facade", () => {
     it("getOrCreateSandbox delegates to the resolved engine", async () => {
       const input = { placement: {} } as never;
-      await expect(service.getOrCreateSandbox("docker", input)).resolves.toEqual({
+      await expect(
+        service.getOrCreateSandbox("docker", input)
+      ).resolves.toEqual({
         engineType: "docker",
         runtimeInstanceId: "container-1",
         workspaceMountPath: "/workspace",
@@ -262,7 +264,11 @@ describe("RuntimeService", () => {
 
     it("resumeSandbox returns undefined when the engine has no resume support", () => {
       engine.resume = undefined;
-      const result = service.resumeSandbox("docker", "container-1", {} as never);
+      const result = service.resumeSandbox(
+        "docker",
+        "container-1",
+        {} as never
+      );
       expect(result).toBeUndefined();
     });
 

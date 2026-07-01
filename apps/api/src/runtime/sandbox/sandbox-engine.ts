@@ -7,7 +7,6 @@ export type {
 
 import type {
   SandboxEngineType,
-  SandboxPlacement,
   SandboxStartInput,
   SandboxRuntime,
 } from "../runtime.types";

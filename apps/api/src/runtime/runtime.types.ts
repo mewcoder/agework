@@ -1,4 +1,8 @@
-import type { IsolationScope, RuntimePlacement, SandboxRuntimePlacement } from "@agework/shared/protocol";
+import type {
+  IsolationScope,
+  RuntimePlacement,
+  SandboxRuntimePlacement,
+} from "@agework/shared/protocol";
 
 // ── Sandbox engine 契约类型(worker-host 的 SandboxInstanceExecutor 与 runtime 的
 // DockerSandboxEngine/OpenSandboxEngine 共用,是这两个模块之间唯一合法的类型契约面) ──

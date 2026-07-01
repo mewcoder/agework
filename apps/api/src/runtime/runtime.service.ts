@@ -106,7 +106,10 @@ export class RuntimeService {
   }
 
   /** 停止(不销毁)一个 sandbox 运行环境。 */
-  stopSandbox(engineType: SandboxEngineType, runtimeInstanceId: string): Promise<void> {
+  stopSandbox(
+    engineType: SandboxEngineType,
+    runtimeInstanceId: string
+  ): Promise<void> {
     return this.resolveSandboxEngine(engineType).stop(runtimeInstanceId);
   }
 
@@ -115,7 +118,9 @@ export class RuntimeService {
     for (const engine of this.sandboxEngines.values()) {
       await engine
         .recoverOrphan(runtimeInstanceId)
-        .catch(swallow(this.logger, `recover orphan via ${engine.type} engine`));
+        .catch(
+          swallow(this.logger, `recover orphan via ${engine.type} engine`)
+        );
     }
   }
 
