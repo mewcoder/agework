@@ -32,7 +32,8 @@ function makeService() {
   const service = new WorkerHostService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
-    commandDispatcher as unknown as WorkerCommandDispatcher
+    commandDispatcher as unknown as WorkerCommandDispatcher,
+    {} as unknown as WorkerRegistryRepository
   );
   return { service, endpointHandler, upstream, commandDispatcher };
 }
