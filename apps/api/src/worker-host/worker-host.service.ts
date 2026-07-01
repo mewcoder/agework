@@ -10,6 +10,7 @@ import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
+import { runtimeInstanceDiagnostics } from "./registry/worker-registry-metadata";
 
 @Injectable()
 export class WorkerHostService {
@@ -196,5 +197,10 @@ export class WorkerHostService {
   /** 删除某个 workspace 的 runtime 绑定关系。 */
   deleteRuntimeWorkspaceBinding(workspaceId: string) {
     return this.registry.deleteWorkspaceBinding(workspaceId);
+  }
+
+  /** 把 RuntimeInstance 的 metadata JSON 转成结构化诊断信息,供 admin 展示用。 */
+  buildRuntimeDiagnostics(metadata: unknown) {
+    return runtimeInstanceDiagnostics(metadata);
   }
 }

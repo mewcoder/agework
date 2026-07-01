@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import type {
   AcquireInstanceResult,
   RuntimeTarget,
@@ -15,7 +15,6 @@ import {
 import { RuntimeProviderRegistry } from "./providers/provider-registry";
 import { SandboxRuntimeInstanceService } from "./sandbox/sandbox-instance.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
-import { runtimeInstanceDiagnostics } from "../worker-host/registry/worker-registry-metadata";
 
 type RuntimeInstanceRow = {
   id: string;
@@ -43,7 +42,6 @@ type RuntimeInstanceRow = {
  */
 @Injectable()
 export class RuntimeService {
-  private readonly logger = new Logger(RuntimeService.name);
   private readonly defaults: RuntimeTargetDefaults;
 
   constructor(
@@ -187,7 +185,9 @@ export class RuntimeService {
   }
 
   private toRuntimeInstanceResponse(resource: RuntimeInstanceRow) {
-    const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
+    const diagnostics = this.workerHost.buildRuntimeDiagnostics(
+      resource.metadata
+    );
     const workspaceRuntimes = resource.workspaceRuntimeInstances?.map(
       (binding) => ({
         id: binding.id,

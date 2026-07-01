@@ -44,6 +44,10 @@ describe("RuntimeService", () => {
       findRuntimeById: vi.fn().mockResolvedValue(null),
       markRuntimeStoppedById: vi.fn().mockResolvedValue(undefined),
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
+      // 直接透传 metadata 当诊断信息:测试只关心 toRuntimeInstanceResponse 有没有
+      // 正确调用并合并结果,不重复验证 runtimeInstanceDiagnostics 自己的提取逻辑
+      // (那部分已在 worker-registry-metadata.spec.ts 里测过)。
+      buildRuntimeDiagnostics: vi.fn((metadata) => metadata as never),
     };
     providerRegistry = new RuntimeProviderRegistry([sandboxProvider]);
     resolveSpy = vi.spyOn(providerRegistry, "resolve");

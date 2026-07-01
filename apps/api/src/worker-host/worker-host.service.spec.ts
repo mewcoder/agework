@@ -224,4 +224,17 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
     );
     expect(result).toEqual({ id: "x" });
   });
+
+  it("buildRuntimeDiagnostics extracts known fields from a metadata blob", () => {
+    const result = service.buildRuntimeDiagnostics({
+      ownerId: "ws-1",
+      statusReason: "running",
+      lastSeenAt: "2026-06-25T00:00:00.000Z",
+    });
+    expect(result).toMatchObject({
+      ownerId: "ws-1",
+      statusReason: "running",
+      lastSeenAt: "2026-06-25T00:00:00.000Z",
+    });
+  });
 });
