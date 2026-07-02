@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit } from "@nestjs/common";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { WorkerEventService } from "../worker-event/worker-event.service";
+import { WorkerEventService } from "../upstream/worker-event.service";
 
 @Injectable()
 export class RunStartupService implements OnModuleInit {

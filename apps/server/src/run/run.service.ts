@@ -10,7 +10,7 @@ import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { WorkerHostService } from "../worker-host/worker-host.service";
-import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
+import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
 import type { StartRunInput } from "./run.types";
@@ -40,7 +40,7 @@ export class RunService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     if (this.recoveryStarted) return;
     this.recoveryStarted = true;
-    await this.runRecovery.recoverInterruptedRuns();
+    await this.runRecovery.failInterruptedRuns();
   }
 
   /** 管理端：分页查询 run 列表。 */

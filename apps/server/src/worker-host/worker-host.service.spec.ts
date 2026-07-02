@@ -269,9 +269,22 @@ describe("WorkerHostService local instance orchestration", () => {
     return { service, localInstances, commandDispatcher };
   }
 
-  it("sendCommand routes through the local channel when one is registered for the owner", () => {
+  // 把 owner 记录成 local 的唯一入口是 resolveInstance(按权威 placement),这是后续命令
+  // 路由到本地 channel 的前提;没经过 resolveInstance 的 owner 一律回落 HTTP dispatcher。
+  async function markOwnerLocal(
+    service: WorkerHostService,
+    ownerId: string,
+    runId = "run-1"
+  ) {
+    await service.resolveInstance({
+      runtimeTarget: { runtimeType: "local", ownerId },
+      runConfig: { runId },
+    } as never);
+  }
+
+  it("sendCommand routes through the local executor after a local instance was resolved for the owner", async () => {
     const { service, localInstances, commandDispatcher } = makeService();
-    localInstances.getChannel.mockReturnValue({});
+    await markOwnerLocal(service, "ws-1");
 
     service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
 
@@ -281,9 +294,8 @@ describe("WorkerHostService local instance orchestration", () => {
     expect(commandDispatcher.sendCommand).not.toHaveBeenCalled();
   });
 
-  it("sendCommand falls back to the HTTP queue when no local channel is registered", () => {
+  it("sendCommand falls back to the HTTP queue for an owner with no resolved local instance", () => {
     const { service, localInstances, commandDispatcher } = makeService();
-    localInstances.getChannel.mockReturnValue(undefined);
 
     service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
 
@@ -297,9 +309,9 @@ describe("WorkerHostService local instance orchestration", () => {
     expect(localInstances.sendCommand).not.toHaveBeenCalled();
   });
 
-  it("openSession routes through the local channel when one is registered for the owner", () => {
+  it("openSession routes through the local executor after a local instance was resolved for the owner", async () => {
     const { service, localInstances, commandDispatcher } = makeService();
-    localInstances.getChannel.mockReturnValue({});
+    await markOwnerLocal(service, "ws-1");
     const params = { runId: "run-1", ownerId: "ws-1", runConfig: {} as never };
 
     service.openSession(params);
@@ -453,14 +465,33 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
     expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
   });
 
-  it("releaseInstanceForRun dispatches by runtimeType", () => {
+  it("releaseInstanceForRun dispatches by the kind recorded at resolveInstance", async () => {
     const { service, sandboxInstances, localInstances } = makeService();
-    service.releaseInstanceForRun("local", "run-1");
-    service.releaseInstanceForRun("sandbox", "run-2");
+    await service.resolveInstance({
+      runtimeTarget: { runtimeType: "local", ownerId: "ws-1" },
+      runConfig: { runId: "run-1" },
+    } as never);
+    await service.resolveInstance({
+      runtimeTarget: { runtimeType: "sandbox", ownerId: "ws-2" },
+      runConfig: { runId: "run-2" },
+    } as never);
+
+    service.releaseInstanceForRun("run-1");
+    service.releaseInstanceForRun("run-2");
+
     expect(localInstances.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
     expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
       "run-2"
     );
+  });
+
+  it("releaseInstanceForRun falls back to the sandbox executor for an unrecorded run", () => {
+    const { service, sandboxInstances, localInstances } = makeService();
+    service.releaseInstanceForRun("run-x");
+    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
+      "run-x"
+    );
+    expect(localInstances.releaseInstanceForRun).not.toHaveBeenCalled();
   });
 
   it("shutdownInstanceByOwnerId dispatches by runtimeType", () => {

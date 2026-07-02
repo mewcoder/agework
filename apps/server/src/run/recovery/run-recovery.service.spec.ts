@@ -14,7 +14,7 @@ function makeWorkerHost(
   };
 }
 
-describe("RunRecoveryService.recoverInterruptedRuns", () => {
+describe("RunRecoveryService.failInterruptedRuns", () => {
   it("sends a cancel command to the bound instance instead of tearing it down", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
@@ -40,7 +40,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       workerHost as WorkerHostService
     );
 
-    await service.recoverInterruptedRuns();
+    await service.failInterruptedRuns();
 
     expect(workerHost.findRuntimeByRuntimeId).toHaveBeenCalledWith(
       "sandbox",
@@ -88,7 +88,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       workerHost as WorkerHostService
     );
 
-    await service.recoverInterruptedRuns();
+    await service.failInterruptedRuns();
 
     expect(workerHost.findRuntimeByRuntimeId).not.toHaveBeenCalled();
     expect(workerHost.sendCommand).not.toHaveBeenCalled();
@@ -104,8 +104,8 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
         {
           id: "run-1",
           conversationId: "conversation-1",
-          runtimeType: "local",
-          runtimeInstanceId: "4242:token",
+          runtimeType: "sandbox",
+          runtimeInstanceId: "container-xyz",
         },
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
@@ -123,8 +123,48 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
       workerHost as WorkerHostService
     );
 
-    await service.recoverInterruptedRuns();
+    await service.failInterruptedRuns();
 
+    expect(workerHost.findRuntimeByRuntimeId).toHaveBeenCalledWith(
+      "sandbox",
+      "container-xyz"
+    );
+    expect(workerHost.sendCommand).not.toHaveBeenCalled();
+    expect(mockRunRepository.markError).toHaveBeenCalledWith(
+      "run-1",
+      "服务重启导致运行中断"
+    );
+  });
+
+  it("skips the cancel command for a local runtime even when an instance is bound (lifecycle already reaped it)", async () => {
+    const mockRunRepository: Partial<RunRepository> = {
+      findAllActive: vi.fn().mockResolvedValue([
+        {
+          id: "run-1",
+          conversationId: "conversation-1",
+          runtimeType: "local",
+          runtimeInstanceId: "4242:token",
+        },
+      ]),
+      markError: vi.fn().mockResolvedValue(undefined),
+    };
+    const mockConversations: Partial<ConversationService> = {
+      setRunStatus: vi.fn().mockResolvedValue(undefined),
+    };
+    const workerHost = makeWorkerHost({
+      findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
+    });
+
+    const service = new RunRecoveryService(
+      mockRunRepository as RunRepository,
+      mockConversations as ConversationService,
+      workerHost as WorkerHostService
+    );
+
+    await service.failInterruptedRuns();
+
+    // local 分支在查 WorkerRegistry 之前就早退,连 findRuntimeByRuntimeId 都不该调。
+    expect(workerHost.findRuntimeByRuntimeId).not.toHaveBeenCalled();
     expect(workerHost.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",

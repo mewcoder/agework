@@ -56,33 +56,34 @@ export class RuntimeService {
 
   // ── sandbox engine 引擎面 ──────────────────────────────────────────
 
-  /** 按 engineType 拿到或新建一个 sandbox 运行时实例。 */
-  getOrCreateSandbox(
+  /**
+   * 取得(或复用)一个 sandbox 运行时并在其上拉起 worker,一步返回就绪实例。
+   * getOrCreate + startWorker 的引擎时序收在 runtime 内,worker-host 只需调一次。
+   */
+  async startSandbox(
     engineType: SandboxEngineType,
     input: SandboxStartInput
   ): Promise<SandboxRuntime> {
-    return this.resolveSandboxEngine(engineType).getOrCreate(input);
+    const engine = this.resolveSandboxEngine(engineType);
+    const runtime = await engine.getOrCreate(input);
+    await engine.startWorker(runtime, input);
+    return runtime;
   }
 
-  /** 恢复一个已存在的 sandbox 运行时;引擎不支持 resume 时返回 undefined。 */
-  resumeSandbox(
+  /**
+   * 恢复一个此前被 stop() 的 sandbox 并重新拉起 worker。引擎不支持 resume(或 resume
+   * 返回空)时返回 undefined,由调用方决定是否退回 startSandbox 全新创建。
+   */
+  async resumeSandbox(
     engineType: SandboxEngineType,
     runtimeInstanceId: string,
     input: SandboxStartInput
-  ): Promise<SandboxRuntime> | undefined {
-    return this.resolveSandboxEngine(engineType).resume?.(
-      runtimeInstanceId,
-      input
-    );
-  }
-
-  /** 在指定 sandbox 运行时上启动 worker 进程。 */
-  startSandboxWorker(
-    engineType: SandboxEngineType,
-    runtime: SandboxRuntime,
-    input: SandboxStartInput
-  ): Promise<void> {
-    return this.resolveSandboxEngine(engineType).startWorker(runtime, input);
+  ): Promise<SandboxRuntime | undefined> {
+    const engine = this.resolveSandboxEngine(engineType);
+    const runtime = await engine.resume?.(runtimeInstanceId, input);
+    if (!runtime) return undefined;
+    await engine.startWorker(runtime, input);
+    return runtime;
   }
 
   /** 停止指定的 sandbox 运行时实例。 */

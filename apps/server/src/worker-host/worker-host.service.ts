@@ -17,8 +17,8 @@ import { WorkerRegistryRepository } from "./registry/worker-registry.repository"
 import { runtimeInstanceDiagnostics } from "./registry/worker-registry-metadata";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
-import { SandboxInstanceExecutor } from "./sandbox/sandbox-instance.executor";
-import { LocalInstanceExecutor } from "./local/local-instance.executor";
+import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.executor";
+import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
 
 type RuntimeInstanceRow = {
   id: string;
@@ -41,6 +41,15 @@ type RuntimeInstanceRow = {
 
 @Injectable()
 export class WorkerHostService {
+  /**
+   * 本进程内被判定为 local 的 owner / run —— 在 resolveInstance 按权威 placement
+   * 记录一次,后续 release / openSession / sendCommand 据此路由。不在集合里的一律按
+   * sandbox / HTTP dispatcher 处理:这天然覆盖重启恢复(内存清空后 owner/run 都不在
+   * 集合里,回落 dispatcher),也是 run 层不再需要回传 runtimeType 的原因。
+   */
+  private readonly localOwners = new Set<string>();
+  private readonly localRuns = new Set<string>();
+
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
@@ -69,31 +78,32 @@ export class WorkerHostService {
     return this.endpointHandler.postEvent(runId, body);
   }
 
-  /** 为一次 run 打开命令下行会话，按 owner 是否为 local channel 内部分流。 */
+  /** 为一次 run 打开命令下行会话,按 resolveInstance 记录的 owner 归属内部分流。 */
   openSession(params: {
     runId: string;
     ownerId: string;
     runConfig: RunConfig;
   }): void {
-    if (this.localInstances.getChannel(params.ownerId)) {
+    if (this.localOwners.has(params.ownerId)) {
       this.localInstances.openSession(params.ownerId, params.runConfig);
       return;
     }
     this.commandDispatcher.openSession(params);
   }
 
-  /** 向 owner 下发一条命令，按 owner 是否为 local channel 内部分流。 */
+  /** 向 owner 下发一条命令,按 resolveInstance 记录的 owner 归属内部分流。 */
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
-    if (this.localInstances.getChannel(ownerId)) {
+    if (this.localOwners.has(ownerId)) {
       this.localInstances.sendCommand(ownerId, command);
       return;
     }
     this.commandDispatcher.sendCommand(ownerId, runId, command);
   }
 
-  /** run 结束时清理该 run 在命令队列里的残留状态。 */
+  /** run 结束时清理该 run 在命令队列里的残留状态,并忘掉它的 local 归属记录。 */
   cleanupRun(runId: string): void {
     this.commandDispatcher.cleanupRun(runId);
+    this.localRuns.delete(runId);
   }
 
   /** 按 ownerId 清理命令队列/会话状态。 */
@@ -129,27 +139,39 @@ export class WorkerHostService {
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
     if (input.runtimeTarget.runtimeType === "local") {
+      // local 是唯一需要特殊路由的分支(本进程持有 IPC channel)。按权威 placement
+      // 记录 owner/run,后续 release / openSession / sendCommand 据此路由,run 层不回传 runtimeType。
+      const { ownerId } = input.runtimeTarget;
+      if (ownerId) this.localOwners.add(ownerId);
+      if (input.runConfig?.runId) this.localRuns.add(input.runConfig.runId);
       return this.localInstances.acquireInstanceForRun(input);
     }
     return this.sandboxInstances.acquireInstanceForRun(input);
   }
 
-  /** 释放一次 run 对 runtime 实例的引用,按 runtimeType 内部分流。 */
-  releaseInstanceForRun(runtimeType: string, runId: string): void {
-    if (runtimeType === "local") {
+  /**
+   * 释放一次 run 对 runtime 实例的引用;local/sandbox 分流按 resolveInstance 记录的归属,
+   * 调用方不再传 runtimeType。未记录的 runId 按 sandbox 处理(sandbox 侧对未知 runId 幂等 no-op)。
+   */
+  releaseInstanceForRun(runId: string): void {
+    if (this.localRuns.has(runId)) {
       this.localInstances.releaseInstanceForRun(runId);
       return;
     }
     this.sandboxInstances.releaseInstanceForRun(runId);
   }
 
-  /** 终止并清理指定 owner 的 runtime 实例,按 runtimeType 内部分流。 */
+  /**
+   * 终止并清理指定 owner 的 runtime 实例。runtimeType 由 admin / 生命周期路径从 DB 取出后
+   * 传入(权威来源),故这里仍按参数分流;顺带清掉本进程对该 owner 的 local 归属记录。
+   */
   shutdownInstanceByOwnerId(runtimeType: string, ownerId: string): void {
     if (runtimeType === "local") {
       this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
-      return;
+    } else {
+      this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
     }
-    this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
+    this.localOwners.delete(ownerId);
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry

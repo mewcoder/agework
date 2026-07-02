@@ -40,7 +40,7 @@ describe("RunService", () => {
       getRuntimeInstanceForAdmin: vi.fn().mockResolvedValue(null),
     };
     mockRunRecovery = {
-      recoverInterruptedRuns: vi.fn().mockResolvedValue(undefined),
+      failInterruptedRuns: vi.fn().mockResolvedValue(undefined),
     };
 
     service = new RunService(
@@ -71,7 +71,7 @@ describe("RunService", () => {
       await service.onApplicationBootstrap();
       await service.onApplicationBootstrap();
 
-      expect(mockRunRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
+      expect(mockRunRecovery.failInterruptedRuns).toHaveBeenCalledTimes(1);
     });
   });
 

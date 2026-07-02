@@ -124,10 +124,7 @@ describe.each(["local", "sandbox"] as const)(
       executor.cleanup("run-1");
 
       expect(workerHost.cleanupRun).toHaveBeenCalledWith("run-1");
-      expect(workerHost.releaseInstanceForRun).toHaveBeenCalledWith(
-        runtimeType,
-        "run-1"
-      );
+      expect(workerHost.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
     });
   }
 );

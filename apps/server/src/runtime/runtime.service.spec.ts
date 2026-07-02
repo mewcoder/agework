@@ -82,19 +82,21 @@ describe("RuntimeService", () => {
   });
 
   describe("sandbox engine facade", () => {
-    it("getOrCreateSandbox delegates to the resolved engine", async () => {
+    it("startSandbox creates the runtime and starts the worker in one step", async () => {
       const input = { placement: {} } as never;
-      await expect(
-        service.getOrCreateSandbox("docker", input)
-      ).resolves.toEqual({
+      await expect(service.startSandbox("docker", input)).resolves.toEqual({
         engineType: "docker",
         runtimeInstanceId: "container-1",
         workspaceMountPath: "/workspace",
       });
       expect(engine.getOrCreate).toHaveBeenCalledWith(input);
+      expect(engine.startWorker).toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeInstanceId: "container-1" }),
+        input
+      );
     });
 
-    it("resumeSandbox delegates to the resolved engine's resume method", async () => {
+    it("resumeSandbox resumes the engine then starts the worker", async () => {
       const input = { placement: {} } as never;
       await expect(
         service.resumeSandbox("docker", "container-1", input)
@@ -104,27 +106,18 @@ describe("RuntimeService", () => {
         workspaceMountPath: "/workspace",
       });
       expect(engine.resume).toHaveBeenCalledWith("container-1", input);
-    });
-
-    it("resumeSandbox returns undefined when the engine has no resume support", () => {
-      engine.resume = undefined;
-      const result = service.resumeSandbox(
-        "docker",
-        "container-1",
-        {} as never
+      expect(engine.startWorker).toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeInstanceId: "container-1" }),
+        input
       );
-      expect(result).toBeUndefined();
     });
 
-    it("startSandboxWorker delegates to the resolved engine", async () => {
-      const runtime = {
-        engineType: "docker",
-        runtimeInstanceId: "container-1",
-        workspaceMountPath: "/workspace",
-      } as never;
-      const input = {} as never;
-      await service.startSandboxWorker("docker", runtime, input);
-      expect(engine.startWorker).toHaveBeenCalledWith(runtime, input);
+    it("resumeSandbox returns undefined (and skips startWorker) when the engine has no resume support", async () => {
+      engine.resume = undefined;
+      await expect(
+        service.resumeSandbox("docker", "container-1", {} as never)
+      ).resolves.toBeUndefined();
+      expect(engine.startWorker).not.toHaveBeenCalled();
     });
 
     it("stopSandbox delegates to the resolved engine", async () => {

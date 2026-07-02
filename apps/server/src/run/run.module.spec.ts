@@ -10,7 +10,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunService } from "./run.service";
-import { WorkerEventService } from "./worker-event/worker-event.service";
+import { WorkerEventService } from "./upstream/worker-event.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
 import { RunModule } from "./run.module";
 import { RunStartupService } from "./startup/run-startup.service";
@@ -28,7 +28,7 @@ class DownstreamRunConsumerModule {}
 
 describe("RunModule wiring", () => {
   let testingModule: TestingModule | undefined;
-  let runRecovery: { recoverInterruptedRuns: ReturnType<typeof vi.fn> };
+  let runRecovery: { failInterruptedRuns: ReturnType<typeof vi.fn> };
 
   afterEach(async () => {
     await testingModule?.close();
@@ -60,7 +60,7 @@ describe("RunModule wiring", () => {
     expect(setUpstreamPort).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorPort).toHaveBeenCalledWith(workerEvents);
     // run 自身在 onApplicationBootstrap 触发一次性重启恢复（不再依赖反向端口接线）
-    expect(runRecovery.recoverInterruptedRuns).toHaveBeenCalledTimes(1);
+    expect(runRecovery.failInterruptedRuns).toHaveBeenCalledTimes(1);
   });
 
   it("exports RunService to downstream modules", async () => {
@@ -77,10 +77,10 @@ async function createRunsTestingModule(
   runImports: Parameters<typeof Test.createTestingModule>[0]["imports"]
 ): Promise<{
   testingModule: TestingModule;
-  runRecovery: { recoverInterruptedRuns: ReturnType<typeof vi.fn> };
+  runRecovery: { failInterruptedRuns: ReturnType<typeof vi.fn> };
 }> {
   const recovery = {
-    recoverInterruptedRuns: vi.fn().mockResolvedValue(undefined),
+    failInterruptedRuns: vi.fn().mockResolvedValue(undefined),
   };
   const module = await Test.createTestingModule({
     imports: [ConfigModule, PrismaModule, ...(runImports ?? [])],

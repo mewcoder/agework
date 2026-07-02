@@ -4,8 +4,8 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
-import { SandboxInstanceExecutor } from "../sandbox/sandbox-instance.executor";
-import { LocalInstanceExecutor } from "../local/local-instance.executor";
+import { SandboxInstanceExecutor } from "../sandbox-instance/sandbox-instance.executor";
+import { LocalInstanceExecutor } from "../local-instance/local-instance.executor";
 import { swallow } from "../../common/swallow";
 
 /**

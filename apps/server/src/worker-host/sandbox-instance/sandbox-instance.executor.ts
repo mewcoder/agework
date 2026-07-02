@@ -546,17 +546,10 @@ export class SandboxInstanceExecutor {
           resumeRuntimeInstanceId,
           input
         );
-        if (runtime) {
-          await this.runtimeService.startSandboxWorker(
-            context.engineType,
-            runtime,
-            input
-          );
-          return runtime;
-        }
+        if (runtime) return runtime;
       } catch (err) {
         this.logger.warn(
-          `resume failed, falling back to getOrCreate ${safeLogJson({
+          `resume failed, falling back to fresh sandbox ${safeLogJson({
             resumeRuntimeInstanceId,
             ...errorLogFields(err),
           })}`
@@ -564,16 +557,7 @@ export class SandboxInstanceExecutor {
       }
     }
 
-    const runtime = await this.runtimeService.getOrCreateSandbox(
-      context.engineType,
-      input
-    );
-    await this.runtimeService.startSandboxWorker(
-      context.engineType,
-      runtime,
-      input
-    );
-    return runtime;
+    return this.runtimeService.startSandbox(context.engineType, input);
   }
 
   private handleIdle(ownerId: string): void {

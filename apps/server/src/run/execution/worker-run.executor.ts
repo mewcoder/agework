@@ -91,7 +91,7 @@ export class WorkerRunExecutor implements RunExecutor {
 
     // outcome === "ready"：取消若早于就绪到达，释放实例并转 cancelled 终态，不开 session。
     if (state.cancelled) {
-      this.workerHost.releaseInstanceForRun(state.handle.runtimeType, runId);
+      this.workerHost.releaseInstanceForRun(runId);
       this.states.delete(runId);
       this.notifyCancelledBeforeReady(runId);
       return;
@@ -144,7 +144,7 @@ export class WorkerRunExecutor implements RunExecutor {
     // 实例 ready 之前到达的取消不下发命令：标记 cancelled，由 resolveInstance 就绪
     // 那刻转 cancelled 终态。
     state.cancelled = true;
-    this.workerHost.releaseInstanceForRun(handle.runtimeType, handle.runId);
+    this.workerHost.releaseInstanceForRun(handle.runId);
   }
 
   private recordCommandSent(runId: string, command: CommandPayload): void {
@@ -198,15 +198,11 @@ export class WorkerRunExecutor implements RunExecutor {
   }
 
   cleanup(runId: string): void {
-    // releaseInstanceForRun 需要 runtimeType 才能路由到 sandbox/local；这个 executor
-    // 不再像旧的按类型分开的两个类那样自带类型，只能从 state 里取——state 不存在
-    // （重复 cleanup / 从未 start 过）时没有 runtimeType 可用，跳过即可，因为对应的
-    // acquire 侧状态同样不存在，没有东西需要释放。
-    const state = this.states.get(runId);
+    // local/sandbox 路由现在收在 worker-host 内部（resolveInstance 时按 owner/run 记录），
+    // release 只需 runId；worker-host 查不到该 runId 就按 sandbox 处理（对未知 runId 幂等
+    // no-op），因此这里不再需要先取 state 拿 runtimeType，直接清理 + 释放即可。
     this.workerHost.cleanupRun(runId);
-    if (state) {
-      this.workerHost.releaseInstanceForRun(state.handle.runtimeType, runId);
-    }
+    this.workerHost.releaseInstanceForRun(runId);
     this.states.delete(runId);
   }
 }

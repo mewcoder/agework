@@ -21,7 +21,7 @@ import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
-} from "../worker-event/assistant-message.aggregator";
+} from "../upstream/assistant-message.aggregator";
 import {
   ConfigService,
   type IsolationScope,

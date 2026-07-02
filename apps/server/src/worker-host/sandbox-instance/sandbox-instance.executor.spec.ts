@@ -8,13 +8,12 @@ import { SandboxInstanceExecutor } from "./sandbox-instance.executor";
 function makeRuntimeService() {
   let nextId = 0;
   return {
-    getOrCreateSandbox: vi.fn().mockImplementation(async () => ({
+    startSandbox: vi.fn().mockImplementation(async () => ({
       engineType: "docker",
       runtimeInstanceId: `docker-resource-${++nextId}`,
       workspaceMountPath: "/workspace",
     })),
     resumeSandbox: vi.fn(),
-    startSandboxWorker: vi.fn().mockResolvedValue(undefined),
     stopSandbox: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -112,14 +111,13 @@ describe("SandboxInstanceExecutor", () => {
 
     const result = await executor.acquireInstanceForRun(makeStartInput());
 
-    expect(runtimeService.getOrCreateSandbox).toHaveBeenCalledWith(
+    expect(runtimeService.startSandbox).toHaveBeenCalledWith(
       "docker",
       expect.objectContaining({
         placement: expect.objectContaining({ ownerId: "ws-1" }),
         env: expect.objectContaining({ AGEWORK_WORKER_OWNER_ID: "ws-1" }),
       })
     );
-    expect(runtimeService.startSandboxWorker).toHaveBeenCalled();
     expect(result).toEqual({
       outcome: "ready",
       runtimeInstanceId: "docker-resource-1",
@@ -139,7 +137,7 @@ describe("SandboxInstanceExecutor", () => {
   it("acquire attaches a second run of the same owner to the pending container", async () => {
     const runtimeService = makeRuntimeService();
     let resolveGetOrCreate: (runtime: unknown) => void;
-    runtimeService.getOrCreateSandbox.mockImplementation(
+    runtimeService.startSandbox.mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveGetOrCreate = resolve;
@@ -167,13 +165,13 @@ describe("SandboxInstanceExecutor", () => {
       runtimeInstanceId: "docker-resource-1",
     });
     // 一个 owner 只创建一个容器,第二个 run 复用 pending。
-    expect(runtimeService.getOrCreateSandbox).toHaveBeenCalledTimes(1);
+    expect(runtimeService.startSandbox).toHaveBeenCalledTimes(1);
   });
 
   it("acquire resolves cancelledBeforeReady when released before the container is ready", async () => {
     const runtimeService = makeRuntimeService();
     let resolveGetOrCreate: (runtime: unknown) => void;
-    runtimeService.getOrCreateSandbox.mockImplementation(
+    runtimeService.startSandbox.mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveGetOrCreate = resolve;
@@ -195,7 +193,7 @@ describe("SandboxInstanceExecutor", () => {
 
   it("acquire resolves error when the container fails to create", async () => {
     const runtimeService = makeRuntimeService();
-    runtimeService.getOrCreateSandbox.mockRejectedValue(new Error("boom"));
+    runtimeService.startSandbox.mockRejectedValue(new Error("boom"));
     const { executor, commandDispatcher } = makeService(runtimeService);
 
     const result = await executor.acquireInstanceForRun(makeStartInput());
@@ -286,7 +284,7 @@ describe("SandboxInstanceExecutor", () => {
       outcome: "ready",
       runtimeInstanceId: "docker-resource-existing",
     });
-    expect(runtimeService.getOrCreateSandbox).not.toHaveBeenCalled();
+    expect(runtimeService.startSandbox).not.toHaveBeenCalled();
   });
 
   it("resolves error on insertStarting conflict against a starting row (concurrent launch in progress)", async () => {
@@ -300,12 +298,12 @@ describe("SandboxInstanceExecutor", () => {
     const result = await executor.acquireInstanceForRun(makeStartInput());
 
     expect(result.outcome).toBe("error");
-    expect(runtimeService.getOrCreateSandbox).not.toHaveBeenCalled();
+    expect(runtimeService.startSandbox).not.toHaveBeenCalled();
   });
 
   it("marks the row as error when the container never becomes ready within the launch timeout", async () => {
     const runtimeService = makeRuntimeService();
-    runtimeService.getOrCreateSandbox.mockImplementation(
+    runtimeService.startSandbox.mockImplementation(
       () =>
         new Promise(() => {
           /* never resolves */

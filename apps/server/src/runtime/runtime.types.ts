@@ -53,7 +53,7 @@ export function isSandboxPlacement(
   return placement.runtimeType === "sandbox";
 }
 
-// ── Local Provider 契约类型(run 模块的 WorkerRunExecutor 与 runtime 的
+// ── Local Provider 契约类型(worker-host 的 LocalInstanceExecutor 与 runtime 的
 // LocalRuntimeProvider 之间唯一合法的类型契约面) ──
 
 export type LocalLaunchInput = {
@@ -63,7 +63,7 @@ export type LocalLaunchInput = {
 
 export type LocalInstanceHandle = {
   runtimeInstanceId: string;
-  /** fork() 返回的 ChildProcess——调用方(目前是 run 模块)自行接手后续 IPC 收发。 */
+  /** fork() 返回的 ChildProcess——调用方(worker-host 的 LocalInstanceExecutor)自行接手后续 IPC 收发。 */
   channel: ChildProcess;
 };
 
