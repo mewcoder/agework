@@ -153,6 +153,7 @@ describe("WorkerHostService — facade routing", () => {
       workspaceId: "ws-1",
       workspaceRootPath: "/tmp/ws-1",
       userWorkspaceRootPath: "/tmp/user-1",
+      runtimeType: "local" as const,
     };
     expect(service.resolveRuntimeTarget(input)).toBe(target);
     expect(runtimeService.resolveRuntimeTarget).toHaveBeenCalledWith(input);

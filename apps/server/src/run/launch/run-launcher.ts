@@ -8,6 +8,7 @@ import { join, posix } from "node:path";
 import type { Response } from "express";
 import type {
   AgentProviderConfig,
+  RecordRunEventInput,
   RunConfig,
   RuntimePlacement,
   RuntimeTarget,
@@ -22,10 +23,7 @@ import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
 } from "../upstream/assistant-message.aggregator";
-import {
-  ConfigService,
-  type IsolationScope,
-} from "../../config/config.service";
+import { ConfigService } from "../../config/config.service";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
 import { errorLogFields, safeLogJson } from "../../common/logging";
@@ -159,7 +157,13 @@ export class RunLauncher {
     });
     if (!runtimeHandle) return;
 
-    await this.saveRuntime(runId, runtimeHandle);
+    if (runtimeHandle.runtimeInstanceId) {
+      await this.persistRuntimeHandle(
+        runId,
+        runtimeHandle.runtimeType,
+        runtimeHandle.runtimeInstanceId
+      );
+    }
     this.registerRun({
       runId,
       conversationId,
@@ -174,38 +178,44 @@ export class RunLauncher {
     });
   }
 
+  /** 解析 placement:部署默认值在这里一次性补齐并校验,传给 runtime 的是已解析入参。 */
   private getPlacement(input: {
     workspace: WorkspaceRunContext;
     userId: string;
   }): RuntimeTarget {
     const { workspace, userId } = input;
-    const requestedRuntimeType =
+    const runtimeType =
       workspace.runtimeType ?? this.configService.getDefaultRuntimeType();
-    if (!this.configService.isRuntimeTypeAllowed(requestedRuntimeType)) {
+    if (!this.configService.isRuntimeTypeAllowed(runtimeType)) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
-    let isolationScope: IsolationScope | undefined;
-    if (requestedRuntimeType === "sandbox") {
-      const resolvedIsolationScope =
-        workspace.isolationScope ??
-        this.configService.getDefaultIsolationScope();
-      if (!this.configService.isIsolationScopeAllowed(resolvedIsolationScope)) {
-        throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
-      }
-      isolationScope = resolvedIsolationScope;
-    }
-
-    return this.workerHost.resolveRuntimeTarget({
+    const base = {
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,
       userWorkspaceRootPath: this.configService.getUserWorkspace(
         workspace.username
       ),
-      runtimeType: requestedRuntimeType,
+    };
+    if (runtimeType === "local") {
+      return this.workerHost.resolveRuntimeTarget({
+        ...base,
+        runtimeType: "local",
+      });
+    }
+
+    const isolationScope =
+      workspace.isolationScope ?? this.configService.getDefaultIsolationScope();
+    if (!this.configService.isIsolationScopeAllowed(isolationScope)) {
+      throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
+    }
+    return this.workerHost.resolveRuntimeTarget({
+      ...base,
+      runtimeType: "sandbox",
       isolationScope,
       sandboxEngine:
-        (workspace.sandboxEngine as "docker" | "opensandbox") ?? undefined,
+        (workspace.sandboxEngine as "docker" | "opensandbox" | null) ??
+        this.configService.getSandboxEngine(),
     });
   }
 
@@ -295,29 +305,24 @@ export class RunLauncher {
     );
     if (activated) return;
 
-    try {
-      await this.conversations.findById(userId, conversationId);
-      if (interruptReason === "user_steered") {
-        await stopActiveRun(conversationId, {
-          reason: "user_steered",
-          endResponse: true,
-        });
-        this.logger.log(
-          `active run interrupted by user steering ${safeLogJson({
-            conversationId,
-            runId,
-          })}`
-        );
-        return;
-      }
-
-      throw new ConflictException(
-        "A run is already active for this conversation"
+    await this.conversations.findById(userId, conversationId);
+    if (interruptReason === "user_steered") {
+      await stopActiveRun(conversationId, {
+        reason: "user_steered",
+        endResponse: true,
+      });
+      this.logger.log(
+        `active run interrupted by user steering ${safeLogJson({
+          conversationId,
+          runId,
+        })}`
       );
-    } catch (err) {
-      if (err instanceof ConflictException) throw err;
-      throw err;
+      return;
     }
+
+    throw new ConflictException(
+      "A run is already active for this conversation"
+    );
   }
 
   private async saveUserTurn(input: {
@@ -411,18 +416,17 @@ export class RunLauncher {
         agentType,
         runtimeType,
       });
-      this.runEvents
-        .append(
-          this.runEvents.runCreated({
-            runId,
-            conversationId,
-            workspaceId,
-            agentType,
-            runtimeType,
-            isolationScope,
-          })
-        )
-        .catch(swallow(this.logger, `record run created for run ${runId}`));
+      this.recordRunEvent(
+        this.runEvents.runCreated({
+          runId,
+          conversationId,
+          workspaceId,
+          agentType,
+          runtimeType,
+          isolationScope,
+        }),
+        `record run created for run ${runId}`
+      );
       if (userMessageId) {
         await this.conversations
           .attachMessageToRun(conversationId, userMessageId, runId)
@@ -432,18 +436,15 @@ export class RunLauncher {
               `attach user message ${userMessageId} to run ${runId}`
             )
           );
-        this.runEvents
-          .append(
-            this.runEvents.messageAccepted({
-              runId,
-              conversationId,
-              messageId: userMessageId,
-              userId,
-            })
-          )
-          .catch(
-            swallow(this.logger, `record message accepted for run ${runId}`)
-          );
+        this.recordRunEvent(
+          this.runEvents.messageAccepted({
+            runId,
+            conversationId,
+            messageId: userMessageId,
+            userId,
+          }),
+          `record message accepted for run ${runId}`
+        );
       }
       return true;
     } catch (err) {
@@ -483,43 +484,21 @@ export class RunLauncher {
     } = input;
 
     try {
-      this.runEvents
-        .append(
-          this.runEvents.runtimeStatusChanged({
-            runId,
-            status: "starting",
-            runtimeType,
-            isolationScope,
-            sandboxEngineType,
-          })
-        )
-        .catch(
-          swallow(this.logger, `record runtime starting for run ${runId}`)
-        );
+      this.recordRunEvent(
+        this.runEvents.runtimeStatusChanged({
+          runId,
+          status: "starting",
+          runtimeType,
+          isolationScope,
+          sandboxEngineType,
+        }),
+        `record runtime starting for run ${runId}`
+      );
       return this.executor.start({
         runConfig,
         runtimeTarget,
-        onRuntimeInstanceIdReady: (runtimeInstanceId) => {
-          this.runRepository
-            .updateRuntimeHandle(runId, runtimeType, runtimeInstanceId)
-            .catch(
-              swallow(this.logger, `persist runtime handle for run ${runId}`)
-            );
-          this.runEvents
-            .append(
-              this.runEvents.runtimeStatusChanged({
-                runId,
-                eventKey: `runtime:${runtimeInstanceId}:ready`,
-                status: "ready",
-                targetId: runtimeInstanceId,
-                runtimeType,
-                runtimeInstanceId,
-              })
-            )
-            .catch(
-              swallow(this.logger, `record runtime ready for run ${runId}`)
-            );
-        },
+        onRuntimeInstanceIdReady: (runtimeInstanceId) =>
+          void this.persistRuntimeHandle(runId, runtimeType, runtimeInstanceId),
       });
     } catch (err) {
       this.logger.error(
@@ -565,31 +544,34 @@ export class RunLauncher {
     }
   }
 
-  private async saveRuntime(
+  /**
+   * 落库 runtime handle 并记录 ready 事件。同步就绪(handle 自带 instanceId)与
+   * sandbox 异步回调两条路径共用;eventKey 保证重复记录幂等。
+   */
+  private async persistRuntimeHandle(
     runId: string,
-    runtimeHandle: WorkerExecutionHandle
+    runtimeType: string,
+    runtimeInstanceId: string
   ): Promise<void> {
-    if (runtimeHandle.runtimeInstanceId) {
-      await this.runRepository
-        .updateRuntimeHandle(
-          runId,
-          runtimeHandle.runtimeType,
-          runtimeHandle.runtimeInstanceId
-        )
-        .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
-      this.runEvents
-        .append(
-          this.runEvents.runtimeStatusChanged({
-            runId,
-            eventKey: `runtime:${runtimeHandle.runtimeInstanceId}:ready`,
-            status: "ready",
-            targetId: runtimeHandle.runtimeInstanceId,
-            runtimeType: runtimeHandle.runtimeType,
-            runtimeInstanceId: runtimeHandle.runtimeInstanceId,
-          })
-        )
-        .catch(swallow(this.logger, `record runtime ready for run ${runId}`));
-    }
+    await this.runRepository
+      .updateRuntimeHandle(runId, runtimeType, runtimeInstanceId)
+      .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
+    this.recordRunEvent(
+      this.runEvents.runtimeStatusChanged({
+        runId,
+        eventKey: `runtime:${runtimeInstanceId}:ready`,
+        status: "ready",
+        targetId: runtimeInstanceId,
+        runtimeType,
+        runtimeInstanceId,
+      }),
+      `record runtime ready for run ${runId}`
+    );
+  }
+
+  /** best-effort 记录一条 run 事件:失败只打日志,不影响启动链路。 */
+  private recordRunEvent(event: RecordRunEventInput, context: string): void {
+    this.runEvents.append(event).catch(swallow(this.logger, context));
   }
 
   private registerRun(input: {

@@ -4,7 +4,6 @@ import { ConfigService } from "../config/config.service";
 import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
-  type RuntimeTargetDefaults,
 } from "./placement/runtime-resource";
 import { SANDBOX_ENGINES, type SandboxEngine } from "./sandbox/sandbox-engine";
 import type {
@@ -22,7 +21,6 @@ import type { LocalInstanceHandle, LocalLaunchInput } from "./runtime.types";
  */
 @Injectable()
 export class RuntimeService {
-  private readonly defaults: RuntimeTargetDefaults;
   private readonly sandboxEngines: Map<SandboxEngineType, SandboxEngine>;
 
   constructor(
@@ -30,17 +28,12 @@ export class RuntimeService {
     @Inject(SANDBOX_ENGINES) engines: SandboxEngine[],
     private readonly localProvider: LocalRuntimeProvider
   ) {
-    this.defaults = {
-      runtimeType: configService.getDefaultRuntimeType(),
-      isolationScope: configService.getDefaultIsolationScope(),
-      sandboxEngine: configService.getSandboxEngine(),
-    };
     this.sandboxEngines = new Map(engines.map((e) => [e.type, e]));
   }
 
-  /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker)。 */
+  /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
   resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
-    return resolveRuntimeTarget(input, this.defaults);
+    return resolveRuntimeTarget(input);
   }
 
   /** 返回当前运行时策略配置(默认/可选 runtimeType、isolationScope、空闲超时秒数),供前端展示与校验用。 */

@@ -5,21 +5,17 @@ import type {
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
-import type {
-  ResolveRuntimeTargetInput,
-  RuntimeTargetDefaults,
-} from "../runtime.types";
+import type { ResolveRuntimeTargetInput } from "../runtime.types";
 
-export type { ResolveRuntimeTargetInput, RuntimeTargetDefaults };
+export type { ResolveRuntimeTargetInput };
 
 /**
- * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
- * 路径映射与容器归属 ownerId，直接返回一个 RuntimeTarget 对象。纯计算，不启动
- * 也不 attach worker。
+ * 解析一次 run 的目标运行环境：根据已解析的 run 输入（runtime 类型、隔离粒度等默认值
+ * 由 run 层补齐），算出路径映射与容器归属 ownerId，直接返回一个 RuntimeTarget 对象。
+ * 纯计算，不启动也不 attach worker。
  */
 export function resolveRuntimeTarget(
-  input: ResolveRuntimeTargetInput,
-  defaults: RuntimeTargetDefaults
+  input: ResolveRuntimeTargetInput
 ): RuntimeTarget {
   const { userId, workspaceId, workspaceRootPath, userWorkspaceRootPath } =
     input;
@@ -30,11 +26,9 @@ export function resolveRuntimeTarget(
     );
   }
 
-  const runtimeType = input.runtimeType ?? defaults.runtimeType;
-
   // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
   // ownerId 无复用语义，用 workspaceId 兜底。
-  if (runtimeType === "local") {
+  if (input.runtimeType === "local") {
     const local: LocalRuntimePlacement = {
       runtimeType: "local",
       userId,
@@ -45,8 +39,7 @@ export function resolveRuntimeTarget(
     return { ...local, ownerId: workspaceId };
   }
 
-  const isolationScope = input.isolationScope ?? defaults.isolationScope;
-  const sandboxEngine = input.sandboxEngine ?? defaults.sandboxEngine;
+  const { isolationScope, sandboxEngine } = input;
 
   // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget / ownerId：
   //   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），

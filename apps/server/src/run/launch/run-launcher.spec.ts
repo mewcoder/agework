@@ -166,6 +166,7 @@ describe("RunLauncher", () => {
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
+      getSandboxEngine: vi.fn().mockReturnValue("docker"),
       isRuntimeTypeAllowed: (t: string): t is "local" | "sandbox" =>
         t === "local" || t === "sandbox",
       isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>

@@ -2,29 +2,21 @@ import { describe, it, expect } from "vitest";
 import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
-  type RuntimeTargetDefaults,
 } from "./runtime-resource";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
-
-const DEFAULTS: RuntimeTargetDefaults = {
-  runtimeType: "sandbox",
-  isolationScope: "user",
-  sandboxEngine: "docker",
-};
 
 const BASE: ResolveRuntimeTargetInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
   userWorkspaceRootPath: "/data/users/user-1",
+  runtimeType: "sandbox",
+  isolationScope: "user",
+  sandboxEngine: "docker",
 };
 
-const withInput = (
-  overrides: Partial<ResolveRuntimeTargetInput>
-): ResolveRuntimeTargetInput => ({ ...BASE, ...overrides });
-
 const resolve = (overrides: Partial<ResolveRuntimeTargetInput> = {}) =>
-  resolveRuntimeTarget(withInput(overrides), DEFAULTS);
+  resolveRuntimeTarget({ ...BASE, ...overrides });
 
 describe("resolveRuntimeTarget", () => {
   describe("sandbox, user isolation", () => {

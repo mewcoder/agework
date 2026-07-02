@@ -51,17 +51,17 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("resolveRuntimeTarget delegates to the pure resolver with config", () => {
+  it("resolveRuntimeTarget delegates to the pure resolver", () => {
     const input = {
       userId: "u-1",
       workspaceId: "ws-1",
       workspaceRootPath: "/data/u-1/ws-1",
       userWorkspaceRootPath: "/data/u-1",
+      runtimeType: "local" as const,
     };
     const result = service.resolveRuntimeTarget(input);
     expect(result.runtimeType).toBe("local");
     expect(result.ownerId).toBe("ws-1");
-    expect(configService.getDefaultRuntimeType).toHaveBeenCalled();
   });
 
   it("getRuntimePolicy reads from ConfigService", () => {

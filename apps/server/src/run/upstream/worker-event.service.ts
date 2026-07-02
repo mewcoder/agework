@@ -20,6 +20,7 @@ import { summarizeMessagePayload } from "./message-payload-summary";
 import {
   decideRunStatusUpdate,
   TERMINAL_RUN_STATUSES,
+  type RunStatusDecision,
 } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
@@ -94,11 +95,19 @@ export class WorkerEventService
 
   async publish(message: RunChannelMessage<unknown>): Promise<void> {
     const { runId, seq } = message;
-    if (
-      message.type === "run.status" &&
-      this.shouldIgnoreRunStatus(runId, message.payload as RunStatusPayload)
-    ) {
-      return;
+    // run.status 的 apply/ignore 决策只算这一次,通过决策的直接传给 handleRunStatus。
+    // 拦截必须发生在 seq 记账之前:终态清理已 forget 该 run 的 seq 状态,
+    // 迟到的状态消息不能再把它重建出来。
+    let statusDecision: RunStatusDecision | undefined;
+    if (message.type === "run.status") {
+      statusDecision = this.decideRunStatus(
+        runId,
+        message.payload as RunStatusPayload
+      );
+      if (statusDecision.action === "ignore") {
+        this.logIgnoredRunStatus(runId, message.payload as RunStatusPayload);
+        return;
+      }
     }
 
     const decision = this.seqGate.accept(runId, seq);
@@ -147,7 +156,11 @@ export class WorkerEventService
 
     switch (message.type) {
       case "run.status":
-        await this.handleRunStatus(runId, message.payload as RunStatusPayload);
+        await this.handleRunStatus(
+          runId,
+          message.payload as RunStatusPayload,
+          statusDecision
+        );
         break;
       case "agui.event":
         this.aguiEvents.handle(runId, message.payload);
@@ -193,11 +206,13 @@ export class WorkerEventService
     return this.finalization.isTerminalOrFinalizing(runId);
   }
 
-  private async handleRunStatus(runId: string, payload: RunStatusPayload) {
-    const decision = decideRunStatusUpdate({
-      nextStatus: payload.status,
-      terminalOrFinalizing: this.isTerminalOrFinalizing(runId),
-    });
+  private async handleRunStatus(
+    runId: string,
+    payload: RunStatusPayload,
+    precomputedDecision?: RunStatusDecision
+  ) {
+    const decision =
+      precomputedDecision ?? this.decideRunStatus(runId, payload);
     if (decision.action === "ignore") {
       this.logIgnoredRunStatus(runId, payload);
       return;
@@ -298,17 +313,14 @@ export class WorkerEventService
     this.runEvents.append(event).catch(swallow(this.logger, context));
   }
 
-  private shouldIgnoreRunStatus(
+  private decideRunStatus(
     runId: string,
     payload: RunStatusPayload
-  ): boolean {
-    const decision = decideRunStatusUpdate({
+  ): RunStatusDecision {
+    return decideRunStatusUpdate({
       nextStatus: payload.status,
       terminalOrFinalizing: this.isTerminalOrFinalizing(runId),
     });
-    if (decision.action === "apply") return false;
-    this.logIgnoredRunStatus(runId, payload);
-    return true;
   }
 
   private logIgnoredRunStatus(runId: string, payload: RunStatusPayload): void {
