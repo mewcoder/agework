@@ -574,7 +574,16 @@ export class SandboxInstanceExecutor {
     runtimeInstanceId: string
   ): Promise<void> {
     return this.registry
-      .upsertRunning(placement, ownerId, runtimeInstanceId)
+      .upsertRunning(
+        {
+          runtimeType: placement.runtimeType,
+          isolationScope: placement.sandbox.isolationScope,
+          workspaceId: placement.workspaceId,
+          ownerId,
+        },
+        runtimeInstanceId,
+        "http"
+      )
       .then(() => undefined)
       .catch(
         swallow(this.logger, `upsert workspace runtime for owner ${ownerId}`)

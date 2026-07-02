@@ -1,4 +1,3 @@
-import type { RuntimePlacement } from "@agework/shared/protocol";
 import type { Prisma } from "../../../generated/prisma/client.js";
 
 type RuntimeInstanceMetadata = Record<string, unknown>;
@@ -24,7 +23,7 @@ export function isMetadataRecord(
 }
 
 export function runningInstanceMetadata(input: {
-  placement: RuntimePlacement;
+  workspaceId: string;
   ownerId: string;
   runtimeInstanceId: string;
   existing?: unknown;
@@ -36,7 +35,7 @@ export function runningInstanceMetadata(input: {
     ...(isMetadataRecord(input.existing) ? input.existing : {}),
     ...(input.metadata ?? {}),
     ownerId: input.ownerId,
-    workspaceId: input.placement.workspaceId,
+    workspaceId: input.workspaceId,
     statusReason: "running",
     lastSeenAt: now,
     lastStartedAt: now,

@@ -89,18 +89,12 @@ describe("WorkerRegistryRepository", () => {
   });
 
   describe("upsertRunning", () => {
-    const placement = {
+    const upsertInput = {
       runtimeType: "sandbox",
+      isolationScope: "workspace",
       workspaceId: "ws-1",
-      userId: "user-1",
-      hostPath: "/host",
-      runtimePath: "/container",
-      sandbox: {
-        isolationScope: "workspace",
-        mountTarget: "/container",
-        sandboxEngineType: "docker",
-      },
-    } as any;
+      ownerId: "ws-1",
+    };
 
     it("creates a new RuntimeInstance row when none exists for the owner", async () => {
       const findFirst = vi.fn().mockResolvedValue(null);
@@ -113,9 +107,9 @@ describe("WorkerRegistryRepository", () => {
       repository = new WorkerRegistryRepository(prismaMock as any);
 
       const result = await repository.upsertRunning(
-        placement,
-        "ws-1",
-        "inst-1"
+        upsertInput,
+        "inst-1",
+        "http"
       );
 
       expect(findFirst).toHaveBeenCalledWith({
@@ -132,6 +126,7 @@ describe("WorkerRegistryRepository", () => {
             isolationScope: "workspace",
             ownerId: "ws-1",
             runtimeInstanceId: "inst-1",
+            transport: "http",
             status: "running",
           }),
         })
@@ -153,7 +148,7 @@ describe("WorkerRegistryRepository", () => {
       );
       repository = new WorkerRegistryRepository(prismaMock as any);
 
-      await repository.upsertRunning(placement, "ws-1", "inst-2");
+      await repository.upsertRunning(upsertInput, "inst-2", "http");
 
       expect(create).not.toHaveBeenCalled();
       expect(update).toHaveBeenCalledWith(

@@ -123,9 +123,14 @@ describe("SandboxInstanceExecutor", () => {
       runtimeInstanceId: "docker-resource-1",
     });
     expect(registry.upsertRunning).toHaveBeenCalledWith(
-      expect.objectContaining({ ownerId: "ws-1" }),
-      "ws-1",
-      "docker-resource-1"
+      {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        workspaceId: "ws-1",
+        ownerId: "ws-1",
+      },
+      "docker-resource-1",
+      "http"
     );
   });
 

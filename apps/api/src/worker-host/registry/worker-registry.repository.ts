@@ -1,6 +1,5 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
-import type { SandboxRuntimePlacement } from "@agework/shared/protocol";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
   runtimeInstanceMetadataJson,
@@ -8,6 +7,13 @@ import {
   statusInstanceMetadata,
   stoppedInstanceMetadata,
 } from "./worker-registry-metadata";
+
+export type UpsertRunningInput = {
+  runtimeType: string;
+  isolationScope: string;
+  workspaceId: string;
+  ownerId: string;
+};
 
 function ownerWhere(
   runtimeType: string,
@@ -37,26 +43,27 @@ export class WorkerRegistryRepository {
   }
 
   async upsertRunning(
-    placement: SandboxRuntimePlacement,
-    ownerId: string,
+    input: UpsertRunningInput,
     runtimeInstanceId: string,
+    transport: string,
     metadata?: object
   ) {
     const where = ownerWhere(
-      placement.runtimeType,
-      placement.sandbox.isolationScope,
-      ownerId
+      input.runtimeType,
+      input.isolationScope,
+      input.ownerId
     );
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.runtimeInstance.findFirst({ where });
       const data = {
         runtimeInstanceId,
+        transport,
         status: "running",
         expiresAt: null,
         metadata: runtimeInstanceMetadataJson(
           runningInstanceMetadata({
-            placement,
-            ownerId,
+            workspaceId: input.workspaceId,
+            ownerId: input.ownerId,
             runtimeInstanceId,
             existing: existing?.metadata,
             metadata,
@@ -77,10 +84,10 @@ export class WorkerRegistryRepository {
           });
       const workspaceRuntimeInstance = await tx.workspaceRuntimeInstance.upsert(
         {
-          where: { workspaceId: placement.workspaceId },
+          where: { workspaceId: input.workspaceId },
           create: {
             id: generateId(),
-            workspaceId: placement.workspaceId,
+            workspaceId: input.workspaceId,
             resourceId: resource.id,
           },
           update: {

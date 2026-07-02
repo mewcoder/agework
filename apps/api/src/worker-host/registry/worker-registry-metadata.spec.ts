@@ -18,18 +18,7 @@ describe("worker-registry-metadata", () => {
   it("runningInstanceMetadata carries ownerId/workspaceId and marks statusReason running", () => {
     const now = new Date("2026-01-01T00:00:00.000Z");
     const result = runningInstanceMetadata({
-      placement: {
-        runtimeType: "sandbox",
-        workspaceId: "ws-1",
-        userId: "user-1",
-        hostPath: "/host",
-        runtimePath: "/container",
-        sandbox: {
-          isolationScope: "workspace",
-          mountTarget: "/container",
-          sandboxEngineType: "docker",
-        },
-      } as any,
+      workspaceId: "ws-1",
       ownerId: "ws-1",
       runtimeInstanceId: "inst-1",
       now,
@@ -43,18 +32,7 @@ describe("worker-registry-metadata", () => {
 
   it("runningInstanceMetadata preserves existing metadata record fields", () => {
     const result = runningInstanceMetadata({
-      placement: {
-        runtimeType: "sandbox",
-        workspaceId: "ws-1",
-        userId: "user-1",
-        hostPath: "/host",
-        runtimePath: "/container",
-        sandbox: {
-          isolationScope: "workspace",
-          mountTarget: "/container",
-          sandboxEngineType: "docker",
-        },
-      } as any,
+      workspaceId: "ws-1",
       ownerId: "ws-1",
       runtimeInstanceId: "inst-1",
       existing: { customField: "kept" },
