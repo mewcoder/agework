@@ -179,7 +179,7 @@ function makeRepositoryMock() {
   } as unknown as WorkerRegistryRepository;
 }
 
-describe("WorkerHostService WorkerRegistry pass-through methods", () => {
+describe("WorkerHostService WorkerRegistry cross-module queries", () => {
   let repository: ReturnType<typeof makeRepositoryMock>;
   let service: WorkerHostService;
 
@@ -196,32 +196,19 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
     );
   });
 
-  it("countRunningRuntimes forwards to repository.countRunning", async () => {
-    (repository.countRunning as any).mockResolvedValue(3);
-    expect(await service.countRunningRuntimes()).toBe(3);
-  });
-
-  it("findRuntimeInstanceView forwards args and result", async () => {
-    (repository.findRunInstanceView as any).mockResolvedValue({ id: "x" });
-    const result = await service.findRuntimeInstanceView("sandbox", "inst-1");
-    expect(repository.findRunInstanceView).toHaveBeenCalledWith(
+  it("findRuntimeByRuntimeId forwards to repository.findByRuntimeId", async () => {
+    (repository.findByRuntimeId as any).mockResolvedValue({ id: "x" });
+    const result = await service.findRuntimeByRuntimeId("sandbox", "inst-1");
+    expect(repository.findByRuntimeId).toHaveBeenCalledWith(
       "sandbox",
       "inst-1"
     );
     expect(result).toEqual({ id: "x" });
   });
 
-  it("buildRuntimeDiagnostics extracts known fields from a metadata blob", () => {
-    const result = service.buildRuntimeDiagnostics({
-      ownerId: "ws-1",
-      statusReason: "running",
-      lastSeenAt: "2026-06-25T00:00:00.000Z",
-    });
-    expect(result).toMatchObject({
-      ownerId: "ws-1",
-      statusReason: "running",
-      lastSeenAt: "2026-06-25T00:00:00.000Z",
-    });
+  it("getRuntimeStats counts running runtime resources", async () => {
+    (repository.countRunning as any).mockResolvedValue(3);
+    expect(await service.getRuntimeStats()).toEqual({ activeRuntimes: 3 });
   });
 });
 
@@ -486,40 +473,5 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
     expect(
       sandboxInstances.shutdownRuntimeInstanceByOwnerId
     ).toHaveBeenCalledWith("ws-2");
-  });
-});
-
-describe("WorkerHostService — restart sweep queries", () => {
-  function makeService() {
-    const registry = {
-      markAllStartingAsError: vi.fn().mockResolvedValue(undefined),
-      findRunningByRuntimeType: vi.fn().mockResolvedValue([]),
-    };
-    const service = new WorkerHostService(
-      {} as never,
-      {} as never,
-      {} as never,
-      registry as never,
-      {} as never,
-      {} as never,
-      {} as never
-    );
-    return { service, registry };
-  }
-
-  it("routes markAllStartingRuntimesAsError to the registry", async () => {
-    const { service, registry } = makeService();
-
-    await service.markAllStartingRuntimesAsError();
-
-    expect(registry.markAllStartingAsError).toHaveBeenCalled();
-  });
-
-  it("routes findRunningRuntimesByType to the registry", async () => {
-    const { service, registry } = makeService();
-
-    await service.findRunningRuntimesByType("local");
-
-    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
   });
 });

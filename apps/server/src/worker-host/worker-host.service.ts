@@ -111,107 +111,14 @@ export class WorkerHostService {
     return this.runtimeService.resolveRuntimeTarget(input);
   }
 
-  // ── WorkerRegistry 透传方法 ──────────────────────────────────────────
+  // ── WorkerRegistry 跨模块查询 ────────────────────────────────────────
   // WorkerRegistry 数据(RuntimeInstance/WorkspaceRuntimeInstance 表)归属 worker-host,
-  // 这里是唯一对外入口;这批方法是 Phase 1(纯粹的归属搬家)的产物,1:1 透传原
-  // repository 方法。取得/释放/回收 runtime 实例本身的编排入口见下方
-  // resolveInstance() 分组(Phase 4)。
+  // 这里是唯一对外入口;模块内部(lifecycle 等 internal provider)直接注入
+  // WorkerRegistryRepository,不经根 Service 转发。
 
-  /** 查询某个 workspace 当前绑定的活跃(running)runtime 资源。 */
-  findActiveRuntimeByWorkspace(workspaceId: string) {
-    return this.registry.findActiveByWorkspace(workspaceId);
-  }
-
-  /** 按 owner 把 runtime 资源标记为 error。 */
-  markRuntimeErrorByOwner(
-    runtimeType: string,
-    isolationScope: string,
-    ownerId: string,
-    errorMessage: string
-  ) {
-    return this.registry.markErrorByOwner(
-      runtimeType,
-      isolationScope,
-      ownerId,
-      errorMessage
-    );
-  }
-
-  /** 统计当前 running 状态的 runtime 资源数量,供 admin 概览用。 */
-  countRunningRuntimes() {
-    return this.registry.countRunning();
-  }
-
-  /** 按 (runtimeType, runtimeInstanceId) 查找 runtime 资源行。 */
+  /** 按 (runtimeType, runtimeInstanceId) 查找 runtime 资源行,供 run 恢复流程用。 */
   findRuntimeByRuntimeId(runtimeType: string, runtimeInstanceId: string) {
     return this.registry.findByRuntimeId(runtimeType, runtimeInstanceId);
-  }
-
-  /** 管理端 run 详情用:运行实例视图 + 绑定的 workspace 列表。 */
-  findRuntimeInstanceView(runtimeType: string, runtimeInstanceId: string) {
-    return this.registry.findRunInstanceView(runtimeType, runtimeInstanceId);
-  }
-
-  /** 管理端分页列出 runtime 资源。 */
-  listRuntimeResourcesPage(opts: {
-    status?: string;
-    take: number;
-    skip: number;
-  }) {
-    return this.registry.listResourcesPage(opts);
-  }
-
-  /** 按主键查找 runtime 资源行。 */
-  findRuntimeById(id: string) {
-    return this.registry.findById(id);
-  }
-
-  /** 查找某个 workspace 的绑定关系 + 资源(不限状态),供生命周期清理用。 */
-  findRuntimeBindingWithResource(workspaceId: string) {
-    return this.registry.findBindingWithResource(workspaceId);
-  }
-
-  /** 服务重启后的扫尾用:把所有卡在 starting 的行标记为 error(仍待讨论第 13 条)。 */
-  markAllStartingRuntimesAsError() {
-    return this.registry.markAllStartingAsError();
-  }
-
-  /** 按 runtimeType 查找所有 running 状态的行,供重启扫尾用。 */
-  findRunningRuntimesByType(runtimeType: string) {
-    return this.registry.findRunningByRuntimeType(runtimeType);
-  }
-
-  /** 查找某个用户名下所有(未删除)workspace 的 id 列表。 */
-  findWorkspaceIdsByUser(userId: string) {
-    return this.registry.findWorkspaceIdsByUser(userId);
-  }
-
-  /** 按 ownerId 列表查找当前 running 的 runtime 资源。 */
-  findRunningRuntimesByOwners(ownerIds: string[]) {
-    return this.registry.findRunningByOwners(ownerIds);
-  }
-
-  /** 按主键把 runtime 资源标记为 stopped 并写入停机原因。 */
-  markRuntimeStoppedById(
-    resource: {
-      id: string;
-      runtimeType: string;
-      isolationScope: string;
-      ownerId: string;
-    },
-    reason: string
-  ) {
-    return this.registry.markStoppedById(resource, reason);
-  }
-
-  /** 删除某个 workspace 的 runtime 绑定关系。 */
-  deleteRuntimeWorkspaceBinding(workspaceId: string) {
-    return this.registry.deleteWorkspaceBinding(workspaceId);
-  }
-
-  /** 把 RuntimeInstance 的 metadata JSON 转成结构化诊断信息,供 admin 展示用。 */
-  buildRuntimeDiagnostics(metadata: unknown) {
-    return runtimeInstanceDiagnostics(metadata);
   }
 
   // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
@@ -255,7 +162,7 @@ export class WorkerHostService {
 
   /** 管理端概览用：当前 running 状态的 runtime 资源数量。 */
   async getRuntimeStats() {
-    return { activeRuntimes: await this.countRunningRuntimes() };
+    return { activeRuntimes: await this.registry.countRunning() };
   }
 
   /** 管理端分页列出 runtime 资源，附带诊断信息。 */
@@ -265,7 +172,7 @@ export class WorkerHostService {
     pageSize?: number;
   }) {
     const { pageNo, pageSize, take, skip } = pageWindow(query);
-    const { items, total } = await this.listRuntimeResourcesPage({
+    const { items, total } = await this.registry.listResourcesPage({
       status: query.status,
       take,
       skip,
@@ -286,7 +193,7 @@ export class WorkerHostService {
     runtimeType: string,
     runtimeInstanceId: string
   ): Promise<AdminRunRuntimeInstanceResponse | null> {
-    const record = await this.findRuntimeInstanceView(
+    const record = await this.registry.findRunInstanceView(
       runtimeType,
       runtimeInstanceId
     );
@@ -310,19 +217,19 @@ export class WorkerHostService {
 
   /** 管理端手动停止一个 running 状态的 runtime 资源。 */
   async stopRuntimeInstance(id: string) {
-    const resource = await this.findRuntimeById(id);
+    const resource = await this.registry.findById(id);
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(
         `Runtime resource ${id} not found or not running`
       );
     }
     this.shutdownInstanceByOwnerId(resource.runtimeType, resource.ownerId);
-    await this.markRuntimeStoppedById(resource, "manual_stop");
+    await this.registry.markStoppedById(resource, "manual_stop");
     return { ok: true };
   }
 
   private toRuntimeInstanceResponse(resource: RuntimeInstanceRow) {
-    const diagnostics = this.buildRuntimeDiagnostics(resource.metadata);
+    const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
     const workspaceRuntimes = resource.workspaceRuntimeInstances?.map(
       (binding) => ({
         id: binding.id,

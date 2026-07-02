@@ -53,13 +53,6 @@ describe("RunModule wiring", () => {
     const setUpstreamPort = vi.spyOn(workerHost, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorPort = vi.spyOn(liveRuns, "setTimeoutErrorPort");
-    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-host 模块内）
-    // 也在 init() 时触发，经 WorkerHostService 打真实 Prisma；只 mock worker-host
-    // 导出的 WorkerHostService 公开方法，不 reach 进其内部 WorkerRegistryRepository。
-    vi.spyOn(workerHost, "markAllStartingRuntimesAsError").mockResolvedValue(
-      undefined
-    );
-    vi.spyOn(workerHost, "findRunningRuntimesByType").mockResolvedValue([]);
     await testingModule.init();
 
     const workerEvents = testingModule.get(WorkerEventService);
@@ -95,7 +88,14 @@ async function createRunsTestingModule(
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())
     .overrideProvider(PrismaService)
-    .useValue({})
+    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-host 模块内）
+    // 在 init() 时经 WorkerRegistryRepository 做重启扫尾，这里给对应查询空实现。
+    .useValue({
+      runtimeInstance: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+    })
     .overrideProvider(ModelProviderService)
     .useValue({})
     .overrideProvider(RunRecoveryService)

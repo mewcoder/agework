@@ -3,7 +3,7 @@ import {
   Logger,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
-import { WorkerHostService } from "../worker-host.service";
+import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { SandboxInstanceExecutor } from "../sandbox/sandbox-instance.executor";
 import { LocalInstanceExecutor } from "../local/local-instance.executor";
 import { swallow } from "../../common/swallow";
@@ -21,15 +21,14 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RuntimeInstanceLifecycleService.name);
 
   constructor(
-    private readonly workerHost: WorkerHostService,
+    private readonly registry: WorkerRegistryRepository,
     private readonly sandboxInstances: SandboxInstanceExecutor,
     private readonly localInstances: LocalInstanceExecutor
   ) {}
 
   /** 关闭专属于该 workspace 的 runtime 资源(user 隔离下的共享资源不受影响)。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
-    const binding =
-      await this.workerHost.findRuntimeBindingWithResource(workspaceId);
+    const binding = await this.registry.findBindingWithResource(workspaceId);
     if (binding?.resource.status === "running") {
       const resource = binding.resource;
       if (
@@ -39,17 +38,16 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
         await this.shutdownResource(resource);
       }
     }
-    await this.workerHost.deleteRuntimeWorkspaceBinding(workspaceId);
+    await this.registry.deleteWorkspaceBinding(workspaceId);
   }
 
   /** 关闭该用户名下所有 runtime 资源(user 级共享资源 + 该用户所有 workspace 级资源)。
    *  user 隔离下 ownerId = userId;workspace 隔离下 ownerId = workspaceId(也归该 user),
    *  通过 ownerId IN (userId, 该 user 的 workspace ids) 匹配。 */
   async shutdownForUser(userId: string): Promise<void> {
-    const workspaces = await this.workerHost.findWorkspaceIdsByUser(userId);
+    const workspaces = await this.registry.findWorkspaceIdsByUser(userId);
     const ownerIds = [userId, ...workspaces.map((w) => w.id)];
-    const resources =
-      await this.workerHost.findRunningRuntimesByOwners(ownerIds);
+    const resources = await this.registry.findRunningByOwners(ownerIds);
     for (const resource of resources) {
       await this.shutdownResource(resource);
     }
@@ -66,10 +64,10 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
    * 容器错误标记为已停止(Phase 1 移除的 blanket 清理正是这个教训)。
    */
   async onApplicationBootstrap(): Promise<void> {
-    await this.workerHost.markAllStartingRuntimesAsError();
+    await this.registry.markAllStartingAsError();
 
     const staleLocalRows =
-      await this.workerHost.findRunningRuntimesByType("local");
+      await this.registry.findRunningByRuntimeType("local");
     for (const row of staleLocalRows) {
       try {
         await this.localInstances.recoverOrphan(row.runtimeInstanceId);
@@ -78,8 +76,8 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
           `Failed to recover orphaned local instance ${row.runtimeInstanceId}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
-      await this.workerHost
-        .markRuntimeStoppedById(row, "interrupted_by_restart")
+      await this.registry
+        .markStoppedById(row, "interrupted_by_restart")
         .catch(
           swallow(this.logger, `mark stopped for orphaned local row ${row.id}`)
         );
@@ -104,7 +102,7 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
           this.localInstances.shutdownRuntimeInstanceByOwnerId(resource.ownerId)
         );
       }
-      await this.workerHost.markRuntimeStoppedById(resource, "owner_released");
+      await this.registry.markStoppedById(resource, "owner_released");
     } catch (err) {
       this.logger.warn(
         `Failed to shut down runtime resource ${resource.id}: ${err instanceof Error ? err.message : String(err)}`
