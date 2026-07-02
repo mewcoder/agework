@@ -32,16 +32,25 @@ function makeService() {
   const localInstances = {
     getChannel: vi.fn().mockReturnValue(undefined),
   };
+  const runtimeService = {
+    resolveRuntimeTarget: vi.fn(),
+  };
   const service = new WorkerHostService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
     commandDispatcher as unknown as WorkerCommandDispatcher,
     {} as unknown as WorkerRegistryRepository,
-    {} as never,
+    runtimeService as never,
     {} as never,
     localInstances as never
   );
-  return { service, endpointHandler, upstream, commandDispatcher };
+  return {
+    service,
+    endpointHandler,
+    upstream,
+    commandDispatcher,
+    runtimeService,
+  };
 }
 
 describe("WorkerHostService — facade routing", () => {
@@ -132,6 +141,21 @@ describe("WorkerHostService — facade routing", () => {
     service.setUpstreamPort(receiver);
 
     expect(upstream.setUpstreamPort).toHaveBeenCalledWith(receiver);
+  });
+
+  it("routes resolveRuntimeTarget to RuntimeService", () => {
+    const { service, runtimeService } = makeService();
+    const target = { runtimeType: "local", ownerId: "ws-1" } as never;
+    runtimeService.resolveRuntimeTarget.mockReturnValue(target);
+
+    const input = {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      workspaceRootPath: "/tmp/ws-1",
+      userWorkspaceRootPath: "/tmp/user-1",
+    };
+    expect(service.resolveRuntimeTarget(input)).toBe(target);
+    expect(runtimeService.resolveRuntimeTarget).toHaveBeenCalledWith(input);
   });
 });
 
@@ -461,5 +485,93 @@ describe("WorkerHostService.stopRuntimeInstance", () => {
       "not found or not running"
     );
     expect(registry.markStoppedById).not.toHaveBeenCalled();
+  });
+});
+
+describe("WorkerHostService — resolveInstance unified dispatch", () => {
+  function makeService() {
+    const sandboxInstances = {
+      acquireInstanceForRun: vi.fn(),
+      releaseInstanceForRun: vi.fn(),
+      recoverOrphan: vi.fn(),
+      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    };
+    const localInstances = {
+      getChannel: vi.fn().mockReturnValue(undefined),
+      acquireInstanceForRun: vi.fn(),
+      releaseInstanceForRun: vi.fn(),
+      recoverOrphan: vi.fn(),
+      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    };
+    const service = new WorkerHostService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      sandboxInstances as never,
+      localInstances as never
+    );
+    return { service, sandboxInstances, localInstances };
+  }
+
+  it("resolveInstance dispatches to the local executor for local placements", async () => {
+    const { service, localInstances } = makeService();
+    const input = { runtimeTarget: { runtimeType: "local" } } as never;
+    localInstances.acquireInstanceForRun.mockResolvedValue({
+      outcome: "ready",
+      runtimeInstanceId: "1:token",
+    });
+
+    await expect(service.resolveInstance(input)).resolves.toEqual({
+      outcome: "ready",
+      runtimeInstanceId: "1:token",
+    });
+    expect(localInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+  });
+
+  it("resolveInstance dispatches to the sandbox executor for sandbox placements", async () => {
+    const { service, sandboxInstances } = makeService();
+    const input = { runtimeTarget: { runtimeType: "sandbox" } } as never;
+    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+      outcome: "ready",
+      runtimeInstanceId: "container-1",
+    });
+
+    await expect(service.resolveInstance(input)).resolves.toEqual({
+      outcome: "ready",
+      runtimeInstanceId: "container-1",
+    });
+    expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+  });
+
+  it("releaseInstanceForRun dispatches by runtimeType", () => {
+    const { service, sandboxInstances, localInstances } = makeService();
+    service.releaseInstanceForRun("local", "run-1");
+    service.releaseInstanceForRun("sandbox", "run-2");
+    expect(localInstances.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
+      "run-2"
+    );
+  });
+
+  it("recoverOrphanInstance dispatches by runtimeType", async () => {
+    const { service, sandboxInstances, localInstances } = makeService();
+    await service.recoverOrphanInstance("local", "4242:token");
+    await service.recoverOrphanInstance("sandbox", "container-1");
+    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("4242:token");
+    expect(sandboxInstances.recoverOrphan).toHaveBeenCalledWith("container-1");
+  });
+
+  it("shutdownInstanceByOwnerId dispatches by runtimeType", () => {
+    const { service, sandboxInstances, localInstances } = makeService();
+    service.shutdownInstanceByOwnerId("local", "ws-1");
+    service.shutdownInstanceByOwnerId("sandbox", "ws-2");
+    expect(
+      localInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-1");
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-2");
   });
 });

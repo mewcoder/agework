@@ -7,6 +7,7 @@ import type {
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
+import type { ResolveRuntimeTargetInput } from "../runtime/runtime.types";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
@@ -94,6 +95,11 @@ export class WorkerHostService {
 
   setUpstreamPort(receiver: WorkerUpstreamPort): void {
     this.upstream.setUpstreamPort(receiver);
+  }
+
+  /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker)。直通转发 runtime 模块。 */
+  resolveRuntimeTarget(input: ResolveRuntimeTargetInput) {
+    return this.runtimeService.resolveRuntimeTarget(input);
   }
 
   // ── WorkerRegistry 透传方法 ──────────────────────────────────────────
@@ -250,6 +256,48 @@ export class WorkerHostService {
   /** 终止并清理指定 owner 的 local keep-alive 进程。 */
   shutdownLocalInstanceByOwnerId(ownerId: string): void {
     this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
+  }
+
+  // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
+  // 专属方法——runtimeType 判断收进这里,run 层不再需要认识 sandbox/local 的区别) ──
+
+  /** 为一次 run 取得(创建/复用/attach)runtime 实例,按 runtimeType 内部分流。 */
+  resolveInstance(
+    input: WorkerExecutionStartInput
+  ): Promise<AcquireInstanceResult> {
+    if (input.runtimeTarget.runtimeType === "local") {
+      return this.localInstances.acquireInstanceForRun(input);
+    }
+    return this.sandboxInstances.acquireInstanceForRun(input);
+  }
+
+  /** 释放一次 run 对 runtime 实例的引用,按 runtimeType 内部分流。 */
+  releaseInstanceForRun(runtimeType: string, runId: string): void {
+    if (runtimeType === "local") {
+      this.localInstances.releaseInstanceForRun(runId);
+      return;
+    }
+    this.sandboxInstances.releaseInstanceForRun(runId);
+  }
+
+  /** 服务重启后清理中断执行残留的 runtime 实例,按 runtimeType 内部分流。 */
+  recoverOrphanInstance(
+    runtimeType: string,
+    runtimeInstanceId: string
+  ): Promise<void> {
+    if (runtimeType === "local") {
+      return this.localInstances.recoverOrphan(runtimeInstanceId);
+    }
+    return this.sandboxInstances.recoverOrphan(runtimeInstanceId);
+  }
+
+  /** 终止并清理指定 owner 的 runtime 实例,按 runtimeType 内部分流。 */
+  shutdownInstanceByOwnerId(runtimeType: string, ownerId: string): void {
+    if (runtimeType === "local") {
+      this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
+      return;
+    }
+    this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry

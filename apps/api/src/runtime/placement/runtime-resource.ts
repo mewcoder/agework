@@ -4,28 +4,13 @@ import type {
   RuntimeTarget,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import type { IsolationScope, RuntimeType } from "../../config/config.service";
 import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
+import type {
+  ResolveRuntimeTargetInput,
+  RuntimeTargetDefaults,
+} from "../runtime.types";
 
-export type ResolveRuntimeTargetInput = {
-  userId: string;
-  workspaceId: string;
-  workspaceRootPath: string;
-  userWorkspaceRootPath: string;
-  /** 不传则用 defaults.runtimeType */
-  runtimeType?: RuntimeType;
-  /** sandbox 下不传则用 defaults.isolationScope；local 不消费 */
-  isolationScope?: IsolationScope;
-  /** sandbox 下不传则用 defaults.sandboxEngine；local 不消费 */
-  sandboxEngine?: "docker" | "opensandbox";
-};
-
-/** 部署默认值（由 RuntimeService 从 ConfigService 取出后传入）。 */
-export type RuntimeTargetDefaults = {
-  runtimeType: RuntimeType;
-  isolationScope: IsolationScope;
-  sandboxEngine: "docker" | "opensandbox";
-};
+export type { ResolveRuntimeTargetInput, RuntimeTargetDefaults };
 
 /**
  * 解析一次 run 的目标运行环境：根据 run 输入与部署默认值，算出 runtime 类型、隔离粒度、
