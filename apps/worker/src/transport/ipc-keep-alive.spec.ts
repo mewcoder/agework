@@ -20,6 +20,19 @@ function emitMessage(msg: unknown): void {
   }
 }
 
+function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
+  return {
+    runId: "run-1",
+    conversationId: "conversation-1",
+    workspaceId: "ws-1",
+    runtimePath: "/tmp/ws",
+    env: {},
+    input: {},
+    agentProviderConfig: { agentType: "claude", source: "system" },
+    ...overrides,
+  } as RunConfig;
+}
+
 describe("IpcKeepAliveTransport", () => {
   beforeEach(() => {
     processMock.send.mockClear();
@@ -99,7 +112,7 @@ describe("IpcKeepAliveTransport", () => {
       const transport = new IpcKeepAliveTransport();
       const pending = transport.fetchRunConfig("run-7");
 
-      const config = { runId: "run-7", conversationId: "c-7" } as RunConfig;
+      const config = makeRunConfig({ runId: "run-7", conversationId: "c-7" });
       emitMessage(
         runConfigMessageToRpcNotification({
           runId: "run-7",
@@ -122,21 +135,22 @@ describe("IpcKeepAliveTransport", () => {
           runId: "run-9",
           seq: 0,
           type: "run.config",
-          payload: { runId: "run-9" } as RunConfig,
+          payload: makeRunConfig({ runId: "run-9" }),
           ts: "2026-01-01T00:00:00.000Z",
         })
       );
+      const expected = makeRunConfig({ runId: "run-8" });
       emitMessage(
         runConfigMessageToRpcNotification({
           runId: "run-8",
           seq: 0,
           type: "run.config",
-          payload: { runId: "run-8" } as RunConfig,
+          payload: expected,
           ts: "2026-01-01T00:00:00.000Z",
         })
       );
 
-      await expect(pending).resolves.toEqual({ runId: "run-8" });
+      await expect(pending).resolves.toEqual(expected);
     });
   });
 
@@ -200,16 +214,17 @@ describe("IpcKeepAliveTransport", () => {
 
       transport.cleanup("run-drop");
 
+      const expected = makeRunConfig({ runId: "run-keep" });
       emitMessage(
         runConfigMessageToRpcNotification({
           runId: "run-keep",
           seq: 0,
           type: "run.config",
-          payload: { runId: "run-keep" } as RunConfig,
+          payload: expected,
           ts: "2026-01-01T00:00:00.000Z",
         })
       );
-      await expect(pendingOther).resolves.toEqual({ runId: "run-keep" });
+      await expect(pendingOther).resolves.toEqual(expected);
     });
   });
 });
