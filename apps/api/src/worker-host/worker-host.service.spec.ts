@@ -507,3 +507,38 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
     ).toHaveBeenCalledWith("ws-2");
   });
 });
+
+describe("WorkerHostService — restart sweep queries", () => {
+  function makeService() {
+    const registry = {
+      markAllStartingAsError: vi.fn().mockResolvedValue(undefined),
+      findRunningByRuntimeType: vi.fn().mockResolvedValue([]),
+    };
+    const service = new WorkerHostService(
+      {} as never,
+      {} as never,
+      {} as never,
+      registry as never,
+      {} as never,
+      {} as never,
+      {} as never
+    );
+    return { service, registry };
+  }
+
+  it("routes markAllStartingRuntimesAsError to the registry", async () => {
+    const { service, registry } = makeService();
+
+    await service.markAllStartingRuntimesAsError();
+
+    expect(registry.markAllStartingAsError).toHaveBeenCalled();
+  });
+
+  it("routes findRunningRuntimesByType to the registry", async () => {
+    const { service, registry } = makeService();
+
+    await service.findRunningRuntimesByType("local");
+
+    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
+  });
+});

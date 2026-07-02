@@ -19,6 +19,8 @@ function makeWorkerHost(overrides: Record<string, unknown> = {}) {
     findWorkspaceIdsByUser: vi.fn().mockResolvedValue([]),
     findRunningRuntimesByOwners: vi.fn().mockResolvedValue([]),
     markRuntimeStoppedById: vi.fn().mockResolvedValue(undefined),
+    markAllStartingRuntimesAsError: vi.fn().mockResolvedValue(undefined),
+    findRunningRuntimesByType: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -33,6 +35,7 @@ function makeSandboxInstances(overrides: Record<string, unknown> = {}) {
 function makeLocalInstances(overrides: Record<string, unknown> = {}) {
   return {
     shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    recoverOrphan: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -208,5 +211,106 @@ describe("RuntimeInstanceLifecycleService", () => {
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
     expect(shutdownRuntimeInstanceByOwnerId).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("onApplicationBootstrap", () => {
+  it("marks all starting rows as error, then recovers orphaned local rows", async () => {
+    const workerHost = makeWorkerHost({
+      findRunningRuntimesByType: vi.fn().mockResolvedValue([
+        {
+          id: "rr-1",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          runtimeInstanceId: "4242:token",
+        },
+        {
+          id: "rr-2",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-2",
+          runtimeInstanceId: "5555:token",
+        },
+      ]),
+    });
+    const sandboxInstances = makeSandboxInstances();
+    const localInstances = makeLocalInstances({
+      recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    });
+    const service = new RuntimeInstanceLifecycleService(
+      workerHost as never,
+      sandboxInstances as never,
+      localInstances as never
+    );
+
+    await service.onApplicationBootstrap();
+
+    expect(workerHost.markAllStartingRuntimesAsError).toHaveBeenCalledTimes(1);
+    expect(workerHost.findRunningRuntimesByType).toHaveBeenCalledWith("local");
+    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("4242:token");
+    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("5555:token");
+    expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-1" }),
+      "interrupted_by_restart"
+    );
+    expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-2" }),
+      "interrupted_by_restart"
+    );
+  });
+
+  it("does not touch running sandbox rows (containers survive an API restart)", async () => {
+    const workerHost = makeWorkerHost();
+    const sandboxInstances = makeSandboxInstances();
+    const localInstances = makeLocalInstances();
+    const service = new RuntimeInstanceLifecycleService(
+      workerHost as never,
+      sandboxInstances as never,
+      localInstances as never
+    );
+
+    await service.onApplicationBootstrap();
+
+    expect(workerHost.findRunningRuntimesByType).toHaveBeenCalledWith("local");
+    expect(workerHost.findRunningRuntimesByType).not.toHaveBeenCalledWith(
+      "sandbox"
+    );
+  });
+
+  it("logs a warning and continues when recovering one orphaned local row throws", async () => {
+    const workerHost = makeWorkerHost({
+      findRunningRuntimesByType: vi.fn().mockResolvedValue([
+        {
+          id: "rr-1",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          runtimeInstanceId: "4242:token",
+        },
+        {
+          id: "rr-2",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-2",
+          runtimeInstanceId: "5555:token",
+        },
+      ]),
+    });
+    const sandboxInstances = makeSandboxInstances();
+    const recoverOrphan = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("ESRCH"))
+      .mockResolvedValueOnce(undefined);
+    const localInstances = makeLocalInstances({ recoverOrphan });
+    const service = new RuntimeInstanceLifecycleService(
+      workerHost as never,
+      sandboxInstances as never,
+      localInstances as never
+    );
+
+    await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    expect(recoverOrphan).toHaveBeenCalledTimes(2);
+    expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledTimes(2);
   });
 });

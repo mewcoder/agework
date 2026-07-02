@@ -163,6 +163,16 @@ export class WorkerHostService {
     return this.registry.findBindingWithResource(workspaceId);
   }
 
+  /** 服务重启后的扫尾用:把所有卡在 starting 的行标记为 error(仍待讨论第 13 条)。 */
+  markAllStartingRuntimesAsError() {
+    return this.registry.markAllStartingAsError();
+  }
+
+  /** 按 runtimeType 查找所有 running 状态的行,供重启扫尾用。 */
+  findRunningRuntimesByType(runtimeType: string) {
+    return this.registry.findRunningByRuntimeType(runtimeType);
+  }
+
   /** 查找某个用户名下所有(未删除)workspace 的 id 列表。 */
   findWorkspaceIdsByUser(userId: string) {
     return this.registry.findWorkspaceIdsByUser(userId);

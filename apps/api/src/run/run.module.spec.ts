@@ -13,6 +13,7 @@ import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunService } from "./run.service";
 import { WorkerEventService } from "./worker-event/worker-event.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
+import { WorkerRegistryRepository } from "../worker-host/registry/worker-registry.repository";
 import { RunModule } from "./run.module";
 import { RunStartupService } from "./startup/run-startup.service";
 
@@ -96,6 +97,15 @@ async function createRunsTestingModule(
     .useValue({})
     .overrideProvider(RunRecoveryService)
     .useValue(recovery)
+    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-host 模块内）
+    // 现在也在 init() 时触发,会经 WorkerRegistryRepository 打真实 Prisma;这里的
+    // PrismaService 是空对象 mock,所以同样要挡住,跟上面 RunRecoveryService 的
+    // override 是同一个原因。
+    .overrideProvider(WorkerRegistryRepository)
+    .useValue({
+      markAllStartingAsError: vi.fn().mockResolvedValue(undefined),
+      findRunningByRuntimeType: vi.fn().mockResolvedValue([]),
+    })
     .compile();
 
   return { testingModule: module, runRecovery: recovery };
