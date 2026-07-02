@@ -315,6 +315,12 @@ describe("WorkerHostService local instance orchestration", () => {
     expect(localInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
   });
 
+  it("releaseLocalInstanceForRun forwards to the local executor", () => {
+    const { service, localInstances } = makeService();
+    service.releaseLocalInstanceForRun("run-1");
+    expect(localInstances.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+  });
+
   it("recoverOrphanLocalInstance forwards to the local executor", async () => {
     const { service, localInstances } = makeService();
     await service.recoverOrphanLocalInstance("4242:token");
