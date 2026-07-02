@@ -20,6 +20,7 @@ import {
 import type { RunExecutor } from "./execution/executor";
 import { LocalRunExecutor } from "./execution/local.executor";
 import { SandboxRunExecutor } from "./execution/sandbox.executor";
+import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { WorkerAgUiEventHandler } from "./worker-event/agui-event.handler";
 
 // controllers
@@ -57,6 +58,7 @@ import { ConversationModule } from "../conversation/conversation.module";
     RunLauncher,
     LocalRunExecutor,
     SandboxRunExecutor,
+    WorkerRunExecutor,
     {
       provide: RUN_EXECUTORS,
       useFactory: (...executors: RunExecutor[]) => executors,
