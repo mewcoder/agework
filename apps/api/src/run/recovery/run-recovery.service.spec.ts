@@ -3,25 +3,25 @@ import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import { ConversationService } from "../../conversation/conversation.service";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
-import { ExecutionService } from "../execution/execution.service";
 
 function makeWorkerHost(
   overrides: Record<string, unknown> = {}
 ): Partial<WorkerHostService> {
   return {
-    isRuntimeInstanceUserScoped: vi.fn().mockResolvedValue(false),
+    findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
+    sendCommand: vi.fn(),
     ...overrides,
   };
 }
 
 describe("RunRecoveryService.recoverInterruptedRuns", () => {
-  it("cleans up interrupted runs through the execution service", async () => {
+  it("sends a cancel command to the bound instance instead of tearing it down", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
           id: "run-1",
           conversationId: "conversation-1",
-          runtimeType: "docker",
+          runtimeType: "sandbox",
           runtimeInstanceId: "container-abc",
         },
       ]),
@@ -30,27 +30,31 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const mockExecutionService: Partial<ExecutionService> = {
-      cleanupInterruptedExecution: vi.fn().mockResolvedValue(undefined),
-    };
-    const workerHost = makeWorkerHost();
+    const workerHost = makeWorkerHost({
+      findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
+    });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      mockExecutionService as ExecutionService,
       workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();
 
-    expect(workerHost.isRuntimeInstanceUserScoped).toHaveBeenCalledWith(
-      "docker",
+    expect(workerHost.findRuntimeByRuntimeId).toHaveBeenCalledWith(
+      "sandbox",
       "container-abc"
     );
-    expect(
-      mockExecutionService.cleanupInterruptedExecution
-    ).toHaveBeenCalledWith("docker", "container-abc");
+    expect(workerHost.sendCommand).toHaveBeenCalledWith(
+      "ws-1",
+      "run-1",
+      expect.objectContaining({
+        type: "cancel",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      })
+    );
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -61,7 +65,7 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     );
   });
 
-  it("skips interrupted execution cleanup when a run has no persisted runtimeInstanceId", async () => {
+  it("skips sending a cancel command when a run has no persisted runtimeInstanceId", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
@@ -76,37 +80,32 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const mockExecutionService: Partial<ExecutionService> = {
-      cleanupInterruptedExecution: vi.fn(),
-    };
     const workerHost = makeWorkerHost();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      mockExecutionService as ExecutionService,
       workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();
 
-    expect(
-      mockExecutionService.cleanupInterruptedExecution
-    ).not.toHaveBeenCalled();
+    expect(workerHost.findRuntimeByRuntimeId).not.toHaveBeenCalled();
+    expect(workerHost.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
     );
   });
 
-  it("skips interrupted execution cleanup for user-scoped runtime resources", async () => {
+  it("skips sending a cancel command when no WorkerRegistry row is found for the instance", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
           id: "run-1",
           conversationId: "conversation-1",
-          runtimeType: "sandbox",
-          runtimeInstanceId: "container-user1",
+          runtimeType: "local",
+          runtimeInstanceId: "4242:token",
         },
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
@@ -114,26 +113,19 @@ describe("RunRecoveryService.recoverInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const mockExecutionService: Partial<ExecutionService> = {
-      cleanupInterruptedExecution: vi.fn(),
-    };
     const workerHost = makeWorkerHost({
-      isRuntimeInstanceUserScoped: vi.fn().mockResolvedValue(true),
+      findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
     });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      mockExecutionService as ExecutionService,
       workerHost as WorkerHostService
     );
 
     await service.recoverInterruptedRuns();
 
-    expect(
-      mockExecutionService.cleanupInterruptedExecution
-    ).not.toHaveBeenCalled();
-    // 即便跳过运行清理，run 仍标记为 error
+    expect(workerHost.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"

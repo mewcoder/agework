@@ -1,14 +1,16 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { generateId } from "@agework/shared";
 import { RunRepository } from "../run.repository";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
-import { ExecutionService } from "../execution/execution.service";
 import { ConversationService } from "../../conversation/conversation.service";
 import { swallow } from "../../common/swallow";
 
 /**
- * 服务重启后恢复中断 run：找到所有仍处于 active 状态的 run，
- * 对非 user-scope 的 runtime 资源清理其底层执行（execution），
- * 并将 run/thread 状态标记为 error。是否 user-scope 通过 WorkerHostService 判断。
+ * 服务重启后恢复中断 run:找到所有仍处于 active 状态的 run,向它绑定的
+ * runtime 实例(如果 WorkerRegistry 里还找得到)发一条 cancel 命令让 Worker
+ * 自己收尾,不碰实例本身的生死——这个 run 中断不代表实例本身有问题,可能还在
+ * 正常服务其它 run(仍待讨论第 12 条)。实例已经不在了,这条命令发出去没人
+ * 收,无副作用。随后统一把 run/thread 状态标记为 error。
  */
 @Injectable()
 export class RunRecoveryService {
@@ -17,7 +19,6 @@ export class RunRecoveryService {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversations: ConversationService,
-    private readonly executionService: ExecutionService,
     private readonly workerHost: WorkerHostService
   ) {}
 
@@ -33,28 +34,9 @@ export class RunRecoveryService {
 
         for (const run of activeRuns) {
           if (run.runtimeInstanceId) {
-            // User-scope runtimes are shared across workspaces — destroying the
-            // container/sandbox because one run was interrupted would kill the others.
-            // Only cleanup interrupted execution when the runtime is NOT user-scoped.
-            const shouldCleanupInterruptedRuntime =
-              await this.shouldCleanupInterruptedRuntimeResource(
-                run.runtimeInstanceId,
-                run.runtimeType
-              );
-            if (shouldCleanupInterruptedRuntime) {
-              await this.executionService
-                .cleanupInterruptedExecution(
-                  run.runtimeType,
-                  run.runtimeInstanceId
-                )
-                .catch(
-                  swallow(this.logger, `cleanup interrupted run ${run.id}`)
-                );
-            } else {
-              this.logger.log(
-                `Skipping interrupted execution cleanup for user-scope runtime resource ${run.runtimeInstanceId} (run ${run.id})`
-              );
-            }
+            await this.sendCancelToBoundInstance(run).catch(
+              swallow(this.logger, `send cancel for interrupted run ${run.id}`)
+            );
           }
 
           await this.runRepository.markError(run.id, "服务重启导致运行中断");
@@ -77,19 +59,24 @@ export class RunRecoveryService {
     }
   }
 
-  /**
-   * Decide whether run-level interrupted execution cleanup is allowed.
-   * User-isolated runtime resources can be shared across workspaces, so destroying
-   * one because a single run was interrupted would be destructive. 查询失败时
-   * 保守处理（视为 user 级），跳过清理。
-   */
-  private async shouldCleanupInterruptedRuntimeResource(
-    runtimeInstanceId: string,
-    runtimeType: string
-  ): Promise<boolean> {
-    const userScoped = await this.workerHost
-      .isRuntimeInstanceUserScoped(runtimeType, runtimeInstanceId)
-      .catch(() => true);
-    return !userScoped;
+  private async sendCancelToBoundInstance(run: {
+    id: string;
+    conversationId: string;
+    runtimeType: string;
+    runtimeInstanceId: string | null;
+  }): Promise<void> {
+    if (!run.runtimeInstanceId) return;
+    const resource = await this.workerHost.findRuntimeByRuntimeId(
+      run.runtimeType,
+      run.runtimeInstanceId
+    );
+    if (!resource) return;
+
+    this.workerHost.sendCommand(resource.ownerId, run.id, {
+      type: "cancel",
+      commandId: generateId(),
+      runId: run.id,
+      conversationId: run.conversationId,
+    });
   }
 }
