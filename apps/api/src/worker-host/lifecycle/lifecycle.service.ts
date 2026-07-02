@@ -1,15 +1,15 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { WorkerHostService } from "../worker-host.service";
 import { SandboxInstanceExecutor } from "../sandbox/sandbox-instance.executor";
+import { LocalInstanceExecutor } from "../local/local-instance.executor";
 
 /**
  * Runtime 资源生命周期清理:
  * - workspace 删除:解除 workspace runtime 绑定,只关闭专属于该 workspace 的资源。
  * - user 删除:关闭该用户名下的所有 user/workspace 隔离资源。
  *
- * 只有 sandbox 资源需要物理关闭(经同模块的 SandboxInstanceExecutor);local 目前
- * 不写 WorkerRegistry,永远不会出现在这里查到的资源里,只是保留 runtimeType 判断
- * 作为防御,不依赖任何多态 registry。
+ * sandbox 资源经同模块的 SandboxInstanceExecutor 物理关闭;local 资源现在也写
+ * WorkerRegistry(owner 长期复用),经同模块的 LocalInstanceExecutor 物理关闭。
  */
 @Injectable()
 export class RuntimeInstanceLifecycleService {
@@ -17,7 +17,8 @@ export class RuntimeInstanceLifecycleService {
 
   constructor(
     private readonly workerHost: WorkerHostService,
-    private readonly sandboxInstances: SandboxInstanceExecutor
+    private readonly sandboxInstances: SandboxInstanceExecutor,
+    private readonly localInstances: LocalInstanceExecutor
   ) {}
 
   /** 关闭专属于该 workspace 的 runtime 资源(user 隔离下的共享资源不受影响)。 */
@@ -61,6 +62,10 @@ export class RuntimeInstanceLifecycleService {
           this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(
             resource.ownerId
           )
+        );
+      } else if (resource.runtimeType === "local") {
+        await Promise.resolve(
+          this.localInstances.shutdownRuntimeInstanceByOwnerId(resource.ownerId)
         );
       }
       await this.workerHost.markRuntimeStoppedById(resource, "owner_released");

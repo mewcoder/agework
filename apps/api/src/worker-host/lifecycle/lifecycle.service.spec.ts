@@ -30,6 +30,13 @@ function makeSandboxInstances(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeLocalInstances(overrides: Record<string, unknown> = {}) {
+  return {
+    shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("RuntimeInstanceLifecycleService", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned sandbox resource and deletes the workspace binding", async () => {
@@ -41,9 +48,11 @@ describe("RuntimeInstanceLifecycleService", () => {
         }),
       });
       const sandboxInstances = makeSandboxInstances();
+      const localInstances = makeLocalInstances();
       const service = new RuntimeInstanceLifecycleService(
         workerHost as never,
-        sandboxInstances as never
+        sandboxInstances as never,
+        localInstances as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -72,9 +81,11 @@ describe("RuntimeInstanceLifecycleService", () => {
         }),
       });
       const sandboxInstances = makeSandboxInstances();
+      const localInstances = makeLocalInstances();
       const service = new RuntimeInstanceLifecycleService(
         workerHost as never,
-        sandboxInstances as never
+        sandboxInstances as never,
+        localInstances as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -88,7 +99,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       );
     });
 
-    it("marks legacy local runtime resources stopped without calling the sandbox executor", async () => {
+    it("shuts down a workspace-owned local resource by calling the local executor", async () => {
       const workerHost = makeWorkerHost({
         findRuntimeBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
@@ -97,9 +108,11 @@ describe("RuntimeInstanceLifecycleService", () => {
         }),
       });
       const sandboxInstances = makeSandboxInstances();
+      const localInstances = makeLocalInstances();
       const service = new RuntimeInstanceLifecycleService(
         workerHost as never,
-        sandboxInstances as never
+        sandboxInstances as never,
+        localInstances as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -107,6 +120,9 @@ describe("RuntimeInstanceLifecycleService", () => {
       expect(
         sandboxInstances.shutdownRuntimeInstanceByOwnerId
       ).not.toHaveBeenCalled();
+      expect(
+        localInstances.shutdownRuntimeInstanceByOwnerId
+      ).toHaveBeenCalledWith("ws-1");
       expect(workerHost.markRuntimeStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1", runtimeType: "local" }),
         "owner_released"
@@ -131,9 +147,11 @@ describe("RuntimeInstanceLifecycleService", () => {
         ]),
       });
       const sandboxInstances = makeSandboxInstances();
+      const localInstances = makeLocalInstances();
       const service = new RuntimeInstanceLifecycleService(
         workerHost as never,
-        sandboxInstances as never
+        sandboxInstances as never,
+        localInstances as never
       );
 
       await service.shutdownForUser("user-1");
@@ -181,9 +199,11 @@ describe("RuntimeInstanceLifecycleService", () => {
     const sandboxInstances = makeSandboxInstances({
       shutdownRuntimeInstanceByOwnerId,
     });
+    const localInstances = makeLocalInstances();
     const service = new RuntimeInstanceLifecycleService(
       workerHost as never,
-      sandboxInstances as never
+      sandboxInstances as never,
+      localInstances as never
     );
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
