@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { upstreamMessageToRpcNotification } from "@agework/shared/protocol/rpc";
 import { LocalInstanceExecutor } from "./local-instance.executor";
 
 function makeChannel() {
@@ -126,6 +127,62 @@ describe("LocalInstanceExecutor", () => {
         outcome: "ready",
         runtimeInstanceId: "4242:token-1",
       });
+    });
+  });
+
+  describe("channel message handling", () => {
+    it("forwards an event notification arriving over the channel to the upstream registry", async () => {
+      const channel = makeChannel();
+      const runtimeService = makeRuntimeService(channel);
+      const { executor, upstream } = makeExecutor({ runtimeService });
+      await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+
+      channel.emit(
+        "message",
+        upstreamMessageToRpcNotification({
+          runId: "run-1",
+          seq: 1,
+          type: "run.status",
+          payload: { status: "running" },
+          ts: "2026-01-01T00:00:00.000Z",
+        })
+      );
+      await Promise.resolve();
+
+      expect(upstream.sendEvent).toHaveBeenCalledWith(
+        "run-1",
+        expect.objectContaining({
+          runId: "run-1",
+          type: "run.status",
+          payload: { status: "running" },
+        })
+      );
+    });
+
+    it("ignores a channel message that is neither an event notification nor a command result", async () => {
+      const channel = makeChannel();
+      const runtimeService = makeRuntimeService(channel);
+      const { executor, upstream } = makeExecutor({ runtimeService });
+      await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+
+      channel.emit("message", { garbage: true });
+      await Promise.resolve();
+
+      expect(upstream.sendEvent).not.toHaveBeenCalled();
     });
   });
 
