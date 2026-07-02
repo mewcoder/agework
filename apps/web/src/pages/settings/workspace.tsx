@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { PencilIcon, Trash2 } from 'lucide-react';
 import { WorkspaceDialog } from '@/components/workspace-dialog';
-import { ConfirmDeleteDialog, useConfirmDelete } from '@/components/confirm-delete-dialog';
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
+import { useConfirmDelete } from '@/hooks/use-confirm-delete';
 import { useFormDialog } from '@/hooks/use-form-dialog';
 import {
   DataTable,

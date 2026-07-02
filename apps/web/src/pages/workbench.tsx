@@ -11,10 +11,8 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useSelectionStore } from "@/stores/selection-store";
-import {
-  AgentChatRuntimeProvider,
-  AgentChatRuntimeContext,
-} from "@/components/agent-chat-runtime-context";
+import { AgentChatRuntimeProvider } from "@/components/agent-chat-runtime-context";
+import { AgentChatRuntimeContext } from "@/components/agent-chat-runtime-context-value";
 import { cn } from "@/lib/utils";
 import { useNativeClient } from "@/hooks/use-native-client";
 

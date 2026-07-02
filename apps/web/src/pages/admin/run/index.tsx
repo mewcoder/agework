@@ -179,7 +179,7 @@ export function RunsPanel({ showHeader = true }: { showHeader?: boolean }) {
         pageNo={pageNo}
         pageSize={pageSize}
         total={total}
-        onPrev={() => goPrev(total)}
+        onPrev={() => goPrev()}
         onNext={() => goNext(total)}
       />
 

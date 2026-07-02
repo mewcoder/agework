@@ -10,7 +10,8 @@ import {
 } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ConfirmDeleteDialog, useBooleanConfirmDelete } from "@/components/confirm-delete-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useBooleanConfirmDelete } from "@/hooks/use-confirm-delete";
 import {
   useConversations,
   useUnarchiveConversation,

@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AgentIcon } from '@/components/icons/agent';
 import { ModelProviderDialog } from '@/components/settings/model-provider-dialog';
-import { ConfirmDeleteDialog, useConfirmDelete } from '@/components/confirm-delete-dialog';
+import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
+import { useConfirmDelete } from '@/hooks/use-confirm-delete';
 import { SettingsSection, SettingsItem } from '@/components/settings/settings-section';
 import { useFormDialog } from '@/hooks/use-form-dialog';
 import {

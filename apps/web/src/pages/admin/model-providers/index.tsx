@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { PlusIcon } from "lucide-react";
 import { ModelProviderDialog } from "@/components/settings/model-provider-dialog";
 import { Button } from "@/components/ui/button";
-import { ConfirmDeleteDialog, useConfirmDelete } from "@/components/confirm-delete-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useConfirmDelete } from "@/hooks/use-confirm-delete";
 import { useFormDialog } from "@/hooks/use-form-dialog";
 import {
   DataTable,

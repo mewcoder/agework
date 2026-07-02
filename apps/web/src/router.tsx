@@ -19,10 +19,6 @@ import WorkbenchPage, { WorkbenchRuntimeLayout } from "@/pages/workbench";
 import type { Conversation } from "@/api/conversations";
 import type { AuthConfigResponse } from "@agework/shared/api";
 
-const LoginPage = lazy(() => import("@/pages/login"));
-const SettingsPage = lazy(() => import("@/pages/settings"));
-const NotFoundPage = lazy(() => import("@/pages/not-found"));
-
 function applyAuthConfig(config: AuthConfigResponse) {
   const store = useAuthStore.getState();
   store.setAuthRequired(config.authRequired);
@@ -105,7 +101,7 @@ const rootRoute = createRootRoute({
 const loginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/login",
-  component: LoginPage,
+  component: lazy(() => import("@/pages/login")),
 });
 
 // 认证后可访问的布局层
@@ -139,7 +135,7 @@ const indexRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings",
-  component: SettingsPage,
+  component: lazy(() => import("@/pages/settings")),
 });
 
 const conversationRoute = createRoute({
@@ -169,7 +165,7 @@ const conversationRoute = createRoute({
 const notFoundRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "*",
-  component: NotFoundPage,
+  component: lazy(() => import("@/pages/not-found")),
 });
 
 const routeTree = rootRoute.addChildren([

@@ -61,8 +61,10 @@ export function ConversationSearchDialog({
   // 弹窗关闭时重置输入
   useEffect(() => {
     if (!open) {
-      setSearchInput("");
-      setDebouncedSearch("");
+      queueMicrotask(() => {
+        setSearchInput("");
+        setDebouncedSearch("");
+      });
     }
   }, [open]);
 

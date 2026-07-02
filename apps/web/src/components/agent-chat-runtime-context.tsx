@@ -1,5 +1,4 @@
 import {
-  createContext,
   useEffect,
   useMemo,
   useRef,
@@ -18,8 +17,7 @@ import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
 import { createThreadListAdapter } from "@/lib/runtime/thread-list-adapter";
 import { useAgentChatRuntime, findCachedConversation } from "@/hooks/use-agent-chat-runtime";
 import { AgentChatContext } from "./agent-chat-context";
-
-export const AgentChatRuntimeContext = createContext<AssistantRuntime | null>(null);
+import { AgentChatRuntimeContext } from "./agent-chat-runtime-context-value";
 
 type NavigateRef = RefObject<ReturnType<typeof useNavigate>>;
 
@@ -47,7 +45,7 @@ function useSyncNewConversationUrl(
     const unsub = tl.subscribe(sync);
     sync();
     return unsub;
-  }, [pathname, runtime, routeConversationId]);
+  }, [pathname, runtime, routeConversationId, navigateRef]);
 }
 
 // URL 的 conversationId 同步到 chat-store，供 composer / sidebar / ask-user-question 读取
@@ -91,8 +89,10 @@ export function AgentChatRuntimeProvider({ children }: { children: ReactNode }) 
   }, [routeConversationId]);
 
   // archive 回调：当 assistant-ui 内部归档当前正在查看的 conversation 时，导航回新会话
+  // 回调本身只在 archive 事件触发时异步执行，不在渲染期间读取 ref，故手动关闭该规则。
   const adapter = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- 回调延迟触发，不在渲染期间读 ref
       createThreadListAdapter((conversationId) => {
         if (conversationId !== routeConversationIdRef.current) return;
         const workspaceId = findCachedConversation(qc, conversationId)?.workspaceId;

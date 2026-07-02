@@ -122,7 +122,7 @@ export function WorkspacesPanel({
         pageNo={pageNo}
         pageSize={pageSize}
         total={total}
-        onPrev={() => goPrev(total)}
+        onPrev={() => goPrev()}
         onNext={() => goNext(total)}
       />
     </div>

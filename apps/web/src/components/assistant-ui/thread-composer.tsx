@@ -413,7 +413,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     if (newConversationFocusToken === 0) return undefined;
 
     let frame = 0;
-    setInputAttentionActive(false);
+    queueMicrotask(() => setInputAttentionActive(false));
     const focusTimer = window.setTimeout(() => {
       const input = inputRef.current;
       if (!input) return;
@@ -437,7 +437,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   // Clear editing state when AI finishes running
   useEffect(() => {
     if (!showStop && editingQueueItemId) {
-      setEditingQueueItemId(null);
+      queueMicrotask(() => setEditingQueueItemId(null));
     }
   }, [editingQueueItemId, showStop]);
 
@@ -445,7 +445,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   useEffect(() => {
     if (!pendingPrioritizeId) return;
     if (queuedInputs.some((item) => item.id === pendingPrioritizeId)) return;
-    setPendingPrioritizeId(null);
+    queueMicrotask(() => setPendingPrioritizeId(null));
   }, [pendingPrioritizeId, queuedInputs]);
 
   useEffect(() => {

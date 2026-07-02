@@ -56,7 +56,7 @@ export function RunEventTimeline({ runId }: { runId: string }) {
       }),
   });
 
-  const allEvents = data?.list ?? [];
+  const allEvents = useMemo(() => data?.list ?? [], [data]);
   const hasSelection = origin.length > 0;
 
   // 事件类型下拉的选项直接从当前运行已加载的事件聚合得到，不维护单独的枚举。

@@ -57,7 +57,7 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
 
   useEffect(() => {
     if (attentionToken === 0 || selectedWorkspaceId) return undefined;
-    setShowAttention(false);
+    queueMicrotask(() => setShowAttention(false));
     const showId = window.setTimeout(() => setShowAttention(true), 0);
     const hideId = window.setTimeout(() => setShowAttention(false), 2600);
 

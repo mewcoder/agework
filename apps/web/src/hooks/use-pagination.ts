@@ -12,8 +12,7 @@ export function getTotalPages(total: number, pageSize: number) {
 export function usePagination(pageSize = DEFAULT_PAGE_SIZE) {
   const [pageNo, setPageNo] = useState(1);
 
-  const goPrev = (_total: number) =>
-    setPageNo((p) => Math.max(1, p - 1));
+  const goPrev = () => setPageNo((p) => Math.max(1, p - 1));
 
   const goNext = (total: number) =>
     setPageNo((p) => Math.min(getTotalPages(total, pageSize), p + 1));

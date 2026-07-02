@@ -13,7 +13,8 @@ import {
   type User,
 } from "@/api/users";
 import { useAuthStore } from "@/stores/auth-store";
-import { ConfirmDeleteDialog, useConfirmDelete } from "@/components/confirm-delete-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useConfirmDelete } from "@/hooks/use-confirm-delete";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
@@ -291,7 +292,7 @@ export function UsersPanel({
         pageNo={pageNo}
         pageSize={pageSize}
         total={total}
-        onPrev={() => goPrev(total)}
+        onPrev={() => goPrev()}
         onNext={() => goNext(total)}
       />
 

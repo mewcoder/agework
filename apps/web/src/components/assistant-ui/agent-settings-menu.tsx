@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckIcon, ChevronDownIcon } from "lucide-react";
 import { AgentIcon } from "@/components/icons/agent";
 import {
@@ -205,9 +205,13 @@ function ModelSettingsSelector({
     (modelProvider) => modelProvider.modelProviderId === selectedModelProviderId,
   );
   const activeModelProvider = matchedModelProvider ?? modelProviders[0];
-  const modelOptions = activeModelProvider
-    ? getModelProviderModels(activeModelProvider.providerConfig)
-    : [];
+  const modelOptions = useMemo(
+    () =>
+      activeModelProvider
+        ? getModelProviderModels(activeModelProvider.providerConfig)
+        : [],
+    [activeModelProvider],
+  );
   const selectedModel = activeModelProvider
     ? selectedModelByProviderIds[activeModelProvider.modelProviderId]
     : undefined;
@@ -239,7 +243,7 @@ function ModelSettingsSelector({
   // attentionToken 递增触发短暂高亮，引导用户去处理模型配置问题。
   useEffect(() => {
     if (attentionToken === 0) return undefined;
-    setShowAttention(false);
+    queueMicrotask(() => setShowAttention(false));
     const showId = window.setTimeout(() => setShowAttention(true), 0);
     const hideId = window.setTimeout(() => setShowAttention(false), 2600);
     return () => {

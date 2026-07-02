@@ -9,7 +9,8 @@ import {
   DataTableText,
   type DataTableColumnDef,
 } from "@/components/data-table";
-import { ConfirmDeleteDialog, useBooleanConfirmDelete } from "@/components/confirm-delete-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { useBooleanConfirmDelete } from "@/hooks/use-confirm-delete";
 import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/pagination-bar";
 import {
@@ -190,7 +191,7 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
         pageNo={pageNo}
         pageSize={pageSize}
         total={total}
-        onPrev={() => goPrev(total)}
+        onPrev={() => goPrev()}
         onNext={() => goNext(total)}
       />
 

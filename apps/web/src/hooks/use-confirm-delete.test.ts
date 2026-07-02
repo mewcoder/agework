@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useConfirmDelete, useBooleanConfirmDelete } from './confirm-delete-dialog';
+import { useConfirmDelete, useBooleanConfirmDelete } from './use-confirm-delete';
 
 describe('useConfirmDelete', () => {
   it('should initialize with no target and closed state', () => {

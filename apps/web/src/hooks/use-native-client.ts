@@ -10,15 +10,13 @@ function detectNativeClient(): boolean {
 }
 
 export function useNativeClient(): boolean {
-  const [nativeClient, setNativeClient] = useState(detectNativeClient);
+  const [nativeClient] = useState(detectNativeClient);
 
   useEffect(() => {
-    const detected = detectNativeClient();
-    setNativeClient(detected);
-    if (detected) {
+    if (nativeClient) {
       document.documentElement.classList.add("electron");
     }
-  }, []);
+  }, [nativeClient]);
 
   return nativeClient;
 }

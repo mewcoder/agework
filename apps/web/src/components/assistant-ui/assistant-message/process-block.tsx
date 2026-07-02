@@ -36,7 +36,7 @@ export function ProcessBlock({
         : "处理过程";
 
   useEffect(() => {
-    setOpen(active);
+    queueMicrotask(() => setOpen(active));
   }, [active]);
 
   return (

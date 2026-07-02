@@ -24,9 +24,11 @@ export function useRunDurationText() {
   const waitingStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
-    setPausedMs(0);
     waitingStartedAtRef.current = null;
-    setNow(Date.now());
+    queueMicrotask(() => {
+      setPausedMs(0);
+      setNow(Date.now());
+    });
   }, [timing?.streamStartTime]);
 
   useEffect(() => {
@@ -65,11 +67,7 @@ export function useRunDurationText() {
   const baseMs = liveMs != null ? liveMs : timing?.totalStreamTime;
   if (baseMs == null) return null;
 
-  const pendingWaitMs =
-    !isRunning && waitingStartedAtRef.current != null
-      ? Math.max(0, Date.now() - waitingStartedAtRef.current)
-      : 0;
-  const ms = Math.max(0, baseMs - pausedMs - pendingWaitMs);
+  const ms = Math.max(0, baseMs - pausedMs);
 
   const sec = ms / 1000;
   return sec < 60 ? `${Math.floor(sec)}s` : `${Math.floor(sec / 60)}m${Math.round(sec % 60)}s`;
