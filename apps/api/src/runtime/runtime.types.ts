@@ -53,7 +53,7 @@ export function isSandboxPlacement(
   return placement.runtimeType === "sandbox";
 }
 
-// ── Local Provider 契约类型(run 模块的 LocalRunExecutor 与 runtime 的
+// ── Local Provider 契约类型(run 模块的 WorkerRunExecutor 与 runtime 的
 // LocalRuntimeProvider 之间唯一合法的类型契约面) ──
 
 export type LocalLaunchInput = {

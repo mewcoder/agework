@@ -17,7 +17,7 @@ const TSX_CLI = require.resolve("tsx/cli");
 /**
  * local 放置机制的 Provider:fork 一个 worker 子进程,IPC 通信。只负责物理
  * 拉起/终止进程,不参与后续通信内容——channel 随 launch() 返回值交给调用方
- * (目前是 run 模块的 LocalRunExecutor)自行收发,这条边界在设计文档 1.1 节
+ * (目前是 run 模块的 WorkerRunExecutor)自行收发,这条边界在设计文档 1.1 节
  * "local 场景的 channel 交接"里有说明。
  */
 @Injectable()

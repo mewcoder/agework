@@ -3,6 +3,7 @@ import type {
   AcquireInstanceResult,
   CommandPayload,
   RunConfig,
+  RuntimeTarget,
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
@@ -98,7 +99,7 @@ export class WorkerHostService {
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker)。直通转发 runtime 模块。 */
-  resolveRuntimeTarget(input: ResolveRuntimeTargetInput) {
+  resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
     return this.runtimeService.resolveRuntimeTarget(input);
   }
 
