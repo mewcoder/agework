@@ -12,7 +12,6 @@ import type {
  * 由 runs 层的 RunExecutor 实现。
  */
 export interface RunExecutor {
-  readonly type: string;
   setRunEventPort(receiver: RunEventPort): void;
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle;
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void;
@@ -21,7 +20,10 @@ export interface RunExecutor {
   terminateExecution?(runId: string, reason: string): void;
   cleanup(runId: string): void;
   /** 服务重启后清理中断执行的残留（如 local worker pid / sandbox runtime resource）。 */
-  cleanupInterruptedExecution?(runtimeInstanceId: string): Promise<void>;
+  cleanupInterruptedExecution?(
+    runtimeType: string,
+    runtimeInstanceId: string
+  ): Promise<void>;
 }
 
 export interface RunEventPort {

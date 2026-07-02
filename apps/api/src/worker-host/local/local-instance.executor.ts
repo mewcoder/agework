@@ -103,7 +103,7 @@ export class LocalInstanceExecutor {
     return { outcome: "ready", runtimeInstanceId };
   }
 
-  /** local 本轮不做 idle 回收,保留方法只为跟 SandboxRunExecutor 的调用形状对齐。 */
+  /** local 本轮不做 idle 回收,保留方法只为跟 sandbox 侧的调用形状对齐。 */
   releaseInstanceForRun(_runId: string): void {
     // no-op
   }

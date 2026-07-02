@@ -15,7 +15,7 @@ import type {
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { ExecutionService } from "../execution/execution.service";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
@@ -64,7 +64,7 @@ export class RunLauncher {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly runtimeService: RuntimeService,
+    private readonly workerHost: WorkerHostService,
     private readonly executionService: ExecutionService,
     private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
@@ -195,7 +195,7 @@ export class RunLauncher {
       isolationScope = resolvedIsolationScope;
     }
 
-    return this.runtimeService.resolveRuntimeTarget({
+    return this.workerHost.resolveRuntimeTarget({
       userId,
       workspaceId: workspace.workspaceId,
       workspaceRootPath: workspace.workspaceRootPath,

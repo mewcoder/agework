@@ -6,7 +6,7 @@ import type {
   WorkerExecutionStartInput,
   CommandPayload,
 } from "@agework/shared/protocol";
-import type { RunEventPort } from "./executor";
+import type { RunEventPort, RunExecutor } from "./executor";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
@@ -29,7 +29,7 @@ type WorkerRunState = {
  * 就绪/早取消/失败由 resolveInstance 结果一次性回流。
  */
 @Injectable()
-export class WorkerRunExecutor {
+export class WorkerRunExecutor implements RunExecutor {
   private readonly logger = new Logger(WorkerRunExecutor.name);
   private readonly states = new Map<string, WorkerRunState>();
   private receiver!: RunEventPort;

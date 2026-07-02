@@ -104,9 +104,9 @@ export class WorkerHostService {
 
   // ── WorkerRegistry 透传方法 ──────────────────────────────────────────
   // WorkerRegistry 数据(RuntimeInstance/WorkspaceRuntimeInstance 表)归属 worker-host,
-  // 这里是唯一对外入口;这批方法目前是 1:1 透传原 repository 方法,是 Phase 1(纯粹的
-  // 归属搬家)的产物——后续 resolveInstance() 落地后,部分方法可能会被更贴合业务语义
-  // 的编排方法取代,不代表这是最终形态。
+  // 这里是唯一对外入口;这批方法是 Phase 1(纯粹的归属搬家)的产物,1:1 透传原
+  // repository 方法。取得/释放/回收 runtime 实例本身的编排入口见下方
+  // resolveInstance() 分组(Phase 4)。
 
   /** 查询某个 workspace 当前绑定的活跃(running)runtime 资源。 */
   findActiveRuntimeByWorkspace(workspaceId: string) {
@@ -195,33 +195,6 @@ export class WorkerHostService {
     return runtimeInstanceDiagnostics(metadata);
   }
 
-  // ── sandbox 实例编排(owner 复用/idle 决策在 worker-host,物理操作转发 runtime) ──
-  // 原 RuntimeService.acquireInstanceForRun 等方法随 SandboxInstanceExecutor 一起
-  // 搬过来:owner 是否已有活实例、要不要新建/复用/idle 回收,是 worker-host 自己的
-  // WorkerRegistry 数据决定的编排决策,不应该反过来让 runtime 依赖 worker-host。
-
-  /** 为一次 sandbox run 取得持久容器实例,ready/cancelledBeforeReady/error 一次性回传。 */
-  acquireSandboxInstanceForRun(
-    input: WorkerExecutionStartInput
-  ): Promise<AcquireInstanceResult> {
-    return this.sandboxInstances.acquireInstanceForRun(input);
-  }
-
-  /** 释放一次 run 对持久容器的引用(不停止可复用的 runtime 实例)。run 终态时调用。 */
-  releaseSandboxInstanceForRun(runId: string): void {
-    this.sandboxInstances.releaseInstanceForRun(runId);
-  }
-
-  /** 服务重启后清理中断执行残留的 sandbox runtime 实例。 */
-  recoverOrphanSandboxInstance(runtimeInstanceId: string): Promise<void> {
-    return this.sandboxInstances.recoverOrphan(runtimeInstanceId);
-  }
-
-  /** 停止并删除指定 owner 对应的持久容器/沙箱。 */
-  shutdownSandboxInstanceByOwnerId(ownerId: string): void {
-    this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
-  }
-
   /** 该 runtime instance 是否为 user 级共享隔离(决定中断 run 是否可清理底层资源)。 */
   async isRuntimeInstanceUserScoped(
     runtimeType: string,
@@ -232,30 +205,6 @@ export class WorkerHostService {
       runtimeInstanceId
     );
     return resource?.isolationScope === "user";
-  }
-
-  // ── local 实例编排(owner 长期复用,worker-host 直接持有并收发 IPC channel) ──
-
-  /** 为一次 local run 取得(创建或复用)owner 的 keep-alive 实例。 */
-  acquireLocalInstanceForRun(
-    input: WorkerExecutionStartInput
-  ): Promise<AcquireInstanceResult> {
-    return this.localInstances.acquireInstanceForRun(input);
-  }
-
-  /** local 本轮不做 idle 回收,方法仅为跟 sandbox 对齐调用形状。 */
-  releaseLocalInstanceForRun(runId: string): void {
-    this.localInstances.releaseInstanceForRun(runId);
-  }
-
-  /** 服务重启后清理中断执行残留的 local 进程。 */
-  recoverOrphanLocalInstance(runtimeInstanceId: string): Promise<void> {
-    return this.localInstances.recoverOrphan(runtimeInstanceId);
-  }
-
-  /** 终止并清理指定 owner 的 local keep-alive 进程。 */
-  shutdownLocalInstanceByOwnerId(ownerId: string): void {
-    this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
   }
 
   // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
@@ -367,11 +316,7 @@ export class WorkerHostService {
         `Runtime resource ${id} not found or not running`
       );
     }
-    if (resource.runtimeType === "sandbox") {
-      this.shutdownSandboxInstanceByOwnerId(resource.ownerId);
-    } else if (resource.runtimeType === "local") {
-      this.shutdownLocalInstanceByOwnerId(resource.ownerId);
-    }
+    this.shutdownInstanceByOwnerId(resource.runtimeType, resource.ownerId);
     await this.markRuntimeStoppedById(resource, "manual_stop");
     return { ok: true };
   }

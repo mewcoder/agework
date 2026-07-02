@@ -248,41 +248,6 @@ describe("WorkerHostService sandbox instance orchestration", () => {
     return { service, runtimeService, sandboxInstances };
   }
 
-  it("acquireSandboxInstanceForRun forwards to the sandbox executor", async () => {
-    const { service, sandboxInstances } = makeService();
-    const input = { runConfig: { runId: "run-1" } } as never;
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-    });
-
-    await expect(service.acquireSandboxInstanceForRun(input)).resolves.toEqual({
-      outcome: "ready",
-    });
-    expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
-  });
-
-  it("releaseSandboxInstanceForRun forwards to the sandbox executor", () => {
-    const { service, sandboxInstances } = makeService();
-    service.releaseSandboxInstanceForRun("run-1");
-    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
-      "run-1"
-    );
-  });
-
-  it("recoverOrphanSandboxInstance forwards to the sandbox executor", async () => {
-    const { service, sandboxInstances } = makeService();
-    await service.recoverOrphanSandboxInstance("inst-1");
-    expect(sandboxInstances.recoverOrphan).toHaveBeenCalledWith("inst-1");
-  });
-
-  it("shutdownSandboxInstanceByOwnerId forwards to the sandbox executor", () => {
-    const { service, sandboxInstances } = makeService();
-    service.shutdownSandboxInstanceByOwnerId("ws-1");
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-1");
-  });
-
   it("isRuntimeInstanceUserScoped reports whether the resource is user-isolated", async () => {
     const { service } = makeService();
     await expect(
@@ -325,39 +290,6 @@ describe("WorkerHostService local instance orchestration", () => {
     );
     return { service, localInstances, commandDispatcher };
   }
-
-  it("acquireLocalInstanceForRun forwards to the local executor", async () => {
-    const { service, localInstances } = makeService();
-    const input = { runConfig: { runId: "run-1" } } as never;
-    localInstances.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-    });
-
-    await expect(service.acquireLocalInstanceForRun(input)).resolves.toEqual({
-      outcome: "ready",
-    });
-    expect(localInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
-  });
-
-  it("releaseLocalInstanceForRun forwards to the local executor", () => {
-    const { service, localInstances } = makeService();
-    service.releaseLocalInstanceForRun("run-1");
-    expect(localInstances.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
-  });
-
-  it("recoverOrphanLocalInstance forwards to the local executor", async () => {
-    const { service, localInstances } = makeService();
-    await service.recoverOrphanLocalInstance("4242:token");
-    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("4242:token");
-  });
-
-  it("shutdownLocalInstanceByOwnerId forwards to the local executor", () => {
-    const { service, localInstances } = makeService();
-    service.shutdownLocalInstanceByOwnerId("ws-1");
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-1");
-  });
 
   it("sendCommand routes through the local channel when one is registered for the owner", () => {
     const { service, localInstances, commandDispatcher } = makeService();

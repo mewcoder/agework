@@ -12,7 +12,7 @@ import { WorkerCommandQueue } from "./command-queue";
  * 维护 command seq 计数器，并把命令塞入 command queue。不持有 runtime 实例状态，
  * 所有入参均为原始值，便于在 worker-host 层独立存在。
  *
- * 由 SandboxRunExecutor 经 WorkerHostService facade 调用；runtime 层只依赖
+ * 由 WorkerRunExecutor 经 WorkerHostService facade 调用；runtime 层只依赖
  * worker-host facade，不直接依赖命令队列。
  */
 @Injectable()
@@ -26,7 +26,7 @@ export class WorkerCommandDispatcher {
 
   /**
    * 打开一次 run 的会话：登记 runConfig。
-   * 首个 user_message 由 run 侧 SandboxRunExecutor 在 start 后显式下发，
+   * 首个 user_message 由 run 侧 WorkerRunExecutor 在 start 后显式下发，
    * worker-host 不再代为生成命令，因此也不需要知道 run-event。
    */
   openSession(params: {

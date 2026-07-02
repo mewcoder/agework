@@ -6,25 +6,18 @@ import type {
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { ExecutionService } from "./execution.service";
-import { RunExecutorRegistry } from "./executor.registry";
+import { WorkerRunExecutor } from "./worker-run.executor";
 
 function makeExecutor() {
   return {
-    type: "local",
     start: vi.fn(),
     sendCommand: vi.fn(),
     cancel: vi.fn(),
     terminateExecution: vi.fn(),
     cleanup: vi.fn(),
     cleanupInterruptedExecution: vi.fn(),
-  };
-}
-
-function makeRegistry(executor: ReturnType<typeof makeExecutor>) {
-  return {
-    resolve: vi.fn().mockReturnValue(executor),
     setRunEventPort: vi.fn(),
-  } as unknown as RunExecutorRegistry;
+  };
 }
 
 const handle: WorkerExecutionHandle = {
@@ -35,11 +28,12 @@ const handle: WorkerExecutionHandle = {
 };
 
 describe("ExecutionService", () => {
-  it("resolves the executor by runtimeType and starts worker execution", () => {
+  it("forwards start to the executor", () => {
     const executor = makeExecutor();
     executor.start.mockReturnValue(handle);
-    const registry = makeRegistry(executor);
-    const service = new ExecutionService(registry);
+    const service = new ExecutionService(
+      executor as unknown as WorkerRunExecutor
+    );
 
     const runConfig = { runId: "run-1" } as RunConfig;
     const runtimeTarget = {
@@ -58,7 +52,6 @@ describe("ExecutionService", () => {
       onRuntimeInstanceIdReady: onReady,
     });
 
-    expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(executor.start).toHaveBeenCalledWith({
       runConfig,
       runtimeTarget,
@@ -67,10 +60,11 @@ describe("ExecutionService", () => {
     expect(result).toBe(handle);
   });
 
-  it("dispatches command / cancel / terminate / cleanup by handle.runtimeType (stateless)", () => {
+  it("forwards command / cancel / terminate / cleanup to the executor", () => {
     const executor = makeExecutor();
-    const registry = makeRegistry(executor);
-    const service = new ExecutionService(registry);
+    const service = new ExecutionService(
+      executor as unknown as WorkerRunExecutor
+    );
     const command = {
       type: "approval_resolved",
       commandId: "command-1",
@@ -83,7 +77,6 @@ describe("ExecutionService", () => {
     service.terminateExecution(handle, "run timeout");
     service.cleanup(handle);
 
-    expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(executor.sendCommand).toHaveBeenCalledWith(handle, command);
     expect(executor.cancel).toHaveBeenCalledWith(handle);
     expect(executor.terminateExecution).toHaveBeenCalledWith(
@@ -93,28 +86,30 @@ describe("ExecutionService", () => {
     expect(executor.cleanup).toHaveBeenCalledWith("run-1");
   });
 
-  it("cleans up interrupted execution by runtimeType without exposing the registry to callers", async () => {
+  it("forwards cleanupInterruptedExecution with runtimeType and runtimeInstanceId", async () => {
     const executor = makeExecutor();
     executor.cleanupInterruptedExecution.mockResolvedValue(undefined);
-    const registry = makeRegistry(executor);
-    const service = new ExecutionService(registry);
+    const service = new ExecutionService(
+      executor as unknown as WorkerRunExecutor
+    );
 
     await service.cleanupInterruptedExecution("local", "runtime-1");
 
-    expect(registry.resolve).toHaveBeenCalledWith("local");
     expect(executor.cleanupInterruptedExecution).toHaveBeenCalledWith(
+      "local",
       "runtime-1"
     );
   });
 
-  it("wires the run event receiver through the registry during module setup", () => {
+  it("wires the run event receiver through to the executor during module setup", () => {
     const executor = makeExecutor();
-    const registry = makeRegistry(executor);
-    const service = new ExecutionService(registry);
+    const service = new ExecutionService(
+      executor as unknown as WorkerRunExecutor
+    );
     const receiver = {} as never;
 
     service.setRunEventPort(receiver);
 
-    expect(registry.setRunEventPort).toHaveBeenCalledWith(receiver);
+    expect(executor.setRunEventPort).toHaveBeenCalledWith(receiver);
   });
 });

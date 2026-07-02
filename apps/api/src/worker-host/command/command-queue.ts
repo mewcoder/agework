@@ -12,10 +12,10 @@ type OwnerWaiter = {
 };
 
 /**
- * 内存 command 队列：写入侧由 SandboxRunExecutor 经 WorkerHostService →
+ * 内存 command 队列：写入侧由 WorkerRunExecutor 经 WorkerHostService →
  * WorkerCommandDispatcher 按 ownerId 推入；读取侧由持久容器 worker 经
  * WorkerCommandController → WorkerHostService 按 ownerId 轮询。
- * LocalRunExecutor 不经过此队列（直接 IPC send）。
+ * local 实例不经过此队列（直接 IPC send）。
  *
  * ownerId 是 runtime 容器归属者的 ID（user 隔离下 = userId，workspace 隔离下 = workspaceId），
  * 一个 ownerId 对应一个可复用的持久容器，对应一个独立的命令队列分区。

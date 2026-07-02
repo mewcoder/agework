@@ -209,7 +209,7 @@ describe("RunRepository", () => {
       username: "mew",
       conversationTitle: "Fix login",
       workspaceName: "AgeWork",
-      // run 行自身携带 runtime handle，供 RunService 经 RuntimeService 补齐实例视图
+      // run 行自身携带 runtime handle，供 RunService 经 WorkerHostService 补齐实例视图
       runtimeType: "sandbox",
       runtimeInstanceId: "container-abc",
       conversation: {

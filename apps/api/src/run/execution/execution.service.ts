@@ -4,44 +4,39 @@ import type {
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { RunExecutorRegistry } from "./executor.registry";
+import { WorkerRunExecutor } from "./worker-run.executor";
 import type { RunEventPort } from "./executor";
 
 /**
- * runs 到 per-run executor 的应用层入口：按 runtimeType 解析 executor，并统一转发
- * start / command / cancel / terminate / cleanup / recovery。
+ * runs 到执行器的应用层入口：转发 start / command / cancel / terminate / cleanup /
+ * recovery 给唯一的 `WorkerRunExecutor`——runtimeType(sandbox/local)判断已经被
+ * `WorkerHostService` 内部吸收（设计文档第一节),这里不再需要按类型查找执行器。
  *
  * 它不持有 live handle；LiveRunRegistry 持有 handle，本 service 只负责把
- * handle/input 转交给对应 executor。
+ * handle/input 转交给执行器。
  */
 @Injectable()
 export class ExecutionService {
-  constructor(private readonly executorRegistry: RunExecutorRegistry) {}
+  constructor(private readonly executor: WorkerRunExecutor) {}
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
-    return this.executorRegistry
-      .resolve(input.runtimeTarget.runtimeType)
-      .start(input);
+    return this.executor.start(input);
   }
 
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
-    this.executorRegistry
-      .resolve(handle.runtimeType)
-      .sendCommand(handle, command);
+    this.executor.sendCommand(handle, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    this.executorRegistry.resolve(handle.runtimeType).cancel(handle);
+    this.executor.cancel(handle);
   }
 
   terminateExecution(handle: WorkerExecutionHandle, reason: string): void {
-    this.executorRegistry
-      .resolve(handle.runtimeType)
-      .terminateExecution?.(handle.runId, reason);
+    this.executor.terminateExecution?.(handle.runId, reason);
   }
 
   cleanup(handle: WorkerExecutionHandle): void {
-    this.executorRegistry.resolve(handle.runtimeType).cleanup(handle.runId);
+    this.executor.cleanup(handle.runId);
   }
 
   cleanupInterruptedExecution(
@@ -49,13 +44,14 @@ export class ExecutionService {
     runtimeInstanceId: string
   ): Promise<void> {
     return Promise.resolve(
-      this.executorRegistry
-        .resolve(runtimeType)
-        .cleanupInterruptedExecution?.(runtimeInstanceId)
+      this.executor.cleanupInterruptedExecution?.(
+        runtimeType,
+        runtimeInstanceId
+      )
     ).then(() => undefined);
   }
 
   setRunEventPort(receiver: RunEventPort): void {
-    this.executorRegistry.setRunEventPort(receiver);
+    this.executor.setRunEventPort(receiver);
   }
 }

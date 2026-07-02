@@ -8,12 +8,8 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
-import {
-  RUN_EXECUTORS,
-  RunExecutorRegistry,
-} from "./execution/executor.registry";
-import type { RunExecutor } from "./execution/executor";
 import { ExecutionService } from "./execution/execution.service";
+import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunService } from "./run.service";
 import { WorkerEventService } from "./worker-event/worker-event.service";
 import { WorkerHostService } from "../worker-host/worker-host.service";
@@ -46,15 +42,9 @@ describe("RunModule wiring", () => {
       RunModule,
     ]));
 
-    const executors = testingModule.get<RunExecutor[]>(RUN_EXECUTORS);
-    expect(executors.map((executor) => executor.type)).toEqual([
-      "local",
-      "sandbox",
-    ]);
-
-    const executorRegistry = testingModule.get(RunExecutorRegistry);
-    expect(executorRegistry.resolve("local")).toBe(executors[0]);
-    expect(executorRegistry.resolve("sandbox")).toBe(executors[1]);
+    expect(testingModule.get(WorkerRunExecutor)).toBeInstanceOf(
+      WorkerRunExecutor
+    );
     expect(testingModule.get(RunService)).toBeInstanceOf(RunService);
 
     const executionService = testingModule.get(ExecutionService);

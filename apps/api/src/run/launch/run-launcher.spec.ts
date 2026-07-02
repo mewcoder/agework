@@ -3,7 +3,7 @@ import { BadRequestException } from "@nestjs/common";
 import { RunLauncher, type StopActiveRun } from "./run-launcher";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { ExecutionService } from "../execution/execution.service";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -79,7 +79,7 @@ describe("RunLauncher", () => {
   let launcher: RunLauncher;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockRuntimeService: Partial<RuntimeService>;
+  let mockWorkerHost: Partial<WorkerHostService>;
   let mockExecutionService: Partial<ExecutionService>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
@@ -137,7 +137,7 @@ describe("RunLauncher", () => {
       unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockRuntimeService = {
+    mockWorkerHost = {
       resolveRuntimeTarget: vi
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
@@ -179,7 +179,7 @@ describe("RunLauncher", () => {
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockRuntimeService as RuntimeService,
+      mockWorkerHost as WorkerHostService,
       mockExecutionService as ExecutionService,
       mockConversations as ConversationService,
       mockRunEvents,
@@ -195,7 +195,7 @@ describe("RunLauncher", () => {
     const res = makeRes();
     await launch(makeStartInput({ res }));
 
-    expect(mockRuntimeService.resolveRuntimeTarget).toHaveBeenCalledWith(
+    expect(mockWorkerHost.resolveRuntimeTarget).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
     );
     expect(mockRunRepository.create).toHaveBeenCalledWith({
@@ -277,7 +277,7 @@ describe("RunLauncher", () => {
       _t: string
     ): _t is "local" | "sandbox" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
-    expect(mockRuntimeService.resolveRuntimeTarget).not.toHaveBeenCalled();
+    expect(mockWorkerHost.resolveRuntimeTarget).not.toHaveBeenCalled();
   });
 
   it("wraps RunConfig assembly errors as BadRequestException", async () => {
@@ -317,7 +317,7 @@ describe("RunLauncher", () => {
 
   it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
     // placement.runtimeType=sandbox，runtimeInstanceId 由 sandbox provider 异步解析
-    mockRuntimeService.resolveRuntimeTarget = vi
+    mockWorkerHost.resolveRuntimeTarget = vi
       .fn()
       .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
     mockExecutionService.start = vi

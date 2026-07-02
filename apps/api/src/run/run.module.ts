@@ -13,38 +13,26 @@ import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { ExecutionService } from "./execution/execution.service";
-import {
-  RUN_EXECUTORS,
-  RunExecutorRegistry,
-} from "./execution/executor.registry";
-import type { RunExecutor } from "./execution/executor";
-import { LocalRunExecutor } from "./execution/local.executor";
-import { SandboxRunExecutor } from "./execution/sandbox.executor";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { WorkerAgUiEventHandler } from "./worker-event/agui-event.handler";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
-// deps（向下依赖：runtime / worker-host / run-event / conversation）
-import { RuntimeModule } from "../runtime/runtime.module";
+// deps（向下依赖：worker-host / run-event / conversation）
 import { WorkerHostModule } from "../worker-host/worker-host.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
 
 /**
- * Run 领域：一次执行的生命周期、事件记录/聚合。向下依赖 runtime / worker-host /
- * run-event / conversation（直接写回会话状态），并在
- * 启动时把 worker 事件统一入口注入 run executor；
- * WorkerUpstreamPort → worker-host 的 WorkerRunController。
+ * Run 领域：一次执行的生命周期、事件记录/聚合。只依赖 worker-host 一个模块获取
+ * runtime 环境（placement 解析、实例取得/释放/回收 全部经 WorkerHostService,
+ * runtimeType 判断收在 worker-host 内部,见设计文档第一节),另外向下依赖
+ * run-event / conversation（直接写回会话状态），并在启动时把 worker 事件统一入口
+ * 注入 run executor；WorkerUpstreamPort → worker-host 的 WorkerRunController。
  */
 @Module({
-  imports: [
-    RuntimeModule,
-    WorkerHostModule,
-    RunEventModule,
-    ConversationModule,
-  ],
+  imports: [WorkerHostModule, RunEventModule, ConversationModule],
   controllers: [AdminRunController],
   providers: [
     RunRepository,
@@ -56,15 +44,7 @@ import { ConversationModule } from "../conversation/conversation.module";
     RunFinalizationStore,
     RunService,
     RunLauncher,
-    LocalRunExecutor,
-    SandboxRunExecutor,
     WorkerRunExecutor,
-    {
-      provide: RUN_EXECUTORS,
-      useFactory: (...executors: RunExecutor[]) => executors,
-      inject: [LocalRunExecutor, SandboxRunExecutor],
-    },
-    RunExecutorRegistry,
     ExecutionService,
     WorkerAgUiEventHandler,
     RunStartupService,
