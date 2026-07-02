@@ -11,6 +11,7 @@ import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 import { WorkerHostService } from "./worker-host.service";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import { SandboxInstanceExecutor } from "./sandbox/sandbox-instance.executor";
+import { LocalInstanceExecutor } from "./local/local-instance.executor";
 import { RuntimeInstanceLifecycleService } from "./lifecycle/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle/lifecycle.listener";
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
@@ -43,6 +44,7 @@ import { AdminRuntimeController } from "./admin/admin-runtime.controller";
     WorkerEndpointHandler,
     WorkerRegistryRepository,
     SandboxInstanceExecutor,
+    LocalInstanceExecutor,
     RuntimeInstanceLifecycleService,
     RuntimeInstanceLifecycleListener,
     WorkerHostService,

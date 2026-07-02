@@ -16,6 +16,7 @@ import { runtimeInstanceDiagnostics } from "./registry/worker-registry-metadata"
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { SandboxInstanceExecutor } from "./sandbox/sandbox-instance.executor";
+import { LocalInstanceExecutor } from "./local/local-instance.executor";
 
 type RuntimeInstanceRow = {
   id: string;
@@ -44,7 +45,8 @@ export class WorkerHostService {
     private readonly commandDispatcher: WorkerCommandDispatcher,
     private readonly registry: WorkerRegistryRepository,
     private readonly runtimeService: RuntimeService,
-    private readonly sandboxInstances: SandboxInstanceExecutor
+    private readonly sandboxInstances: SandboxInstanceExecutor,
+    private readonly localInstances: LocalInstanceExecutor
   ) {}
 
   async pollCommands(
@@ -67,10 +69,18 @@ export class WorkerHostService {
     ownerId: string;
     runConfig: RunConfig;
   }): void {
+    if (this.localInstances.getChannel(params.ownerId)) {
+      this.localInstances.openSession(params.ownerId, params.runConfig);
+      return;
+    }
     this.commandDispatcher.openSession(params);
   }
 
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
+    if (this.localInstances.getChannel(ownerId)) {
+      this.localInstances.sendCommand(ownerId, command);
+      return;
+    }
     this.commandDispatcher.sendCommand(ownerId, runId, command);
   }
 
@@ -216,6 +226,30 @@ export class WorkerHostService {
       runtimeInstanceId
     );
     return resource?.isolationScope === "user";
+  }
+
+  // ── local 实例编排(owner 长期复用,worker-host 直接持有并收发 IPC channel) ──
+
+  /** 为一次 local run 取得(创建或复用)owner 的 keep-alive 实例。 */
+  acquireLocalInstanceForRun(
+    input: WorkerExecutionStartInput
+  ): Promise<AcquireInstanceResult> {
+    return this.localInstances.acquireInstanceForRun(input);
+  }
+
+  /** local 本轮不做 idle 回收,方法仅为跟 sandbox 对齐调用形状。 */
+  releaseLocalInstanceForRun(runId: string): void {
+    this.localInstances.releaseInstanceForRun(runId);
+  }
+
+  /** 服务重启后清理中断执行残留的 local 进程。 */
+  recoverOrphanLocalInstance(runtimeInstanceId: string): Promise<void> {
+    return this.localInstances.recoverOrphan(runtimeInstanceId);
+  }
+
+  /** 终止并清理指定 owner 的 local keep-alive 进程。 */
+  shutdownLocalInstanceByOwnerId(ownerId: string): void {
+    this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry

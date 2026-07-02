@@ -29,13 +29,17 @@ function makeService() {
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
+  const localInstances = {
+    getChannel: vi.fn().mockReturnValue(undefined),
+  };
   const service = new WorkerHostService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
     commandDispatcher as unknown as WorkerCommandDispatcher,
     {} as unknown as WorkerRegistryRepository,
     {} as never,
-    {} as never
+    {} as never,
+    localInstances as never
   );
   return { service, endpointHandler, upstream, commandDispatcher };
 }
@@ -163,6 +167,7 @@ describe("WorkerHostService WorkerRegistry pass-through methods", () => {
       {} as any,
       repository,
       {} as any,
+      {} as any,
       {} as any
     );
   });
@@ -213,7 +218,8 @@ describe("WorkerHostService sandbox instance orchestration", () => {
         findByRuntimeId: vi.fn().mockResolvedValue({ isolationScope: "user" }),
       } as never,
       runtimeService as never,
-      sandboxInstances as never
+      sandboxInstances as never,
+      {} as never
     );
     return { service, runtimeService, sandboxInstances };
   }
@@ -264,5 +270,104 @@ describe("WorkerHostService sandbox instance orchestration", () => {
     const { service, runtimeService } = makeService();
     runtimeService.getRuntimePolicy.mockReturnValue({ runtimeType: "local" });
     expect(service.getRuntimePolicy()).toEqual({ runtimeType: "local" });
+  });
+});
+
+describe("WorkerHostService local instance orchestration", () => {
+  function makeService() {
+    const localInstances = {
+      getChannel: vi.fn().mockReturnValue(undefined),
+      acquireInstanceForRun: vi.fn(),
+      releaseInstanceForRun: vi.fn(),
+      recoverOrphan: vi.fn(),
+      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+      sendCommand: vi.fn(),
+      openSession: vi.fn(),
+    };
+    const commandDispatcher = {
+      openSession: vi.fn(),
+      sendCommand: vi.fn(),
+      cleanupRun: vi.fn(),
+      cleanupByOwnerId: vi.fn(),
+    };
+    const service = new WorkerHostService(
+      {} as never,
+      {} as never,
+      commandDispatcher as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      localInstances as never
+    );
+    return { service, localInstances, commandDispatcher };
+  }
+
+  it("acquireLocalInstanceForRun forwards to the local executor", async () => {
+    const { service, localInstances } = makeService();
+    const input = { runConfig: { runId: "run-1" } } as never;
+    localInstances.acquireInstanceForRun.mockResolvedValue({
+      outcome: "ready",
+    });
+
+    await expect(service.acquireLocalInstanceForRun(input)).resolves.toEqual({
+      outcome: "ready",
+    });
+    expect(localInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+  });
+
+  it("recoverOrphanLocalInstance forwards to the local executor", async () => {
+    const { service, localInstances } = makeService();
+    await service.recoverOrphanLocalInstance("4242:token");
+    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("4242:token");
+  });
+
+  it("shutdownLocalInstanceByOwnerId forwards to the local executor", () => {
+    const { service, localInstances } = makeService();
+    service.shutdownLocalInstanceByOwnerId("ws-1");
+    expect(
+      localInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("sendCommand routes through the local channel when one is registered for the owner", () => {
+    const { service, localInstances, commandDispatcher } = makeService();
+    localInstances.getChannel.mockReturnValue({});
+
+    service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
+
+    expect(localInstances.sendCommand).toHaveBeenCalledWith("ws-1", {
+      type: "cancel",
+    });
+    expect(commandDispatcher.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("sendCommand falls back to the HTTP queue when no local channel is registered", () => {
+    const { service, localInstances, commandDispatcher } = makeService();
+    localInstances.getChannel.mockReturnValue(undefined);
+
+    service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
+
+    expect(commandDispatcher.sendCommand).toHaveBeenCalledWith(
+      "ws-1",
+      "run-1",
+      {
+        type: "cancel",
+      }
+    );
+    expect(localInstances.sendCommand).not.toHaveBeenCalled();
+  });
+
+  it("openSession routes through the local channel when one is registered for the owner", () => {
+    const { service, localInstances, commandDispatcher } = makeService();
+    localInstances.getChannel.mockReturnValue({});
+    const params = { runId: "run-1", ownerId: "ws-1", runConfig: {} as never };
+
+    service.openSession(params);
+
+    expect(localInstances.openSession).toHaveBeenCalledWith(
+      "ws-1",
+      params.runConfig
+    );
+    expect(commandDispatcher.openSession).not.toHaveBeenCalled();
   });
 });
