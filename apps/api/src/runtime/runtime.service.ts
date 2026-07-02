@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import type { RuntimeTarget } from "@agework/shared/protocol";
 import { ConfigService } from "../config/config.service";
 import {
@@ -22,7 +22,6 @@ import type { LocalInstanceHandle, LocalLaunchInput } from "./runtime.types";
  */
 @Injectable()
 export class RuntimeService {
-  private readonly logger = new Logger(RuntimeService.name);
   private readonly defaults: RuntimeTargetDefaults;
   private readonly sandboxEngines: Map<SandboxEngineType, SandboxEngine>;
 
