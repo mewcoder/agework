@@ -321,6 +321,8 @@ export class WorkerHostService {
     }
     if (resource.runtimeType === "sandbox") {
       this.shutdownSandboxInstanceByOwnerId(resource.ownerId);
+    } else if (resource.runtimeType === "local") {
+      this.shutdownLocalInstanceByOwnerId(resource.ownerId);
     }
     await this.markRuntimeStoppedById(resource, "manual_stop");
     return { ok: true };

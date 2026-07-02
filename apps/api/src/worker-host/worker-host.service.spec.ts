@@ -377,3 +377,89 @@ describe("WorkerHostService local instance orchestration", () => {
     expect(commandDispatcher.openSession).not.toHaveBeenCalled();
   });
 });
+
+describe("WorkerHostService.stopRuntimeInstance", () => {
+  function makeService() {
+    const registry = {
+      findById: vi.fn(),
+      markStoppedById: vi.fn().mockResolvedValue(undefined),
+    };
+    const sandboxInstances = { shutdownRuntimeInstanceByOwnerId: vi.fn() };
+    const localInstances = {
+      getChannel: vi.fn().mockReturnValue(undefined),
+      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+    };
+    const service = new WorkerHostService(
+      {} as never,
+      {} as never,
+      {} as never,
+      registry as never,
+      {} as never,
+      sandboxInstances as never,
+      localInstances as never
+    );
+    return { service, registry, sandboxInstances, localInstances };
+  }
+
+  it("physically shuts down the sandbox executor for a running sandbox resource", async () => {
+    const { service, registry, sandboxInstances, localInstances } =
+      makeService();
+    registry.findById.mockResolvedValue({
+      id: "rr-1",
+      runtimeType: "sandbox",
+      ownerId: "ws-1",
+      status: "running",
+    });
+
+    await expect(service.stopRuntimeInstance("rr-1")).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-1");
+    expect(
+      localInstances.shutdownRuntimeInstanceByOwnerId
+    ).not.toHaveBeenCalled();
+    expect(registry.markStoppedById).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-1" }),
+      "manual_stop"
+    );
+  });
+
+  it("physically shuts down the local executor for a running local resource", async () => {
+    const { service, registry, sandboxInstances, localInstances } =
+      makeService();
+    registry.findById.mockResolvedValue({
+      id: "rr-2",
+      runtimeType: "local",
+      ownerId: "ws-2",
+      status: "running",
+    });
+
+    await expect(service.stopRuntimeInstance("rr-2")).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(
+      localInstances.shutdownRuntimeInstanceByOwnerId
+    ).toHaveBeenCalledWith("ws-2");
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).not.toHaveBeenCalled();
+    expect(registry.markStoppedById).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-2" }),
+      "manual_stop"
+    );
+  });
+
+  it("throws when the resource is missing or not running", async () => {
+    const { service, registry } = makeService();
+    registry.findById.mockResolvedValue({ status: "stopped" });
+
+    await expect(service.stopRuntimeInstance("rr-3")).rejects.toThrow(
+      "not found or not running"
+    );
+    expect(registry.markStoppedById).not.toHaveBeenCalled();
+  });
+});
