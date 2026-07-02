@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { ChildProcess } from "node:child_process";
+import { generateId } from "@agework/shared";
 import type {
   AcquireInstanceResult,
   CommandPayload,
@@ -65,17 +66,56 @@ export class LocalInstanceExecutor {
       };
     }
 
-    const { runtimeInstanceId, channel } = this.runtimeService.launchLocal({
-      runId: input.runConfig.runId,
-      env: {
-        AGEWORK_WORKER_KEEP_ALIVE: "true",
-        AGEWORK_WORKER_CHANNEL: "ipc",
-        ...(input.runConfig.workerLogFilePath
-          ? { AGEWORK_WORKER_LOG_FILE: input.runConfig.workerLogFilePath }
-          : {}),
+    const insertResult = await this.registry.insertStarting(
+      {
+        runtimeType: "local",
+        isolationScope: "workspace",
+        workspaceId,
+        ownerId,
       },
-    });
+      generateId(),
+      "ipc"
+    );
+    if (!insertResult.ok) {
+      // local 走 IPC,父子进程关系一旦断了就没有重连这回事(设计文档 2.4 节)。
+      // 已有行不管是 starting 还是 running,都不能安全复用,统一报错。
+      return {
+        outcome: "error",
+        error: `owner ${ownerId} already has an active local instance record (status=${insertResult.existing.status}); this process cannot reattach to it`,
+      };
+    }
 
+    let launched: {
+      runtimeInstanceId: string;
+      channel: LocalOwnerState["channel"];
+    };
+    try {
+      launched = this.runtimeService.launchLocal({
+        runId: input.runConfig.runId,
+        env: {
+          AGEWORK_WORKER_KEEP_ALIVE: "true",
+          AGEWORK_WORKER_CHANNEL: "ipc",
+          ...(input.runConfig.workerLogFilePath
+            ? { AGEWORK_WORKER_LOG_FILE: input.runConfig.workerLogFilePath }
+            : {}),
+        },
+      });
+    } catch (err) {
+      await this.registry
+        .markErrorByOwner(
+          "local",
+          "workspace",
+          ownerId,
+          err instanceof Error ? err.message : String(err)
+        )
+        .catch(swallow(this.logger, `mark launch error for owner ${ownerId}`));
+      return {
+        outcome: "error",
+        error: `launch local worker failed: ${String(err)}`,
+      };
+    }
+
+    const { runtimeInstanceId, channel } = launched;
     const state: LocalOwnerState = {
       runtimeInstanceId,
       channel,

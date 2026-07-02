@@ -32,11 +32,13 @@ function makeRuntimeService(channel = makeChannel()) {
 function makeRegistry() {
   return {
     findActiveByWorkspace: vi.fn().mockResolvedValue(null),
+    insertStarting: vi.fn().mockResolvedValue({ ok: true }),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
     markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
+    markErrorByOwner: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -127,6 +129,85 @@ describe("LocalInstanceExecutor", () => {
         outcome: "ready",
         runtimeInstanceId: "4242:token-1",
       });
+    });
+
+    it("writes a starting row before launching, then flips it to running", async () => {
+      const { executor, registry } = makeExecutor();
+
+      await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+
+      expect(registry.insertStarting).toHaveBeenCalledWith(
+        {
+          runtimeType: "local",
+          isolationScope: "workspace",
+          workspaceId: "ws-1",
+          ownerId: "ws-1",
+        },
+        expect.any(String),
+        "ipc"
+      );
+      expect(registry.upsertRunning).toHaveBeenCalledWith(
+        {
+          runtimeType: "local",
+          isolationScope: "workspace",
+          workspaceId: "ws-1",
+          ownerId: "ws-1",
+        },
+        "4242:token-1",
+        "ipc"
+      );
+    });
+
+    it("resolves error on insertStarting conflict without forking a process (local can never reattach across restarts)", async () => {
+      const { executor, runtimeService, registry } = makeExecutor();
+      registry.insertStarting.mockResolvedValueOnce({
+        ok: false,
+        existing: { runtimeInstanceId: "9999:stale-token", status: "running" },
+      });
+
+      const result = await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+
+      expect(result.outcome).toBe("error");
+      expect(runtimeService.launchLocal).not.toHaveBeenCalled();
+    });
+
+    it("marks the row as error when launchLocal throws synchronously", async () => {
+      const runtimeService = makeRuntimeService();
+      runtimeService.launchLocal.mockImplementation(() => {
+        throw new Error("fork failed: EAGAIN");
+      });
+      const { executor, registry } = makeExecutor({ runtimeService });
+
+      const result = await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+
+      expect(result.outcome).toBe("error");
+      expect(registry.markErrorByOwner).toHaveBeenCalledWith(
+        "local",
+        "workspace",
+        "ws-1",
+        expect.stringContaining("fork failed")
+      );
     });
   });
 
