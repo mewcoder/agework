@@ -152,6 +152,39 @@ describe("IpcKeepAliveTransport", () => {
 
       await expect(pending).resolves.toEqual(expected);
     });
+
+    it("resolves immediately from the buffer when run.config arrives before fetchRunConfig is called (production push-then-pull ordering)", async () => {
+      const transport = new IpcKeepAliveTransport();
+      const config = makeRunConfig({ runId: "run-10" });
+
+      // openSession pushes run.config first, sendCommand's user_message triggers
+      // fetchRunConfig later — the parent never waits for fetchRunConfig before
+      // sending the config, so the config can genuinely arrive first.
+      emitMessage(
+        runConfigMessageToRpcNotification({
+          runId: "run-10",
+          seq: 0,
+          type: "run.config",
+          payload: config,
+          ts: "2026-01-01T00:00:00.000Z",
+        })
+      );
+
+      await expect(transport.fetchRunConfig("run-10")).resolves.toEqual(config);
+    });
+
+    it("rejects if no run.config arrives within the timeout", async () => {
+      vi.useFakeTimers();
+      const transport = new IpcKeepAliveTransport();
+      const pending = transport.fetchRunConfig("run-11");
+      const assertion = expect(pending).rejects.toThrow(
+        "Timed out waiting for run.config for run run-11"
+      );
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+      vi.useRealTimers();
+    });
   });
 
   describe("emit", () => {
@@ -225,6 +258,30 @@ describe("IpcKeepAliveTransport", () => {
         })
       );
       await expect(pendingOther).resolves.toEqual(expected);
+    });
+
+    it("discards a buffered run.config that arrived before fetchRunConfig was ever called", async () => {
+      const transport = new IpcKeepAliveTransport();
+      emitMessage(
+        runConfigMessageToRpcNotification({
+          runId: "run-drop",
+          seq: 0,
+          type: "run.config",
+          payload: makeRunConfig({ runId: "run-drop" }),
+          ts: "2026-01-01T00:00:00.000Z",
+        })
+      );
+
+      transport.cleanup("run-drop");
+
+      vi.useFakeTimers();
+      const pending = transport.fetchRunConfig("run-drop");
+      const assertion = expect(pending).rejects.toThrow(
+        "Timed out waiting for run.config for run run-drop"
+      );
+      await vi.advanceTimersByTimeAsync(10_000);
+      await assertion;
+      vi.useRealTimers();
     });
   });
 });
