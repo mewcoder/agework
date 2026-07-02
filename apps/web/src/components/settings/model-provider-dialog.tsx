@@ -159,7 +159,7 @@ function ModelProviderDialogForm({
   const apiKeyValue = useWatch({ control: form.control, name: "apiKey" }) ?? "";
   const formId = `model-provider-dialog-form-${modelProvider?.modelProviderId ?? "new"}`;
   const showAgentSelect = allowAgentSelect && !isEdit;
-  const agents = agentOptions?.agents ?? [
+  const agents = agentOptions?.list ?? [
     { id: agent, label: AGENT_LABELS[agent] },
   ];
   const hasRequiredFields =

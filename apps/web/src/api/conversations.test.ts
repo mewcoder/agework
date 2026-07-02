@@ -156,10 +156,11 @@ describe('conversationsApi', () => {
 
   describe('listMessages', () => {
     it('用 query 参数获取消息列表', async () => {
-      mockApiGet.mockResolvedValue([{ id: 'm1' }]);
-      await conversationsApi.listMessages('conv-1');
+      mockApiGet.mockResolvedValue({ list: [{ id: 'm1' }] });
+      const result = await conversationsApi.listMessages('conv-1');
 
       expect(mockApiGet).toHaveBeenCalledWith('/api/v1/conversations/messages/list?id=conv-1');
+      expect(result).toEqual([{ id: 'm1' }]);
     });
   });
 

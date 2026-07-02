@@ -43,6 +43,7 @@ export class RuntimeService {
     return resolveRuntimeTarget(input, this.defaults);
   }
 
+  /** 返回当前运行时策略配置(默认/可选 runtimeType、isolationScope、空闲超时秒数),供前端展示与校验用。 */
   getRuntimePolicy() {
     return {
       runtimeType: this.configService.getDefaultRuntimeType(),
@@ -55,6 +56,7 @@ export class RuntimeService {
 
   // ── sandbox engine 引擎面 ──────────────────────────────────────────
 
+  /** 按 engineType 拿到或新建一个 sandbox 运行时实例。 */
   getOrCreateSandbox(
     engineType: SandboxEngineType,
     input: SandboxStartInput
@@ -62,6 +64,7 @@ export class RuntimeService {
     return this.resolveSandboxEngine(engineType).getOrCreate(input);
   }
 
+  /** 恢复一个已存在的 sandbox 运行时;引擎不支持 resume 时返回 undefined。 */
   resumeSandbox(
     engineType: SandboxEngineType,
     runtimeInstanceId: string,
@@ -73,6 +76,7 @@ export class RuntimeService {
     );
   }
 
+  /** 在指定 sandbox 运行时上启动 worker 进程。 */
   startSandboxWorker(
     engineType: SandboxEngineType,
     runtime: SandboxRuntime,
@@ -81,6 +85,7 @@ export class RuntimeService {
     return this.resolveSandboxEngine(engineType).startWorker(runtime, input);
   }
 
+  /** 停止指定的 sandbox 运行时实例。 */
   stopSandbox(
     engineType: SandboxEngineType,
     runtimeInstanceId: string
@@ -98,10 +103,12 @@ export class RuntimeService {
 
   // ── local Provider 门面 ────────────────────────────────────────────
 
+  /** fork 一个本地 worker 子进程并返回其句柄。 */
   launchLocal(input: LocalLaunchInput): LocalInstanceHandle {
     return this.localProvider.launch(input);
   }
 
+  /** 恢复(或按需终止)一个孤儿本地运行时实例;runtimeInstanceId 格式与本地进程标识一致。 */
   recoverOrphanLocal(runtimeInstanceId: string): Promise<void> {
     return this.localProvider.recoverOrphan(runtimeInstanceId);
   }

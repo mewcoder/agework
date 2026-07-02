@@ -16,7 +16,7 @@ import type {
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
-import { ExecutionService } from "../execution/execution.service";
+import { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -33,7 +33,7 @@ import {
   RunEventService,
   compactData,
 } from "../../run-event/run-event.service";
-import type { StartRunInput } from "../run-service.types";
+import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { safePathPart } from "../../common/safe-path";
 import { RunStream } from "../streaming/run-stream";
@@ -65,7 +65,7 @@ export class RunLauncher {
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
     private readonly workerHost: WorkerHostService,
-    private readonly executionService: ExecutionService,
+    private readonly executor: WorkerRunExecutor,
     private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
@@ -496,7 +496,7 @@ export class RunLauncher {
         .catch(
           swallow(this.logger, `record runtime starting for run ${runId}`)
         );
-      return this.executionService.start({
+      return this.executor.start({
         runConfig,
         runtimeTarget,
         onRuntimeInstanceIdReady: (runtimeInstanceId) => {

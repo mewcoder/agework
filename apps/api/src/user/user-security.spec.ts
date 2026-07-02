@@ -1,27 +1,13 @@
-vi.mock("../prisma/prisma.service", () => ({
-  PrismaService: class PrismaService {},
-}));
-
-import { Reflector } from "@nestjs/core";
-import { JwtService } from "@nestjs/jwt";
-import type { ExecutionContext } from "@nestjs/common";
-import { AuthService } from "./auth.service";
-import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import type { JwtUser } from "./decorators/current-user.decorator";
-import { PrismaService } from "../prisma/prisma.service";
-import { SystemInitService } from "../system/init/system-init.service";
-import { UserService } from "../user/user.service";
-import { UserRepository } from "../user/user.repository";
-import { SessionService } from "./session/session.service";
-import { SUPER_ADMIN_USERNAME } from "../user/credential/user-credential";
-import { PasswordHasherService } from "../user/credential/password-hasher.service";
-import { LoginFailedException } from "../user/credential/login-failed.exception";
-import { ConfigService } from "../config/config.service";
-import { SystemSettingRepository } from "../config/system-setting.repository";
+import { UserService } from "./user.service";
+import { UserRepository } from "./user.repository";
+import { PasswordHasherService } from "./credential/password-hasher.service";
+import { SUPER_ADMIN_USERNAME } from "./credential/user-credential";
+import { LoginFailedException } from "./credential/login-failed.exception";
+import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { PrismaService } from "../prisma/prisma.service";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
-const NEXT_ADMIN_PASSWORD = "Next2026x";
 
 type TestUser = {
   id: string;
@@ -51,6 +37,10 @@ type UserWhere = Partial<Record<keyof TestUser, WhereValue>>;
 type UserSelect = Partial<Record<keyof TestUser, boolean>>;
 type UserData = Partial<Record<keyof TestUser, unknown>>;
 
+/**
+ * 内存版 Prisma 替身：真实驱动 UserRepository + PasswordHasherService，
+ * 用于验证 UserService 完整的账号安全业务规则（不涉及 auth/system 模块）。
+ */
 class MemoryPrisma {
   private nextId = 1;
   private users: TestUser[] = [];
@@ -149,11 +139,6 @@ class MemoryPrisma {
     },
   };
 
-  systemSetting = {
-    findUnique: () => Promise.resolve(null),
-    create: () => Promise.resolve(undefined),
-  };
-
   getUser(username: string) {
     return this.users.find((user) => user.username === username);
   }
@@ -208,41 +193,13 @@ function optionalString(value: unknown, fallback: string) {
 
 function makeServices() {
   const prisma = new MemoryPrisma();
-  const jwt = new JwtService({ secret: "test-secret" });
   const passwordHasher = new PasswordHasherService();
-  const configService = new ConfigService(
-    new SystemSettingRepository(prisma as unknown as PrismaService)
-  );
-  const users = new UserService(
-    new UserRepository(prisma as unknown as PrismaService),
-    passwordHasher,
-    {
-      emit: vi.fn(),
-    } as never
-  );
-  const sessions = {
-    issue: vi.fn(async () => ({
-      rawToken: "test-refresh-token",
-      expiresAt: new Date(Date.now() + 60_000),
-    })),
-    rotate: vi.fn(),
-    revoke: vi.fn(async () => {}),
-    revokeAllForUser: vi.fn(async () => {}),
-  } as unknown as SessionService;
-  const auth = new AuthService(users, jwt, configService, sessions);
-  const systemInitialization = new SystemInitService(users, configService);
-  const guard = new JwtAuthGuard(jwt, new Reflector(), users, configService);
+  const repository = new UserRepository(prisma as unknown as PrismaService);
+  const users = new UserService(repository, passwordHasher, {
+    emit: vi.fn(),
+  } as never);
 
-  return {
-    auth,
-    guard,
-    passwordHasher,
-    prisma,
-    sessions,
-    systemInitialization,
-    users,
-    configService,
-  };
+  return { users, repository, passwordHasher, prisma };
 }
 
 async function seedSuperAdmin(
@@ -303,80 +260,11 @@ function expectExpiresNear(
   expect(expiresTime).toBeLessThanOrEqual(Date.now() + ttlMs + 3000);
 }
 
-function contextForToken(
-  token: string,
-  path = "/api/v1/auth/query",
-  method = "GET"
-): ExecutionContext {
-  const request = {
-    headers: {
-      authorization: `Bearer ${token}`,
-    },
-    method,
-    originalUrl: path,
-  };
+describe("user account security flows", () => {
+  it("ensureDevSuperAdmin creates the fixed admin super admin without exposing a password", async () => {
+    const { users, prisma } = makeServices();
 
-  return {
-    switchToHttp: () => ({
-      getRequest: () => request,
-    }),
-    getHandler: () => contextForToken,
-    getClass: () => class TestController {},
-  } as unknown as ExecutionContext;
-}
-
-function contextWithoutToken(
-  path = "/api/v1/auth/query",
-  method = "GET"
-): ExecutionContext & { request: { user?: JwtUser } } {
-  const request = {
-    headers: {},
-    method,
-    originalUrl: path,
-    user: undefined as JwtUser | undefined,
-  };
-
-  return {
-    request,
-    switchToHttp: () => ({
-      getRequest: () => request,
-    }),
-    getHandler: () => contextWithoutToken,
-    getClass: () => class TestController {},
-  } as unknown as ExecutionContext & { request: { user?: JwtUser } };
-}
-
-describe("auth and user management security flows", () => {
-  const originalEnv = {
-    AGEWORK_DEV_AUTH_DISABLED: process.env.AGEWORK_DEV_AUTH_DISABLED,
-    AGEWORK_PRIVATE_JWT_SECRET: process.env.AGEWORK_PRIVATE_JWT_SECRET,
-    NODE_ENV: process.env.NODE_ENV,
-  };
-
-  beforeEach(() => {
-    process.env.NODE_ENV = "test";
-    process.env.AGEWORK_DEV_AUTH_DISABLED = "false";
-    process.env.AGEWORK_PRIVATE_JWT_SECRET = "test-secret";
-  });
-
-  afterEach(() => {
-    restoreEnv(
-      "AGEWORK_DEV_AUTH_DISABLED",
-      originalEnv.AGEWORK_DEV_AUTH_DISABLED
-    );
-    restoreEnv(
-      "AGEWORK_PRIVATE_JWT_SECRET",
-      originalEnv.AGEWORK_PRIVATE_JWT_SECRET
-    );
-    restoreEnv("NODE_ENV", originalEnv.NODE_ENV);
-  });
-
-  it("creates the fixed admin super admin for dev auth disabled without exposing an initial password", async () => {
-    const { prisma, systemInitialization } = makeServices();
-    process.env.NODE_ENV = "development";
-    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
-
-    await systemInitialization.onApplicationBootstrap();
+    await users.ensureDevSuperAdmin();
 
     const admin = prisma.getUser("admin");
     expect(admin).toMatchObject({
@@ -390,14 +278,14 @@ describe("auth and user management security flows", () => {
   });
 
   it("allows startup before setup and creates admin only after setup", async () => {
-    const { auth, prisma } = makeServices();
+    const { users, prisma } = makeServices();
 
-    await expect(auth.isNoSuperAdmin()).resolves.toBe(true);
+    await expect(users.isNoSuperAdmin()).resolves.toBe(true);
     expect(prisma.getUser("admin")).toBeUndefined();
 
-    const session = await auth.setupSuperAdmin("AdminInitPass1");
+    const admin = await users.setupSuperAdmin("AdminInitPass1");
 
-    expect(session.user).toMatchObject({
+    expect(admin).toMatchObject({
       username: "admin",
       role: "super_admin",
       status: "active",
@@ -409,20 +297,20 @@ describe("auth and user management security flows", () => {
       role: "super_admin",
       status: "active",
     });
-    await expect(auth.isNoSuperAdmin()).resolves.toBe(false);
-    await expect(auth.setupSuperAdmin("AdminInitPass2")).rejects.toThrow(
+    await expect(users.isNoSuperAdmin()).resolves.toBe(false);
+    await expect(users.setupSuperAdmin("AdminInitPass2")).rejects.toThrow(
       "系统已初始化"
     );
   });
 
   it("converts a concurrent super-admin creation race into 系统已初始化", async () => {
-    const { auth } = makeServices();
+    const { users } = makeServices();
     // 模拟两个请求都通过 isNoSuperAdmin 后，另一个先一步落库（P2002 -> null）
     vi.spyOn(
       UserRepository.prototype,
       "createSuperAdmin"
     ).mockResolvedValueOnce(null);
-    await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
+    await expect(users.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
       "系统已初始化"
     );
   });
@@ -448,80 +336,26 @@ describe("auth and user management security flows", () => {
     ).resolves.toBeNull();
   });
 
-  describe("production setup bootstrap key", () => {
-    const originalNodeEnv = process.env.NODE_ENV;
-    const originalKey = process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
-
-    afterEach(() => {
-      restoreEnv("NODE_ENV", originalNodeEnv);
-      restoreEnv("AGEWORK_PRIVATE_ADMIN_INIT_KEY", originalKey);
-    });
-
-    it("rejects setup when no bootstrap key is configured", async () => {
-      const { auth } = makeServices();
-      process.env.NODE_ENV = "production";
-      delete process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
-
-      await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
-        "未配置 AGEWORK_PRIVATE_ADMIN_INIT_KEY"
-      );
-    });
-
-    it("rejects setup when the bootstrap key is missing or wrong", async () => {
-      const { auth } = makeServices();
-      process.env.NODE_ENV = "production";
-      process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY = "right-key";
-
-      await expect(auth.setupSuperAdmin("AdminInitPass1")).rejects.toThrow(
-        "初始化密钥无效"
-      );
-      await expect(
-        auth.setupSuperAdmin("AdminInitPass1", "wrong-key")
-      ).rejects.toThrow("初始化密钥无效");
-    });
-
-    it("creates the super admin when the bootstrap key matches", async () => {
-      const { auth } = makeServices();
-      process.env.NODE_ENV = "production";
-      process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY = "right-key";
-
-      const session = await auth.setupSuperAdmin("AdminInitPass1", "right-key");
-      expect(session.user).toMatchObject({
-        username: "admin",
-        role: "super_admin",
-      });
-    });
-
-    it("does not require a bootstrap key outside production", async () => {
-      const { auth } = makeServices();
-      process.env.NODE_ENV = "development";
-      delete process.env.AGEWORK_PRIVATE_ADMIN_INIT_KEY;
-
-      const session = await auth.setupSuperAdmin("AdminInitPass1");
-      expect(session.user).toMatchObject({ username: "admin" });
-    });
-  });
-
   it("validates usernames and passwords before registration", async () => {
-    const { auth } = makeServices();
+    const { users } = makeServices();
 
-    await expect(auth.register("ab", "UserPass123")).rejects.toThrow(
+    await expect(users.register("ab", "UserPass123")).rejects.toThrow(
       "用户名至少需要"
     );
-    await expect(auth.register("valid_user", "short")).rejects.toThrow(
+    await expect(users.register("valid_user", "short")).rejects.toThrow(
       "密码至少需要"
     );
-    await expect(auth.register("numbers", "12345678")).rejects.toThrow(
+    await expect(users.register("numbers", "12345678")).rejects.toThrow(
       "密码需要同时包含字母和数字"
     );
-    await expect(auth.register("letters", "abcdefgh")).rejects.toThrow(
+    await expect(users.register("letters", "abcdefgh")).rejects.toThrow(
       "密码需要同时包含字母和数字"
     );
-    await expect(auth.register("SameName1", "SameName1")).rejects.toThrow(
+    await expect(users.register("SameName1", "SameName1")).rejects.toThrow(
       "密码不能和用户名相同"
     );
     await expect(
-      auth.register("common_user", "password1")
+      users.register("common_user", "password1")
     ).resolves.toMatchObject({
       username: "common_user",
       status: "pending",
@@ -529,30 +363,30 @@ describe("auth and user management security flows", () => {
   });
 
   it("keeps self-registered users pending without forcing password changes after approval", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
 
-    const registered = await auth.register("alice", "AlicePass123");
+    const registered = await users.register("alice", "AlicePass123");
     expect(registered).toMatchObject({
       role: "user",
       status: "pending",
       mustChangePassword: false,
       passwordKind: "user_set",
     });
-    await expect(auth.login("alice", "AlicePass123")).rejects.toThrow(
+    await expect(users.authenticate("alice", "AlicePass123")).rejects.toThrow(
       "用户名或密码错误"
     );
 
     await users.approve(registered.id, superAdminUser());
 
-    const login = await auth.login("alice", "AlicePass123");
-    expect(login.user).toMatchObject({
+    const login = await users.authenticate("alice", "AlicePass123");
+    expect(login).toMatchObject({
       status: "active",
       mustChangePassword: false,
     });
   });
 
   it("returns one generic error for non-existent, wrong-password, pending, and disabled logins while keeping the internal reason", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
 
     const active = await users.create(superAdminUser(), "active_user", "user");
     const disabled = await users.create(
@@ -565,7 +399,7 @@ describe("auth and user management security flows", () => {
       { status: "disabled" },
       superAdminUser()
     );
-    await auth.register("pending_user", "PendingPass123");
+    await users.register("pending_user", "PendingPass123");
 
     const attempts: Array<{
       username: string;
@@ -596,8 +430,8 @@ describe("auth and user management security flows", () => {
 
     const errors: LoginFailedException[] = [];
     for (const attempt of attempts) {
-      await auth
-        .login(attempt.username, attempt.password)
+      await users
+        .authenticate(attempt.username, attempt.password)
         .catch((error) => errors.push(error));
     }
 
@@ -615,12 +449,12 @@ describe("auth and user management security flows", () => {
 
     // 正确密码的活跃账号仍可登录，确认收敛没有误伤正常路径
     await expect(
-      auth.login("active_user", active.temporaryPassword)
-    ).resolves.toMatchObject({ user: { username: "active_user" } });
+      users.authenticate("active_user", active.temporaryPassword)
+    ).resolves.toMatchObject({ username: "active_user" });
   });
 
   it("generates 72-hour initial passwords for admin-created accounts", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
     const startedAt = new Date();
 
     const created = await users.create(superAdminUser(), "manager", "admin");
@@ -638,12 +472,15 @@ describe("auth and user management security flows", () => {
       INITIAL_PASSWORD_TTL_MS
     );
 
-    const login = await auth.login("manager", created.temporaryPassword);
-    expect(login.user.mustChangePassword).toBe(true);
+    const login = await users.authenticate(
+      "manager",
+      created.temporaryPassword
+    );
+    expect(login.mustChangePassword).toBe(true);
   });
 
   it("rejects expired initial or temporary passwords during login", async () => {
-    const { auth, prisma, users } = makeServices();
+    const { users, prisma } = makeServices();
     const created = await users.create(
       superAdminUser(),
       "expired_user",
@@ -656,12 +493,12 @@ describe("auth and user management security flows", () => {
     });
 
     await expect(
-      auth.login("expired_user", created.temporaryPassword)
+      users.authenticate("expired_user", created.temporaryPassword)
     ).rejects.toThrow("用户名或密码错误");
   });
 
   it("creates 24-hour temporary passwords during admin reset and invalidates the old password", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
     const created = await users.create(superAdminUser(), "bob", "user");
     const startedAt = new Date();
 
@@ -677,156 +514,85 @@ describe("auth and user management security flows", () => {
       startedAt,
       RESET_PASSWORD_TTL_MS
     );
-    await expect(auth.login("bob", created.temporaryPassword)).rejects.toThrow(
-      "用户名或密码错误"
-    );
+    await expect(
+      users.authenticate("bob", created.temporaryPassword)
+    ).rejects.toThrow("用户名或密码错误");
 
-    const login = await auth.login("bob", reset.temporaryPassword);
-    expect(login.user.mustChangePassword).toBe(true);
+    const login = await users.authenticate("bob", reset.temporaryPassword);
+    expect(login.mustChangePassword).toBe(true);
   });
 
   it("clears temporary password state and increments sessionVersion after forced password change", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
     const created = await users.create(superAdminUser(), "carol", "user");
-    const login = await auth.login("carol", created.temporaryPassword);
+    const login = await users.authenticate("carol", created.temporaryPassword);
 
-    const changed = await auth.completePasswordChange(
+    const changed = await users.completePasswordChange(
       created.user.id,
       "CarolPass123"
     );
 
-    expect(login.user.sessionVersion).toBe(1);
-    expect(changed.user).toMatchObject({
+    expect(login.sessionVersion).toBe(1);
+    expect(changed).toMatchObject({
       mustChangePassword: false,
       passwordKind: "user_set",
       passwordExpiresAt: null,
       sessionVersion: 2,
     });
     await expect(
-      auth.login("carol", created.temporaryPassword)
+      users.authenticate("carol", created.temporaryPassword)
     ).rejects.toThrow("用户名或密码错误");
-    await expect(auth.login("carol", "CarolPass123")).resolves.toMatchObject({
-      user: { mustChangePassword: false },
-    });
+    await expect(
+      users.authenticate("carol", "CarolPass123")
+    ).resolves.toMatchObject({ mustChangePassword: false });
   });
 
   it("rejects forced password changes when the account does not require one", async () => {
-    const { auth, users } = makeServices();
+    const { users } = makeServices();
 
     const created = await users.create(superAdminUser(), "ready_user", "user");
-    const changed = await auth.completePasswordChange(
+    const changed = await users.completePasswordChange(
       created.user.id,
       "ReadyPass123"
     );
 
     await expect(
-      auth.completePasswordChange(changed.user.id, "ReadyPass456")
+      users.completePasswordChange(changed.id, "ReadyPass456")
     ).rejects.toThrow("当前账号不需要强制修改密码");
   });
 
-  it("rejects tokens whose sessionVersion no longer matches the user record", async () => {
-    const { auth, guard, users } = makeServices();
-    const created = await users.create(superAdminUser(), "dave", "user");
-    const oldLogin = await auth.login("dave", created.temporaryPassword);
-    const newLogin = await auth.changePassword(
-      created.user.id,
-      created.temporaryPassword,
-      "DavePass123"
-    );
-
-    await expect(
-      guard.canActivate(contextForToken(oldLogin.token))
-    ).rejects.toThrow();
-    await expect(
-      guard.canActivate(contextForToken(newLogin.token))
-    ).resolves.toBe(true);
-  });
-
-  it("blocks non-password endpoints while the current password must be changed", async () => {
-    const { auth, guard, users } = makeServices();
-    const created = await users.create(superAdminUser(), "erin", "user");
-    const login = await auth.login("erin", created.temporaryPassword);
-
-    await expect(
-      guard.canActivate(
-        contextForToken(login.token, "/api/v1/admin/users/list")
-      )
-    ).rejects.toThrow();
-    await expect(
-      guard.canActivate(contextForToken(login.token, "/api/v1/auth/query"))
-    ).resolves.toBe(true);
-    await expect(
-      guard.canActivate(
-        contextForToken(login.token, "/api/v1/auth/update-password", "POST")
-      )
-    ).resolves.toBe(true);
-  });
-
   it("prevents ordinary admins from managing admin and super admin accounts", async () => {
-    const { auth, passwordHasher, prisma, users } = makeServices();
+    const { users, passwordHasher, prisma } = makeServices();
     await seedSuperAdmin(passwordHasher, prisma);
     const manager = await users.create(superAdminUser(), "ops_admin", "admin");
-    const root = await auth.login("admin", "AdminInitPass1");
+    const root = await users.authenticate("admin", "AdminInitPass1");
 
     await expect(
       users.resetPassword(manager.user.id, adminUser())
     ).rejects.toThrow("普通管理员不能管理管理员账号");
     await expect(
-      users.resetPassword(root.user.id, superAdminUser())
+      users.resetPassword(root.id, superAdminUser())
     ).rejects.toThrow("超级管理员只能通过本人账号或服务器脚本管理");
   });
 
   it("uses the same password rules for super admin password changes", async () => {
-    const { auth, passwordHasher, prisma } = makeServices();
+    const { users, passwordHasher, prisma } = makeServices();
 
     await seedSuperAdmin(passwordHasher, prisma);
-    const login = await auth.login("admin", "AdminInitPass1");
+    const login = await users.authenticate("admin", "AdminInitPass1");
 
     await expect(
-      auth.changePassword(login.user.id, "AdminInitPass1", "12345678")
+      users.changePassword(login.id, "AdminInitPass1", "12345678")
     ).rejects.toThrow("密码需要同时包含字母和数字");
     await expect(
-      auth.changePassword(login.user.id, "AdminInitPass1", "abcdefgh")
+      users.changePassword(login.id, "AdminInitPass1", "abcdefgh")
     ).rejects.toThrow("密码需要同时包含字母和数字");
 
     await expect(
-      auth.changePassword(login.user.id, "AdminInitPass1", NEXT_ADMIN_PASSWORD)
+      users.changePassword(login.id, "AdminInitPass1", "Next2026x")
     ).resolves.toMatchObject({
-      user: { mustChangePassword: false, passwordKind: "user_set" },
+      mustChangePassword: false,
+      passwordKind: "user_set",
     });
-  });
-
-  it("uses the real admin user for dev auth disabled only in development", async () => {
-    const { guard, prisma, systemInitialization } = makeServices();
-
-    process.env.NODE_ENV = "development";
-    process.env.AGEWORK_DEV_AUTH_DISABLED = "true";
-
-    await systemInitialization.onApplicationBootstrap();
-    const context = contextWithoutToken();
-    await expect(guard.canActivate(context)).resolves.toBe(true);
-    const admin = prisma.getUser("admin");
-    expect(admin).toMatchObject({
-      username: "admin",
-      role: "super_admin",
-      status: "active",
-    });
-    expect(context.request.user).toMatchObject({
-      userId: admin?.id,
-      username: "admin",
-      role: "super_admin",
-      status: "active",
-    });
-
-    process.env.NODE_ENV = "production";
-    await expect(guard.canActivate(contextWithoutToken())).rejects.toThrow();
   });
 });
-
-function restoreEnv(name: string, value: string | undefined) {
-  if (value === undefined) {
-    delete process.env[name];
-  } else {
-    process.env[name] = value;
-  }
-}

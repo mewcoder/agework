@@ -149,7 +149,7 @@ export class ModelProviderService implements OnModuleInit {
     };
     const existing = await this.repo.findById(id);
     if (existing) {
-      const isPlaceholder =
+      const matchesPlaceholder =
         existing.agentType === agentType &&
         existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM &&
         existing.userId === null &&
@@ -158,7 +158,10 @@ export class ModelProviderService implements OnModuleInit {
         existing.apiKey === "" &&
         normalizeModels(existing.models).length === 0 &&
         Object.keys(normalizeExtraConfig(existing.extraConfig)).length === 0;
-      if (isPlaceholder && existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
+      if (
+        matchesPlaceholder &&
+        existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM
+      ) {
         return existing;
       }
       return this.repo.update(id, placeholder);
@@ -227,16 +230,19 @@ export class ModelProviderService implements OnModuleInit {
     };
   }
 
+  /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。 */
   async listEnabled(agentType: string) {
     const list = await this.list(agentType, false);
     return { list };
   }
 
+  /** 列出指定 agent 类型下全部模型服务（含未启用），供 admin 管理端使用；原样回显 `apiKey`，不脱敏。 */
   async listForAdmin(agentType: string) {
     const list = await this.list(agentType, true);
     return { list };
   }
 
+  /** 创建一个全局作用域的自定义模型服务；校验 baseUrl 合法性与同 scope 下名称唯一性。 */
   async create(
     agentType: string,
     name: string,
@@ -266,6 +272,7 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(modelProvider, false);
   }
 
+  /** 更新一个自定义模型服务的名称与配置；系统环境模型服务（id 以 `system:` 开头）不可更新。 */
   async update(
     modelProviderId: string,
     name: string,
@@ -295,6 +302,7 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(updated, false);
   }
 
+  /** 启用/停用一个模型服务；系统环境模型服务会先确保 placeholder 记录存在，再写入启用状态。 */
   async setEnabled(modelProviderId: string, isEnabled: boolean) {
     if (isSystemModelProviderId(modelProviderId)) {
       const agentType = agentTypeFromSystemModelProviderId(modelProviderId);
@@ -310,8 +318,10 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(updated, false);
   }
 
-  // 供 agent 模块解析运行所需的模型服务：系统/自定义都以数据库启用状态为准。
-  // 系统配置不携带 ProviderConfig；未找到/不可用返回 null，由调用方决定如何报错。
+  /**
+   * 供 agent 模块解析运行所需的模型服务：系统/自定义都以数据库启用状态为准。
+   * 系统配置不携带 ProviderConfig；未找到/不可用返回 null，由调用方决定如何报错。
+   */
   async resolveEnabledProvider(
     agentType: string,
     modelProviderId: string
@@ -330,6 +340,7 @@ export class ModelProviderService implements OnModuleInit {
     };
   }
 
+  /** 删除一个自定义模型服务；系统环境不可删除，启用中的模型服务须先停用才能删除。 */
   async delete(modelProviderId: string) {
     if (isSystemModelProviderId(modelProviderId))
       throw new BadRequestException("系统环境不可删除");
@@ -341,6 +352,7 @@ export class ModelProviderService implements OnModuleInit {
     await this.repo.delete(modelProviderId);
   }
 
+  /** 返回指定 agent 类型系统环境的诊断信息（相关环境变量是否设置、配置文件是否存在），供 admin 排查系统模型服务可用性使用。 */
   getSystemInfo(agent: string) {
     const agentType = this.resolveAgentType(agent);
     const home = homedir();
@@ -409,6 +421,7 @@ export class ModelProviderService implements OnModuleInit {
     };
   }
 
+  /** 对一个自定义模型服务发起一次最小生成请求，探测连通性/鉴权是否可用；系统环境不支持连通性测试。 */
   async ping(
     modelProviderId: string,
     includeDisabled = false

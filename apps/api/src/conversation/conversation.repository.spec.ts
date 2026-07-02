@@ -7,11 +7,17 @@ function makePrisma(parts: {
   message?: Record<string, unknown>;
   workspace?: Record<string, unknown>;
 }) {
-  return {
+  const client = {
     conversation: parts.conversation ?? {},
     message: parts.message ?? {},
     workspace: parts.workspace ?? {},
+    $transaction: vi.fn((arg: unknown) =>
+      typeof arg === "function"
+        ? (arg as (tx: unknown) => unknown)(client)
+        : Promise.resolve(arg)
+    ),
   };
+  return client;
 }
 
 describe("ConversationRepository", () => {

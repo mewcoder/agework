@@ -280,7 +280,7 @@ describe("external API route convention", () => {
     );
 
     expect(controllerPath(AdminWorkspaceController)).toBe("admin/workspaces");
-    expectRoute(AdminWorkspaceController, "listAll", "get", "all");
+    expectRoute(AdminWorkspaceController, "listAll", "get", "list");
     expectRoute(AdminWorkspaceController, "update", "post", "update");
   });
 

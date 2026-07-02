@@ -4,6 +4,7 @@ import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerHostService } from "./worker-host.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
+import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
 
 /**
  * Worker run API（run-scoped）— 仅供 worker 调用，不暴露给前端。
@@ -35,7 +36,7 @@ export class WorkerRunController {
   @Post(":runId/events")
   async postEvent(
     @Param() params: WorkerRunParamDto,
-    @Body() body: unknown
+    @Body() body: WorkerEventPostBodyDto
   ): Promise<{ ok: boolean }> {
     return this.workerHost.postEvent(params.runId, body);
   }

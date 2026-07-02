@@ -88,7 +88,7 @@ export function getAgentOptionsByType(): AgentOptionsByType {
 export function getAgentOptions(): AgentOptionsResponse {
   const optionsByType = getAgentOptionsByType();
   return {
-    agents: AGENT_TYPES.map(
+    list: AGENT_TYPES.map(
       (id) =>
         ({
           id,

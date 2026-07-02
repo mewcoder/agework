@@ -92,6 +92,10 @@ export class ConversationService {
     return pendingUserAction === "question" ? "question" : null;
   }
 
+  /**
+   * 按属主分页查询会话列表,默认只返回常规会话(归档会话需显式传 `status=archived`)。
+   * 调用方:`ConversationController` `GET /conversations/list`。
+   */
   async list(userId: string, after?: string, status?: string, sort?: string) {
     const sortKey = sort === "createdAt" ? "createdAt" : "updatedAt";
     const conversations = await this.repo.findByOwner(userId, {
@@ -236,6 +240,10 @@ export class ConversationService {
     return resolvedAgentType;
   }
 
+  /**
+   * 按属主读取单条会话,非本人或不存在抛 `NotFoundException`。
+   * 调用方:`ConversationController` `GET /conversations/query`、`AgentService`(校验会话归属)、`RunLauncher`。
+   */
   async findById(userId: string, conversationId: string) {
     const c = await this.repo.findOwnedById(userId, conversationId);
     if (!c) {
@@ -244,6 +252,10 @@ export class ConversationService {
     return this.toConversationDto(c);
   }
 
+  /**
+   * 按属主批量查询指定会话 id 的运行状态,用于前端轮询/批量刷新;非本人的 id 会被过滤掉。
+   * 调用方:`ConversationController` `POST /conversations/statuses/query`。
+   */
   async listRunStatuses(userId: string, ids: string[]) {
     const uniqueIds = [...new Set(ids.filter(Boolean))].slice(0, 50);
     if (uniqueIds.length === 0) return { list: [] };
@@ -265,6 +277,10 @@ export class ConversationService {
     };
   }
 
+  /**
+   * 记录 agent session id,供后续 resume 时关联同一个 agent 会话。
+   * 调用方:`RunLauncher`(run 建立/恢复 agent session 后回写)。
+   */
   async setAgentSessionId(conversationId: string, agentSessionId: string) {
     await this.repo.setAgentSessionId(conversationId, agentSessionId);
   }
@@ -289,6 +305,10 @@ export class ConversationService {
     await this.repo.updateTitle(input.conversationId, title);
   }
 
+  /**
+   * 按属主更新会话标题 / 状态。只改标题时跳过 `updatedAt` 更新,避免会话在列表中重新排序。
+   * 调用方:`ConversationController` `POST /conversations/update`。
+   */
   async update(
     userId: string,
     conversationId: string,
@@ -305,6 +325,12 @@ export class ConversationService {
     await this.repo.updateOwned(userId, conversationId, { title, status });
   }
 
+  /**
+   * 原子切换会话运行状态;切到 `running` 时要求当前状态为 `idle`/`error`,防止重复启动 run。
+   * 返回是否命中并发生变更。
+   * 调用方:`AgentService`(停止后置 idle)、`RunLauncher`(激活前置 running)、
+   * `RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)。
+   */
   async setRunStatus(
     conversationId: string,
     runStatus: "idle" | "running" | "error"
@@ -312,6 +338,10 @@ export class ConversationService {
     return this.repo.setRunStatus(conversationId, runStatus);
   }
 
+  /**
+   * 记录待用户操作(如 `question`),用于 requires-action 场景标记会话需要用户输入。
+   * 调用方:`RunStatusService`。
+   */
   async setPendingUserAction(
     conversationId: string,
     pendingUserAction: ConversationPendingUserAction
@@ -319,6 +349,11 @@ export class ConversationService {
     await this.repo.setPendingUserAction(conversationId, pendingUserAction);
   }
 
+  /**
+   * 落库用户消息,并 best-effort 触发默认标题生成(首条用户消息时)与可选的 LLM 标题生成;
+   * 两者失败均被 swallow,不影响消息保存本身。
+   * 调用方:`RunLauncher`(run 发起前保存用户消息)。
+   */
   async saveUserMessage(
     conversationId: string,
     userMessage: AssistantUserMessage,
@@ -368,6 +403,10 @@ export class ConversationService {
     }
   }
 
+  /**
+   * 将已落库的消息与 run 关联,便于后续按 run 级联查询 / 操作消息。
+   * 调用方:`RunLauncher`。
+   */
   async attachMessageToRun(
     conversationId: string,
     messageId: string,
@@ -403,14 +442,26 @@ export class ConversationService {
     return firstUserText;
   }
 
+  /**
+   * 按属主归档会话。
+   * 调用方:`ConversationController` `POST /conversations/archive`。
+   */
   async archive(userId: string, conversationId: string) {
     await this.repo.archiveOwned(userId, conversationId);
   }
 
+  /**
+   * 按属主取消归档会话。
+   * 调用方:`ConversationController` `POST /conversations/unarchive`。
+   */
   async unarchive(userId: string, conversationId: string) {
     await this.repo.unarchiveOwned(userId, conversationId);
   }
 
+  /**
+   * 按属主软删除会话。
+   * 调用方:`ConversationController` `POST /conversations/remove`。
+   */
   async delete(userId: string, conversationId: string) {
     await this.repo.softDeleteOwned(userId, conversationId);
   }
@@ -423,29 +474,44 @@ export class ConversationService {
     await this.repo.deleteByWorkspace(workspaceId, deletedAt);
   }
 
+  /**
+   * 按属主批量软删除全部已归档会话。
+   * 调用方:`ConversationController` `POST /conversations/clear-archived`。
+   */
   async clearArchived(userId: string) {
     await this.repo.clearArchivedOwned(userId);
   }
 
+  /**
+   * 按属主返回会话的消息列表(assistant-ui 格式,已按前序消息补齐 `parent_id`)。
+   * 非本人或不存在返回空列表而非抛错。
+   * 调用方:`ConversationController` `GET /conversations/messages/list`。
+   */
   async listMessages(userId: string, conversationId: string) {
     const conversation = await this.repo.findOwnedById(userId, conversationId);
-    if (!conversation) return [];
+    if (!conversation) return { list: [] };
 
     const messages = await this.repo.findMessages(conversationId);
     let previousMessageId: string | null = null;
-    return messages.map((m) => {
-      const content = m.content as unknown;
-      const message = {
-        id: m.id,
-        parent_id: m.parentId ?? previousMessageId,
-        format: this.normalizeMessageFormat(m.format, content),
-        content,
-      };
-      previousMessageId = message.id;
-      return message;
-    });
+    return {
+      list: messages.map((m) => {
+        const content = m.content as unknown;
+        const message = {
+          id: m.id,
+          parent_id: m.parentId ?? previousMessageId,
+          format: this.normalizeMessageFormat(m.format, content),
+          content,
+        };
+        previousMessageId = message.id;
+        return message;
+      }),
+    };
   }
 
+  /**
+   * 写入或更新一条消息,并同步会话 `updatedAt`(用于会话列表排序)。
+   * 调用方:`saveUserMessage`(本类内部)、`RunLauncher`(assistant 消息落库)。
+   */
   async upsertMessage(
     conversationId: string,
     data: {

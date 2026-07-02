@@ -231,7 +231,7 @@ export function ModelProvider({
   showHeader?: boolean;
 }) {
   const { data: agentOptions, isLoading: isLoadingAgents } = useAgentOptions();
-  const agents = agentOptions?.agents ?? [];
+  const agents = agentOptions?.list ?? [];
 
   return (
     <div className={showHeader ? 'space-y-6' : 'space-y-0'}>

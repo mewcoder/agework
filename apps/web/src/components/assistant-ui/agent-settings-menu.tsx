@@ -101,7 +101,7 @@ function AgentSelector() {
   // 显示当前 agent 的小图标提示（agent 随首条消息落库后不可更改）。
   if (selectedConversationId === undefined) return null;
 
-  const agents = agentOptions?.agents ?? [];
+  const agents = agentOptions?.list ?? [];
   const selectedAgentLabel =
     agents.find((agent) => agent.id === selectedAgentType)?.label ??
     AGENT_LABELS[selectedAgentType];
@@ -136,7 +136,7 @@ export function AgentSwitcher() {
   const { data: agentOptions } = useAgentOptions();
   if (selectedConversationId !== undefined) return null;
 
-  const agents = agentOptions?.agents ?? [];
+  const agents = agentOptions?.list ?? [];
   if (agents.length === 0) return null;
 
   const selectedIndex = Math.max(

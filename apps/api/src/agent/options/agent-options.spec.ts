@@ -93,8 +93,8 @@ describe("getAgentOptions", () => {
   it("returns agents array with all agent types", () => {
     vi.spyOn(process, "getuid").mockReturnValue(1000);
     const result = getAgentOptions();
-    expect(result.agents.length).toBeGreaterThan(0);
-    for (const agent of result.agents) {
+    expect(result.list.length).toBeGreaterThan(0);
+    for (const agent of result.list) {
       expect(agent.id).toBeTruthy();
       expect(agent.label).toBeTruthy();
       expect(agent.options).toBeDefined();

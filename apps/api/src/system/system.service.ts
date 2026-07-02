@@ -109,6 +109,7 @@ export class SystemService {
     "api"
   );
 
+  /** 返回平台信息与各 agent SDK 版本,供 /system/about 只读端点使用。 */
   about(): AboutInfo {
     const dependencies = this.apiPackage?.dependencies ?? {};
 

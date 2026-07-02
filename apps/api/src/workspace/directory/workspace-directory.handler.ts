@@ -166,16 +166,16 @@ export class WorkspaceDirectoryHandler {
     }
 
     let rootPath: string;
-    let isDirectory = false;
+    let directory = false;
     try {
       rootPath = realpathSync(resolve(expanded));
-      isDirectory = statSync(rootPath).isDirectory();
+      directory = statSync(rootPath).isDirectory();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new BadRequestException(`目录不存在或不可访问: ${msg}`);
     }
 
-    if (!isDirectory) {
+    if (!directory) {
       throw new BadRequestException("目录路径必须指向一个目录");
     }
     return rootPath;

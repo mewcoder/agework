@@ -13,7 +13,7 @@ import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
-import { ExecutionService } from "../execution/execution.service";
+import { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { summarizeMessagePayload } from "./message-payload-summary";
@@ -25,7 +25,7 @@ import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
-import { WorkerAgUiEventHandler } from "./agui-event.handler";
+import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
 @Injectable()
 export class WorkerEventService
@@ -37,7 +37,7 @@ export class WorkerEventService
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
-    private readonly executionService: ExecutionService,
+    private readonly executor: WorkerRunExecutor,
     private readonly aguiEvents: WorkerAgUiEventHandler,
     private readonly finalization: RunFinalizationStore,
     private readonly seqGate: WorkerSeqStore
@@ -69,7 +69,7 @@ export class WorkerEventService
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
       if (TERMINAL_RUN_STATUSES.includes(status) && handle) {
-        this.executionService.cleanup(handle.runtimeHandle);
+        this.executor.cleanup(handle.runtimeHandle.runId);
       }
     }
   }
@@ -179,7 +179,7 @@ export class WorkerEventService
     try {
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
-      this.executionService.terminateExecution(runtimeHandle, "run timeout");
+      this.executor.terminateExecution(runtimeHandle.runId, "run timeout");
     }
   }
 

@@ -4,11 +4,11 @@ import { RunLauncher, type StopActiveRun } from "./run-launcher";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerHostService } from "../../worker-host/worker-host.service";
-import { ExecutionService } from "../execution/execution.service";
+import { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
-import type { StartRunInput } from "../run-service.types";
+import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
@@ -80,7 +80,7 @@ describe("RunLauncher", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockWorkerHost: Partial<WorkerHostService>;
-  let mockExecutionService: Partial<ExecutionService>;
+  let mockExecutor: Partial<WorkerRunExecutor>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
@@ -142,7 +142,7 @@ describe("RunLauncher", () => {
         .fn()
         .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
     };
-    mockExecutionService = {
+    mockExecutor = {
       start: vi.fn().mockReturnValue({
         runId: "run-1",
         runtimeType: "local",
@@ -160,7 +160,7 @@ describe("RunLauncher", () => {
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       upsertMessage: vi.fn().mockResolvedValue(undefined),
     };
-    mockRunEvents = new RunEventService({} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockConfigService = {
@@ -180,7 +180,7 @@ describe("RunLauncher", () => {
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockWorkerHost as WorkerHostService,
-      mockExecutionService as ExecutionService,
+      mockExecutor as WorkerRunExecutor,
       mockConversations as ConversationService,
       mockRunEvents,
       mockConfigService as ConfigService
@@ -204,7 +204,7 @@ describe("RunLauncher", () => {
       agentType: "claude",
       runtimeType: "local",
     });
-    expect(mockExecutionService.start).toHaveBeenCalledWith(
+    expect(mockExecutor.start).toHaveBeenCalledWith(
       expect.objectContaining({
         runConfig: expect.objectContaining({ runId: "run-1" }),
         runtimeTarget: expect.objectContaining({
@@ -213,7 +213,7 @@ describe("RunLauncher", () => {
         }),
       })
     );
-    expect(mockExecutionService.start).toHaveBeenCalledWith(
+    expect(mockExecutor.start).toHaveBeenCalledWith(
       expect.objectContaining({
         runConfig: expect.objectContaining({
           runId: "run-1",
@@ -309,7 +309,7 @@ describe("RunLauncher", () => {
 
     await launch(makeStartInput({ res }));
 
-    expect(mockExecutionService.start).toHaveBeenCalled();
+    expect(mockExecutor.start).toHaveBeenCalled();
     expect(mockLiveRunRegistry.register).toHaveBeenCalled();
     expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(res.write).not.toHaveBeenCalled();
@@ -320,7 +320,7 @@ describe("RunLauncher", () => {
     mockWorkerHost.resolveRuntimeTarget = vi
       .fn()
       .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
-    mockExecutionService.start = vi
+    mockExecutor.start = vi
       .fn()
       .mockImplementation(({ onRuntimeInstanceIdReady }) => {
         const handle = {
@@ -344,7 +344,7 @@ describe("RunLauncher", () => {
       "sandbox",
       "container-abc"
     );
-    expect(mockExecutionService.start).toHaveBeenCalledWith(
+    expect(mockExecutor.start).toHaveBeenCalledWith(
       expect.objectContaining({
         runConfig: expect.objectContaining({
           runtimePath: "/workspace",
@@ -358,7 +358,7 @@ describe("RunLauncher", () => {
   });
 
   it("rolls back on worker start failure", async () => {
-    mockExecutionService.start = vi.fn().mockImplementation(() => {
+    mockExecutor.start = vi.fn().mockImplementation(() => {
       throw new Error("spawn failed");
     });
     const res = makeRes();

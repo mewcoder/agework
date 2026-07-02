@@ -5,6 +5,7 @@ import type {
 } from "@agework/shared/protocol";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventService, compactData } from "./run-event.service";
+import { RunSeqStore } from "./seq/run-seq.store";
 
 type StoredRunEventInput = Partial<RecordRunEventInput> & { runSeq: number };
 
@@ -67,7 +68,7 @@ describe("compactData", () => {
 });
 
 describe("RunEventService events", () => {
-  const service = new RunEventService({} as never);
+  const service = new RunEventService({} as never, {} as never);
 
   it("builds run.created events", () => {
     expect(
@@ -130,7 +131,7 @@ describe("RunEventService events", () => {
 });
 
 describe("RunEventService normalizers", () => {
-  const service = new RunEventService({} as never);
+  const service = new RunEventService({} as never, {} as never);
 
   it("normalizes run status payloads", () => {
     expect(
@@ -266,7 +267,8 @@ describe("RunEventService append", () => {
         makeRunEventRecord(input)
       ),
     };
-    const service = new RunEventService(repository as never);
+    const seqStore = new RunSeqStore(repository as never);
+    const service = new RunEventService(repository as never, seqStore);
 
     const records = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
@@ -296,7 +298,8 @@ describe("RunEventService append", () => {
         return makeRunEventRecord(input);
       }),
     };
-    const service = new RunEventService(repository as never);
+    const seqStore = new RunSeqStore(repository as never);
+    const service = new RunEventService(repository as never, seqStore);
 
     const first = await service.append(makeEvent({ eventKey: "event-key-1" }));
     const duplicate = await service.append(
@@ -316,7 +319,8 @@ describe("RunEventService append", () => {
         makeRunEventRecord(input)
       ),
     };
-    const service = new RunEventService(repository as never);
+    const seqStore = new RunSeqStore(repository as never);
+    const service = new RunEventService(repository as never, seqStore);
 
     const beforeForget = await service.append(makeEvent());
     service.forgetRun("run-1");

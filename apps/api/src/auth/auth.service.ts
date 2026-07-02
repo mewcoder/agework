@@ -21,10 +21,12 @@ export class AuthService {
     private readonly sessions: SessionService
   ) {}
 
+  /** 是否尚未初始化超级管理员。 */
   async isNoSuperAdmin(): Promise<boolean> {
     return this.users.isNoSuperAdmin();
   }
 
+  /** 返回前端所需的认证配置：是否需要登录、应用名、注册模式、是否需要初始化。 */
   async getAuthConfig() {
     const authRequired = !this.configService.isDevAuthDisabled();
     return {
@@ -35,6 +37,7 @@ export class AuthService {
     };
   }
 
+  /** 首次初始化超级管理员账号，生产环境需校验引导密钥。 */
   async setupSuperAdmin(newPassword: string, adminInitKey?: string) {
     this.assertSetupAuthorized(adminInitKey);
     const user = await this.users.setupSuperAdmin(newPassword);
@@ -59,6 +62,7 @@ export class AuthService {
     }
   }
 
+  /** 校验用户名密码并签发新会话。 */
   async login(username: string, password: string) {
     const user = await this.users.authenticate(username, password);
     return this.startSession(user);
@@ -82,14 +86,17 @@ export class AuthService {
     }
   }
 
+  /** 用户自助注册，注册成功后账号处于待审批状态。 */
   register(username: string, password: string) {
     return this.users.register(username, password);
   }
 
+  /** 获取指定用户的资料。 */
   getUserInfo(userId: string) {
     return this.users.getProfile(userId);
   }
 
+  /** 用户主动修改密码（需提供当前密码），修改后撤销旧会话并签发新会话。 */
   async changePassword(
     userId: string,
     currentPassword: string,
@@ -103,6 +110,7 @@ export class AuthService {
     return this.rotateSessionsAfterPasswordChange(user);
   }
 
+  /** 完成强制改密（临时/初始密码场景，无需提供当前密码），修改后撤销旧会话并签发新会话。 */
   async completePasswordChange(userId: string, newPassword: string) {
     const user = await this.users.completePasswordChange(userId, newPassword);
     return this.rotateSessionsAfterPasswordChange(user);

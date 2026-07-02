@@ -8,6 +8,7 @@ import type {
   ConversationStatus,
   CreateConversationRequest,
   StoredMessage,
+  StoredMessageListResponse,
   SubmitQuestionAnswerRequest,
 } from '@agework/shared/api';
 
@@ -69,8 +70,12 @@ export const conversationsApi = {
       answers,
     }),
 
-  listMessages: (conversationId: string) =>
-    apiGet<StoredMessage[]>(`/api/v1/conversations/messages/list?id=${conversationId}`),
+  listMessages: async (conversationId: string) => {
+    const result = await apiGet<StoredMessageListResponse>(
+      `/api/v1/conversations/messages/list?id=${conversationId}`,
+    );
+    return result.list;
+  },
 
   search: async (q: string, limit = 20) => {
     const params = new URLSearchParams({ q });

@@ -10,7 +10,7 @@ import { AdminWorkspaceListQueryDto } from "./admin-workspace-query.dto";
 export class AdminWorkspaceController {
   constructor(private workspaceService: WorkspaceService) {}
 
-  @Get("all")
+  @Get("list")
   listAll(@Query() query: AdminWorkspaceListQueryDto) {
     const { take, skip } = pageWindow(query);
     return this.workspaceService.listForAdmin({ take, skip });

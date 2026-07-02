@@ -7,7 +7,7 @@ import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerRunController } from "./worker-run.controller";
-import { WorkerEndpointHandler } from "./worker-endpoint.handler";
+import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
 import { WorkerHostService } from "./worker-host.service";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import { SandboxInstanceExecutor } from "./sandbox/sandbox-instance.executor";

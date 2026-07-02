@@ -104,6 +104,7 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getAppName: vi.fn().mockReturnValue("AgeWork"),
     requiresAdminInitKey: vi.fn().mockReturnValue(false),
     getAdminInitKey: vi.fn().mockReturnValue(undefined),
+    isProduction: vi.fn().mockReturnValue(false),
   };
 }
 

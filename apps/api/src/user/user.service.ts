@@ -54,6 +54,10 @@ export class UserService {
     private events: EventEmitter2
   ) {}
 
+  /**
+   * 列出用户；super_admin 可看到全部角色，普通管理员只能看到受限角色范围（由 repository 过滤）。
+   * 不传 pagination 时返回全量列表。
+   */
   async list(
     operator: UserSession,
     pagination?: { take: number; skip: number }
@@ -74,6 +78,9 @@ export class UserService {
     return { list: list.map((user) => this.toUserDto(user)) };
   }
 
+  /**
+   * 创建用户并生成临时密码；普通管理员只能创建 user 角色，不能创建 super_admin 或其他管理员角色。
+   */
   async create(operator: UserSession, username: string, role = "user") {
     const normalizedUsername = normalizeUsername(username);
     const targetRole = normalizeRole(role);
@@ -113,6 +120,9 @@ export class UserService {
     };
   }
 
+  /**
+   * 审批 pending 状态的 user 角色注册；super_admin 或未被禁止管理该目标用户的管理员可调用。
+   */
   async approve(id: string, operator: UserSession) {
     const user = await this.getUserOrThrow(id);
     this.assertCanManage(operator, user, "approve");
@@ -131,6 +141,10 @@ export class UserService {
     return this.toUserDto(updated);
   }
 
+  /**
+   * 更新用户角色/状态；角色调整仅 super_admin 可做，禁止把状态改回 pending；
+   * 状态改为 disabled 时发出 USER_DISABLED_EVENT。
+   */
   async update(
     id: string,
     data: { role?: string; status?: string },
@@ -170,6 +184,9 @@ export class UserService {
     return this.toUserDto(updated);
   }
 
+  /**
+   * 管理员为目标用户重置密码为临时密码；发出 USER_PASSWORD_RESET_EVENT 通知会话失效。
+   */
   async resetPassword(id: string, operator: UserSession) {
     const user = await this.getUserOrThrow(id);
     this.assertCanManage(operator, user, "reset-password");
@@ -192,6 +209,9 @@ export class UserService {
     };
   }
 
+  /**
+   * 软删除用户；不能删除自己或非 user 角色账号（管理员账号只能停用），成功后发出 USER_DELETED_EVENT。
+   */
   async delete(id: string, operator: UserSession) {
     const user = await this.getUserOrThrow(id);
     if (id === operator.userId) {
@@ -206,12 +226,18 @@ export class UserService {
     this.events.emit(USER_DELETED_EVENT, new UserDeletedEvent(id));
   }
 
+  /**
+   * 判断系统是否尚未初始化超级管理员；同时校验超级管理员固定唯一（用户名必须为 SUPER_ADMIN_USERNAME 且至多一个）。
+   */
   async isNoSuperAdmin(): Promise<boolean> {
     const superAdmins = await this.users.findSuperAdmins();
     this.assertSingleFixedSuperAdmin(superAdmins);
     return superAdmins.length === 0;
   }
 
+  /**
+   * 系统初始化用例：仅当尚无超级管理员时创建固定用户名的超级管理员账号，重复调用会因唯一约束或状态校验被拒绝。
+   */
   async setupSuperAdmin(newPassword: string) {
     if (!(await this.isNoSuperAdmin())) {
       throw new BadRequestException("系统已初始化");
@@ -252,6 +278,9 @@ export class UserService {
     return this.toUserDto(user);
   }
 
+  /**
+   * 开发环境启动用例：确保固定用户名的超级管理员存在并同步为已知随机密码，仅供本地/开发免登场景调用。
+   */
   async ensureDevSuperAdmin(): Promise<void> {
     const existing =
       await this.users.findSuperAdminByUsername(SUPER_ADMIN_USERNAME);
@@ -274,6 +303,9 @@ export class UserService {
     );
   }
 
+  /**
+   * 用户自助注册；成功后账号处于 pending 状态，需管理员 approve 后才能登录。
+   */
   async register(username: string, password: string) {
     const normalizedUsername = normalizeUsername(username);
     const rawPassword = assertPasswordForSet(password, normalizedUsername);
@@ -297,6 +329,9 @@ export class UserService {
     return this.toUserDto(user);
   }
 
+  /**
+   * 校验用户名密码并处理登录失败计数/锁定；成功后返回用户信息，供 auth 模块颁发会话。
+   */
   async authenticate(username: string, password: string) {
     const normalizedUsername = normalizeUsername(username);
     const rawPassword = assertPasswordForLogin(password);
@@ -326,12 +361,18 @@ export class UserService {
     return this.toUserDto(updated);
   }
 
+  /**
+   * 获取当前登录用户的个人资料；用户不存在时按未授权处理（不暴露用户是否存在）。
+   */
   async getProfile(userId: string) {
     const user = await this.users.findById(userId);
     if (!user) throw new UnauthorizedException();
     return this.toUserDto(user);
   }
 
+  /**
+   * 用户主动修改密码；需校验当前密码正确且新密码不能与当前密码相同。
+   */
   async changePassword(
     userId: string,
     currentPassword: string,
@@ -354,6 +395,9 @@ export class UserService {
     return this.setUserPassword(user.id, next);
   }
 
+  /**
+   * 强制改密流程（mustChangePassword=true 时）设置新密码；仅当账号处于强制改密状态时可调用。
+   */
   async completePasswordChange(userId: string, newPassword: string) {
     const user = await this.users.findCredentialByIdActive(userId);
     if (!user) throw new UnauthorizedException();
@@ -372,11 +416,17 @@ export class UserService {
     return this.setUserPassword(user.id, next);
   }
 
+  /**
+   * JWT 鉴权守卫使用：按 userId 查找当前有效会话用户，供 guard 校验会话是否仍然合法（返回 null 视为无效会话）。
+   */
   async findActiveSessionUser(userId: string): Promise<UserSession | null> {
     const user = await this.users.findSessionUserById(userId);
     return user ? this.toUserSession(user) : null;
   }
 
+  /**
+   * 开发免登场景使用：查找固定用户名的超级管理员作为会话用户，不存在时返回 null。
+   */
   async findDevSuperAdminSessionUser(): Promise<UserSession | null> {
     const user =
       await this.users.findDevSuperAdminSessionUser(SUPER_ADMIN_USERNAME);

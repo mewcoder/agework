@@ -38,14 +38,14 @@ describe('workspacesApi', () => {
       mockApiGet.mockResolvedValue({ list: [] });
       await workspacesApi.all();
 
-      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/workspaces/all');
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/workspaces/list');
     });
 
     it('带分页参数', async () => {
       mockApiGet.mockResolvedValue({ list: [] });
       await workspacesApi.all({ pageNo: 1, pageSize: 20 });
 
-      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/workspaces/all?pageNo=1&pageSize=20');
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/workspaces/list?pageNo=1&pageSize=20');
     });
   });
 

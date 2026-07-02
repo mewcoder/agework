@@ -11,7 +11,7 @@ import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
 import type { ResolveRuntimeTargetInput } from "../runtime/runtime.types";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { WorkerEndpointHandler } from "./worker-endpoint.handler";
+import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import { runtimeInstanceDiagnostics } from "./registry/worker-registry-metadata";
@@ -51,6 +51,7 @@ export class WorkerHostService {
     private readonly localInstances: LocalInstanceExecutor
   ) {}
 
+  /** worker 长轮询拉取下行命令，按 ownerId + afterSeq 增量返回。 */
   async pollCommands(
     ownerId: string,
     query: { afterSeq?: number; waitMs?: number }
@@ -58,14 +59,17 @@ export class WorkerHostService {
     return this.endpointHandler.pollCommands(ownerId, query);
   }
 
+  /** worker 启动后拉取本次 run 的 RunConfig。 */
   getRunConfig(runId: string): { config: RunConfig } {
     return this.endpointHandler.getRunConfig(runId);
   }
 
+  /** 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。 */
   async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
     return this.endpointHandler.postEvent(runId, body);
   }
 
+  /** 为一次 run 打开命令下行会话，按 owner 是否为 local channel 内部分流。 */
   openSession(params: {
     runId: string;
     ownerId: string;
@@ -78,6 +82,7 @@ export class WorkerHostService {
     this.commandDispatcher.openSession(params);
   }
 
+  /** 向 owner 下发一条命令，按 owner 是否为 local channel 内部分流。 */
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
     if (this.localInstances.getChannel(ownerId)) {
       this.localInstances.sendCommand(ownerId, command);
@@ -86,14 +91,17 @@ export class WorkerHostService {
     this.commandDispatcher.sendCommand(ownerId, runId, command);
   }
 
+  /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
     this.commandDispatcher.cleanupRun(runId);
   }
 
+  /** 按 ownerId 清理命令队列/会话状态。 */
   cleanupByOwnerId(ownerId: string): void {
     this.commandDispatcher.cleanupByOwnerId(ownerId);
   }
 
+  /** 接线 `run` 模块实现的上行事件 Port，供上报事件时反向回流。 */
   setUpstreamPort(receiver: WorkerUpstreamPort): void {
     this.upstream.setUpstreamPort(receiver);
   }
@@ -240,14 +248,17 @@ export class WorkerHostService {
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry
   // 数据搬迁——admin 查询本来就是读这份数据,归属 worker-host 更直接) ──
 
+  /** 管理端查询当前 runtime 资源策略（配额等）。 */
   getRuntimePolicy() {
     return this.runtimeService.getRuntimePolicy();
   }
 
+  /** 管理端概览用：当前 running 状态的 runtime 资源数量。 */
   async getRuntimeStats() {
     return { activeRuntimes: await this.countRunningRuntimes() };
   }
 
+  /** 管理端分页列出 runtime 资源，附带诊断信息。 */
   async listResources(query: {
     status?: string;
     pageNo?: number;
@@ -297,6 +308,7 @@ export class WorkerHostService {
     };
   }
 
+  /** 管理端手动停止一个 running 状态的 runtime 资源。 */
   async stopRuntimeInstance(id: string) {
     const resource = await this.findRuntimeById(id);
     if (!resource || resource.status !== "running") {

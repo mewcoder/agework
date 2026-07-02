@@ -22,7 +22,7 @@ export type WorkspaceResponse = {
   updatedAt: string;
 };
 
-/** /api/v1/admin/workspaces/all 的条目。 */
+/** /api/v1/admin/workspaces/list 的条目。 */
 export type AdminWorkspaceResponse = WorkspaceResponse & {
   userId?: string | null;
   user?: { username: string } | null;

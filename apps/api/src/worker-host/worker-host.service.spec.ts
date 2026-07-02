@@ -2,7 +2,7 @@ import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { WorkerEndpointHandler } from "./worker-endpoint.handler";
+import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-host.types";
 import { WorkerHostService } from "./worker-host.service";
 import type { WorkerRegistryRepository } from "./registry/worker-registry.repository";

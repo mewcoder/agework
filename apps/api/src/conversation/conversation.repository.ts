@@ -248,26 +248,28 @@ export class ConversationRepository {
       data.id,
       data.parent_id
     );
-    await this.prisma.message.upsert({
-      where: { id_conversationId: { id: data.id, conversationId } },
-      create: {
-        id: data.id,
-        conversationId,
-        runId: data.runId ?? null,
-        parentId,
-        format: data.format,
-        content: contentJson,
-      },
-      update: {
-        parentId,
-        format: data.format,
-        content: contentJson,
-        ...(data.runId !== undefined ? { runId: data.runId } : {}),
-      },
-    });
-    await this.prisma.conversation.update({
-      where: { id: conversationId },
-      data: { updatedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.message.upsert({
+        where: { id_conversationId: { id: data.id, conversationId } },
+        create: {
+          id: data.id,
+          conversationId,
+          runId: data.runId ?? null,
+          parentId,
+          format: data.format,
+          content: contentJson,
+        },
+        update: {
+          parentId,
+          format: data.format,
+          content: contentJson,
+          ...(data.runId !== undefined ? { runId: data.runId } : {}),
+        },
+      });
+      await tx.conversation.update({
+        where: { id: conversationId },
+        data: { updatedAt: new Date() },
+      });
     });
   }
 

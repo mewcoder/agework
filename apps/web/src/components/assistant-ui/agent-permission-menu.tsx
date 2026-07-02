@@ -88,10 +88,10 @@ export function AgentPermissionMenu() {
     (s) => s.setCodexPermissionMode,
   );
 
-  const claudePermission = agentOptions?.agents.find(
+  const claudePermission = agentOptions?.list.find(
     (agent) => agent.id === "claude",
   )?.options.permissionMode;
-  const codexPermission = agentOptions?.agents.find(
+  const codexPermission = agentOptions?.list.find(
     (agent) => agent.id === "codex",
   )?.options.permissionMode;
   const claudeOptions = claudePermission?.options ?? [];

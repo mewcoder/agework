@@ -61,6 +61,12 @@ export class AgentService {
     );
   }
 
+  /**
+   * 发起一次 agent run:把 AG-UI `RunAgentInput`(`body`)翻译为
+   * `RunService.start` 所需的输入 —— 校验请求 agent 类型与 conversation
+   * 归属一致、解析 forwardedProps 得到 agent provider config,再把
+   * SSE response 交给 RunService 驱动实际执行。
+   */
   async run(
     body: AgentRunRequestDto,
     res: Response,

@@ -2,11 +2,9 @@ import { Controller, Get, Query } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RunService } from "../run.service";
 import { pageWindow } from "../../common/dto/pagination-query.dto";
-import {
-  AdminRunEventsQueryDto,
-  AdminRunIdQueryDto,
-  AdminRunListQueryDto,
-} from "./admin-run-query.dto";
+import { AdminRunEventsQueryDto } from "./admin-run-events-query.dto";
+import { AdminRunListQueryDto } from "./admin-run-list-query.dto";
+import { RunIdDto } from "./run-id.dto";
 
 @Controller("admin/runs")
 @Roles("admin")
@@ -20,7 +18,7 @@ export class AdminRunController {
   }
 
   @Get("query")
-  query(@Query() query: AdminRunIdQueryDto) {
+  query(@Query() query: RunIdDto) {
     return this.runService.getDetailForAdmin(query.id);
   }
 

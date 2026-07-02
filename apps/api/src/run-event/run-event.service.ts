@@ -12,6 +12,7 @@ import type {
 } from "@agework/shared/protocol";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRepository } from "./run-event.repository";
+import { RunSeqStore } from "./seq/run-seq.store";
 
 type RunEventBase = {
   runId: string;
@@ -31,10 +32,11 @@ type RunEventBase = {
 @Injectable()
 export class RunEventService {
   private readonly logger = new Logger(RunEventService.name);
-  private readonly runSeqCounters = new Map<string, number>();
-  private readonly runLocks = new Map<string, Promise<unknown>>();
 
-  constructor(private readonly repository: RunEventRepository) {}
+  constructor(
+    private readonly repository: RunEventRepository,
+    private readonly seqStore: RunSeqStore
+  ) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
   listForAdmin(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
@@ -42,21 +44,11 @@ export class RunEventService {
   }
 
   /**
-   * Per-run seq is allocated in-process for the single API instance deployment.
-   * Multi-instance deployment must move seq allocation into RunEventRepository/DB.
+   * 持久化一条结构化 run event：委托 RunSeqStore 按 runId 串行分配单调 runSeq，
+   * 再落库；`eventKey` 冲突时幂等返回已存在的记录。
    */
   append(event: RecordRunEventInput): Promise<RunEventRecord> {
-    return this.withRunLock(event.runId, async () => {
-      if (!this.runSeqCounters.has(event.runId)) {
-        this.runSeqCounters.set(
-          event.runId,
-          await this.repository.maxRunSeq(event.runId)
-        );
-      }
-
-      const runSeq = (this.runSeqCounters.get(event.runId) ?? 0) + 1;
-      this.runSeqCounters.set(event.runId, runSeq);
-
+    return this.seqStore.withNextSeq(event.runId, async (runSeq) => {
       try {
         return await this.repository.insertOrGetByEventKey({
           ...event,
@@ -75,10 +67,12 @@ export class RunEventService {
     });
   }
 
+  /** run 终态 cleanup：丢弃该 run 缓存的 seq 游标（委托 RunSeqStore）。 */
   forgetRun(runId: string): void {
-    this.runSeqCounters.delete(runId);
+    this.seqStore.forget(runId);
   }
 
+  /** 构建 run.created 事件：run 创建时记录 agent/runtime 类型与隔离粒度。 */
   runCreated(input: {
     runId: string;
     conversationId: string;
@@ -110,6 +104,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 run.status_changed 事件：记录 run 状态迁移、阶段与待处理动作。 */
   runStatusChanged(input: {
     runId: string;
     origin?: RunEventOrigin;
@@ -136,6 +131,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 runtime.status_changed 事件：记录 runtime 实例的状态与隔离/引擎信息。 */
   runtimeStatusChanged(
     input: RunEventBase & {
       status: string;
@@ -168,6 +164,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 message.accepted 事件：记录用户消息被平台接收。 */
   messageAccepted(input: {
     runId: string;
     messageId: string;
@@ -192,6 +189,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 command.sent 事件：记录平台向 worker 下发的命令。 */
   commandSent(input: {
     runId: string;
     commandId: string;
@@ -214,6 +212,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 command.handled 事件：记录 worker 收到/处理命令的阶段。 */
   commandHandled(input: {
     runId: string;
     commandId: string;
@@ -234,6 +233,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 command.failed 事件：记录命令在 worker 侧执行失败。 */
   commandFailed(input: {
     runId: string;
     commandId: string;
@@ -258,6 +258,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 command.result 事件：记录命令的最终执行结果（ok/error）。 */
   commandResult(input: {
     runId: string;
     commandId: string;
@@ -286,6 +287,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 message.started 事件：agent 开始输出消息；缺少 messageId 时不产生事件。 */
   messageStarted(input: {
     runId: string;
     messageId?: string;
@@ -305,6 +307,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 message.completed 事件：agent 消息输出完成；缺少 messageId 时不产生事件。 */
   messageCompleted(input: {
     runId: string;
     messageId?: string;
@@ -322,6 +325,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 tool.started 事件：工具调用开始；缺少 toolCallId 时不产生事件。 */
   toolStarted(input: {
     runId: string;
     toolCallId?: string;
@@ -346,6 +350,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 tool.completed 事件：工具调用成功完成；缺少 toolCallId 时不产生事件。 */
   toolCompleted(input: {
     runId: string;
     toolCallId?: string;
@@ -370,6 +375,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 tool.failed 事件：工具调用失败；缺少 toolCallId 时不产生事件。 */
   toolFailed(input: {
     runId: string;
     toolCallId?: string;
@@ -398,6 +404,7 @@ export class RunEventService {
     };
   }
 
+  /** 构建 system.issue 事件：记录平台/agent/worker 侧的诊断问题。 */
   systemIssue(
     input: RunEventBase & {
       code: string;
@@ -425,6 +432,7 @@ export class RunEventService {
     };
   }
 
+  /** 将 worker 上行消息的 seq 跳号归一化为 system.issue 事件（worker_seq_gap）。 */
   fromWorkerSeqGap(input: {
     runId: string;
     expected: number;
@@ -445,6 +453,7 @@ export class RunEventService {
     });
   }
 
+  /** 将 worker 上报的 run 状态 payload 归一化为 run.status_changed 事件。 */
   fromRunStatusPayload(
     runId: string,
     payload: RunStatusPayload
@@ -459,6 +468,7 @@ export class RunEventService {
     });
   }
 
+  /** 判定某个 AG-UI 事件类型是否属于需要落 run event 的生命周期边界。 */
   shouldLogAgUiEvent(eventType: string): boolean {
     return (
       eventType.endsWith("_START") ||
@@ -468,6 +478,7 @@ export class RunEventService {
     );
   }
 
+  /** 将一条 AG-UI 事件归一化为 0..N 条结构化 run event。 */
   fromAgUiEvent(
     runId: string,
     eventType: string,
@@ -545,6 +556,7 @@ export class RunEventService {
     return events;
   }
 
+  /** 将 SDK 原始事件归一化为 system.issue 事件；仅错误类事件产生结果,否则返回 undefined。 */
   fromSdkRawEvent(
     runId: string,
     event: unknown
@@ -566,6 +578,7 @@ export class RunEventService {
     });
   }
 
+  /** 将命令 trace payload 归一化为 command.handled 或 command.failed 事件。 */
   fromCommandTrace(
     runId: string,
     payload: CommandTracePayload
@@ -585,6 +598,7 @@ export class RunEventService {
         });
   }
 
+  /** 将命令 result payload 归一化为 command.result 事件。 */
   fromCommandResult(
     runId: string,
     payload: CommandResultPayload
@@ -596,19 +610,6 @@ export class RunEventService {
       status: payload.status,
       error: payload.error,
     });
-  }
-
-  private withRunLock<T>(runId: string, fn: () => Promise<T>): Promise<T> {
-    const previous = this.runLocks.get(runId) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(fn);
-    const stored = next.catch(() => undefined);
-    this.runLocks.set(runId, stored);
-    stored.finally(() => {
-      if (this.runLocks.get(runId) === stored) {
-        this.runLocks.delete(runId);
-      }
-    });
-    return next;
   }
 }
 

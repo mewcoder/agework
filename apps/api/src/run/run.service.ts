@@ -8,12 +8,12 @@ import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { ExecutionService } from "./execution/execution.service";
+import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { WorkerHostService } from "../worker-host/worker-host.service";
 import { type IncompleteMessageReason } from "./worker-event/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
-import type { StartRunInput } from "./run-service.types";
+import type { StartRunInput } from "./run.types";
 import { RunStream } from "./streaming/run-stream";
 import { RunLauncher } from "./launch/run-launcher";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
@@ -26,7 +26,7 @@ export class RunService implements OnApplicationBootstrap {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly executionService: ExecutionService,
+    private readonly executor: WorkerRunExecutor,
     private readonly runEvents: RunEventService,
     private readonly runLauncher: RunLauncher,
     private readonly workerHost: WorkerHostService,
@@ -111,7 +111,7 @@ export class RunService implements OnApplicationBootstrap {
         `No active run for conversation: ${conversationId}`
       );
     }
-    this.executionService.sendCommand(handle.runtimeHandle, {
+    this.executor.sendCommand(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
@@ -241,7 +241,7 @@ export class RunService implements OnApplicationBootstrap {
           )
         );
     }
-    this.executionService.cancel(handle.runtimeHandle);
+    this.executor.cancel(handle.runtimeHandle);
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       handle.stream.end();

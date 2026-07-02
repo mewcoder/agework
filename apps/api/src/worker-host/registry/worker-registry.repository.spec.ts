@@ -219,9 +219,9 @@ describe("WorkerRegistryRepository", () => {
     it("creates a starting row and returns ok:true when no active row exists for the owner", async () => {
       const prismaMocks = makePrismaMock();
       prismaMocks.runtimeInstance.create.mockResolvedValue({ id: "rr-1" });
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      const result = await repo.insertStarting(
+      const result = await repository.insertStarting(
         {
           runtimeType: "sandbox",
           isolationScope: "workspace",
@@ -254,9 +254,9 @@ describe("WorkerRegistryRepository", () => {
         runtimeInstanceId: "docker-resource-1",
         status: "running",
       });
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      const result = await repo.insertStarting(
+      const result = await repository.insertStarting(
         {
           runtimeType: "sandbox",
           isolationScope: "workspace",
@@ -281,10 +281,10 @@ describe("WorkerRegistryRepository", () => {
       const err = { code: "P2002" };
       prismaMocks.runtimeInstance.create.mockRejectedValue(err);
       prismaMocks.runtimeInstance.findFirst.mockResolvedValue(null);
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       await expect(
-        repo.insertStarting(
+        repository.insertStarting(
           {
             runtimeType: "sandbox",
             isolationScope: "workspace",
@@ -301,10 +301,10 @@ describe("WorkerRegistryRepository", () => {
       const prismaMocks = makePrismaMock();
       const err = new Error("connection refused");
       prismaMocks.runtimeInstance.create.mockRejectedValue(err);
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       await expect(
-        repo.insertStarting(
+        repository.insertStarting(
           {
             runtimeType: "sandbox",
             isolationScope: "workspace",
@@ -322,9 +322,9 @@ describe("WorkerRegistryRepository", () => {
       const prismaMocks = makePrismaMock();
       prismaMocks.runtimeInstance.deleteMany.mockResolvedValue({ count: 1 });
       prismaMocks.runtimeInstance.create.mockResolvedValue({ id: "rr-2" });
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      const result = await repo.insertStarting(
+      const result = await repository.insertStarting(
         {
           runtimeType: "sandbox",
           isolationScope: "workspace",
@@ -359,9 +359,9 @@ describe("WorkerRegistryRepository", () => {
     it("updates every starting row to error, regardless of runtimeType", async () => {
       const prismaMocks = makePrismaMock();
       prismaMocks.runtimeInstance.updateMany.mockResolvedValue({ count: 2 });
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      await repo.markAllStartingAsError();
+      await repository.markAllStartingAsError();
 
       expect(prismaMocks.runtimeInstance.updateMany).toHaveBeenCalledWith({
         where: { status: "starting" },
@@ -382,9 +382,9 @@ describe("WorkerRegistryRepository", () => {
           runtimeInstanceId: "4242:token",
         },
       ]);
-      const repo = new WorkerRegistryRepository(prismaMocks as never);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      const result = await repo.findRunningByRuntimeType("local");
+      const result = await repository.findRunningByRuntimeType("local");
 
       expect(prismaMocks.runtimeInstance.findMany).toHaveBeenCalledWith({
         where: { runtimeType: "local", status: "running" },

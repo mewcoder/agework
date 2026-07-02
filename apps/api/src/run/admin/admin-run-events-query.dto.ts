@@ -1,9 +1,7 @@
-import type { RunStatus } from "@agework/shared";
 import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
-  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -12,37 +10,10 @@ import {
   MaxLength,
   Min,
 } from "class-validator";
-import { PaginationQueryDto } from "../../common/dto/pagination-query.dto";
 import {
   OptionalStringArrayQuery,
   OptionalTrimmedString,
 } from "../../common/decorators/query-value.decorator";
-
-const RUN_STATUSES = [
-  "queued",
-  "preparing",
-  "running",
-  "requires_action",
-  "cancelling",
-  "finished",
-  "error",
-  "cancelled",
-] as const satisfies readonly RunStatus[];
-
-export class AdminRunListQueryDto extends PaginationQueryDto {
-  @IsOptional()
-  @OptionalTrimmedString()
-  @IsIn([...RUN_STATUSES])
-  status?: RunStatus;
-}
-
-export class AdminRunIdQueryDto {
-  @OptionalTrimmedString()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  id!: string;
-}
 
 export class AdminRunEventsQueryDto {
   @OptionalTrimmedString()

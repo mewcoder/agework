@@ -8,7 +8,7 @@ export function AgentSelect() {
   const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
   const selectAgentType = useSelectionStore((s) => s.selectAgentType);
   const { data: agentOptions } = useAgentOptions();
-  const agents = agentOptions?.agents ?? [];
+  const agents = agentOptions?.list ?? [];
 
   return (
     <div className="inline-flex items-center gap-1 rounded-lg border border-border bg-background p-1">

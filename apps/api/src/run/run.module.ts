@@ -12,9 +12,8 @@ import { RunStartupService } from "./startup/run-startup.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
-import { ExecutionService } from "./execution/execution.service";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
-import { WorkerAgUiEventHandler } from "./worker-event/agui-event.handler";
+import { WorkerAgUiEventHandler } from "./worker-event/worker-agui-event.handler";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -45,7 +44,6 @@ import { ConversationModule } from "../conversation/conversation.module";
     RunService,
     RunLauncher,
     WorkerRunExecutor,
-    ExecutionService,
     WorkerAgUiEventHandler,
     RunStartupService,
     RunWorkspaceListener,

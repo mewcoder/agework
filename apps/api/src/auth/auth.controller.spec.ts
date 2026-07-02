@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AuthController } from "./auth.controller";
 import type { AuthService } from "./auth.service";
+import type { ConfigService } from "../config/config.service";
 import type { JwtUser } from "./decorators/current-user.decorator";
 
 function makeController(overrides?: { auth?: Partial<AuthService> }) {
@@ -23,8 +24,14 @@ function makeController(overrides?: { auth?: Partial<AuthService> }) {
     }),
     ...overrides?.auth,
   };
+  const configService = {
+    isProduction: vi.fn().mockReturnValue(false),
+  };
   return {
-    controller: new AuthController(auth as unknown as AuthService),
+    controller: new AuthController(
+      auth as unknown as AuthService,
+      configService as unknown as ConfigService
+    ),
     auth,
   };
 }

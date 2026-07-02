@@ -195,6 +195,11 @@ export class ConfigService implements OnModuleInit {
     return process.env.NODE_ENV === "production";
   }
 
+  /** 是否为生产环境（NODE_ENV=production）。 */
+  isProduction(): boolean {
+    return process.env.NODE_ENV === "production";
+  }
+
   /** 首次初始化的引导密钥，init 自动生成并写入 .env。 */
   getAdminInitKey(): string | undefined {
     return this.getEnv(EnvKey.PRIVATE_ADMIN_INIT_KEY) || undefined;

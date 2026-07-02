@@ -11,6 +11,7 @@ import {
 import type { Request, Response } from "express";
 import { SkipThrottle, ThrottlerGuard } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
+import { ConfigService } from "../config/config.service";
 import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
 import type { JwtUser } from "./decorators/current-user.decorator";
@@ -29,7 +30,10 @@ type SessionResult = { token: string; refreshToken: string; user: unknown };
 @UseGuards(ThrottlerGuard)
 @Controller("auth")
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+    private configService: ConfigService
+  ) {}
 
   @Public()
   @Post("login")
@@ -68,7 +72,7 @@ export class AuthController {
   ) {
     const rawToken = readRefreshCookie(req);
     if (!rawToken) {
-      clearRefreshCookie(res);
+      clearRefreshCookie(res, this.configService.isProduction());
       throw new UnauthorizedException();
     }
     const result = await this.authService.refreshToken(rawToken);
@@ -79,7 +83,7 @@ export class AuthController {
   @Post("logout")
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(readRefreshCookie(req));
-    clearRefreshCookie(res);
+    clearRefreshCookie(res, this.configService.isProduction());
     return { ok: true };
   }
 
@@ -118,7 +122,11 @@ export class AuthController {
 
   /** 把 refresh token 写进 HttpOnly cookie，响应体只回 access token 与用户信息。 */
   private issueSession(res: Response, result: SessionResult) {
-    setRefreshCookie(res, result.refreshToken);
+    setRefreshCookie(
+      res,
+      result.refreshToken,
+      this.configService.isProduction()
+    );
     return { token: result.token, user: result.user };
   }
 }

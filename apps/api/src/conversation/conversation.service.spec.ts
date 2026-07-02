@@ -218,20 +218,22 @@ describe("ConversationService", () => {
 
     await expect(
       service.listMessages(mockUserId, "conversation-1")
-    ).resolves.toEqual([
-      {
-        id: "user-1",
-        parent_id: null,
-        format: "assistant-ui",
-        content: { id: "user-1", role: "user", content: "hello" },
-      },
-      {
-        id: "user-2",
-        parent_id: "user-1",
-        format: "assistant-ui",
-        content: { id: "user-2", role: "user", content: "next" },
-      },
-    ]);
+    ).resolves.toEqual({
+      list: [
+        {
+          id: "user-1",
+          parent_id: null,
+          format: "assistant-ui",
+          content: { id: "user-1", role: "user", content: "hello" },
+        },
+        {
+          id: "user-2",
+          parent_id: "user-1",
+          format: "assistant-ui",
+          content: { id: "user-2", role: "user", content: "next" },
+        },
+      ],
+    });
   });
 
   describe("search", () => {
@@ -383,7 +385,7 @@ describe("ConversationService", () => {
 
       const result = await service.listMessages(mockUserId, "conv-x");
 
-      expect(result).toEqual([]);
+      expect(result).toEqual({ list: [] });
       expect(repo.findMessages).not.toHaveBeenCalled();
     });
   });

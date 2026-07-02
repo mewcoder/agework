@@ -9,9 +9,9 @@ import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import type { ConfigService } from "../../config/config.service";
-import type { ExecutionService } from "../execution/execution.service";
+import type { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { RunStream } from "../streaming/run-stream";
-import { WorkerAgUiEventHandler } from "./agui-event.handler";
+import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
 function makeConfig(): ConfigService {
   return {
@@ -40,7 +40,7 @@ describe("WorkerEventService", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
-  let mockExecutionService: Partial<ExecutionService>;
+  let mockExecutor: Partial<WorkerRunExecutor>;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -58,10 +58,10 @@ describe("WorkerEventService", () => {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
       setAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
-    mockRunEvents = new RunEventService({} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
-    mockExecutionService = {
+    mockExecutor = {
       cleanup: vi.fn(),
       terminateExecution: vi.fn(),
     };
@@ -81,7 +81,7 @@ describe("WorkerEventService", () => {
       liveRuns,
       mockRunEvents,
       runStatusService,
-      mockExecutionService as ExecutionService,
+      mockExecutor as WorkerRunExecutor,
       aguiEvents,
       new RunFinalizationStore(),
       new WorkerSeqStore()
@@ -136,7 +136,7 @@ describe("WorkerEventService", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockExecutionService.cleanup).toHaveBeenCalledWith(runtimeHandle);
+    expect(mockExecutor.cleanup).toHaveBeenCalledWith(runtimeHandle.runId);
   });
 
   it("notifyWorkerError skips when run already terminal/finalizing", async () => {
@@ -266,8 +266,8 @@ describe("WorkerEventService", () => {
       "run-1",
       "run timeout"
     );
-    expect(mockExecutionService.terminateExecution).toHaveBeenCalledWith(
-      runtimeHandle,
+    expect(mockExecutor.terminateExecution).toHaveBeenCalledWith(
+      runtimeHandle.runId,
       "run timeout"
     );
   });

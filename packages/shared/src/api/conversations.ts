@@ -40,6 +40,8 @@ export type StoredMessage = {
   content: Record<string, unknown>;
 };
 
+export type StoredMessageListResponse = ListResponse<StoredMessage>;
+
 export type CreateConversationRequest = {
   workspaceId: string;
   firstMessage?: string;

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { ExecutionService } from "./execution/execution.service";
+import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { WorkerHostService } from "../worker-host/worker-host.service";
@@ -12,7 +12,7 @@ describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockExecutionService: Partial<ExecutionService>;
+  let mockExecutor: Partial<WorkerRunExecutor>;
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
   let mockWorkerHost: Partial<WorkerHostService>;
@@ -27,11 +27,11 @@ describe("RunService", () => {
     mockLiveRunRegistry = {
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockExecutionService = {
+    mockExecutor = {
       sendCommand: vi.fn(),
       cancel: vi.fn(),
     };
-    mockRunEvents = new RunEventService({} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
@@ -46,7 +46,7 @@ describe("RunService", () => {
     service = new RunService(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockExecutionService as ExecutionService,
+      mockExecutor as WorkerRunExecutor,
       mockRunEvents,
       mockRunLauncher as RunLauncher,
       mockWorkerHost as WorkerHostService,
@@ -116,7 +116,7 @@ describe("RunService", () => {
 
       await service.reply("conversation-1", { decision: "yes" });
 
-      expect(mockExecutionService.sendCommand).toHaveBeenCalledWith(
+      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
         expect.objectContaining({
           type: "approval_resolved",
@@ -158,9 +158,7 @@ describe("RunService", () => {
       const hadHandle = await service.stop("conversation-1");
 
       expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
-      expect(mockExecutionService.cancel).toHaveBeenCalledWith(
-        handle.runtimeHandle
-      );
+      expect(mockExecutor.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
       expect(hadHandle).toBe(true);
     });
   });

@@ -66,5 +66,5 @@ export type AgentOption = {
 }[AgentType];
 
 export type AgentOptionsResponse = {
-  agents: AgentOption[];
+  list: AgentOption[];
 };

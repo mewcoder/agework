@@ -24,7 +24,7 @@ export const workspacesApi = {
     if (params?.pageNo) query.set('pageNo', String(params.pageNo));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     const qs = query.toString();
-    return apiGet<AdminWorkspaceListResponse>(`/api/v1/admin/workspaces/all${qs ? `?${qs}` : ''}`);
+    return apiGet<AdminWorkspaceListResponse>(`/api/v1/admin/workspaces/list${qs ? `?${qs}` : ''}`);
   },
 
   create: (body: CreateWorkspaceRequest) =>
