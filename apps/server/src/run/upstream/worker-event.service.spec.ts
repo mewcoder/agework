@@ -41,6 +41,8 @@ describe("WorkerEventService", () => {
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockExecutor: Partial<WorkerRunExecutor>;
+  let runStatusService: RunStatusService;
+  let seqGate: WorkerSeqStore;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -67,7 +69,7 @@ describe("WorkerEventService", () => {
     };
 
     liveRuns = new LiveRunRegistry(makeConfig());
-    const runStatusService = new RunStatusService(
+    runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
       liveRuns
@@ -77,6 +79,7 @@ describe("WorkerEventService", () => {
       liveRuns,
       mockRunEvents
     );
+    seqGate = new WorkerSeqStore();
     workerEventsService = new WorkerEventService(
       liveRuns,
       mockRunEvents,
@@ -84,7 +87,7 @@ describe("WorkerEventService", () => {
       mockExecutor as WorkerRunExecutor,
       aguiEvents,
       new RunFinalizationStore(),
-      new WorkerSeqStore()
+      seqGate
     );
   });
 
@@ -312,6 +315,70 @@ describe("WorkerEventService", () => {
 
     expect(mockRunRepository.markRunning).not.toHaveBeenCalled();
     expect(mockRunEvents.append).not.toHaveBeenCalled();
+  });
+
+  it("ignores late run.status after terminal before any seq accounting", async () => {
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "run.status" as const,
+      payload: { status: "finished" as const },
+      ts: new Date().toISOString(),
+    });
+    const acceptSpy = vi.spyOn(seqGate, "accept");
+
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 2,
+      type: "run.status" as const,
+      payload: { status: "running" as const },
+      ts: new Date().toISOString(),
+    });
+
+    // 终态清理已 forget 该 run 的 seq 游标,迟到的状态消息必须在 seq 记账之前
+    // 被拦下,否则会把已清空的 per-run seq 状态重建出来。
+    expect(acceptSpy).not.toHaveBeenCalled();
+  });
+
+  it("records a seq gap as a system.issue event but still processes the message", async () => {
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 5,
+      type: "run.status" as const,
+      payload: { status: "running" as const },
+      ts: new Date().toISOString(),
+    });
+
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "system.issue",
+        data: expect.objectContaining({ expected: 1, got: 5 }),
+      })
+    );
+    expect(mockRunRepository.markRunning).toHaveBeenCalledWith("run-1");
+  });
+
+  it("keeps the terminal guard when status application fails mid-finalization", async () => {
+    vi.spyOn(runStatusService, "apply").mockRejectedValueOnce(
+      new Error("db down")
+    );
+
+    await expect(
+      workerEventsService.publish({
+        runId: "run-1",
+        seq: 1,
+        type: "run.status" as const,
+        payload: { status: "error" as const, error: "boom" },
+        ts: new Date().toISOString(),
+      })
+    ).rejects.toThrow("db down");
+
+    // markCompleted 必须先于可能抛异常的 apply:守卫已生效,后续 force 不再重复终态
+    expect(workerEventsService.isTerminalOrFinalizing("run-1")).toBe(true);
+    expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
+
+    await workerEventsService.notifyWorkerError("run-1", "late crash");
+    expect(mockRunRepository.markError).not.toHaveBeenCalled();
   });
 
   it("continues AG-UI processing when run event recording fails", async () => {
