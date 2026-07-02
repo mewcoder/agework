@@ -14,6 +14,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   DEFAULT_RUN_TIMEOUT_SECONDS,
+  DEFAULT_LAUNCH_TIMEOUT_SECONDS,
   DEV_JWT_SECRET,
   DEFAULT_OPENSANDBOX_DOMAIN,
   DEFAULT_OPENSANDBOX_IMAGE,
@@ -314,6 +315,13 @@ export class ConfigService implements OnModuleInit {
     return (
       this.getSettingNumber(SettingKey.RUNTIME_RUN_TIMEOUT_SECONDS) ??
       DEFAULT_RUN_TIMEOUT_SECONDS
+    );
+  }
+
+  getLaunchTimeoutSeconds(): number {
+    return (
+      this.getSettingNumber(SettingKey.RUNTIME_LAUNCH_TIMEOUT_SECONDS) ??
+      DEFAULT_LAUNCH_TIMEOUT_SECONDS
     );
   }
 

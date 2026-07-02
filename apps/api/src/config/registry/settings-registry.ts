@@ -3,6 +3,7 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   DEFAULT_RUN_TIMEOUT_SECONDS,
+  DEFAULT_LAUNCH_TIMEOUT_SECONDS,
 } from "./defaults";
 
 /**
@@ -14,6 +15,7 @@ export const SettingKey = {
   APP_NAME: "AGEWORK_APP_NAME",
   RUNTIME_IDLE_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS",
   RUNTIME_RUN_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS",
+  RUNTIME_LAUNCH_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_LAUNCH_TIMEOUT_SECONDS",
 } as const;
 
 export type SettingKey = (typeof SettingKey)[keyof typeof SettingKey];
@@ -53,6 +55,13 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     label: "Run 执行超时（秒）",
     description: "Run 执行超过该时长未进入终态后会标记为错误",
     defaultValue: String(DEFAULT_RUN_TIMEOUT_SECONDS),
+  },
+  {
+    key: SettingKey.RUNTIME_LAUNCH_TIMEOUT_SECONDS,
+    type: "number",
+    label: "Runtime 启动超时(秒)",
+    description: "新建 runtime 实例(容器/进程)超过该时长未就绪则判定为启动失败",
+    defaultValue: String(DEFAULT_LAUNCH_TIMEOUT_SECONDS),
   },
 ];
 

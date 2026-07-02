@@ -6,6 +6,7 @@ import type {
   SandboxRuntimePlacement,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
+import { generateId } from "@agework/shared";
 import { isSandboxPlacement } from "../../runtime/runtime.types";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
@@ -16,6 +17,7 @@ import {
   DEFAULT_WORKER_IMAGE,
 } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
+import { withTimeout } from "../../common/with-timeout";
 import { IdleWatchdog, resolveDockerApiBase } from "./sandbox-utils";
 import type {
   SandboxEngineType,
@@ -362,16 +364,8 @@ export class SandboxInstanceExecutor {
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks
   ): void {
-    const { context, ownerState } = attachment;
-    const engineInput = this.buildSandboxStartInput(context);
-    const resumeRuntimeInstanceId = ownerState.lastStoppedRuntimeInstanceId;
-    ownerState.lastStoppedRuntimeInstanceId = undefined;
-
-    const runtimePromise = this.createSandbox(
-      context,
-      engineInput,
-      resumeRuntimeInstanceId
-    );
+    const { context } = attachment;
+    const runtimePromise = this.launchWithHandshake(attachment);
     this.pendingSandboxes.set(context.ownerId, runtimePromise);
 
     void runtimePromise
@@ -381,6 +375,69 @@ export class SandboxInstanceExecutor {
       .catch((err) =>
         this.onRuntimeInstanceStartFailed(context, err, callbacks)
       );
+  }
+
+  /**
+   * 3.7 节握手状态机:先插入 starting 行(靠 Task 1 的唯一索引防并发重复
+   * launch)。撞见冲突且已有行是 running——说明 API 重启导致内存丢了但容器
+   * 其实还活着(sandbox 容器不随 API 进程重启而死),直接复用,不重复起；
+   * 撞见冲突且已有行是 starting——同进程内真正的并发竞态早已被
+   * pendingSandboxes 的同步 check-then-set 挡住,理论上不可达,报错让调用方
+   * 重试即可,不做轮询等待(见计划 Architecture 一节)。
+   * 插入成功后才真正调用 Provider,超时或失败都把这一行标记为 error。
+   */
+  private async launchWithHandshake(
+    attachment: SandboxRuntimeInstanceAttachment
+  ): Promise<SandboxRuntime> {
+    const { context, ownerState } = attachment;
+    const placeholderInstanceId = generateId();
+    const insertResult = await this.registry.insertStarting(
+      {
+        runtimeType: context.placement.runtimeType,
+        isolationScope: context.isolationScope,
+        workspaceId: context.workspaceId,
+        ownerId: context.ownerId,
+      },
+      placeholderInstanceId,
+      "http"
+    );
+
+    if (!insertResult.ok) {
+      if (insertResult.existing.status === "running") {
+        return {
+          engineType: context.engineType,
+          runtimeInstanceId: insertResult.existing.runtimeInstanceId,
+          workspaceMountPath: context.placement.sandbox.mountTarget,
+        };
+      }
+      throw new Error(
+        `owner ${context.ownerId} has a concurrent launch already starting`
+      );
+    }
+
+    const engineInput = this.buildSandboxStartInput(context);
+    const resumeRuntimeInstanceId = ownerState.lastStoppedRuntimeInstanceId;
+    ownerState.lastStoppedRuntimeInstanceId = undefined;
+
+    try {
+      return await withTimeout(
+        this.createSandbox(context, engineInput, resumeRuntimeInstanceId),
+        this.configService.getLaunchTimeoutSeconds() * 1000,
+        `sandbox launch timed out for owner ${context.ownerId}`
+      );
+    } catch (err) {
+      await this.registry
+        .markErrorByOwner(
+          context.placement.runtimeType,
+          context.isolationScope,
+          context.ownerId,
+          err instanceof Error ? err.message : String(err)
+        )
+        .catch(
+          swallow(this.logger, `mark launch error for owner ${context.ownerId}`)
+        );
+      throw err;
+    }
   }
 
   private buildSandboxStartInput(

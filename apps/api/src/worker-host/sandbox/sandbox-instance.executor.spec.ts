@@ -56,16 +56,19 @@ function makeService(runtimeService = makeRuntimeService()) {
     getSandboxEngine: vi.fn().mockReturnValue("docker"),
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-logs/runtime"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(5),
+    getLaunchTimeoutSeconds: vi.fn().mockReturnValue(60),
   };
   const commandDispatcher = {
     cleanupByOwnerId: vi.fn(),
   };
   const registry = {
+    insertStarting: vi.fn().mockResolvedValue({ ok: true }),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
       workspaceRuntimeInstance: { id: "wr-1" },
     }),
     markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
+    markErrorByOwner: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
   const executor = new SandboxInstanceExecutor(
@@ -149,6 +152,7 @@ describe("SandboxInstanceExecutor", () => {
     const second = executor.acquireInstanceForRun(
       makeStartInput(makePlacement(), "run-2")
     );
+    await flushPromises();
     resolveGetOrCreate!({
       engineType: "docker",
       runtimeInstanceId: "docker-resource-1",
@@ -180,6 +184,7 @@ describe("SandboxInstanceExecutor", () => {
 
     const acquire = executor.acquireInstanceForRun(makeStartInput());
     executor.releaseInstanceForRun("run-1");
+    await flushPromises();
     resolveGetOrCreate!({
       engineType: "docker",
       runtimeInstanceId: "docker-resource-1",
@@ -235,6 +240,91 @@ describe("SandboxInstanceExecutor", () => {
       "sandbox",
       "workspace",
       "ws-1"
+    );
+  });
+
+  it("writes a starting row before creating the container, then flips it to running", async () => {
+    const { executor, registry } = makeService();
+
+    await executor.acquireInstanceForRun(makeStartInput());
+
+    expect(registry.insertStarting).toHaveBeenCalledWith(
+      {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        workspaceId: "ws-1",
+        ownerId: "ws-1",
+      },
+      expect.any(String),
+      "http"
+    );
+    expect(registry.upsertRunning).toHaveBeenCalledWith(
+      {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        workspaceId: "ws-1",
+        ownerId: "ws-1",
+      },
+      "docker-resource-1",
+      "http"
+    );
+  });
+
+  it("attaches to an existing running row on insertStarting conflict instead of creating a new container", async () => {
+    const runtimeService = makeRuntimeService();
+    const { executor, registry } = makeService(runtimeService);
+    registry.insertStarting.mockResolvedValueOnce({
+      ok: false,
+      existing: {
+        runtimeInstanceId: "docker-resource-existing",
+        status: "running",
+      },
+    });
+
+    const result = await executor.acquireInstanceForRun(makeStartInput());
+
+    expect(result).toEqual({
+      outcome: "ready",
+      runtimeInstanceId: "docker-resource-existing",
+    });
+    expect(runtimeService.getOrCreateSandbox).not.toHaveBeenCalled();
+  });
+
+  it("resolves error on insertStarting conflict against a starting row (concurrent launch in progress)", async () => {
+    const runtimeService = makeRuntimeService();
+    const { executor, registry } = makeService(runtimeService);
+    registry.insertStarting.mockResolvedValueOnce({
+      ok: false,
+      existing: { runtimeInstanceId: "placeholder-x", status: "starting" },
+    });
+
+    const result = await executor.acquireInstanceForRun(makeStartInput());
+
+    expect(result.outcome).toBe("error");
+    expect(runtimeService.getOrCreateSandbox).not.toHaveBeenCalled();
+  });
+
+  it("marks the row as error when the container never becomes ready within the launch timeout", async () => {
+    const runtimeService = makeRuntimeService();
+    runtimeService.getOrCreateSandbox.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* never resolves */
+        })
+    );
+    const { executor, registry, config } = makeService(runtimeService);
+    config.getLaunchTimeoutSeconds.mockReturnValue(1);
+
+    const acquire = executor.acquireInstanceForRun(makeStartInput());
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await acquire;
+
+    expect(result.outcome).toBe("error");
+    expect(registry.markErrorByOwner).toHaveBeenCalledWith(
+      "sandbox",
+      "workspace",
+      "ws-1",
+      expect.stringContaining("timed out")
     );
   });
 

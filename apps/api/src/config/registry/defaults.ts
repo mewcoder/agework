@@ -20,6 +20,7 @@ export const DEFAULT_SANDBOX_ENGINE = "docker";
 export const DEFAULT_WORKER_IMAGE = "agework/worker:latest";
 export const DEFAULT_IDLE_TIMEOUT_SECONDS = 1800;
 export const DEFAULT_RUN_TIMEOUT_SECONDS = 1800;
+export const DEFAULT_LAUNCH_TIMEOUT_SECONDS = 120;
 export const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
 export const DEFAULT_OPENSANDBOX_DOMAIN = "localhost:8080";
