@@ -9,6 +9,7 @@ import type {
 } from "@agework/shared/protocol";
 import { WorkerCommands } from "./commands.js";
 import { HttpTransport } from "./transport/http.js";
+import { IpcKeepAliveTransport } from "./transport/ipc-keep-alive.js";
 import { IpcTransport } from "./transport/ipc.js";
 import { RunnerManager } from "./runner-manager.js";
 import {
@@ -218,14 +219,18 @@ async function runOneShotWorker() {
       );
     }
     await transport.close().catch((err) => {
-      workerLog("finalize failed to close transport", errorDetails(err), "warn");
+      workerLog(
+        "finalize failed to close transport",
+        errorDetails(err),
+        "warn"
+      );
     });
     process.exit(statusReported ? 0 : 1);
   }
 }
 
 async function runKeepAliveWorker() {
-  const client = new HttpTransport();
+  const client = resolveKeepAliveClient();
   const commands = new WorkerCommands(client, {
     waitMs: COMMAND_LONG_POLL_MS,
     emptyRetryDelayMs: COMMAND_EMPTY_RETRY_DELAY_MS,
@@ -289,6 +294,14 @@ function createInitialRunChannel(): RuntimeChannel {
     process.exit(1);
   }
   return new IpcTransport();
+}
+
+function resolveKeepAliveClient(): HttpTransport | IpcKeepAliveTransport {
+  const channel = process.env.AGEWORK_WORKER_CHANNEL;
+  if (channel === "ipc") {
+    return new IpcKeepAliveTransport();
+  }
+  return new HttpTransport();
 }
 
 function emitStatus(
