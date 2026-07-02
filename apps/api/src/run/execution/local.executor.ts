@@ -1,47 +1,36 @@
-import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
-import type { ChildProcess } from "node:child_process";
+import { Injectable, Logger } from "@nestjs/common";
 import { generateId } from "@agework/shared";
-import { RuntimeService } from "../../runtime/runtime.service";
-import {
-  nextCommandMessage,
-  type RunConfig,
-  type WorkerExecutionHandle,
-  type WorkerExecutionStartInput,
-  type CommandPayload,
-  type RunChannelMessage,
+import type {
+  AcquireInstanceResult,
+  WorkerExecutionHandle,
+  WorkerExecutionStartInput,
+  CommandPayload,
 } from "@agework/shared/protocol";
-import {
-  commandMessageToRpcRequest,
-  isWorkerCommandResultRpcResponse,
-  isWorkerEventRpcNotification,
-  rpcNotificationToUpstreamMessage,
-  rpcResponseToCommandResultMessage,
-  runConfigMessageToRpcNotification,
-} from "@agework/shared/protocol/rpc";
 import type { RunEventPort, RunExecutor } from "./executor";
+import { WorkerHostService } from "../../worker-host/worker-host.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
+import { swallow } from "../../common/swallow";
 
-/** Internal state for a local worker process (not part of the protocol handle). */
 type LocalRunState = {
   handle: WorkerExecutionHandle;
-  child: ChildProcess;
+  ownerId: string;
+  status: "acquiring" | "ready";
+  cancelled: boolean;
 };
 
 /**
- * Local run executor：one run = one child process，无容器、无跨 run 复用。
- *
- * 因此 local 不写 RuntimeTarget / WorkspaceRuntime 表——没有持久容器要登记。
- * runtimeInstanceId 即 `pid:startToken`，只记在内存里，run 结束进程即销毁。
+ * local run executor:owner 长期复用一个 keep-alive 进程(worker-host 的
+ * LocalInstanceExecutor 负责),per-run 执行编排归 run 层——跟 SandboxRunExecutor
+ * 同构,不再自己 fork/持有 IPC channel(那是 Phase 2 之前的旧模型,已废弃)。
  */
 @Injectable()
-export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
+export class LocalRunExecutor implements RunExecutor {
   readonly type = "local" as const;
   private readonly logger = new Logger(LocalRunExecutor.name);
   private readonly states = new Map<string, LocalRunState>();
-  private readonly commandSeqs = new Map<string, number>();
   private receiver!: RunEventPort;
 
-  constructor(private readonly runtimeService: RuntimeService) {}
+  constructor(private readonly workerHost: WorkerHostService) {}
 
   setRunEventPort(receiver: RunEventPort): void {
     this.receiver = receiver;
@@ -49,115 +38,77 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
     const { runConfig, runtimeTarget } = input;
-    if (runtimeTarget.runtimeType !== this.type) {
-      throw new Error(
-        `LocalRunExecutor cannot start worker for runtime type: ${runtimeTarget.runtimeType}`
-      );
-    }
-    const { runId } = runConfig;
-
-    const { runtimeInstanceId, channel: child } =
-      this.runtimeService.launchLocal({
-        runId,
-        env: {
-          AGEWORK_WORKER_KEEP_ALIVE: "false",
-          AGEWORK_WORKER_CHANNEL: "ipc",
-          AGEWORK_WORKER_RUN_ID: runId,
-          ...(runConfig.workerLogFilePath
-            ? { AGEWORK_WORKER_LOG_FILE: runConfig.workerLogFilePath }
-            : {}),
-        },
-      });
-    this.logger.log(
-      `local worker started ${safeLogJson({
-        runId,
-        conversationId: runConfig.conversationId,
-        workspaceId: runConfig.workspaceId,
-        pid: child.pid,
-      })}`
-    );
-
     const handle: WorkerExecutionHandle = {
-      runId,
+      runId: runConfig.runId,
       runtimeType: runtimeTarget.runtimeType,
-      runtimeInstanceId,
+      runtimeInstanceId: "",
       conversationId: runConfig.conversationId,
     };
-
-    this.states.set(runId, { handle, child });
-    this.commandSeqs.set(runId, 0);
-
-    // Send run config as first message
-    const configMessage: RunChannelMessage<RunConfig> = {
-      runId,
-      seq: 0,
-      type: "run.config",
-      payload: runConfig,
-      ts: new Date().toISOString(),
-    };
-    child.send(runConfigMessageToRpcNotification(configMessage));
-
-    // Forward upstream messages to WorkerEventService
-    child.on("message", (msg: unknown) => {
-      const message = normalizeWorkerIpcMessage(msg, runId);
-      if (!message) {
-        this.logger.warn(
-          `worker ipc message ignored ${safeLogJson({
-            runId,
-            reason: "invalid_message",
-          })}`
-        );
-        return;
-      }
-      this.receiver.sendEvent(runId, message).catch((err) => {
-        this.logger.warn(
-          `worker message receive failed ${safeLogJson({
-            runId,
-            type: message.type,
-            ...errorLogFields(err),
-          })}`
-        );
-      });
+    this.states.set(runConfig.runId, {
+      handle,
+      ownerId: runtimeTarget.ownerId,
+      status: "acquiring",
+      cancelled: false,
     });
 
-    // Handle unexpected exit
-    child.on("exit", (code) => {
-      this.cleanup(runId);
-      if (code !== 0) {
-        this.logger.warn(
-          `local worker exited unexpectedly ${safeLogJson({ runId, code })}`
-        );
-        this.receiver
-          .notifyWorkerError(runId, `worker exited with code ${code}`)
-          .catch((err) => {
-            this.logger.warn(
-              `notify worker error failed ${safeLogJson({
-                runId,
-                ...errorLogFields(err),
-              })}`
-            );
-          });
-      }
-    });
-
-    // Pipe worker stdout/stderr to logger
-    child.stdout?.on("data", (data: Buffer) => {
-      this.logger.debug(`[worker:${runId}] ${data.toString().trimEnd()}`);
-    });
-    child.stderr?.on("data", (data: Buffer) => {
-      this.logger.debug(
-        `[worker:${runId}:stderr] ${data.toString().trimEnd()}`
-      );
-    });
+    try {
+      this.workerHost
+        .acquireLocalInstanceForRun(input)
+        .then((result) => this.onAcquired(input, result))
+        .catch((err) => this.onAcquireFailed(runConfig.runId, err));
+    } catch (err) {
+      this.onAcquireFailed(runConfig.runId, err);
+    }
 
     return handle;
+  }
+
+  private onAcquired(
+    input: WorkerExecutionStartInput,
+    result: AcquireInstanceResult
+  ): void {
+    const { runId } = input.runConfig;
+    const state = this.states.get(runId);
+    if (!state) return;
+
+    if (result.outcome === "error") {
+      this.states.delete(runId);
+      this.notifyWorkerError(runId, result.error);
+      return;
+    }
+    if (result.outcome === "cancelledBeforeReady") {
+      this.states.delete(runId);
+      this.notifyCancelledBeforeReady(runId);
+      return;
+    }
+
+    if (state.cancelled) {
+      this.states.delete(runId);
+      this.notifyCancelledBeforeReady(runId);
+      return;
+    }
+
+    state.handle.runtimeInstanceId = result.runtimeInstanceId;
+    state.status = "ready";
+    input.onRuntimeInstanceIdReady?.(result.runtimeInstanceId);
+
+    this.workerHost.openSession({
+      runId,
+      ownerId: state.ownerId,
+      runConfig: input.runConfig,
+    });
+    this.sendCommand(state.handle, {
+      type: "user_message",
+      commandId: generateId(),
+      runId,
+    });
   }
 
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
     const state = this.states.get(handle.runId);
     if (!state) {
       this.logger.warn(
-        `send command dropped ${safeLogJson({
+        `local send command dropped ${safeLogJson({
           runId: handle.runId,
           commandType: command.type,
           reason: "no_active_state",
@@ -165,103 +116,81 @@ export class LocalRunExecutor implements RunExecutor, OnApplicationShutdown {
       );
       return;
     }
-
-    const message = nextCommandMessage(
-      this.commandSeqs,
-      handle.runId,
-      handle.runId,
-      command
-    );
-    this.receiver
-      .recordCommandSent({
-        runId: handle.runId,
-        commandId: command.commandId,
-        commandType: command.type,
-      })
-      .catch((err) => {
-        this.logger.warn(
-          `record command sent failed ${safeLogJson({
-            runId: handle.runId,
-            commandType: command.type,
-            ...errorLogFields(err),
-          })}`
-        );
-      });
-    state.child.send(commandMessageToRpcRequest(message));
+    this.workerHost.sendCommand(state.ownerId, handle.runId, command);
+    this.recordCommandSent(handle.runId, command);
   }
 
   cancel(handle: WorkerExecutionHandle): void {
-    this.sendCommand(handle, {
-      type: "cancel",
-      commandId: generateId(),
-      runId: handle.runId,
-      conversationId: handle.conversationId,
-    });
+    const state = this.states.get(handle.runId);
+    if (!state) return;
+    if (state.status === "ready") {
+      this.sendCommand(handle, {
+        type: "cancel",
+        commandId: generateId(),
+        runId: handle.runId,
+        conversationId: handle.conversationId,
+      });
+      return;
+    }
+    state.cancelled = true;
   }
 
-  /** Run 终态后清理，幂等。 */
-  cleanup(runId: string): void {
+  private recordCommandSent(runId: string, command: CommandPayload): void {
+    this.receiver
+      .recordCommandSent({
+        runId,
+        commandId: command.commandId,
+        commandType: command.type,
+      })
+      .catch((err) =>
+        this.logger.warn(
+          `record command sent failed ${safeLogJson({
+            runId,
+            commandType: command.type,
+            ...errorLogFields(err),
+          })}`
+        )
+      );
+  }
+
+  private onAcquireFailed(runId: string, err: unknown): void {
+    this.logger.warn(
+      `acquire local instance failed ${safeLogJson({ runId, ...errorLogFields(err) })}`
+    );
     this.states.delete(runId);
-    this.commandSeqs.delete(runId);
+    this.notifyWorkerError(
+      runId,
+      `acquire local instance failed: ${String(err)}`
+    );
+  }
+
+  private notifyWorkerError(runId: string, error: string): void {
+    this.receiver
+      .notifyWorkerError(runId, error)
+      .catch(swallow(this.logger, `notify worker error for run ${runId}`));
+  }
+
+  private notifyCancelledBeforeReady(runId: string): void {
+    this.receiver
+      .notifyCancelledBeforeReady(runId)
+      .catch(
+        swallow(this.logger, `notify cancelled before ready for run ${runId}`)
+      );
   }
 
   terminateExecution(runId: string, reason: string): void {
-    const state = this.states.get(runId);
-    if (!state) return;
-
     this.logger.warn(
-      `terminating local worker ${safeLogJson({
-        runId,
-        reason,
-        pid: state.child.pid,
-      })}`
+      `terminating local run session ${safeLogJson({ runId, reason })}`
     );
-    try {
-      if (!state.child.killed) {
-        state.child.kill("SIGTERM");
-      }
-    } catch (err) {
-      this.logger.warn(
-        `terminate local worker failed ${safeLogJson({
-          runId,
-          reason,
-          ...errorLogFields(err),
-        })}`
-      );
-    } finally {
-      this.cleanup(runId);
-    }
+    this.cleanup(runId);
   }
 
-  /**
-   * 进程退出时最佳努力终止所有在途 local worker 子进程，避免孤儿进程。
-   * fork 出的 worker 是独立进程，向 API pid 发 SIGTERM 不会传播到它们。
-   * run 状态不在此落库，由重启后 RunRecoveryService 收敛。
-   */
-  onApplicationShutdown(): void {
-    if (this.states.size === 0) return;
-    this.logger.log(
-      `terminating ${this.states.size} local worker(s) on shutdown`
-    );
-    for (const runId of [...this.states.keys()]) {
-      this.terminateExecution(runId, "application_shutdown");
-    }
+  cleanup(runId: string): void {
+    this.workerHost.cleanupRun(runId);
+    this.states.delete(runId);
   }
 
   cleanupInterruptedExecution(runtimeInstanceId: string): Promise<void> {
-    return this.runtimeService.recoverOrphanLocal(runtimeInstanceId);
+    return this.workerHost.recoverOrphanLocalInstance(runtimeInstanceId);
   }
-}
-
-function normalizeWorkerIpcMessage(
-  message: unknown,
-  fallbackRunId: string
-): RunChannelMessage<unknown> | undefined {
-  if (isWorkerEventRpcNotification(message)) {
-    return rpcNotificationToUpstreamMessage(message);
-  }
-  if (isWorkerCommandResultRpcResponse(message)) {
-    return rpcResponseToCommandResultMessage(message, { runId: fallbackRunId });
-  }
-  return undefined;
 }
