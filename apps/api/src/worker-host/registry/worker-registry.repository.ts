@@ -15,12 +15,25 @@ export type UpsertRunningInput = {
   ownerId: string;
 };
 
+export type InsertStartingResult =
+  | { ok: true }
+  | { ok: false; existing: { runtimeInstanceId: string; status: string } };
+
 function ownerWhere(
   runtimeType: string,
   isolationScope: string,
   ownerId: string
 ) {
   return { runtimeType, isolationScope, ownerId };
+}
+
+function isPrismaUniqueError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "P2002"
+  );
 }
 
 /**
@@ -99,6 +112,55 @@ export class WorkerRegistryRepository {
     });
   }
 
+  /**
+   * 冷启动前插入一条 starting 记录,靠 Phase 1 建好的 partial unique index
+   * (runtime_instance_active_owner_idx,ON ownerId WHERE status IN
+   * ('starting','running'))做并发防重。撞见冲突时返回已存在的活跃行,由
+   * 调用方决定是复用还是报错(sandbox/local 的策略不同,不在这一层判断)。
+   */
+  async insertStarting(
+    input: UpsertRunningInput,
+    runtimeInstanceId: string,
+    transport: string
+  ): Promise<InsertStartingResult> {
+    try {
+      await this.prisma.runtimeInstance.create({
+        data: {
+          id: generateId(),
+          ...ownerWhere(input.runtimeType, input.isolationScope, input.ownerId),
+          runtimeInstanceId,
+          transport,
+          status: "starting",
+          metadata: runtimeInstanceMetadataJson(
+            statusInstanceMetadata({
+              runtimeType: input.runtimeType,
+              isolationScope: input.isolationScope,
+              ownerId: input.ownerId,
+              reason: "starting",
+            })
+          ),
+        },
+      });
+      return { ok: true };
+    } catch (err) {
+      if (!isPrismaUniqueError(err)) throw err;
+      const existing = await this.prisma.runtimeInstance.findFirst({
+        where: {
+          ownerId: input.ownerId,
+          status: { in: ["starting", "running"] },
+        },
+      });
+      if (!existing) throw err;
+      return {
+        ok: false,
+        existing: {
+          runtimeInstanceId: existing.runtimeInstanceId,
+          status: existing.status,
+        },
+      };
+    }
+  }
+
   async markStoppedByOwner(
     runtimeType: string,
     isolationScope: string,
@@ -140,6 +202,36 @@ export class WorkerRegistryRepository {
           })
         ),
       },
+    });
+  }
+
+  /**
+   * 服务重启后的扫尾用:把所有还卡在 starting 的行标记为 error——这些行代表
+   * 上一个(已经不在了的)进程没来得及确认完成的启动尝试,不可能再被确认,
+   * 必须清空,否则并发防重唯一索引会把对应 owner 永久卡死(仍待讨论第 13 条)。
+   * 不区分 runtimeType:starting 行本身的语义跟放置方式无关。
+   */
+  async markAllStartingAsError(): Promise<void> {
+    await this.prisma.runtimeInstance.updateMany({
+      where: { status: "starting" },
+      data: {
+        status: "error",
+        metadata: runtimeInstanceMetadataJson(
+          statusInstanceMetadata({
+            runtimeType: "",
+            isolationScope: "",
+            ownerId: "",
+            reason: "interrupted_by_restart",
+          })
+        ),
+      },
+    });
+  }
+
+  /** 按 runtimeType 查找所有 running 状态的行,供重启扫尾用。 */
+  findRunningByRuntimeType(runtimeType: string) {
+    return this.prisma.runtimeInstance.findMany({
+      where: { runtimeType, status: "running" },
     });
   }
 
