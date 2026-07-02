@@ -124,7 +124,7 @@ pnpm init:dev --runtime local,sandbox --isolation workspace --sandbox-engine ope
 
 初始化脚本会从模板创建：
 
-- `apps/api/.env`
+- `apps/server/.env`
 - `apps/web/.env`
 
 ### API

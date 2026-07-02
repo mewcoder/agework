@@ -4,7 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
- * 模块边界护栏：扫描 apps/api/src 下的跨模块 import，确保跨模块只触碰对方公开面。
+ * 模块边界护栏：扫描 apps/server/src 下的跨模块 import，确保跨模块只触碰对方公开面。
  *
  * 公开面定义见 .claude/rules/backend-architecture.md：
  *  - 根 Service（`*.service.ts`）是 module 唯一对外入口。

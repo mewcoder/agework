@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * analyze-modules 的结构提取脚本。
- * 机械扫描 apps/api/src 全部 feature module,输出跨模块关系 JSON,交给 LLM 翻译成 HTML。
+ * 机械扫描 apps/server/src 全部 feature module,输出跨模块关系 JSON,交给 LLM 翻译成 HTML。
  * 用途:保证全量分析不漏模块、调用点有 file:line 证据,而不是靠 LLM 凭记忆。
  *
  * 运行: node .claude/skills/analyze-modules/analyze.mjs [src-dir]
- * 默认 src-dir = apps/api/src
+ * 默认 src-dir = apps/server/src
  *
  * 输出 JSON 结构:
  *   modules: [{ name, path, imports:[modName], exports:[provider], rootService, file }]
@@ -16,7 +16,7 @@
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative, sep, basename, dirname } from "node:path";
 
-const SRC = process.argv[2] || join(process.cwd(), "apps", "api", "src");
+const SRC = process.argv[2] || join(process.cwd(), "apps", "server", "src");
 
 const read = (p) => readFileSync(p, "utf8");
 const lines = (s) => s.split(/\r?\n/);

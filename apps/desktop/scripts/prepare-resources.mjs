@@ -135,10 +135,10 @@ console.log("Resetting resources directory...");
 rmSync(resourcesDir, { recursive: true, force: true });
 mkdirSync(appDir, { recursive: true });
 
-console.log("Deploying apps/api (production deps, includes worker and adapters)...");
+console.log("Deploying apps/server (production deps, includes worker and adapters)...");
 execFileSync(
   "pnpm",
-  ["--filter", "api", "deploy", "--prod", "--legacy", join(appDir, "api")],
+  ["--filter", "server", "deploy", "--prod", "--legacy", join(appDir, "server")],
   { cwd: repoRoot, stdio: "inherit" },
 );
 
@@ -150,7 +150,7 @@ const templateDb = join(resourcesDir, "template.db");
 rmSync(templateDb, { force: true });
 const schemaSql = execFileSync(
   "pnpm",
-  ["--filter", "api", "exec", "prisma", "migrate", "diff", "--from-empty", "--to-schema", "prisma/schema.prisma", "--script"],
+  ["--filter", "server", "exec", "prisma", "migrate", "diff", "--from-empty", "--to-schema", "prisma/schema.prisma", "--script"],
   { cwd: repoRoot, encoding: "utf8" },
 );
 const db = new Database(templateDb);

@@ -5,7 +5,7 @@
 这是 pnpm workspace + Turborepo monorepo。
 
 - `apps/web`：前端应用，React 19 + Vite + Tailwind CSS v4。
-- `apps/api`：后端服务，NestJS 11 + Prisma。
+- `apps/server`：后端服务，NestJS 11 + Prisma。
 - `apps/worker`：Agent worker。
 - `apps/desktop`：Electron 桌面壳；不在 workspace 内，使用根目录 `desktop:*` 脚本。
 - `packages/shared`：前后端共享类型、API 类型、协议类型。
@@ -18,18 +18,18 @@
 ```bash
 # 开发服务
 pnpm dev
-pnpm dev:api
+pnpm dev:server
 pnpm dev:web
 
 # 类型检查
 pnpm typecheck
 pnpm --filter web typecheck
-pnpm --filter api typecheck
+pnpm --filter server typecheck
 
 # 精准测试
-pnpm test:api
+pnpm test:server
 pnpm test:web
-pnpm --filter api test -- <spec-file>
+pnpm --filter server test -- <spec-file>
 pnpm --filter web test -- <test-file>
 
 # 数据库
@@ -64,12 +64,12 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 > 后端命名、API URL / 接口动作命名见 [`.claude/rules/backend-naming.md`](.claude/rules/backend-naming.md)。
 
 - 新功能按 NestJS Feature Module 组织：`*.module.ts`、`*.controller.ts`、`*.service.ts`。
-- `apps/api/src/app.module.ts` 只负责组合 feature module。
+- `apps/server/src/app.module.ts` 只负责组合 feature module。
 - Controller 处理 HTTP 输入输出，业务逻辑放 Service。
 - 使用构造函数依赖注入，避免循环依赖。
 - DTO、配置和外部输入要验证。
 - 前后端共享结构优先放 `packages/shared`。
-- Prisma 相关代码在 `apps/api/src/prisma` 和 `apps/api/prisma`。
+- Prisma 相关代码在 `apps/server/src/prisma` 和 `apps/server/prisma`。
 
 ### 模块组织与封装
 

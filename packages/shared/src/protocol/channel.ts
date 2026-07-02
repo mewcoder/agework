@@ -205,7 +205,7 @@ export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
 // startWorkerExecution() starts/attaches a per-run worker session.
 //
 // 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
-// 不是跨进程线缆协议，定义在 apps/api/src/runtime 下，不在此处。
+// 不是跨进程线缆协议，定义在 apps/server/src/runtime 下，不在此处。
 
 /** 一次 run 的 worker/session 执行句柄。 */
 export interface WorkerExecutionHandle {

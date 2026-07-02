@@ -7,9 +7,9 @@ const isProd = process.argv.includes("--prod");
 
 const envPairs = [
   {
-    envPath: resolve(repoRoot, "apps/api/.env"),
-    examplePath: resolve(repoRoot, "apps/api/.env.example"),
-    label: "apps/api/.env",
+    envPath: resolve(repoRoot, "apps/server/.env"),
+    examplePath: resolve(repoRoot, "apps/server/.env.example"),
+    label: "apps/server/.env",
   },
   {
     envPath: resolve(repoRoot, "apps/web/.env"),

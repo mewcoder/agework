@@ -32,7 +32,7 @@ Electron 客户端会启动自己的后端进程，并随机选择高位本地�
 查看当前 Electron / 桌面后端进程：
 
 ```sh
-ps -axo pid,ppid,command | rg "Electron.app|apps/desktop|apps/api/dist/src/main"
+ps -axo pid,ppid,command | rg "Electron.app|apps/desktop|apps/server/dist/src/main"
 ```
 
 查看桌面后端日志和实际端口：

@@ -2,7 +2,7 @@
 
 本文用大白话解释项目里和 Docker、OpenSandbox、worker 镜像相关的文件分别是干什么的，
 面向不熟悉 Docker 的读者。涉及的运行时（runtime provider）实现细节见
-`apps/api/src/runtime/`，更深入的设计文档见 `docs/opensandbox-setup.md` 和
+`apps/server/src/runtime/`，更深入的设计文档见 `docs/opensandbox-setup.md` 和
 `docs/archive/superpowers/specs/`。
 
 ## 1. 为什么要用 Docker
@@ -73,7 +73,7 @@ services:
     container_name: agework-opensandbox-server
     ports:
       - "8080:8080"                       # 容器的 8080 映射到主机 8080，
-                                           # 你的后端 (apps/api) 通过它通信
+                                           # 你的后端 (apps/server) 通过它通信
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
         # 把主机的 Docker 控制权"借"给它，让它能替你的后端去造/管理盒子
@@ -138,7 +138,7 @@ OpenSandbox server 运行时会自动从 Docker Hub 按需拉取。你只需要�
 ### opensandbox 模式
 
 ```
-你的后端 (apps/api)
+你的后端 (apps/server)
    │  "给用户 A 造一个盒子"
    ▼
 OpenSandbox server   ← infra/opensandbox/docker-compose.yml 启动，
@@ -157,7 +157,7 @@ worker 容器（盒子）   ← apps/worker/Dockerfile 构建出的镜像
 自己调用 Docker 造盒子、管理生命周期：
 
 ```
-你的后端 (apps/api) ──直接用 Docker── worker 容器（盒子）
+你的后端 (apps/server) ──直接用 Docker── worker 容器（盒子）
                                         agework/worker 镜像
 ```
 
@@ -167,7 +167,7 @@ worker 容器（盒子）   ← apps/worker/Dockerfile 构建出的镜像
 这是开发时的默认方式，也是未来打包成桌面客户端时会用的方式：
 
 ```
-你的后端 (apps/api) ──直接执行── agent 进程（无隔离，跑在主机上）
+你的后端 (apps/server) ──直接执行── agent 进程（无隔离，跑在主机上）
 ```
 
 ## 5. 小结：哪些是"本项目的东西"，哪些是"借来的"

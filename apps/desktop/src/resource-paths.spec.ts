@@ -11,9 +11,9 @@ describe("getResourcePaths", () => {
       repoRoot,
     });
 
-    expect(paths.apiCwd).toBe(join(repoRoot, "apps", "api"));
-    expect(paths.apiMainPath).toBe(
-      join(repoRoot, "apps", "api", "dist", "src", "main.js")
+    expect(paths.serverCwd).toBe(join(repoRoot, "apps", "server"));
+    expect(paths.serverMainPath).toBe(
+      join(repoRoot, "apps", "server", "dist", "src", "main.js")
     );
     expect(paths.templateDbPath).toBe(
       join(repoRoot, "apps", "desktop", "resources", "template.db")
@@ -32,9 +32,9 @@ describe("getResourcePaths", () => {
       platform: "darwin",
     });
 
-    expect(paths.apiCwd).toBe(join(resourcesPath, "app", "api"));
-    expect(paths.apiMainPath).toBe(
-      join(resourcesPath, "app", "api", "dist", "src", "main.js")
+    expect(paths.serverCwd).toBe(join(resourcesPath, "app", "server"));
+    expect(paths.serverMainPath).toBe(
+      join(resourcesPath, "app", "server", "dist", "src", "main.js")
     );
     expect(paths.templateDbPath).toBe(join(resourcesPath, "template.db"));
     expect(paths.claudeCliPath).toBe(join(resourcesPath, "bin", "claude"));

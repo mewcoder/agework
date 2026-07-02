@@ -5,12 +5,12 @@ description: >
   上半是 mermaid 关系图(只画箭头,正向蓝实线、反向 Port 红实线、事件紫虚线,每条边带序号),
   下半是按序号逐条解释的调用关系明细(A→B 调用了什么函数、干什么;B→A 反向回流了什么)。
   当用户输入 "/analyze-modules" 或 "分析模块关系"、"画模块依赖图"、"模块调用关系" 时使用。
-  固定分析 apps/api 全部 feature module,不接受范围参数。只读分析,不改代码。
+  固定分析 apps/server 全部 feature module,不接受范围参数。只读分析,不改代码。
 ---
 
 # Analyze Modules
 
-分析 `apps/api` 后端**全部** feature module 之间的依赖与调用关系,输出一个自包含 HTML:mermaid 关系图 + 按序号的调用明细。只读,不改代码。**固定全量,不接受范围参数**;无论用户是否给模块名,都扫 `apps/api/src` 下所有 `*.module.ts`。
+分析 `apps/server` 后端**全部** feature module 之间的依赖与调用关系,输出一个自包含 HTML:mermaid 关系图 + 按序号的调用明细。只读,不改代码。**固定全量,不接受范围参数**;无论用户是否给模块名,都扫 `apps/server/src` 下所有 `*.module.ts`。
 
 ## Ground Rules
 
@@ -29,7 +29,7 @@ description: >
 
 1. **读规则** — 先读 `.claude/rules/backend-architecture.md` §4 / §5 / Port 纪律,把"正向 / 反向 Port / 事件"的判定装进脑子,不凭记忆。
 
-2. **定范围** — 固定全量。扫 `apps/api/src` 下所有 `*.module.ts`,**必须覆盖全部 feature module,不得遗漏**(漏模块是本 skill 最常见的失败)。先列出纳入分析的模块清单。用户若给模块名也忽略,始终全量;图过密时靠页面筛选复选框收窄,不在生成阶段裁剪。
+2. **定范围** — 固定全量。扫 `apps/server/src` 下所有 `*.module.ts`,**必须覆盖全部 feature module,不得遗漏**(漏模块是本 skill 最常见的失败)。先列出纳入分析的模块清单。用户若给模块名也忽略,始终全量;图过密时靠页面筛选复选框收窄,不在生成阶段裁剪。
 
 3. **跑分析脚本取证(首要)**
    - 先跑 `node .claude/skills/analyze-modules/analyze.mjs`,它会机械扫描全部模块,输出结构化 JSON:`modules`(每个模块 imports/exports/根 Service)、`forwardEdges`(跨模块正向调用,每条带 `callerClass`/`callee`/`file:line`)、`portEdges`(Port 定义/接线/回调)、`eventEdges`(emit↔@OnEvent 配对)。
@@ -61,19 +61,19 @@ description: >
 
 ```bash
 # 模块清单(核对脚本未漏)
-rg --files apps/api/src -g '*.module.ts'
+rg --files apps/server/src -g '*.module.ts'
 
 # 正向:根 Service 注入了哪些别 module 的 Service
-rg -n 'constructor\(' apps/api/src/<module>/<module>.service.ts
-rg -n 'this\.[A-Za-z]+Service\.[A-Za-z]+\(' apps/api/src/<module>   # 调用了对方什么方法
+rg -n 'constructor\(' apps/server/src/<module>/<module>.service.ts
+rg -n 'this\.[A-Za-z]+Service\.[A-Za-z]+\(' apps/server/src/<module>   # 调用了对方什么方法
 
 # 反向 Port:接口定义 + 接线
-rg -n 'export interface \w*Port\b' apps/api/src
-rg -n 'set[A-Z][A-Za-z]*Port\(' apps/api/src
+rg -n 'export interface \w*Port\b' apps/server/src
+rg -n 'set[A-Z][A-Za-z]*Port\(' apps/server/src
 
 # 事件:emit + handler 配对
-rg -n '@OnEvent\(' apps/api/src
-rg -n '\.emit(Async)?\(' apps/api/src
+rg -n '@OnEvent\(' apps/server/src
+rg -n '\.emit(Async)?\(' apps/server/src
 ```
 
 ## HTML Template
@@ -149,12 +149,12 @@ graph LR
   </div>
   <div class="calls">
     <div class="caller">
-      <div class="caller-name"><a class="ev" data-file="apps/api/src/agent/agent.service.ts" data-line="149">AgentService.run()</a></div>
-      <div class="callee"><a class="ev" data-file="apps/api/src/agent/agent.service.ts" data-line="152">RunService.start()</a><span class="what">:启动一次 run 并接 SSE</span></div>
+      <div class="caller-name"><a class="ev" data-file="apps/server/src/agent/agent.service.ts" data-line="149">AgentService.run()</a></div>
+      <div class="callee"><a class="ev" data-file="apps/server/src/agent/agent.service.ts" data-line="152">RunService.start()</a><span class="what">:启动一次 run 并接 SSE</span></div>
     </div>
     <div class="caller">
-      <div class="caller-name"><a class="ev" data-file="apps/api/src/agent/agent.service.ts" data-line="197">AgentService.stop()</a></div>
-      <div class="callee"><a class="ev" data-file="apps/api/src/agent/agent.service.ts" data-line="200">RunService.stop()</a><span class="what">:停止会话的活跃 run</span></div>
+      <div class="caller-name"><a class="ev" data-file="apps/server/src/agent/agent.service.ts" data-line="197">AgentService.stop()</a></div>
+      <div class="callee"><a class="ev" data-file="apps/server/src/agent/agent.service.ts" data-line="200">RunService.stop()</a><span class="what">:停止会话的活跃 run</span></div>
     </div>
   </div>
 </div>
@@ -162,7 +162,7 @@ graph LR
 
 - 类型标签三种:`<span class="tag fwd">正向</span>` / `<span class="tag rev">反向</span>` / `<span class="tag evt">事件</span>`。
 - 调用点树形:**每个调用方法一个 `.caller`**,`.caller-name` 写调用方**类+具体方法名**(如 `AgentService.createConversation()`,不能只写类名 `AgentService`),`.callee` 是被调方方法+一句话用途。同一调用方法调多个被调方法时,多个 `.callee` 挂在同一个 `.caller` 下。脚本 `forwardEdges.calls` 每条已带 `callerClass` + `callerMethod`(由 `analyze.mjs` 反查 enclosing method 得到),直接用 `callerClass.callerMethod()` 作为 caller-name,按 `callerClass.callerMethod` 分组。
-- **函数名直接做成可点击跳转**:每个 `.caller-name` 和 `.callee` 的函数名用 `<a class="ev" data-file="相对项目根路径" data-line="行号">函数名</a>` 包裹(`.callee` 里函数名后紧跟 `<span class="what">`)。`data-file` 写相对项目根路径(如 `apps/api/src/agent/agent.service.ts`),`data-line` 是**该调用语句所在行号**(脚本 `forwardEdges` 的 `file:line`)。模板 JS 读取 `<meta name="project-root">` 里的项目根绝对路径,拼接成 `vscode://file/<项目根>/<相对路径>:<行号>`,点击即在 VSCode 打开并定位到该行。**不要手写 `.evidence` 行**——JS 会自动在每个 `.edge-card` 底部汇总该边所有 `a.ev` 的**文件路径**(去重,仅文件名不带行号)作为证据行展示。
+- **函数名直接做成可点击跳转**:每个 `.caller-name` 和 `.callee` 的函数名用 `<a class="ev" data-file="相对项目根路径" data-line="行号">函数名</a>` 包裹(`.callee` 里函数名后紧跟 `<span class="what">`)。`data-file` 写相对项目根路径(如 `apps/server/src/agent/agent.service.ts`),`data-line` 是**该调用语句所在行号**(脚本 `forwardEdges` 的 `file:line`)。模板 JS 读取 `<meta name="project-root">` 里的项目根绝对路径,拼接成 `vscode://file/<项目根>/<相对路径>:<行号>`,点击即在 VSCode 打开并定位到该行。**不要手写 `.evidence` 行**——JS 会自动在每个 `.edge-card` 底部汇总该边所有 `a.ev` 的**文件路径**(去重,仅文件名不带行号)作为证据行展示。
 - 反向(Port)边:只一个 caller,`caller-name` 写 `runtime(SandboxWorkerExecutor).<method>()`,`callee` 写 `回调 SandboxWorkerEventPort.notifyWorkerError()/notifyCancelledBeforeReady()`,`.what` 补决策链说明;同样把函数名包成 `a.ev`,`data-line` 用 Port 回调调用处行号。
 - 事件边:`caller-name` 写 `WorkspaceService.emit(EVENT)`(或具体发布方法),`callee` 写 `runtime.RuntimeInstanceLifecycleListener.<handler>()`,`.what` 补用途;`caller-name` 的 `a.ev` 指向 `emit` 处行号,`callee` 的 `a.ev` 指向 `@OnEvent` handler 处行号。
 - 反向(Port)边:只一个 caller,`caller-name` 写 `runtime(SandboxWorkerExecutor)`,`callee` 写 `回调 SandboxWorkerEventPort.notifyWorkerError(),由 run 实现`,`.what` 补决策链说明;同样把函数名包成 `a.ev`,`data-line` 用 Port 接线(`setXxxPort`)或回调调用处行号。

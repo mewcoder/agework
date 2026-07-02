@@ -19,8 +19,8 @@
     `packages/adapters` 源码 mtime
 - `scripts/init.mjs`（`pnpm boot` / `pnpm init:*`）— 选择 `opensandbox` 时复用
   `opensandbox.mjs` 完成镜像构建、镜像拉取、启动容器、等待健康检查
-- `apps/api/src/runtime/providers/opensandbox-runtime-provider.ts` — 后端 RuntimeProvider 实现
-- `apps/api/.env` 中的 `OPENSANDBOX_*`（DOMAIN/PROTOCOL/API_KEY/IMAGE/...）
+- `apps/server/src/runtime/providers/opensandbox-runtime-provider.ts` — 后端 RuntimeProvider 实现
+- `apps/server/.env` 中的 `OPENSANDBOX_*`（DOMAIN/PROTOCOL/API_KEY/IMAGE/...）
 
 ## 常用命令
 

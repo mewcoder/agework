@@ -2,9 +2,9 @@ import { join } from "node:path";
 
 export type ResourcePaths = {
   /** cwd to fork the NestJS backend from so `../web/dist` resolves correctly. */
-  apiCwd: string;
+  serverCwd: string;
   /** Absolute path to the compiled NestJS entry point. */
-  apiMainPath: string;
+  serverMainPath: string;
   /** Pre-built empty SQLite db copied into userData on first run. */
   templateDbPath: string;
   /** Bundled claude CLI binary, packaged builds only. */
@@ -34,8 +34,8 @@ export function getResourcePaths(options: ResourcePathsOptions): ResourcePaths {
     const appDir = join(resourcesPath, "app");
     const exe = platform === "win32" ? ".exe" : "";
     return {
-      apiCwd: join(appDir, "api"),
-      apiMainPath: join(appDir, "api", "dist", "src", "main.js"),
+      serverCwd: join(appDir, "server"),
+      serverMainPath: join(appDir, "server", "dist", "src", "main.js"),
       templateDbPath: join(resourcesPath, "template.db"),
       claudeCliPath: join(resourcesPath, "bin", `claude${exe}`),
       codexCliPath: join(resourcesPath, "bin", `codex${exe}`),
@@ -43,8 +43,8 @@ export function getResourcePaths(options: ResourcePathsOptions): ResourcePaths {
   }
 
   return {
-    apiCwd: join(repoRoot, "apps", "api"),
-    apiMainPath: join(repoRoot, "apps", "api", "dist", "src", "main.js"),
+    serverCwd: join(repoRoot, "apps", "server"),
+    serverMainPath: join(repoRoot, "apps", "server", "dist", "src", "main.js"),
     templateDbPath: join(repoRoot, "apps", "desktop", "resources", "template.db"),
     backendExecPath: process.env.AGEWORK_DESKTOP_NODE_PATH?.trim() || "node",
   };

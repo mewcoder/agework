@@ -22,7 +22,7 @@ mkdirSync(userDataRoot, { recursive: true });
 console.log(`Creating fresh desktop database: ${dbPath}`);
 execFileSync(
   "pnpm",
-  ["--filter", "api", "exec", "prisma", "db", "push", "--force-reset"],
+  ["--filter", "server", "exec", "prisma", "db", "push", "--force-reset"],
   {
     cwd: repoRoot,
     env: {

@@ -43,14 +43,14 @@ export function startBackend(
   if (resources.codexCliPath) env.AGEWORK_CODEX_CLI_PATH = resources.codexCliPath;
 
   const forkOptions = {
-    cwd: resources.apiCwd,
+    cwd: resources.serverCwd,
     env,
     ...(resources.backendExecPath ? { execPath: resources.backendExecPath } : {}),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
   } as Parameters<typeof fork>[2] & { windowsHide: boolean };
 
-  const child = fork(resources.apiMainPath, [], forkOptions);
+  const child = fork(resources.serverMainPath, [], forkOptions);
 
   child.stdout?.pipe(logStream);
   child.stderr?.pipe(logStream);

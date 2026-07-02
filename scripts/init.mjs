@@ -12,8 +12,8 @@ import {
 } from "./opensandbox.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const apiEnv = resolve(repoRoot, "apps/api/.env");
-const apiEnvExample = resolve(repoRoot, "apps/api/.env.example");
+const apiEnv = resolve(repoRoot, "apps/server/.env");
+const apiEnvExample = resolve(repoRoot, "apps/server/.env.example");
 const webEnv = resolve(repoRoot, "apps/web/.env");
 const webEnvExample = resolve(repoRoot, "apps/web/.env.example");
 const pnpm = "pnpm";
@@ -317,7 +317,7 @@ function generateJwtSecret() {
 }
 
 function getDbPath() {
-  const apiDir = resolve(repoRoot, "apps/api");
+  const apiDir = resolve(repoRoot, "apps/server");
   const dbUrl = existsSync(apiEnv)
     ? (readEnvValues(apiEnv).get("AGEWORK_PRIVATE_DATABASE_URL") ?? "file:./dev.db")
     : "file:./dev.db";
@@ -593,11 +593,11 @@ async function main() {
     console.log("  --reset          Reset .env defaults and recreate database data");
     console.log("  --start          Start dev server after init");
     console.log("  --ctx <path>     Set backend context and frontend paths, for example /agent");
-    console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/api/.env");
-    console.log("  --port <port>    Set backend PORT in apps/api/.env");
-    console.log("  --runtime <local|sandbox|local,sandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/api/.env");
-    console.log("  --isolation <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES in apps/api/.env");
-    console.log("  --sandbox-engine <docker|opensandbox>     Set AGEWORK_SANDBOX_ENGINE in apps/api/.env");
+    console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/server/.env");
+    console.log("  --port <port>    Set backend PORT in apps/server/.env");
+    console.log("  --runtime <local|sandbox|local,sandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env");
+    console.log("  --isolation <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES in apps/server/.env");
+    console.log("  --sandbox-engine <docker|opensandbox>     Set AGEWORK_SANDBOX_ENGINE in apps/server/.env");
     console.log("  --no-install     Skip pnpm install");
     console.log("Default: runs pnpm install unless --no-install is set.");
     return;
@@ -667,23 +667,23 @@ async function main() {
     sandboxEngine = result;
   }
   if (shouldInstall) runPnpm(["install"]);
-  const apiWasCreated = ensureEnv(apiEnv, apiEnvExample, "apps/api/.env", {
+  const apiWasCreated = ensureEnv(apiEnv, apiEnvExample, "apps/server/.env", {
     reset: shouldReset,
   });
   ensureEnv(webEnv, webEnvExample, "apps/web/.env", {
     reset: shouldReset,
   });
-  applyEnvDefaults(apiEnv, apiModeDefaults(noAuth), "apps/api/.env", {
+  applyEnvDefaults(apiEnv, apiModeDefaults(noAuth), "apps/server/.env", {
     overwrite: shouldReset || apiWasCreated,
   });
   if (interactive || rawArgs.includes("--no-auth")) {
     upsertEnvValues(
       apiEnv,
       { AGEWORK_DEV_AUTH_DISABLED: noAuth ? "true" : "false" },
-      "apps/api/.env"
+      "apps/server/.env"
     );
   }
-  syncMissingEnvKeys(apiEnv, apiEnvExample, "apps/api/.env");
+  syncMissingEnvKeys(apiEnv, apiEnvExample, "apps/server/.env");
   syncMissingEnvKeys(webEnv, webEnvExample, "apps/web/.env");
   const apiUpdates = {};
   if (appName) apiUpdates.AGEWORK_APP_NAME = appName;
@@ -715,23 +715,23 @@ async function main() {
     );
   }
   if (Object.keys(apiUpdates).length > 0) {
-    upsertEnvValues(apiEnv, apiUpdates, "apps/api/.env");
+    upsertEnvValues(apiEnv, apiUpdates, "apps/server/.env");
   }
   runNode(["scripts/check-env.mjs", ...(isProd ? ["--prod"] : [])]);
-  runPnpm(["--filter", "api", "db:generate"]);
+  runPnpm(["--filter", "server", "db:generate"]);
   if (shouldReset) {
     let backups = {};
     if (backupTables.length > 0) {
       console.log("📦 备份数据...");
       backups = await backupDb(backupTables);
     }
-    runPnpm(["--filter", "api", "db:reset"]);
+    runPnpm(["--filter", "server", "db:reset"]);
     if (backupTables.length > 0) {
       console.log("♻️  恢复数据...");
       await restoreDb(backups);
     }
   } else {
-    runPnpm(["--filter", "api", "db:push"]);
+    runPnpm(["--filter", "server", "db:push"]);
   }
   if (interactive) {
     const run = await p.select({
@@ -739,7 +739,7 @@ async function main() {
       options: [
         { value: "dev", label: "开发模式" },
         { value: "api-web", label: "启动后端 + 前端" },
-        { value: "api", label: "启动后端" },
+        { value: "server", label: "启动后端" },
         { value: "build", label: "仅构建" },
         { value: "none", label: "跳过" },
       ],
@@ -747,7 +747,7 @@ async function main() {
     if (p.isCancel(run)) process.exit(0);
     if (run === "dev") await startDev(interactive);
     else if (run === "build") runPnpm(["build"]);
-    else if (run === "api") {
+    else if (run === "server") {
       runPnpm(["build"]);
       runPnpm(["start:api"]);
     } else if (run === "api-web") {

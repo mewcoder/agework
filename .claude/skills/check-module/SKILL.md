@@ -28,7 +28,7 @@ description: >
 
 1. **读规则** — 先读两份规则文件全文,提取检测项(架构 §1 优先级 P0/P1/P2、§7 自检清单;naming 的【强制】/【推荐】/【参考】分级条目)。规则会变,这一步不能省、不能凭记忆。
 
-2. **定位模块** — 后端模块在 `apps/api/src/<feature>/`。**用户必须指定模块名;没指定时不要自行挑模块,先问用户要测哪个**(可列出 `apps/api/src/` 下的 feature 目录供选择)。用户给了领域名后,先 `rg --files apps/api/src | rg <name>` 确认目录与边界,说明所选范围。列出 root 文件 + 各子目录文件,得到模块全貌。
+2. **定位模块** — 后端模块在 `apps/server/src/<feature>/`。**用户必须指定模块名;没指定时不要自行挑模块,先问用户要测哪个**(可列出 `apps/server/src/` 下的 feature 目录供选择)。用户给了领域名后,先 `rg --files apps/server/src | rg <name>` 确认目录与边界,说明所选范围。列出 root 文件 + 各子目录文件,得到模块全貌。
 
 3. **读代码取证**
    - 必读:`*.module.ts`(imports/providers/controllers/exports)、根 `*.service.ts`、`*.controller.ts`(含 `admin/`)、`*.repository.ts`。
@@ -42,27 +42,27 @@ description: >
    - 架构 §7 自检清单是天然 checklist,逐项过一遍。
    - 只要能在规则里找到条文依据,就按该条文的级别报,不要自我降级成"设计观察";规则里没有依据的不要报(那是别的 skill 的事)。
 
-5. **输出报告** — 写成 md 文件落盘到**项目根目录的 `reports/` 目录**,文件名 `<feature>.check.md`(如 `reports/model-provider.check.md`);同时在对话里给一句话摘要 + 文件链接。用下方 Report Template。注意:报告在 `reports/` 下,引用 `.claude/rules/*` 用 `../.claude/rules/...`,引用源码用 `apps/api/src/...`(源码链接从项目根算,不加 `../`)。
+5. **输出报告** — 写成 md 文件落盘到**项目根目录的 `reports/` 目录**,文件名 `<feature>.check.md`(如 `reports/model-provider.check.md`);同时在对话里给一句话摘要 + 文件链接。用下方 Report Template。注意:报告在 `reports/` 下,引用 `.claude/rules/*` 用 `../.claude/rules/...`,引用源码用 `apps/server/src/...`(源码链接从项目根算,不加 `../`)。
 
 ## Useful Search Patterns
 
 ```bash
 # 定位模块
-rg --files apps/api/src | rg '<module>'
+rg --files apps/server/src | rg '<module>'
 
 # 架构骨架
-rg -n '@(Module|Controller|Get|Post|Put|Patch|Delete)\b|@Injectable|constructor\(' apps/api/src/<module>
-rg -n 'exports:\s*\[' apps/api/src/<module>      # 看 export 了什么
-rg -n 'PrismaService' apps/api/src/<module>      # 业务层是否直注 Prisma
+rg -n '@(Module|Controller|Get|Post|Put|Patch|Delete)\b|@Injectable|constructor\(' apps/server/src/<module>
+rg -n 'exports:\s*\[' apps/server/src/<module>      # 看 export 了什么
+rg -n 'PrismaService' apps/server/src/<module>      # 业务层是否直注 Prisma
 
 # 跨模块 reach(是否 import 别 module 的内部文件)
-rg -n 'from\s+["\'].*\.\./\.\./<other-module>/' apps/api/src/<module>
+rg -n 'from\s+["\'].*\.\./\.\./<other-module>/' apps/server/src/<module>
 
 # 命名
-rg -n 'is[A-Z]' apps/api/src/<module>            # 布尔 is 前缀
-rg -n '\b(conv|repo|condi)\b' apps/api/src/<module>
-rg -n '@(Put|Patch|Delete)\(' apps/api/src/<module>   # 非 GET/POST
-rg -n '/:id' apps/api/src/<module>               # path 传 ID
+rg -n 'is[A-Z]' apps/server/src/<module>            # 布尔 is 前缀
+rg -n '\b(conv|repo|condi)\b' apps/server/src/<module>
+rg -n '@(Put|Patch|Delete)\(' apps/server/src/<module>   # 非 GET/POST
+rg -n '/:id' apps/server/src/<module>               # path 传 ID
 ```
 
 ## Report Template
@@ -70,7 +70,7 @@ rg -n '/:id' apps/api/src/<module>               # path 传 ID
 分级标签严格沿用两份 md 自身:架构块用 `P0`/`P1`/`P2`(architecture.md §1),命名块用 `【强制】`/`【推荐】`/`【参考】`(naming.md 体例)。每个标签前加 emoji 表明严重度:`🔴 P0` / `🟠 P1` / `🟡 P2` / `🚫 【强制】` / `💡 【推荐】` / `📖 【参考】`。每条"规则"字段直接抄规则原文措辞 + 出处,不改写。
 
 ```text
-模块:<feature>  路径:apps/api/src/<feature>/
+模块:<feature>  路径:apps/server/src/<feature>/
 检测范围:root N 文件 + 子目录 M 文件;跨模块依赖:<list>
 
 ## 目录树
@@ -97,7 +97,7 @@ rg -n '/:id' apps/api/src/<module>               # path 传 ID
 ### 🔴 P0
 1. <Class.method()> — <一句话问题>。
    规则:<抄 architecture.md 原文那条>  (architecture §<章节>)
-   证据:apps/api/src/<feature>/x.ts:行
+   证据:apps/server/src/<feature>/x.ts:行
    修复:<具体方向>
 (无则写"无")
 

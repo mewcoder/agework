@@ -18,7 +18,7 @@ Generate and execute a commit from staged changes with a standardized message.
 ```
 
 - **type**: `feat` | `fix` | `refactor` | `docs` | `chore` | `test` | `perf` | `ci` | `build`
-- **scope** (optional): `api` | `web` | `worker` | `shared` | `protocol` | `infra`
+- **scope** (optional): `server` | `web` | `worker` | `shared` | `protocol` | `infra`
 - **description**: lowercase English, ≤50 chars, no trailing period
 - Body (optional): explain **why** not what, wrap at 72 chars
 
@@ -40,7 +40,7 @@ Generate and execute a commit from staged changes with a standardized message.
 
 Determine scope from changed file paths:
 
-- `apps/api/` → `api`
+- `apps/server/` → `server`
 - `apps/web/` → `web`
 - `apps/worker/` → `worker`
 - `packages/shared/` → `shared`

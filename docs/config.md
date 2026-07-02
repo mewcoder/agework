@@ -4,7 +4,7 @@ AgeWork 配置按边界分为四类：
 
 | 类别            | 存放位置                  | 用途                                                         | 生效方式                       |
 | --------------- | ------------------------- | ------------------------------------------------------------ | ------------------------------ |
-| 部署/启动 ENV   | `apps/api/.env`、进程环境 | 进程启动前必须确定的部署、认证、网络、runtime 拓扑、诊断配置 | 修改后重启                     |
+| 部署/启动 ENV   | `apps/server/.env`、进程环境 | 进程启动前必须确定的部署、认证、网络、runtime 拓扑、诊断配置 | 修改后重启                     |
 | 前端构建 ENV    | `apps/web/.env`、进程环境 | Vite base path 与 API context                                | 重新启动 dev server 或重新构建 |
 | DB 系统设置     | `SystemSetting` 表        | 管理员可在线调整的运行时业务配置                             | API 写入后立即刷新内存缓存     |
 | 内部 worker ENV | API 启动 worker 时注入    | API 与 worker 通信协议、runtime 元数据                       | 不暴露给用户维护               |
@@ -16,13 +16,13 @@ AgeWork 配置按边界分为四类：
 - Worker 内部协议变量不要写进用户 `.env.example`。
 - 模型 Provider 的系统环境变量单独归类，不属于 AgeWork 部署配置。
 
-代码级默认配置集中在 `apps/api/src/config/defaults.ts`。如果 fork/私有部署想改变 AgeWork 的默认 App 名、端口、默认 runtime、默认镜像、OpenSandbox 默认值或固定本机目录，直接改这个文件；不要再为这些默认值额外增加 ENV。
+代码级默认配置集中在 `apps/server/src/config/defaults.ts`。如果 fork/私有部署想改变 AgeWork 的默认 App 名、端口、默认 runtime、默认镜像、OpenSandbox 默认值或固定本机目录，直接改这个文件；不要再为这些默认值额外增加 ENV。
 
 ---
 
 ## API ENV
 
-这些变量由后端进程读取，主要配置文件是 `apps/api/.env`。
+这些变量由后端进程读取，主要配置文件是 `apps/server/.env`。
 
 ### 基础
 
@@ -71,8 +71,8 @@ AgeWork 配置按边界分为四类：
 
 | 变量                   | 默认值                                       | 建议           | 说明                                                           |
 | ---------------------- | --------------------------------------------- | -------------- | --------------------------------------------------------------- |
-| `VITE_APP_BASE_PATH`   | fallback 到 `apps/api/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端页面、路由、静态资源 base path。                          |
-| `VITE_APP_API_CONTEXT` | fallback 到 `apps/api/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端请求 API 的 context，最终 API 前缀为 `<context>/api/v1`。 |
+| `VITE_APP_BASE_PATH`   | fallback 到 `apps/server/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端页面、路由、静态资源 base path。                          |
+| `VITE_APP_API_CONTEXT` | fallback 到 `apps/server/.env` 的 `AGEWORK_CONTEXT` | 保留为高级覆盖 | 前端请求 API 的 context，最终 API 前缀为 `<context>/api/v1`。 |
 
 通常只设置 `AGEWORK_CONTEXT` 即可；只有前端部署路径和后端 API context 不一致时才单独设置这两个变量。
 

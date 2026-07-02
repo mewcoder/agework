@@ -1,6 +1,6 @@
 # Backend and API Naming Rules
 
-适用于 `apps/api` 的后端命名规则,并覆盖与后端 API 契约直接相关的 `apps/web/src/api`、`apps/web/src/types`、`apps/web/src/store`、`apps/web/src/pages` 命名。
+适用于 `apps/server` 的后端命名规则,并覆盖与后端 API 契约直接相关的 `apps/web/src/api`、`apps/web/src/types`、`apps/web/src/store`、`apps/web/src/pages` 命名。
 
 体例参考《Java 开发手册》命名规约:条目按【强制】/【推荐】/【参考】分级,正反例对照。不适用的 Java 条目(数组 `int[]`、`Abstract`/`Base`/`Exception`/`Test` 后缀、`Impl`、接口不加修饰符、子父类成员同名)已剔除;与 NestJS/TS + RPC-over-HTTP 约定冲突的条目(如 Service/DAO 接口 + `Impl`、各层统一 `get/save` 前缀)不照搬。
 
@@ -56,7 +56,7 @@
 正例:`user.service.ts`→`UserService`、`model-provider.repository.ts`→`ModelProviderRepository`、`create-user.dto.ts`→`CreateUserDto`、`run-status.enum.ts`→`RunStatusEnum`、`admin-user.controller.ts`。
 
 14.【强制】默认全部使用单数业务语义,只有两个例外使用复数:HTTP API path 资源段(`/users`、`/runtimes`)、前端 API 文件名(`apps/web/src/api/users.ts`)。
-正例:Entity `User`、module 目录 `apps/api/src/user/`、module 根文件 `user.module.ts`、Web Store `useUserStore.ts`、Web `types/` 文件 `User.ts`、页面 `pages/admin/user.tsx`、组件 `user-form.tsx`。
+正例:Entity `User`、module 目录 `apps/server/src/user/`、module 根文件 `user.module.ts`、Web Store `useUserStore.ts`、Web `types/` 文件 `User.ts`、页面 `pages/admin/user.tsx`、组件 `user-form.tsx`。
 反例:页面文件用 `users.tsx` 表达集合(页面是路由映射,可用`user-list.tsx`)。
 
 动词总览(第 15-19 条共用参考):`get` / `find` / `query` / `list` / `count` / `save` / `create` / `update` / `delete` / `remove` / `archive`。

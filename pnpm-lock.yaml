@@ -45,7 +45,7 @@ importers:
         specifier: ~5.9
         version: 5.9.3
 
-  apps/api:
+  apps/server:
     dependencies:
       '@ag-ui/client':
         specifier: 'catalog:'

@@ -1,6 +1,6 @@
-# Feature Module Architecture (apps/api)
+# Feature Module Architecture (apps/server)
 
-适用于 `apps/api`(NestJS 11 + Prisma)。竖切模块单体,不引入 DDD / Clean Architecture 重型分层。命名细则见 [`backend-naming.md`](backend-naming.md)。
+适用于 `apps/server`(NestJS 11 + Prisma)。竖切模块单体,不引入 DDD / Clean Architecture 重型分层。命名细则见 [`backend-naming.md`](backend-naming.md)。
 
 ## 0. 核心概念
 
@@ -50,7 +50,7 @@ feature/
 └── <sub-capability>/        # 按需,稳定子能力目录
 ```
 
-**Root 白名单(delivery gate,强制)**:root 只允许放 `*.module.ts` / `*.service.ts` / `*.controller.ts` / `*.repository.ts` / `*.types.ts` / `*.events.ts` / `*.spec.ts` / `dto/` / 子能力目录。其余内部实现文件必须收进按子能力命名的子目录;Auth 的 `decorators/`、`guards/` 同理,不平铺在 root。feature 直接放 `apps/api/src/` 顶层,不套 `src/modules/`。不为凑齐造空文件 / 空文件夹。
+**Root 白名单(delivery gate,强制)**:root 只允许放 `*.module.ts` / `*.service.ts` / `*.controller.ts` / `*.repository.ts` / `*.types.ts` / `*.events.ts` / `*.spec.ts` / `dto/` / 子能力目录。其余内部实现文件必须收进按子能力命名的子目录;Auth 的 `decorators/`、`guards/` 同理,不平铺在 root。feature 直接放 `apps/server/src/` 顶层,不套 `src/modules/`。不为凑齐造空文件 / 空文件夹。
 
 大模块(如 `runtime/`)在 root 下按子能力建目录:`instances/`、`providers/`、`sandbox/` 等。
 
@@ -143,7 +143,7 @@ Port 只配决策链第 5 条(infra/execution 运行时回流);平级业务领�
 | 位置 | 用途 |
 |---|---|
 | `@agework/shared` | 前后端都真 import 的共享类型 / 协议类型 / 纯函数(如 `generateId`)。后端独用的不进 |
-| `apps/api/src/common/` | 只后端用、完全不认识领域概念的通用能力(filters、guards 的全局壳、纯工具) |
+| `apps/server/src/common/` | 只后端用、完全不认识领域概念的通用能力(filters、guards 的全局壳、纯工具) |
 | module 内部 | 认识某个领域概念、只该领域用的能力 |
 
 判据是实际使用,不是"看起来通用"。工具函数默认不抽,先内联 owner Service 私有方法 / 同文件 pure function;满足 ≥2 处真复用 / 厚到自成单元 / 值得单测才抽独立文件。feature module 内不准新建 `common/`、`utils/` 兜底。
