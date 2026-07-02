@@ -255,24 +255,6 @@ describe("OpenSandboxEngine", () => {
     });
   });
 
-  it("recoverOrphan deletes the sandbox by id", async () => {
-    const client = makeClient();
-    const engine = new OpenSandboxEngine(client);
-
-    await engine.recoverOrphan("sandbox-orphan");
-
-    expect(client.deleteSandbox).toHaveBeenCalledWith("sandbox-orphan");
-  });
-
-  it("recoverOrphan is a no-op if sandbox does not exist", async () => {
-    const client = makeClient();
-    (client.getSandbox as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    const engine = new OpenSandboxEngine(client);
-
-    // 不应抛错
-    await engine.recoverOrphan("sandbox-nonexistent");
-  });
-
   it("isHealthy returns true when sandbox is healthy", async () => {
     const client = makeClient();
     const sandbox = makeSandboxMock("sandbox-1");

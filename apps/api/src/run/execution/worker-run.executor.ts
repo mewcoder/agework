@@ -20,8 +20,8 @@ type WorkerRunState = {
 };
 
 /**
- * 统一 run executor:per-run 执行编排归 run 层,取得/释放/回收 runtime 实例统一经
- * `WorkerHostService.resolveInstance()`/`releaseInstanceForRun()`/`recoverOrphanInstance()`
+ * 统一 run executor:per-run 执行编排归 run 层,取得/释放 runtime 实例统一经
+ * `WorkerHostService.resolveInstance()`/`releaseInstanceForRun()`
  * 完成——runtimeType(sandbox/local)判断被 worker-host 内部吸收,run 层不再需要认识
  * 这个区别,也因此不再需要按 runtimeType 分别持有两个执行器类(设计文档第一节)。
  *
@@ -208,15 +208,5 @@ export class WorkerRunExecutor implements RunExecutor {
       this.workerHost.releaseInstanceForRun(state.handle.runtimeType, runId);
     }
     this.states.delete(runId);
-  }
-
-  cleanupInterruptedExecution(
-    runtimeType: string,
-    runtimeInstanceId: string
-  ): Promise<void> {
-    return this.workerHost.recoverOrphanInstance(
-      runtimeType,
-      runtimeInstanceId
-    );
   }
 }

@@ -36,7 +36,6 @@ describe("RuntimeService", () => {
         runtimeInstanceId: "container-1",
         workspaceMountPath: "/workspace",
       }),
-      recoverOrphan: vi.fn().mockResolvedValue(undefined),
     };
     localProvider = {
       launch: vi.fn().mockReturnValue({
@@ -131,27 +130,6 @@ describe("RuntimeService", () => {
     it("stopSandbox delegates to the resolved engine", async () => {
       await service.stopSandbox("docker", "container-1");
       expect(engine.stop).toHaveBeenCalledWith("container-1");
-    });
-
-    it("recoverOrphanSandbox loops all registered engines and swallows individual failures", async () => {
-      const secondEngine: SandboxEngine = {
-        type: "opensandbox",
-        getOrCreate: vi.fn(),
-        startWorker: vi.fn(),
-        stop: vi.fn(),
-        recoverOrphan: vi.fn().mockRejectedValue(new Error("boom")),
-      };
-      service = new RuntimeService(
-        configService as ConfigService,
-        [engine, secondEngine],
-        localProvider as unknown as LocalRuntimeProvider
-      );
-
-      await expect(
-        service.recoverOrphanSandbox("resource-abc")
-      ).resolves.toBeUndefined();
-      expect(engine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
-      expect(secondEngine.recoverOrphan).toHaveBeenCalledWith("resource-abc");
     });
   });
 

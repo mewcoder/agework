@@ -107,11 +107,6 @@ export class OpenSandboxEngine implements SandboxEngine {
     };
   }
 
-  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
-    this.sandboxes.delete(runtimeInstanceId);
-    await this.client.deleteSandbox(runtimeInstanceId);
-  }
-
   async isHealthy(runtimeInstanceId: string): Promise<boolean> {
     try {
       const sandbox = await this.client.getSandbox(runtimeInstanceId);

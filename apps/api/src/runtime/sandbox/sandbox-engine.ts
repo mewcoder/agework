@@ -48,11 +48,6 @@ export interface SandboxEngine {
   ): Promise<SandboxRuntime>;
 
   /**
-   * 服务重启后，根据持久化的 runtimeInstanceId 终止孤儿资源。幂等。
-   */
-  recoverOrphan(runtimeInstanceId: string): Promise<void>;
-
-  /**
    * 检查沙箱是否健康。可选，用于 DB resource 恢复时验证。
    */
   isHealthy?(runtimeInstanceId: string): Promise<boolean>;

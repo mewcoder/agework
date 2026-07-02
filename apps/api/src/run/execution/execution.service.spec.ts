@@ -15,7 +15,6 @@ function makeExecutor() {
     cancel: vi.fn(),
     terminateExecution: vi.fn(),
     cleanup: vi.fn(),
-    cleanupInterruptedExecution: vi.fn(),
     setRunEventPort: vi.fn(),
   };
 }
@@ -84,21 +83,6 @@ describe("ExecutionService", () => {
       "run timeout"
     );
     expect(executor.cleanup).toHaveBeenCalledWith("run-1");
-  });
-
-  it("forwards cleanupInterruptedExecution with runtimeType and runtimeInstanceId", async () => {
-    const executor = makeExecutor();
-    executor.cleanupInterruptedExecution.mockResolvedValue(undefined);
-    const service = new ExecutionService(
-      executor as unknown as WorkerRunExecutor
-    );
-
-    await service.cleanupInterruptedExecution("local", "runtime-1");
-
-    expect(executor.cleanupInterruptedExecution).toHaveBeenCalledWith(
-      "local",
-      "runtime-1"
-    );
   });
 
   it("wires the run event receiver through to the executor during module setup", () => {

@@ -266,42 +266,6 @@ describe("DockerSandboxEngine", () => {
     );
   });
 
-  it("recoverOrphan stops the container by id", async () => {
-    const engine = new DockerSandboxEngine();
-    mockExecFile.mockImplementation(((...args: any[]) => {
-      args[args.length - 1](null, { stdout: "", stderr: "" });
-    }) as any);
-
-    await engine.recoverOrphan("container-abc");
-
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "docker",
-      expect.arrayContaining(["stop", "container-abc"]),
-      expect.any(Function)
-    );
-  });
-
-  it("recoverOrphan force kills when stop fails", async () => {
-    const engine = new DockerSandboxEngine();
-    mockExecFile.mockImplementation(((...args: any[]) => {
-      const cmdArgs = args[1] as string[];
-      const callback = args[args.length - 1];
-      if (cmdArgs[0] === "stop") {
-        callback(new Error("stop failed"));
-      } else {
-        callback(null, { stdout: "", stderr: "" });
-      }
-    }) as any);
-
-    await engine.recoverOrphan("container-abc");
-
-    expect(mockExecFile).toHaveBeenCalledWith(
-      "docker",
-      ["kill", "container-abc"],
-      expect.any(Function)
-    );
-  });
-
   it("resume calls docker start and returns the runtime", async () => {
     const engine = new DockerSandboxEngine();
     mockExecFile.mockImplementation(((...args: any[]) => {

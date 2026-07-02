@@ -311,11 +311,6 @@ export class SandboxInstanceExecutor {
     this.pendingSandboxes.delete(ownerId);
   }
 
-  /** 服务重启后清理中断执行残留的 sandbox runtime 实例。 */
-  recoverOrphan(runtimeInstanceId: string): Promise<void> {
-    return this.runtimeService.recoverOrphanSandbox(runtimeInstanceId);
-  }
-
   private attachReadyRuntimeInstance(
     attachment: SandboxRuntimeInstanceAttachment,
     callbacks: SandboxRuntimeInstanceCallbacks

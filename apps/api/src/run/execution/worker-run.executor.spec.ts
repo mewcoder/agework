@@ -11,7 +11,6 @@ function makeWorkerHost() {
   return {
     resolveInstance: vi.fn(),
     releaseInstanceForRun: vi.fn(),
-    recoverOrphanInstance: vi.fn(),
     openSession: vi.fn(),
     sendCommand: vi.fn(),
     cleanupRun: vi.fn(),
@@ -128,17 +127,6 @@ describe.each(["local", "sandbox"] as const)(
       expect(workerHost.releaseInstanceForRun).toHaveBeenCalledWith(
         runtimeType,
         "run-1"
-      );
-    });
-
-    it("cleanupInterruptedExecution forwards runtimeType and runtimeInstanceId to recoverOrphanInstance", async () => {
-      workerHost.recoverOrphanInstance.mockResolvedValue(undefined);
-
-      await executor.cleanupInterruptedExecution(runtimeType, "instance-1");
-
-      expect(workerHost.recoverOrphanInstance).toHaveBeenCalledWith(
-        runtimeType,
-        "instance-1"
       );
     });
   }

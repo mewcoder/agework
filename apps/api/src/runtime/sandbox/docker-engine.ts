@@ -159,19 +159,6 @@ export class DockerSandboxEngine implements SandboxEngine {
     };
   }
 
-  async recoverOrphan(runtimeInstanceId: string): Promise<void> {
-    try {
-      await this.dockerStop(runtimeInstanceId);
-    } catch {
-      await this.dockerKill(runtimeInstanceId).catch(
-        swallow(
-          this.logger,
-          `recover orphan: docker kill ${runtimeInstanceId.slice(0, 12)}`
-        )
-      );
-    }
-  }
-
   private async dockerStop(containerId: string): Promise<void> {
     await execFileAsync("docker", [
       "stop",

@@ -16,7 +16,6 @@ function makeRuntimeService() {
     resumeSandbox: vi.fn(),
     startSandboxWorker: vi.fn().mockResolvedValue(undefined),
     stopSandbox: vi.fn().mockResolvedValue(undefined),
-    recoverOrphanSandbox: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -325,16 +324,6 @@ describe("SandboxInstanceExecutor", () => {
       "workspace",
       "ws-1",
       expect.stringContaining("timed out")
-    );
-  });
-
-  it("delegates orphan recovery to RuntimeService.recoverOrphanSandbox", async () => {
-    const { executor, runtimeService } = makeService();
-
-    await executor.recoverOrphan("resource-abc");
-
-    expect(runtimeService.recoverOrphanSandbox).toHaveBeenCalledWith(
-      "resource-abc"
     );
   });
 });

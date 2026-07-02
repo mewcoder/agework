@@ -206,18 +206,6 @@ export class WorkerHostService {
     return runtimeInstanceDiagnostics(metadata);
   }
 
-  /** 该 runtime instance 是否为 user 级共享隔离(决定中断 run 是否可清理底层资源)。 */
-  async isRuntimeInstanceUserScoped(
-    runtimeType: string,
-    runtimeInstanceId: string
-  ): Promise<boolean> {
-    const resource = await this.findRuntimeByRuntimeId(
-      runtimeType,
-      runtimeInstanceId
-    );
-    return resource?.isolationScope === "user";
-  }
-
   // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
   // 专属方法——runtimeType 判断收进这里,run 层不再需要认识 sandbox/local 的区别) ──
 
@@ -238,17 +226,6 @@ export class WorkerHostService {
       return;
     }
     this.sandboxInstances.releaseInstanceForRun(runId);
-  }
-
-  /** 服务重启后清理中断执行残留的 runtime 实例,按 runtimeType 内部分流。 */
-  recoverOrphanInstance(
-    runtimeType: string,
-    runtimeInstanceId: string
-  ): Promise<void> {
-    if (runtimeType === "local") {
-      return this.localInstances.recoverOrphan(runtimeInstanceId);
-    }
-    return this.sandboxInstances.recoverOrphan(runtimeInstanceId);
   }
 
   /** 终止并清理指定 owner 的 runtime 实例,按 runtimeType 内部分流。 */

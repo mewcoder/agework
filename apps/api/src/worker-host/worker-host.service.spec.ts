@@ -238,22 +238,13 @@ describe("WorkerHostService sandbox instance orchestration", () => {
       {} as never,
       {} as never,
       {} as never,
-      {
-        findByRuntimeId: vi.fn().mockResolvedValue({ isolationScope: "user" }),
-      } as never,
+      {} as never,
       runtimeService as never,
       sandboxInstances as never,
       {} as never
     );
     return { service, runtimeService, sandboxInstances };
   }
-
-  it("isRuntimeInstanceUserScoped reports whether the resource is user-isolated", async () => {
-    const { service } = makeService();
-    await expect(
-      service.isRuntimeInstanceUserScoped("sandbox", "container-1")
-    ).resolves.toBe(true);
-  });
 
   it("getRuntimePolicy forwards to RuntimeService", () => {
     const { service, runtimeService } = makeService();
@@ -425,14 +416,12 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
     const sandboxInstances = {
       acquireInstanceForRun: vi.fn(),
       releaseInstanceForRun: vi.fn(),
-      recoverOrphan: vi.fn(),
       shutdownRuntimeInstanceByOwnerId: vi.fn(),
     };
     const localInstances = {
       getChannel: vi.fn().mockReturnValue(undefined),
       acquireInstanceForRun: vi.fn(),
       releaseInstanceForRun: vi.fn(),
-      recoverOrphan: vi.fn(),
       shutdownRuntimeInstanceByOwnerId: vi.fn(),
     };
     const service = new WorkerHostService(
@@ -485,14 +474,6 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
     expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
       "run-2"
     );
-  });
-
-  it("recoverOrphanInstance dispatches by runtimeType", async () => {
-    const { service, sandboxInstances, localInstances } = makeService();
-    await service.recoverOrphanInstance("local", "4242:token");
-    await service.recoverOrphanInstance("sandbox", "container-1");
-    expect(localInstances.recoverOrphan).toHaveBeenCalledWith("4242:token");
-    expect(sandboxInstances.recoverOrphan).toHaveBeenCalledWith("container-1");
   });
 
   it("shutdownInstanceByOwnerId dispatches by runtimeType", () => {

@@ -14,7 +14,6 @@ import type {
 } from "./runtime.types";
 import { LocalRuntimeProvider } from "./local/local-runtime.provider";
 import type { LocalInstanceHandle, LocalLaunchInput } from "./runtime.types";
-import { swallow } from "../common/swallow";
 
 /**
  * Runtime 层对上层的门面:纯 Provider 引擎 + placement 计算。不认识 WorkerRegistry、
@@ -88,16 +87,6 @@ export class RuntimeService {
     runtimeInstanceId: string
   ): Promise<void> {
     return this.resolveSandboxEngine(engineType).stop(runtimeInstanceId);
-  }
-
-  async recoverOrphanSandbox(runtimeInstanceId: string): Promise<void> {
-    for (const engine of this.sandboxEngines.values()) {
-      await engine
-        .recoverOrphan(runtimeInstanceId)
-        .catch(
-          swallow(this.logger, `recover orphan via ${engine.type} engine`)
-        );
-    }
   }
 
   private resolveSandboxEngine(engineType: SandboxEngineType): SandboxEngine {

@@ -8,8 +8,8 @@ import { WorkerRunExecutor } from "./worker-run.executor";
 import type { RunEventPort } from "./executor";
 
 /**
- * runs 到执行器的应用层入口：转发 start / command / cancel / terminate / cleanup /
- * recovery 给唯一的 `WorkerRunExecutor`——runtimeType(sandbox/local)判断已经被
+ * runs 到执行器的应用层入口：转发 start / command / cancel / terminate / cleanup
+ * 给唯一的 `WorkerRunExecutor`——runtimeType(sandbox/local)判断已经被
  * `WorkerHostService` 内部吸收（设计文档第一节),这里不再需要按类型查找执行器。
  *
  * 它不持有 live handle；LiveRunRegistry 持有 handle，本 service 只负责把
@@ -37,18 +37,6 @@ export class ExecutionService {
 
   cleanup(handle: WorkerExecutionHandle): void {
     this.executor.cleanup(handle.runId);
-  }
-
-  cleanupInterruptedExecution(
-    runtimeType: string,
-    runtimeInstanceId: string
-  ): Promise<void> {
-    return Promise.resolve(
-      this.executor.cleanupInterruptedExecution?.(
-        runtimeType,
-        runtimeInstanceId
-      )
-    ).then(() => undefined);
   }
 
   setRunEventPort(receiver: RunEventPort): void {
