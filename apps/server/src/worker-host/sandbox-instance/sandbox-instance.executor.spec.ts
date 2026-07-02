@@ -27,6 +27,7 @@ function makePlacement(
     workspaceId: "ws-1",
     hostPath: "/host/ws-1",
     runtimePath: "/workspace",
+    runtimeLogDir: "/workspace-logs",
     sandbox: {
       isolationScope: "workspace",
       mountTarget: "/workspace",

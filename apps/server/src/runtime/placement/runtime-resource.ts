@@ -4,7 +4,10 @@ import type {
   RuntimeTarget,
   SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
+import {
+  CONTAINER_RUNTIME_LOG_DIR,
+  CONTAINER_WORKSPACES_ROOT,
+} from "../../config/registry/defaults";
 import type { ResolveRuntimeTargetInput } from "../runtime.types";
 
 export type { ResolveRuntimeTargetInput };
@@ -26,8 +29,8 @@ export function resolveRuntimeTarget(
     );
   }
 
-  // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath。
-  // ownerId 无复用语义，用 workspaceId 兜底。
+  // local：直接用宿主机 workspace 路径，无容器，runtimePath === hostPath，
+  // 日志目录同理。ownerId 无复用语义，用 workspaceId 兜底。
   if (input.runtimeType === "local") {
     const local: LocalRuntimePlacement = {
       runtimeType: "local",
@@ -35,6 +38,7 @@ export function resolveRuntimeTarget(
       workspaceId,
       hostPath: workspaceRootPath,
       runtimePath: workspaceRootPath,
+      runtimeLogDir: input.runtimeLogHostPath,
     };
     return { ...local, ownerId: workspaceId };
   }
@@ -77,6 +81,7 @@ export function resolveRuntimeTarget(
     workspaceId,
     hostPath,
     runtimePath,
+    runtimeLogDir: CONTAINER_RUNTIME_LOG_DIR,
     sandbox: { isolationScope, mountTarget, sandboxEngineType: sandboxEngine },
   };
   return { ...placement, ownerId };

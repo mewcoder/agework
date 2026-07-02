@@ -22,12 +22,18 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
     hostPath: "/tmp/ws",
   };
   if (runtimeType === "local") {
-    return { ...common, runtimeType: "local", runtimePath: "/tmp/ws" };
+    return {
+      ...common,
+      runtimeType: "local",
+      runtimePath: "/tmp/ws",
+      runtimeLogDir: RUNTIME_LOG_DIR,
+    };
   }
   return {
     ...common,
     runtimeType: "sandbox",
     runtimePath: "/workspace",
+    runtimeLogDir: CONTAINER_RUNTIME_LOG_DIR,
     sandbox: {
       isolationScope: "workspace",
       mountTarget: "/workspace",

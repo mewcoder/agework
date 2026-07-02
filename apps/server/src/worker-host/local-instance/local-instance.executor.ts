@@ -49,8 +49,9 @@ export class LocalInstanceExecutor {
     private readonly upstream: WorkerUpstreamRegistry
   ) {}
 
-  getChannel(ownerId: string): ChildProcess | undefined {
-    return this.ownerStates.get(ownerId)?.channel;
+  /** owner 当前是否持有存活的 local 实例(WorkerHostService 据此路由命令下发)。 */
+  has(ownerId: string): boolean {
+    return this.ownerStates.has(ownerId);
   }
 
   async acquireInstanceForRun(

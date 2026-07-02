@@ -57,6 +57,7 @@ describe("RuntimeService", () => {
       workspaceId: "ws-1",
       workspaceRootPath: "/data/u-1/ws-1",
       userWorkspaceRootPath: "/data/u-1",
+      runtimeLogHostPath: "/data/logs/runtime",
       runtimeType: "local" as const,
     };
     const result = service.resolveRuntimeTarget(input);

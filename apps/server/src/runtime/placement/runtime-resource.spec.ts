@@ -3,13 +3,17 @@ import {
   resolveRuntimeTarget,
   type ResolveRuntimeTargetInput,
 } from "./runtime-resource";
-import { CONTAINER_WORKSPACES_ROOT } from "../../config/registry/defaults";
+import {
+  CONTAINER_RUNTIME_LOG_DIR,
+  CONTAINER_WORKSPACES_ROOT,
+} from "../../config/registry/defaults";
 
 const BASE: ResolveRuntimeTargetInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
   userWorkspaceRootPath: "/data/users/user-1",
+  runtimeLogHostPath: "/data/logs/runtime",
   runtimeType: "sandbox",
   isolationScope: "user",
   sandboxEngine: "docker",
@@ -25,6 +29,7 @@ describe("resolveRuntimeTarget", () => {
       expect(r.runtimeType).toBe("sandbox");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
+      expect(r.runtimeLogDir).toBe(CONTAINER_RUNTIME_LOG_DIR);
       expect(r.ownerId).toBe("user-1");
       expect(r.workspaceId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
@@ -68,6 +73,7 @@ describe("resolveRuntimeTarget", () => {
       expect(r.runtimeType).toBe("local");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
+      expect(r.runtimeLogDir).toBe("/data/logs/runtime");
       expect((r as { sandbox?: unknown }).sandbox).toBeUndefined();
       expect(r.ownerId).toBe("ws-1");
     });

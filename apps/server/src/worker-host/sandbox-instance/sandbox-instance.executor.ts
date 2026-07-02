@@ -12,10 +12,7 @@ import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerCommandDispatcher } from "../command/command-dispatcher.service";
 import { ConfigService } from "../../config/config.service";
-import {
-  CONTAINER_RUNTIME_LOG_DIR,
-  DEFAULT_WORKER_IMAGE,
-} from "../../config/registry/defaults";
+import { DEFAULT_WORKER_IMAGE } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
 import { withTimeout } from "../../common/with-timeout";
 import { IdleWatchdog, resolveDockerApiBase } from "./sandbox-utils";
@@ -46,17 +43,6 @@ export type SandboxWorkerExecutionContext = {
   ownerId: string;
   isolationScope: IsolationScope;
   engineType: SandboxEngineType;
-};
-
-export type SandboxRuntimeInstanceAttachment = {
-  context: SandboxWorkerExecutionContext;
-  ownerState: SandboxOwnerState;
-};
-
-export type SandboxRuntimeInstanceCallbacks = {
-  runtimeReady(runId: string, runtimeInstanceId: string): void;
-  publishWorkerError(runId: string, error: string): void;
-  cleanupByOwnerId(ownerId: string): void;
 };
 
 /**
@@ -114,10 +100,7 @@ export class SandboxInstanceExecutor {
         cancelled: false,
         settle: resolve,
       });
-      this.attachOrStartRuntimeInstance(
-        { context, ownerState },
-        this.acquireCallbacks()
-      );
+      this.attachOrStartRuntimeInstance(context, ownerState);
     });
   }
 
@@ -135,15 +118,6 @@ export class SandboxInstanceExecutor {
     }
     this.releaseOwnerRun(state.ownerId);
     this.acquireStates.delete(runId);
-  }
-
-  private acquireCallbacks(): SandboxRuntimeInstanceCallbacks {
-    return {
-      runtimeReady: (runId, runtimeInstanceId) =>
-        this.settleReady(runId, runtimeInstanceId),
-      publishWorkerError: (runId, error) => this.settleError(runId, error),
-      cleanupByOwnerId: (ownerId) => this.cleanupOwner(ownerId),
-    };
   }
 
   private settleReady(runId: string, runtimeInstanceId: string): void {
@@ -267,22 +241,21 @@ export class SandboxInstanceExecutor {
   }
 
   private attachOrStartRuntimeInstance(
-    attachment: SandboxRuntimeInstanceAttachment,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    context: SandboxWorkerExecutionContext,
+    ownerState: SandboxOwnerState
   ): void {
-    const { context, ownerState } = attachment;
     if (ownerState.runtimeInstanceId) {
-      this.attachReadyRuntimeInstance(attachment, callbacks);
+      this.attachReadyRuntimeInstance(context, ownerState);
       return;
     }
 
     const existingPending = this.pendingSandboxes.get(context.ownerId);
     if (existingPending) {
-      this.attachPendingRuntimeInstance(attachment, existingPending, callbacks);
+      this.attachPendingRuntimeInstance(context, existingPending);
       return;
     }
 
-    this.startRuntimeInstanceForOwner(attachment, callbacks);
+    this.startRuntimeInstanceForOwner(context, ownerState);
   }
 
   /** 停止并删除某 owner 的持久容器/沙箱,并清掉其 worker-host 资源。 */
@@ -312,24 +285,21 @@ export class SandboxInstanceExecutor {
   }
 
   private attachReadyRuntimeInstance(
-    attachment: SandboxRuntimeInstanceAttachment,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    context: SandboxWorkerExecutionContext,
+    ownerState: SandboxOwnerState
   ): void {
-    const { context, ownerState } = attachment;
     void this.recordWorkspaceRuntime(
       context.placement,
       context.ownerId,
       ownerState.runtimeInstanceId
     );
-    callbacks.runtimeReady(context.runId, ownerState.runtimeInstanceId);
+    this.settleReady(context.runId, ownerState.runtimeInstanceId);
   }
 
   private attachPendingRuntimeInstance(
-    attachment: SandboxRuntimeInstanceAttachment,
-    runtimePromise: Promise<SandboxRuntime>,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    context: SandboxWorkerExecutionContext,
+    runtimePromise: Promise<SandboxRuntime>
   ): void {
-    const { context } = attachment;
     void runtimePromise
       .then((runtime) => {
         void this.recordWorkspaceRuntime(
@@ -337,10 +307,10 @@ export class SandboxInstanceExecutor {
           context.ownerId,
           runtime.runtimeInstanceId
         );
-        callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
+        this.settleReady(context.runId, runtime.runtimeInstanceId);
       })
       .catch((err) => {
-        callbacks.publishWorkerError(
+        this.settleError(
           context.runId,
           `sandbox create failed: ${String(err)}`
         );
@@ -356,20 +326,15 @@ export class SandboxInstanceExecutor {
   }
 
   private startRuntimeInstanceForOwner(
-    attachment: SandboxRuntimeInstanceAttachment,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    context: SandboxWorkerExecutionContext,
+    ownerState: SandboxOwnerState
   ): void {
-    const { context } = attachment;
-    const runtimePromise = this.launchWithHandshake(attachment);
+    const runtimePromise = this.launchWithHandshake(context, ownerState);
     this.pendingSandboxes.set(context.ownerId, runtimePromise);
 
     void runtimePromise
-      .then((runtime) =>
-        this.onRuntimeInstanceStarted(attachment, runtime, callbacks)
-      )
-      .catch((err) =>
-        this.onRuntimeInstanceStartFailed(context, err, callbacks)
-      );
+      .then((runtime) => this.onRuntimeInstanceStarted(context, runtime))
+      .catch((err) => this.onRuntimeInstanceStartFailed(context, err));
   }
 
   /**
@@ -382,9 +347,9 @@ export class SandboxInstanceExecutor {
    * 插入成功后才真正调用 Provider,超时或失败都把这一行标记为 error。
    */
   private async launchWithHandshake(
-    attachment: SandboxRuntimeInstanceAttachment
+    context: SandboxWorkerExecutionContext,
+    ownerState: SandboxOwnerState
   ): Promise<SandboxRuntime> {
-    const { context, ownerState } = attachment;
     const placeholderInstanceId = generateId();
     const insertResult = await this.registry.insertStarting(
       {
@@ -439,6 +404,8 @@ export class SandboxInstanceExecutor {
     context: SandboxWorkerExecutionContext
   ): SandboxStartInput {
     const apiBase = resolveDockerApiBase();
+    // 容器内日志挂载点由 placement 统一给出(run 层的 RunConfig 日志路径同源)。
+    const runtimeLogDir = context.placement.runtimeLogDir;
     const sandboxPlacement: SandboxPlacement = {
       isolationScope: context.isolationScope,
       ownerId: context.ownerId,
@@ -462,8 +429,8 @@ export class SandboxInstanceExecutor {
         AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(
           context.ownerId
         )}`,
-        AGEWORK_WORKER_LOG_DIR: CONTAINER_RUNTIME_LOG_DIR,
-        AGEWORK_WORKER_LOG_FILE: `${CONTAINER_RUNTIME_LOG_DIR}/${safePathPart(
+        AGEWORK_WORKER_LOG_DIR: runtimeLogDir,
+        AGEWORK_WORKER_LOG_FILE: `${runtimeLogDir}/${safePathPart(
           context.ownerId
         )}.runtime.worker.log`,
       },
@@ -472,7 +439,7 @@ export class SandboxInstanceExecutor {
         "agework.io/isolation-scope": context.isolationScope,
       },
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
-      runtimeLogMountPath: CONTAINER_RUNTIME_LOG_DIR,
+      runtimeLogMountPath: runtimeLogDir,
       isExpectedRuntimeInstance: (runtimeInstanceId: string) =>
         this.registry.isRuntimeInstanceBoundToWorkspace(
           "sandbox",
@@ -483,11 +450,9 @@ export class SandboxInstanceExecutor {
   }
 
   private onRuntimeInstanceStarted(
-    attachment: SandboxRuntimeInstanceAttachment,
-    runtime: SandboxRuntime,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    context: SandboxWorkerExecutionContext,
+    runtime: SandboxRuntime
   ): void {
-    const { context } = attachment;
     this.pendingSandboxes.delete(context.ownerId);
     const state = this.ownerStates.get(context.ownerId);
     if (!state) return;
@@ -508,13 +473,12 @@ export class SandboxInstanceExecutor {
       runtime.runtimeInstanceId
     );
 
-    callbacks.runtimeReady(context.runId, runtime.runtimeInstanceId);
+    this.settleReady(context.runId, runtime.runtimeInstanceId);
   }
 
   private onRuntimeInstanceStartFailed(
     context: SandboxWorkerExecutionContext,
-    err: unknown,
-    callbacks: SandboxRuntimeInstanceCallbacks
+    err: unknown
   ): void {
     this.pendingSandboxes.delete(context.ownerId);
     this.logger.error(
@@ -525,13 +489,10 @@ export class SandboxInstanceExecutor {
         ...errorLogFields(err),
       })}`
     );
-    callbacks.publishWorkerError(
-      context.runId,
-      `sandbox create failed: ${String(err)}`
-    );
+    this.settleError(context.runId, `sandbox create failed: ${String(err)}`);
 
     this.ownerStates.delete(context.ownerId);
-    callbacks.cleanupByOwnerId(context.ownerId);
+    this.cleanupOwner(context.ownerId);
   }
 
   private async createSandbox(

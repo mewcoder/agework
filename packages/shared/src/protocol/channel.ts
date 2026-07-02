@@ -185,6 +185,8 @@ export type LocalRuntimePlacement = {
   workspaceId: string;
   hostPath: string;
   runtimePath: string;
+  /** 日志目录在执行环境内的路径(local 下即宿主机日志目录)。 */
+  runtimeLogDir: string;
 };
 
 export type SandboxRuntimePlacement = {
@@ -193,6 +195,8 @@ export type SandboxRuntimePlacement = {
   workspaceId: string;
   hostPath: string;
   runtimePath: string;
+  /** 日志目录在执行环境内的路径(sandbox 下为容器内挂载点)。 */
+  runtimeLogDir: string;
   sandbox: SandboxPlacementInfo;
 };
 

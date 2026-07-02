@@ -289,7 +289,7 @@ describe("LocalInstanceExecutor", () => {
         "workspace",
         "ws-1"
       );
-      expect(executor.getChannel("ws-1")).toBeUndefined();
+      expect(executor.has("ws-1")).toBe(false);
     });
   });
 
@@ -362,7 +362,7 @@ describe("LocalInstanceExecutor", () => {
         "workspace",
         "ws-1"
       );
-      expect(executor.getChannel("ws-1")).toBeUndefined();
+      expect(executor.has("ws-1")).toBe(false);
     });
 
     it("is a no-op when the owner has no registered channel", () => {

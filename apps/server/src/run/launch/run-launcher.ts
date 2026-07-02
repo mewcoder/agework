@@ -24,7 +24,6 @@ import {
   type IncompleteMessageReason,
 } from "../upstream/assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
-import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import {
@@ -89,13 +88,14 @@ export class RunLauncher {
     } = input;
     const agentType = agentProviderConfig.agentType;
     const runtimeTarget = this.getPlacement({ workspace, userId });
-    const placement = runtimeTarget;
-    const runtimeType = placement.runtimeType;
+    const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
-      placement.runtimeType === "sandbox" ? placement.sandbox : undefined;
+      runtimeTarget.runtimeType === "sandbox"
+        ? runtimeTarget.sandbox
+        : undefined;
     const runConfig = this.makeRunConfig({
       agentProviderConfig,
-      placement,
+      placement: runtimeTarget,
       workspaceId: workspace.workspaceId,
       runId,
       conversationId,
@@ -125,7 +125,7 @@ export class RunLauncher {
       `run starting ${safeLogJson({
         runId,
         conversationId,
-        workspaceId: placement.workspaceId,
+        workspaceId: runtimeTarget.workspaceId,
         agentType,
         runtimeType,
         isolationScope: sandbox?.isolationScope,
@@ -135,7 +135,7 @@ export class RunLauncher {
     const runCreated = await this.createRun({
       runId,
       conversationId,
-      workspaceId: placement.workspaceId,
+      workspaceId: runtimeTarget.workspaceId,
       agentType,
       runtimeType,
       isolationScope: sandbox?.isolationScope,
@@ -196,6 +196,7 @@ export class RunLauncher {
       userWorkspaceRootPath: this.configService.getUserWorkspace(
         workspace.username
       ),
+      runtimeLogHostPath: this.readRuntimeLogHostPath(),
     };
     if (runtimeType === "local") {
       return this.workerHost.resolveRuntimeTarget({
@@ -217,6 +218,17 @@ export class RunLauncher {
         (workspace.sandboxEngine as "docker" | "opensandbox" | null) ??
         this.configService.getSandboxEngine(),
     });
+  }
+
+  /** 日志目录配置读取失败按启动入参问题返回 400,与 makeRunConfig 的组装错误语义一致。 */
+  private readRuntimeLogHostPath(): string {
+    try {
+      return this.configService.getRuntimeLogDir();
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
   }
 
   private makeRunConfig(params: {
@@ -272,21 +284,18 @@ export class RunLauncher {
     const rawFileName = `${conversationFileName}.raw.jsonl`;
     const aguiFileName = `${conversationFileName}.agui.jsonl`;
     const workerFileName = `${conversationFileName}.worker.log`;
-    const isSandbox = placement.runtimeType === "sandbox";
+    // 运行时侧路径基于 placement.runtimeLogDir(容器挂载点或宿主机目录由 placement
+    // 决定,run 层不再区分 sandbox/local)。统一 posix join:容器必然 linux,
+    // local 下 runtimeLogDir 即宿主机目录,服务端按 unix 运行时两者等价。
+    const runtimeLogDir = placement.runtimeLogDir;
 
     return {
       logDir,
       rawFilePath: join(logDir, rawFileName),
-      rawRuntimeFilePath: isSandbox
-        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, rawFileName)
-        : join(logDir, rawFileName),
+      rawRuntimeFilePath: posix.join(runtimeLogDir, rawFileName),
       aguiFilePath: join(logDir, aguiFileName),
-      aguiRuntimeFilePath: isSandbox
-        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, aguiFileName)
-        : join(logDir, aguiFileName),
-      workerRuntimeFilePath: isSandbox
-        ? posix.join(CONTAINER_RUNTIME_LOG_DIR, workerFileName)
-        : join(logDir, workerFileName),
+      aguiRuntimeFilePath: posix.join(runtimeLogDir, aguiFileName),
+      workerRuntimeFilePath: posix.join(runtimeLogDir, workerFileName),
     };
   }
 

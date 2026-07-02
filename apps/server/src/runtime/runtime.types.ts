@@ -73,6 +73,8 @@ export type ResolveRuntimeTargetInput = {
   workspaceId: string;
   workspaceRootPath: string;
   userWorkspaceRootPath: string;
+  /** 宿主机日志目录(placement 据此算出执行环境内的 runtimeLogDir)。 */
+  runtimeLogHostPath: string;
 } & (
   | { runtimeType: "local" }
   | {
