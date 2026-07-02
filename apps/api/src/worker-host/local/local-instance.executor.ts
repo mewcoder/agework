@@ -66,6 +66,12 @@ export class LocalInstanceExecutor {
       };
     }
 
+    // insertStarting 用占位 id 写行(真实 pid:token 要等 launchLocal 返回才知道)。
+    // 如果进程恰好在这个窗口崩溃,启动扫尾(RuntimeInstanceLifecycleService)只会把
+    // 这行从 starting 转 error,不会杀真正的孤儿进程——扫尾的杀进程逻辑只处理
+    // running 状态的行,而这里存的还是占位 id,不是可用的 pid。要在这个窗口内也能
+    // 定位并杀掉孤儿进程,需要先落地设计文档 3.5 节"instanceId 由 Run 预先生成",
+    // 这轮没做,留作已知的窄窗口缺口(概率极低,fork() 本身是同步调用)。
     const insertResult = await this.registry.insertStarting(
       {
         runtimeType: "local",
