@@ -117,17 +117,28 @@ export class WorkerRegistryRepository {
    * (runtime_instance_active_owner_idx,ON ownerId WHERE status IN
    * ('starting','running'))做并发防重。撞见冲突时返回已存在的活跃行,由
    * 调用方决定是复用还是报错(sandbox/local 的策略不同,不在这一层判断)。
+   * 插入前先删掉该 owner 名下的历史终态行(stopped/error),避免它们跟新插入的
+   * starting 行同时存在导致 upsertRunning 后续的 findFirst(无 orderBy)有概率
+   * 选中旧行,把 starting 行晾成孤儿。
    */
   async insertStarting(
     input: UpsertRunningInput,
     runtimeInstanceId: string,
     transport: string
   ): Promise<InsertStartingResult> {
+    const where = ownerWhere(
+      input.runtimeType,
+      input.isolationScope,
+      input.ownerId
+    );
+    await this.prisma.runtimeInstance.deleteMany({
+      where: { ...where, status: { in: ["stopped", "error"] } },
+    });
     try {
       await this.prisma.runtimeInstance.create({
         data: {
           id: generateId(),
-          ...ownerWhere(input.runtimeType, input.isolationScope, input.ownerId),
+          ...where,
           runtimeInstanceId,
           transport,
           status: "starting",

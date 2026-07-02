@@ -10,6 +10,7 @@ function makePrismaMock() {
       create: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+      deleteMany: vi.fn(),
       count: vi.fn(),
     },
     workspaceRuntimeInstance: {
@@ -315,6 +316,42 @@ describe("WorkerRegistryRepository", () => {
         )
       ).rejects.toBe(err);
       expect(prismaMocks.runtimeInstance.findFirst).not.toHaveBeenCalled();
+    });
+
+    it("deletes stale terminal rows for the owner before creating the starting row", async () => {
+      const prismaMocks = makePrismaMock();
+      prismaMocks.runtimeInstance.deleteMany.mockResolvedValue({ count: 1 });
+      prismaMocks.runtimeInstance.create.mockResolvedValue({ id: "rr-2" });
+      const repo = new WorkerRegistryRepository(prismaMocks as never);
+
+      const result = await repo.insertStarting(
+        {
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          workspaceId: "ws-1",
+          ownerId: "ws-1",
+        },
+        "placeholder-5",
+        "http"
+      );
+
+      expect(result).toEqual({ ok: true });
+      expect(prismaMocks.runtimeInstance.deleteMany).toHaveBeenCalledWith({
+        where: {
+          runtimeType: "sandbox",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          status: { in: ["stopped", "error"] },
+        },
+      });
+      // deleteMany runs before create — the cleanup must happen first so
+      // upsertRunning's later findFirst can't pick a stale row instead of
+      // this new starting row.
+      expect(
+        prismaMocks.runtimeInstance.deleteMany.mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        prismaMocks.runtimeInstance.create.mock.invocationCallOrder[0]
+      );
     });
   });
 
