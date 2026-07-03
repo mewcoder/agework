@@ -109,4 +109,115 @@ describe("LocalRuntimeProvider", () => {
       })
     ).resolves.toEqual({});
   });
+
+  describe("launchWorker / teardown", () => {
+    const makeCtx = () => ({
+      runtimeType: "local" as const,
+      ownerId: "owner-1",
+      workspaceId: "ws-1",
+      runId: "run-1",
+      placement: {
+        runtimeType: "local" as const,
+        userId: "u1",
+        workspaceId: "ws-1",
+        hostPath: "/w",
+        runtimePath: "/w",
+        runtimeLogDir: "/logs",
+      },
+      workerEnv: {},
+    });
+
+    const makeFakeChannel = () => ({
+      pid: 12345,
+      killed: false,
+      kill: vi.fn(),
+      on: vi.fn(),
+    });
+
+    it("returns the launched runtimeInstanceId and stores the channel", async () => {
+      const provider = new LocalRuntimeProvider();
+      const fakeChannel = makeFakeChannel();
+      vi.spyOn(provider as any, "launch").mockReturnValue({
+        runtimeInstanceId: "12345:some-token",
+        channel: fakeChannel,
+      });
+
+      const result = await provider.launchWorker(makeCtx(), {});
+
+      expect(result).toEqual({ runtimeInstanceId: "12345:some-token" });
+
+      provider.teardown({
+        runtimeType: "local",
+        ownerId: "owner-1",
+        runtimeInstanceId: "12345:some-token",
+        isolationScope: "workspace",
+      });
+      expect(fakeChannel.kill).toHaveBeenCalledWith("SIGTERM");
+    });
+
+    it("teardown kills the stored channel and is idempotent afterwards", async () => {
+      const provider = new LocalRuntimeProvider();
+      const fakeChannel = makeFakeChannel();
+      vi.spyOn(provider as any, "launch").mockReturnValue({
+        runtimeInstanceId: "12345:some-token",
+        channel: fakeChannel,
+      });
+
+      await provider.launchWorker(makeCtx(), {});
+
+      const ref = {
+        runtimeType: "local" as const,
+        ownerId: "owner-1",
+        runtimeInstanceId: "12345:some-token",
+        isolationScope: "workspace" as const,
+      };
+
+      provider.teardown(ref);
+      expect(fakeChannel.kill).toHaveBeenCalledTimes(1);
+      expect(fakeChannel.kill).toHaveBeenCalledWith("SIGTERM");
+
+      expect(() => provider.teardown(ref)).not.toThrow();
+      expect(fakeChannel.kill).toHaveBeenCalledTimes(1);
+    });
+
+    it("teardown for an unknown owner does nothing and does not throw", () => {
+      const provider = new LocalRuntimeProvider();
+
+      expect(() =>
+        provider.teardown({
+          runtimeType: "local",
+          ownerId: "unknown-owner",
+          runtimeInstanceId: "99999:no-token",
+          isolationScope: "workspace",
+        })
+      ).not.toThrow();
+    });
+
+    it("removes the channel on exit so a later teardown is a no-op", async () => {
+      const provider = new LocalRuntimeProvider();
+      const fakeChannel = makeFakeChannel();
+      vi.spyOn(provider as any, "launch").mockReturnValue({
+        runtimeInstanceId: "12345:some-token",
+        channel: fakeChannel,
+      });
+
+      await provider.launchWorker(makeCtx(), {});
+
+      expect(fakeChannel.on).toHaveBeenCalledWith("exit", expect.any(Function));
+      const exitHandler = fakeChannel.on.mock.calls.find(
+        (call) => call[0] === "exit"
+      )?.[1];
+      expect(exitHandler).toBeInstanceOf(Function);
+
+      exitHandler();
+
+      provider.teardown({
+        runtimeType: "local",
+        ownerId: "owner-1",
+        runtimeInstanceId: "12345:some-token",
+        isolationScope: "workspace",
+      });
+      expect(fakeChannel.kill).not.toHaveBeenCalled();
+    });
+  });
 });
