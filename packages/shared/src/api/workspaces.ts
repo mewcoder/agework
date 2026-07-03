@@ -1,8 +1,7 @@
 import type { ListResponse, PaginatedListResponse } from "../common";
 
-export type WorkspaceRuntimeType = "local" | "sandbox";
+export type WorkspaceRuntimeType = "local" | "docker" | "opensandbox";
 export type WorkspaceIsolationScope = "user" | "workspace";
-export type SandboxEngineType = "docker" | "opensandbox";
 export type WorkspaceDirectorySource = "managed" | "external";
 
 export type WorkspaceResponse = {
@@ -13,7 +12,6 @@ export type WorkspaceResponse = {
   directorySource: WorkspaceDirectorySource;
   runtimeType: WorkspaceRuntimeType;
   isolationScope?: WorkspaceIsolationScope | null;
-  sandboxEngine?: SandboxEngineType | null;
   gitUrl?: string | null;
   description?: string | null;
   /** ISO 8601 */
@@ -36,7 +34,6 @@ export type CreateWorkspaceRequest = {
   rootPath?: string;
   runtimeType?: WorkspaceRuntimeType;
   isolationScope?: WorkspaceIsolationScope;
-  sandboxEngine?: SandboxEngineType;
 };
 
 export type UpdateWorkspaceRequest = {
@@ -54,7 +51,6 @@ export type WorkspaceCapabilitiesResponse = {
   canSelectLocalDirectory: boolean;
   runtimeType: WorkspaceRuntimeType;
   allowedRuntimeTypes: WorkspaceRuntimeType[];
-  sandboxEngine: SandboxEngineType;
   isolationScope: WorkspaceIsolationScope;
   allowedIsolationScopes: WorkspaceIsolationScope[];
 };
