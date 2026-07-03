@@ -131,4 +131,37 @@ describe("WorkerCommandQueue", () => {
     await expect(a).resolves.toEqual([]);
     await expect(b).resolves.toEqual([]);
   });
+
+  describe("epochFor()", () => {
+    it("returns the same value across repeated calls for the same ownerId", () => {
+      const first = queue.epochFor("owner-1");
+      const second = queue.epochFor("owner-1");
+      expect(second).toBe(first);
+    });
+
+    it("returns independent values for different ownerIds", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000);
+      const owner1Epoch = queue.epochFor("owner-1");
+      vi.setSystemTime(2_000);
+      const owner2Epoch = queue.epochFor("owner-2");
+
+      expect(owner1Epoch).not.toBe(owner2Epoch);
+      // 各自的值在重复调用后依然稳定，互不影响
+      expect(queue.epochFor("owner-1")).toBe(owner1Epoch);
+      expect(queue.epochFor("owner-2")).toBe(owner2Epoch);
+    });
+
+    it("issues a new epoch after cleanupByOwnerId", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(1_000);
+      const beforeCleanup = queue.epochFor("owner-1");
+
+      queue.cleanupByOwnerId("owner-1");
+      vi.setSystemTime(2_000);
+      const afterCleanup = queue.epochFor("owner-1");
+
+      expect(afterCleanup).not.toBe(beforeCleanup);
+    });
+  });
 });

@@ -29,6 +29,8 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     RunChannelMessage<CommandPayload>[]
   >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
+  /** ownerId 级"代次"标识——懒生成，进程重启即归零重来，用于让 worker 察觉自己的 afterSeq 已过期。 */
+  private readonly ownerEpochs = new Map<string, number>();
 
   /** 按 ownerId 推送命令（持久容器场景）。 */
   pushByOwnerId(
@@ -131,7 +133,23 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
       waiter.resolve([]);
     }
     this.ownerWaiters.delete(ownerId);
+    this.ownerEpochs.delete(ownerId);
     this.logger.debug(`cleanup owner commands ${safeLogJson({ ownerId })}`);
+  }
+
+  /**
+   * 某个 owner 的队列在本进程内存里的"代次"标识：懒生成，进程重启即归零重来。
+   * 用 `Date.now()` 生成值，不需要严格单调或防碰撞，只需要"跟重启前的旧值大概率不同"
+   * 这个弱保证。第一次被问起（不管是 push 还是 poll 触发）时懒生成并记住，之后同一个
+   * ownerId 在本进程存活期间返回同一个值。
+   */
+  epochFor(ownerId: string): number {
+    let epoch = this.ownerEpochs.get(ownerId);
+    if (epoch === undefined) {
+      epoch = Date.now();
+      this.ownerEpochs.set(ownerId, epoch);
+    }
+    return epoch;
   }
 
   private resolveOwnerWaiters(ownerId: string): void {

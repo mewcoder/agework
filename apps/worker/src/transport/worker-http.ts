@@ -32,6 +32,8 @@ export class WorkerHttpTransport {
   private readonly token: string;
   private commandSeq = 0;
   private emptyPolls = 0;
+  /** server 侧队列的代次标识，未定义表示还没见过任何 epoch（冷启动）。 */
+  private queueEpoch: number | undefined;
   private readonly eventSeqs = new Map<string, number>();
   /** 按 runId 串行化 emit，避免并发 fetch 乱序到达导致服务端按 seq 去重时丢弃早序事件。 */
   private readonly emitChains = new Map<string, Promise<void>>();
@@ -96,7 +98,30 @@ export class WorkerHttpTransport {
 
     const data = (await res.json()) as {
       messages?: WorkerCommandRpcRequest[];
+      queueEpoch?: number;
     };
+
+    const previousEpoch = this.queueEpoch;
+    if (data.queueEpoch !== undefined) {
+      this.queueEpoch = data.queueEpoch;
+    }
+    if (
+      previousEpoch !== undefined &&
+      data.queueEpoch !== undefined &&
+      data.queueEpoch !== previousEpoch
+    ) {
+      workerLog("queue epoch changed, resetting afterSeq and re-polling", {
+        ownerId: this.ownerId,
+        previousEpoch,
+        newEpoch: data.queueEpoch,
+      }, "warn");
+      this.commandSeq = 0;
+      // 本次响应已经是用过期的 afterSeq 请求出来的，服务端重启后新队列从 seq 1
+      // 开始，这次 messages 大概率把新队列的命令全过滤掉了。用重置后的
+      // afterSeq=0 立即重新拉取一次，把这次遗漏的命令找回来，调用方全程无感。
+      return this.pollCommands(waitMs);
+    }
+
     const commands = normalizeCommandPollResponse(data);
     if (commands.length > 0) {
       this.emptyPolls = 0;

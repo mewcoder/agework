@@ -71,7 +71,7 @@ export class WorkerManagerService {
   async pollCommands(
     ownerId: string,
     query: { afterSeq?: number; waitMs?: number }
-  ): Promise<{ messages: WorkerCommandRpcRequest[] }> {
+  ): Promise<{ messages: WorkerCommandRpcRequest[]; queueEpoch: number }> {
     this.livenessStore.touch(ownerId);
     return this.endpointHandler.pollCommands(ownerId, query);
   }

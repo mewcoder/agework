@@ -11,7 +11,10 @@ function makeHandler(opts: {
   configStore?: Partial<WorkerConfigStore>;
   upstream?: Partial<WorkerUpstreamRegistry>;
 }) {
-  const commandQueue = (opts.commandQueue ?? {}) as WorkerCommandQueue;
+  const commandQueue = {
+    epochFor: vi.fn().mockReturnValue(0),
+    ...opts.commandQueue,
+  } as WorkerCommandQueue;
   const configStore = (opts.configStore ?? {}) as WorkerConfigStore;
   const upstream = (opts.upstream ?? {}) as WorkerUpstreamRegistry;
   return new WorkerEndpointHandler(commandQueue, configStore, upstream);
@@ -34,7 +37,10 @@ describe("WorkerEndpointHandler", () => {
   describe("pollCommands()", () => {
     it("polls the command queue by ownerId and afterSeq", async () => {
       const pollByOwnerId = vi.fn().mockReturnValue([commandMessage]);
-      const handler = makeHandler({ commandQueue: { pollByOwnerId } });
+      const epochFor = vi.fn().mockReturnValue(1000);
+      const handler = makeHandler({
+        commandQueue: { pollByOwnerId, epochFor },
+      });
 
       const result = await handler.pollCommands("owner-1", { afterSeq: 3 });
 
@@ -49,7 +55,21 @@ describe("WorkerEndpointHandler", () => {
             meta: { runId: "run-1", seq: 1, ts: "2026-06-27T00:00:00.000Z" },
           },
         ],
+        queueEpoch: 1000,
       });
+    });
+
+    it("returns the current queueEpoch regardless of whether commands were found", async () => {
+      const pollByOwnerId = vi.fn().mockReturnValue([]);
+      const epochFor = vi.fn().mockReturnValue(4242);
+      const handler = makeHandler({
+        commandQueue: { pollByOwnerId, epochFor },
+      });
+
+      const result = await handler.pollCommands("owner-1", { afterSeq: 0 });
+
+      expect(epochFor).toHaveBeenCalledWith("owner-1");
+      expect(result.queueEpoch).toBe(4242);
     });
 
     it("defaults afterSeq to 0 when not provided", async () => {

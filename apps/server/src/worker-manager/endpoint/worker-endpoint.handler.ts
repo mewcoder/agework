@@ -28,7 +28,7 @@ export class WorkerEndpointHandler {
   async pollCommands(
     ownerId: string,
     query: { afterSeq?: number; waitMs?: number }
-  ): Promise<{ messages: WorkerCommandRpcRequest[] }> {
+  ): Promise<{ messages: WorkerCommandRpcRequest[]; queueEpoch: number }> {
     const seq = query.afterSeq ?? 0;
     const wait = query.waitMs ?? 0;
     const commands =
@@ -49,7 +49,10 @@ export class WorkerEndpointHandler {
         })}`
       );
     }
-    return { messages: commands.map(commandMessageToRpcRequest) };
+    return {
+      messages: commands.map(commandMessageToRpcRequest),
+      queueEpoch: this.commandQueue.epochFor(ownerId),
+    };
   }
 
   getRunConfig(runId: string): { config: RunConfig } {

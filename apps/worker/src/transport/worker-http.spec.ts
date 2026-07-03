@@ -361,6 +361,107 @@ describe("WorkerHttpTransport", () => {
     expect(seqInLastCall()).toBe(1);
   });
 
+  describe("queueEpoch", () => {
+    it("records the epoch on the first poll without re-polling", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ messages: [], queueEpoch: 1000 }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      const commands = await client.pollCommands();
+
+      expect(commands).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not re-poll when the epoch is unchanged across polls", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ messages: [], queueEpoch: 1000 }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await client.pollCommands(); // records epoch 1000
+      fetchMock.mockClear();
+      const commands = await client.pollCommands();
+
+      expect(commands).toEqual([]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("resets afterSeq and immediately re-polls when the epoch changes, returning the re-polled result", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          messages: [
+            {
+              jsonrpc: "2.0",
+              id: "cmd-9",
+              method: "run.start",
+              params: { runId: "run-9" },
+              meta: { runId: "run-9", seq: 9, ts: "2026-06-27T00:00:00.000Z" },
+            },
+          ],
+          queueEpoch: 1000,
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+      await client.pollCommands(); // records epoch 1000 baseline, commandSeq -> 9
+      fetchMock.mockClear();
+
+      // server restarted: new epoch, and the stale afterSeq=9 request comes back
+      // empty because the new queue starts at seq 1
+      fetchMock
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ messages: [], queueEpoch: 2000 }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            messages: [
+              {
+                jsonrpc: "2.0",
+                id: "cmd-1",
+                method: "run.start",
+                params: { runId: "run-1" },
+                meta: {
+                  runId: "run-1",
+                  seq: 1,
+                  ts: "2026-06-27T00:00:00.000Z",
+                },
+              },
+            ],
+            queueEpoch: 2000,
+          }),
+        });
+
+      const commands = await client.pollCommands();
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        1,
+        "http://api/worker/owners/ws-1/commands?afterSeq=9",
+        expect.anything()
+      );
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        "http://api/worker/owners/ws-1/commands?afterSeq=0",
+        expect.anything()
+      );
+      // returns the re-polled (correct, non-empty) result, not the first (stale, empty) one
+      expect(commands).toHaveLength(1);
+      expect(commands[0].payload).toMatchObject({
+        commandId: "cmd-1",
+        runId: "run-1",
+      });
+    });
+  });
+
   describe("410 token eviction", () => {
     it("exits the process when pollCommands gets a 410", async () => {
       const exitSpy = vi
