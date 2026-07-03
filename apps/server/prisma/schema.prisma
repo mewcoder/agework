@@ -216,6 +216,10 @@ model WorkerInstance {
   activeOwnerKey          String?                  @unique
   runtimeInstanceId       String
   transport               String                   @default("http")
+  /// 注册握手共享密钥，绑定"这次运行载体存活周期"（容器/进程），不绑定单次调用；
+  /// resume 场景下容器内 worker 进程沿用创建时注入的 token，故 token 需要在 owner
+  /// 的存活周期内保持不变（见 SandboxOwnerState.startToken）。
+  startToken              String?
   status                  String                   @default("running")
   expiresAt               DateTime?
   metadata                Json

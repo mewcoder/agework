@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type {
   AcquireInstanceResult,
   CommandPayload,
@@ -22,6 +26,8 @@ import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.executor";
 import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
+import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
+import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 
 /**
  * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
@@ -38,7 +44,8 @@ export class WorkerManagerService {
     private readonly registry: WorkerRegistryRepository,
     private readonly runtimeService: RuntimeService,
     private readonly sandboxInstances: SandboxInstanceExecutor,
-    private readonly localInstances: LocalInstanceExecutor
+    private readonly localInstances: LocalInstanceExecutor,
+    private readonly handshakeStore: WorkerHandshakeStore
   ) {}
 
   /** worker 长轮询拉取下行命令，按 ownerId + afterSeq 增量返回。 */
@@ -57,6 +64,31 @@ export class WorkerManagerService {
   /** 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。 */
   async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
     return this.endpointHandler.postEvent(runId, body);
+  }
+
+  /**
+   * worker 进程启动后主动回连注册，携带 launch 时下发的 startToken。
+   * token 匹配则 resolve 对应 executor 里挂起的 launch 等待（见 WorkerHandshakeStore），
+   * 不匹配或没有 pending 握手（迟到的/伪造的回连）一律 400。
+   */
+  // async 是有意的：把下面的同步 BadRequestException throw 转成 rejected Promise，
+  // 与这个门面上其它 async 方法的调用约定保持一致。
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async registerWorker(
+    ownerId: string,
+    body: RegisterWorkerDto
+  ): Promise<{ ok: boolean }> {
+    const accepted = this.handshakeStore.registerWorker(
+      ownerId,
+      body.startToken,
+      { pid: body.pid }
+    );
+    if (!accepted) {
+      throw new BadRequestException(
+        `no pending launch handshake for owner ${ownerId}, or token mismatch`
+      );
+    }
+    return { ok: true };
   }
 
   /** 为一次 run 打开命令下行会话。 */

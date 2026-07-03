@@ -247,7 +247,8 @@ describe("WorkerRegistryRepository", () => {
           ownerId: "ws-1",
         },
         "placeholder-1",
-        "http"
+        "http",
+        "token-1"
       );
 
       expect(result).toEqual({ ok: true });
@@ -259,6 +260,7 @@ describe("WorkerRegistryRepository", () => {
             ownerId: "ws-1",
             runtimeInstanceId: "placeholder-1",
             transport: "http",
+            startToken: "token-1",
             status: "starting",
           }),
         })
@@ -282,7 +284,8 @@ describe("WorkerRegistryRepository", () => {
           ownerId: "ws-1",
         },
         "placeholder-2",
-        "http"
+        "http",
+        "token-2"
       );
 
       expect(result).toEqual({
@@ -310,7 +313,8 @@ describe("WorkerRegistryRepository", () => {
             ownerId: "ws-1",
           },
           "placeholder-3",
-          "http"
+          "http",
+          "token-3"
         )
       ).rejects.toBe(err);
     });
@@ -330,7 +334,8 @@ describe("WorkerRegistryRepository", () => {
             ownerId: "ws-1",
           },
           "placeholder-4",
-          "http"
+          "http",
+          "token-4"
         )
       ).rejects.toBe(err);
       expect(prismaMocks.workerInstance.findFirst).not.toHaveBeenCalled();
@@ -350,7 +355,8 @@ describe("WorkerRegistryRepository", () => {
           ownerId: "ws-1",
         },
         "placeholder-5",
-        "http"
+        "http",
+        "token-5"
       );
 
       expect(result).toEqual({ ok: true });
@@ -480,14 +486,16 @@ describe("WorkerRegistryRepository — activeOwnerKey uniqueness (real sqlite)",
     const first = await repository.insertStarting(
       baseInput,
       "inst-real-1",
-      "http"
+      "http",
+      "token-real-1"
     );
     expect(first).toEqual({ ok: true });
 
     const second = await repository.insertStarting(
       baseInput,
       "inst-real-2",
-      "http"
+      "http",
+      "token-real-2"
     );
     expect(second.ok).toBe(false);
     if (!second.ok) {
@@ -504,7 +512,12 @@ describe("WorkerRegistryRepository — activeOwnerKey uniqueness (real sqlite)",
   });
 
   it("allows a new insertStarting once the owner's previous row reaches a terminal state", async () => {
-    await repository.insertStarting(baseInput, "inst-real-3", "http");
+    await repository.insertStarting(
+      baseInput,
+      "inst-real-3",
+      "http",
+      "token-real-3"
+    );
     await repository.markStoppedByOwner(
       baseInput.runtimeType,
       baseInput.isolationScope,
@@ -514,7 +527,8 @@ describe("WorkerRegistryRepository — activeOwnerKey uniqueness (real sqlite)",
     const result = await repository.insertStarting(
       baseInput,
       "inst-real-4",
-      "http"
+      "http",
+      "token-real-4"
     );
 
     expect(result).toEqual({ ok: true });
@@ -536,7 +550,8 @@ describe("WorkerRegistryRepository — activeOwnerKey uniqueness (real sqlite)",
     const conflict = await repository.insertStarting(
       baseInput,
       "inst-real-6",
-      "http"
+      "http",
+      "token-real-6"
     );
     expect(conflict.ok).toBe(false);
   });

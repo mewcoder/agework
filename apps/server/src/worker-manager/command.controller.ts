@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerManagerService } from "./worker-manager.service";
@@ -6,6 +6,7 @@ import {
   WorkerCommandQueryDto,
   WorkerOwnerParamDto,
 } from "./dto/worker-command-query.dto";
+import { RegisterWorkerDto } from "./dto/register-worker.dto";
 
 /**
  * Worker command API — 仅供持久容器内的 worker 调用。
@@ -29,5 +30,19 @@ export class WorkerCommandController {
     @Query() query: WorkerCommandQueryDto
   ) {
     return this.workerManager.pollCommands(params.ownerId, query);
+  }
+
+  /**
+   * POST /worker/owners/:ownerId/register
+   * worker 进程启动后主动回连注册,带上 launch 时下发的 startToken 证明自己是
+   * server 期望的那个进程/容器,而不仅仅是"进程/容器起来了"。server 据此才把
+   * 该 owner 判定为 running(见 WorkerHandshakeStore)。
+   */
+  @Post(":ownerId/register")
+  registerWorker(
+    @Param() params: WorkerOwnerParamDto,
+    @Body() body: RegisterWorkerDto
+  ) {
+    return this.workerManager.registerWorker(params.ownerId, body);
   }
 }

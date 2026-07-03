@@ -5,6 +5,7 @@ import type {
   RunChannelMessage,
   UpstreamMessage,
   WorkerCommandRpcRequest,
+  WorkerRegisterRequest,
 } from "@agework/shared/protocol";
 import {
   commandResultMessageToRpcResponse,
@@ -145,6 +146,28 @@ export class WorkerHttpTransport {
       agentProviderSource: data.config.agentProviderConfig.source,
     }, "debug");
     return data.config;
+  }
+
+  /**
+   * 进入命令轮询循环前的注册握手:带上 launch 时下发的 startToken 证明自己是
+   * server 期望的那个进程/容器,server 收到后才把该 owner 判定为 running。
+   * 重试/兜底退出由调用方（worker.ts runWorker）负责。
+   */
+  async register(): Promise<void> {
+    const url = `${this.apiBase}/worker/owners/${this.ownerId}/register`;
+    const body: WorkerRegisterRequest = {
+      startToken: process.env.AGEWORK_WORKER_START_TOKEN ?? "",
+      pid: process.pid,
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const responseBody = await safeText(res);
+      throw new Error(`register failed: ${res.status} ${responseBody}`);
+    }
   }
 
   async emit(runId: string, msg: UpstreamMessage): Promise<void> {

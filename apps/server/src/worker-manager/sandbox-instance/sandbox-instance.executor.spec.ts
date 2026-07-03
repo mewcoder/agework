@@ -50,6 +50,23 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
   } as RunConfig;
 }
 
+const DEFAULT_HANDSHAKE = {
+  pid: 4242,
+  registeredAt: "2026-01-01T00:00:00.000Z",
+};
+
+/**
+ * 默认自动 resolve(模拟 register 秒回),让不关心握手细节的既有用例保持
+ * 原有的"一步到位"行为;需要控制握手时机的用例自行覆盖 waitForRegister 实现。
+ */
+function makeHandshakeStore() {
+  return {
+    waitForRegister: vi.fn().mockResolvedValue(DEFAULT_HANDSHAKE),
+    cancel: vi.fn(),
+    registerWorker: vi.fn(),
+  };
+}
+
 function makeService(runtimeService = makeRuntimeService()) {
   const config = {
     getSandboxEngine: vi.fn().mockReturnValue("docker"),
@@ -70,13 +87,22 @@ function makeService(runtimeService = makeRuntimeService()) {
     markErrorByOwner: vi.fn().mockResolvedValue(undefined),
     isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(false),
   };
+  const handshakeStore = makeHandshakeStore();
   const executor = new SandboxInstanceExecutor(
     config as never,
     runtimeService as never,
     registry as never,
-    commandDispatcher as never
+    commandDispatcher as never,
+    handshakeStore as never
   );
-  return { executor, runtimeService, config, registry, commandDispatcher };
+  return {
+    executor,
+    runtimeService,
+    config,
+    registry,
+    commandDispatcher,
+    handshakeStore,
+  };
 }
 
 function makeStartInput(placement = makePlacement(), runId = "run-1") {
@@ -131,7 +157,8 @@ describe("SandboxInstanceExecutor", () => {
         ownerId: "ws-1",
       },
       "docker-resource-1",
-      "http"
+      "http",
+      { pid: 4242, registeredAt: "2026-01-01T00:00:00.000Z" }
     );
   });
 
@@ -254,7 +281,8 @@ describe("SandboxInstanceExecutor", () => {
         ownerId: "ws-1",
       },
       expect.any(String),
-      "http"
+      "http",
+      expect.any(String)
     );
     expect(registry.upsertRunning).toHaveBeenCalledWith(
       {
@@ -264,7 +292,8 @@ describe("SandboxInstanceExecutor", () => {
         ownerId: "ws-1",
       },
       "docker-resource-1",
-      "http"
+      "http",
+      { pid: 4242, registeredAt: "2026-01-01T00:00:00.000Z" }
     );
   });
 
@@ -324,5 +353,89 @@ describe("SandboxInstanceExecutor", () => {
       "ws-1",
       expect.stringContaining("timed out")
     );
+  });
+
+  it("settles ready only after the worker registers (waitForRegister resolving gates readiness)", async () => {
+    const { executor, registry, handshakeStore } = makeService();
+    let resolveHandshake!: (result: {
+      pid?: number;
+      registeredAt: string;
+    }) => void;
+    handshakeStore.waitForRegister.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveHandshake = resolve;
+        })
+    );
+
+    const acquire = executor.acquireInstanceForRun(makeStartInput());
+    await flushPromises();
+    // container "created" already, but no register yet — must not be settled/recorded.
+    expect(registry.upsertRunning).not.toHaveBeenCalled();
+
+    resolveHandshake({ pid: 777, registeredAt: "2026-02-02T00:00:00.000Z" });
+    const result = await acquire;
+
+    expect(result).toEqual({
+      outcome: "ready",
+      runtimeInstanceId: "docker-resource-1",
+    });
+    expect(registry.upsertRunning).toHaveBeenCalledWith(
+      {
+        runtimeType: "sandbox",
+        isolationScope: "workspace",
+        workspaceId: "ws-1",
+        ownerId: "ws-1",
+      },
+      "docker-resource-1",
+      "http",
+      { pid: 777, registeredAt: "2026-02-02T00:00:00.000Z" }
+    );
+  });
+
+  it("cancels the pending handshake and marks the row as error when register never arrives within the launch timeout", async () => {
+    const { executor, registry, config, handshakeStore } = makeService();
+    handshakeStore.waitForRegister.mockImplementation(
+      () =>
+        new Promise(() => {
+          /* register never arrives */
+        })
+    );
+    config.getLaunchTimeoutSeconds.mockReturnValue(1);
+
+    const acquire = executor.acquireInstanceForRun(makeStartInput());
+    await vi.advanceTimersByTimeAsync(1_000);
+    const result = await acquire;
+
+    expect(result.outcome).toBe("error");
+    expect(handshakeStore.cancel).toHaveBeenCalledWith(
+      "ws-1",
+      expect.any(String)
+    );
+    expect(registry.markErrorByOwner).toHaveBeenCalledWith(
+      "sandbox",
+      "workspace",
+      "ws-1",
+      expect.stringContaining("timed out")
+    );
+  });
+
+  it("reuses the same startToken across an idle-stop/resume cycle on the same owner state", async () => {
+    const { executor, registry } = makeService();
+
+    await executor.acquireInstanceForRun(makeStartInput());
+    executor.releaseInstanceForRun("run-1");
+    // idle watchdog stops the container but keeps the in-memory owner state alive.
+    await vi.advanceTimersByTimeAsync(5_500);
+
+    await executor.acquireInstanceForRun(
+      makeStartInput(makePlacement(), "run-2")
+    );
+
+    expect(registry.insertStarting).toHaveBeenCalledTimes(2);
+    const firstToken = registry.insertStarting.mock.calls[0][3];
+    const secondToken = registry.insertStarting.mock.calls[1][3];
+    expect(typeof firstToken).toBe("string");
+    expect(secondToken).toBe(firstToken);
   });
 });

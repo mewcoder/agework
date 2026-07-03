@@ -248,3 +248,13 @@ export type AcquireInstanceResult =
   | { outcome: "ready"; runtimeInstanceId: string }
   | { outcome: "cancelledBeforeReady" }
   | { outcome: "error"; error: string };
+
+/**
+ * worker 进程启动后向 `POST /worker/owners/:ownerId/register` 发起的注册握手请求体。
+ * startToken 由 server 在 launch 时下发（env `AGEWORK_WORKER_START_TOKEN`），worker
+ * 原样带回以证明自己是 server 期望的那个进程/容器。
+ */
+export type WorkerRegisterRequest = {
+  startToken: string;
+  pid?: number;
+};

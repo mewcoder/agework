@@ -28,4 +28,18 @@ describe("WorkerCommandController", () => {
       waitMs: 25000,
     });
   });
+
+  it("delegates registerWorker to WorkerManagerService with ownerId and body", async () => {
+    const workerManager = {
+      registerWorker: vi.fn().mockResolvedValue({ ok: true }),
+    };
+    const controller = new WorkerCommandController(
+      workerManager as unknown as WorkerManagerService
+    );
+
+    const body = { startToken: "token-1", pid: 4242 };
+    await controller.registerWorker({ ownerId: "owner-1" }, body);
+
+    expect(workerManager.registerWorker).toHaveBeenCalledWith("owner-1", body);
+  });
 });

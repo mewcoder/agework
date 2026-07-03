@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import type {
   AcquireInstanceResult,
   IsolationScope,
@@ -11,6 +12,7 @@ import { isSandboxPlacement } from "../../runtime/runtime.types";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerCommandDispatcher } from "../command/command-dispatcher.service";
+import { WorkerHandshakeStore } from "../handshake/worker-handshake.store";
 import { ConfigService } from "../../config/config.service";
 import { DEFAULT_WORKER_IMAGE } from "../../config/registry/defaults";
 import { swallow } from "../../common/swallow";
@@ -32,6 +34,16 @@ export type SandboxOwnerState = {
   activeRunCount: number;
   isolationScope: IsolationScope;
   engineType: SandboxEngineType;
+  /**
+   * 注册握手共享密钥,归属这次容器"存活周期"而非单次调用:resume(`docker start`)
+   * 不会更新容器创建时注入的 env,容器里跑的还是当初创建时的 worker 进程带着
+   * 当初的 token,所以 token 要在同一个 ownerState 实例的生命周期内保持不变,
+   * 只有 ownerState 整个被销毁重建(下次全新创建容器)才重新生成。
+   */
+  startToken?: string;
+  /** 上一次握手成功拿到的 worker pid / 注册时间,供 recordWorkspaceRuntime 写入诊断 metadata。 */
+  lastHandshakePid?: number;
+  lastRegisteredAt?: string;
 };
 
 export type SandboxWorkerExecutionContext = {
@@ -79,7 +91,8 @@ export class SandboxInstanceExecutor {
     private readonly configService: ConfigService,
     private readonly runtimeService: RuntimeService,
     private readonly registry: WorkerRegistryRepository,
-    private readonly commandDispatcher: WorkerCommandDispatcher
+    private readonly commandDispatcher: WorkerCommandDispatcher,
+    private readonly handshakeStore: WorkerHandshakeStore
   ) {}
 
   /**
@@ -291,7 +304,8 @@ export class SandboxInstanceExecutor {
     void this.recordWorkspaceRuntime(
       context.placement,
       context.ownerId,
-      ownerState.runtimeInstanceId
+      ownerState.runtimeInstanceId,
+      ownerState
     );
     this.settleReady(context.runId, ownerState.runtimeInstanceId);
   }
@@ -305,7 +319,8 @@ export class SandboxInstanceExecutor {
         void this.recordWorkspaceRuntime(
           context.placement,
           context.ownerId,
-          runtime.runtimeInstanceId
+          runtime.runtimeInstanceId,
+          this.ownerStates.get(context.ownerId)
         );
         this.settleReady(context.runId, runtime.runtimeInstanceId);
       })
@@ -351,6 +366,11 @@ export class SandboxInstanceExecutor {
     ownerState: SandboxOwnerState
   ): Promise<SandboxRuntime> {
     const placeholderInstanceId = generateId();
+    // token 归属容器"存活周期"而非本次调用:同一个 ownerState 实例的生命周期内
+    // 只生成一次,resume 时复用——resume(docker start)不会更新容器创建时注入
+    // 的 env,容器里跑的还是当初创建时带着这个 token 的 worker 进程。
+    const startToken = ownerState.startToken ?? randomUUID();
+    ownerState.startToken = startToken;
     const insertResult = await this.registry.insertStarting(
       {
         runtimeType: context.placement.runtimeType,
@@ -359,7 +379,8 @@ export class SandboxInstanceExecutor {
         ownerId: context.ownerId,
       },
       placeholderInstanceId,
-      "http"
+      "http",
+      startToken
     );
 
     if (!insertResult.ok) {
@@ -375,17 +396,30 @@ export class SandboxInstanceExecutor {
       );
     }
 
-    const engineInput = this.buildSandboxStartInput(context);
+    const engineInput = this.buildSandboxStartInput(context, startToken);
     const resumeRuntimeInstanceId = ownerState.lastStoppedRuntimeInstanceId;
     ownerState.lastStoppedRuntimeInstanceId = undefined;
 
     try {
       return await withTimeout(
-        this.createSandbox(context, engineInput, resumeRuntimeInstanceId),
+        this.createSandbox(context, engineInput, resumeRuntimeInstanceId).then(
+          (runtime) =>
+            this.handshakeStore
+              .waitForRegister(context.ownerId, startToken)
+              .then((handshake) => {
+                ownerState.lastHandshakePid = handshake.pid;
+                ownerState.lastRegisteredAt = handshake.registeredAt;
+                return runtime;
+              })
+        ),
         this.configService.getLaunchTimeoutSeconds() * 1000,
         `sandbox launch timed out for owner ${context.ownerId}`
       );
     } catch (err) {
+      this.handshakeStore.cancel(
+        context.ownerId,
+        `sandbox launch failed for owner ${context.ownerId}`
+      );
       await this.registry
         .markErrorByOwner(
           context.placement.runtimeType,
@@ -401,7 +435,8 @@ export class SandboxInstanceExecutor {
   }
 
   private buildSandboxStartInput(
-    context: SandboxWorkerExecutionContext
+    context: SandboxWorkerExecutionContext,
+    startToken: string
   ): SandboxStartInput {
     const apiBase = resolveDockerApiBase();
     // 容器内日志挂载点由 placement 统一给出(run 层的 RunConfig 日志路径同源)。
@@ -422,6 +457,7 @@ export class SandboxInstanceExecutor {
         AGEWORK_WORKER_ROLE: "worker",
         AGEWORK_WORKER_API_BASE: apiBase,
         AGEWORK_WORKER_OWNER_ID: context.ownerId,
+        AGEWORK_WORKER_START_TOKEN: startToken,
         AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",
         AGEWORK_WORKER_SANDBOX_ENGINE: context.engineType,
         AGEWORK_WORKER_ISOLATION_SCOPE: context.isolationScope,
@@ -469,7 +505,8 @@ export class SandboxInstanceExecutor {
     void this.recordWorkspaceRuntime(
       context.placement,
       context.ownerId,
-      runtime.runtimeInstanceId
+      runtime.runtimeInstanceId,
+      state
     );
 
     this.settleReady(context.runId, runtime.runtimeInstanceId);
@@ -567,7 +604,8 @@ export class SandboxInstanceExecutor {
   private recordWorkspaceRuntime(
     placement: SandboxRuntimePlacement,
     ownerId: string,
-    runtimeInstanceId: string
+    runtimeInstanceId: string,
+    ownerState?: SandboxOwnerState
   ): Promise<void> {
     return this.registry
       .upsertRunning(
@@ -578,7 +616,13 @@ export class SandboxInstanceExecutor {
           ownerId,
         },
         runtimeInstanceId,
-        "http"
+        "http",
+        ownerState
+          ? {
+              pid: ownerState.lastHandshakePid,
+              registeredAt: ownerState.lastRegisteredAt,
+            }
+          : undefined
       )
       .then(() => undefined)
       .catch(

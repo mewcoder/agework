@@ -40,7 +40,8 @@ function makeService() {
     {} as unknown as WorkerRegistryRepository,
     runtimeService as never,
     {} as never,
-    localInstances as never
+    localInstances as never,
+    {} as never
   );
   return {
     service,
@@ -192,6 +193,7 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
       repository,
       {} as any,
       {} as any,
+      {} as any,
       {} as any
     );
   });
@@ -228,6 +230,7 @@ describe("WorkerManagerService sandbox instance orchestration", () => {
       {} as never,
       runtimeService as never,
       sandboxInstances as never,
+      {} as never,
       {} as never
     );
     return { service, runtimeService, sandboxInstances };
@@ -257,7 +260,8 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       registry as never,
       {} as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      {} as never
     );
     return { service, registry, sandboxInstances, localInstances };
   }
@@ -344,7 +348,8 @@ describe("WorkerManagerService — resolveInstance unified dispatch", () => {
       {} as never,
       {} as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      {} as never
     );
     return { service, sandboxInstances, localInstances };
   }
@@ -398,5 +403,45 @@ describe("WorkerManagerService — resolveInstance unified dispatch", () => {
     expect(
       sandboxInstances.shutdownRuntimeInstanceByOwnerId
     ).toHaveBeenCalledWith("ws-2");
+  });
+});
+
+describe("WorkerManagerService.registerWorker", () => {
+  function makeService() {
+    const handshakeStore = { registerWorker: vi.fn() };
+    const service = new WorkerManagerService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      handshakeStore as never
+    );
+    return { service, handshakeStore };
+  }
+
+  it("returns ok:true when the handshake store accepts the token", async () => {
+    const { service, handshakeStore } = makeService();
+    handshakeStore.registerWorker.mockReturnValue(true);
+
+    await expect(
+      service.registerWorker("owner-1", { startToken: "token-1", pid: 4242 })
+    ).resolves.toEqual({ ok: true });
+    expect(handshakeStore.registerWorker).toHaveBeenCalledWith(
+      "owner-1",
+      "token-1",
+      { pid: 4242 }
+    );
+  });
+
+  it("throws BadRequestException when the handshake store rejects the token", async () => {
+    const { service, handshakeStore } = makeService();
+    handshakeStore.registerWorker.mockReturnValue(false);
+
+    await expect(
+      service.registerWorker("owner-1", { startToken: "wrong-token" })
+    ).rejects.toThrow(/no pending launch handshake/);
   });
 });

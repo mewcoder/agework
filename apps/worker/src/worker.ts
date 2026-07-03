@@ -23,6 +23,8 @@ import { createAgentDriver, toAgentRunInput } from "./agent/index.js";
 const COMMAND_LONG_POLL_MS = 25_000;
 const COMMAND_EMPTY_RETRY_DELAY_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 8_000;
+const REGISTER_RETRY_ATTEMPTS = 3;
+const REGISTER_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 
 export async function runRunner() {
   const transport = createInitialRunChannel();
@@ -232,6 +234,12 @@ export async function runWorker() {
     ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
   });
 
+  // 进入命令轮询循环前先向 server 注册握手,证明这个进程/容器真的活着能通信。
+  // server 在此之前不会把该 owner 判定为 running（见 WorkerHandshakeStore）。
+  // 重试用尽说明这个进程反正没法正常工作,主动退出比等 server 侧 launchTimeout
+  // 超时收敛更快。
+  await registerWithRetry(client);
+
   let shutdownPromise: Promise<void> | undefined;
 
   const requestShutdown = (signal: NodeJS.Signals) => {
@@ -289,6 +297,47 @@ function createInitialRunChannel(): RuntimeChannel {
 
 function resolveWorkerClient(): WorkerHttpTransport {
   return new WorkerHttpTransport();
+}
+
+export async function registerWithRetry(
+  client: WorkerHttpTransport
+): Promise<void> {
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt < REGISTER_RETRY_ATTEMPTS; attempt++) {
+    try {
+      await client.register();
+      workerLog("worker registered", {
+        ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
+      });
+      return;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      workerLog(
+        "worker register failed",
+        {
+          attempt: attempt + 1,
+          ...errorDetails(err),
+        },
+        "warn"
+      );
+      if (attempt < REGISTER_RETRY_ATTEMPTS - 1) {
+        await sleep(REGISTER_RETRY_DELAYS_MS[attempt] ?? 4_000);
+      }
+    }
+  }
+  workerLog(
+    "worker register failed after retries, exiting",
+    {
+      attempts: REGISTER_RETRY_ATTEMPTS,
+      ...errorDetails(lastError),
+    },
+    "error"
+  );
+  process.exit(1);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function emitStatus(

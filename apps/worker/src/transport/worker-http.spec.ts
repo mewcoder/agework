@@ -285,6 +285,40 @@ describe("WorkerHttpTransport", () => {
     vi.useRealTimers();
   });
 
+  it("registers with the owner's register endpoint, sending startToken and pid", async () => {
+    vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "token-1");
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new WorkerHttpTransport();
+
+    await client.register();
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://api/worker/owners/ws-1/register",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(
+      JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string)
+    ).toMatchObject({
+      startToken: "token-1",
+      pid: process.pid,
+    });
+  });
+
+  it("rejects when the register endpoint returns non-ok", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => "no pending launch handshake",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new WorkerHttpTransport();
+
+    await expect(client.register()).rejects.toThrow(
+      "register failed: 400 no pending launch handshake"
+    );
+  });
+
   it("cleanup resets the per-run seq counter", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);

@@ -15,6 +15,7 @@ import { LocalInstanceExecutor } from "./local-instance/local-instance.executor"
 import { RuntimeInstanceLifecycleService } from "./lifecycle/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle/lifecycle.listener";
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
+import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
 
 /**
  * worker-manager:API ↔ worker 进程之间的通信边界(配置下发、命令下发、上行事件),
@@ -43,6 +44,7 @@ import { AdminRuntimeController } from "./admin/admin-runtime.controller";
     WorkerCommandDispatcher,
     WorkerEndpointHandler,
     WorkerRegistryRepository,
+    WorkerHandshakeStore,
     SandboxInstanceExecutor,
     LocalInstanceExecutor,
     RuntimeInstanceLifecycleService,

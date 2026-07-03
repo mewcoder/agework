@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import type {
   AcquireInstanceResult,
@@ -7,7 +8,10 @@ import type {
 } from "@agework/shared/protocol";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
+import { WorkerHandshakeStore } from "../handshake/worker-handshake.store";
+import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
+import { withTimeout } from "../../common/with-timeout";
 import { safeLogJson } from "../../common/logging";
 import { resolveApiBasePath } from "../../common/path.util";
 import { EnvKey } from "../../config/registry/env-key";
@@ -49,7 +53,9 @@ export class LocalInstanceExecutor {
 
   constructor(
     private readonly runtimeService: RuntimeService,
-    private readonly registry: WorkerRegistryRepository
+    private readonly registry: WorkerRegistryRepository,
+    private readonly handshakeStore: WorkerHandshakeStore,
+    private readonly configService: ConfigService
   ) {}
 
   async acquireInstanceForRun(
@@ -71,6 +77,9 @@ export class LocalInstanceExecutor {
     // running 状态的行,而这里存的还是占位 id,不是可用的 pid。要在这个窗口内也能
     // 定位并杀掉孤儿进程,需要先落地设计文档 3.5 节"instanceId 由 Run 预先生成",
     // 这轮没做,留作已知的窄窗口缺口(概率极低,fork() 本身是同步调用)。
+    // local 每次都是全新进程,token 每次生成新的,不存在跨进程复用问题(对比
+    // sandbox 的 startToken 需要在 SandboxOwnerState 生命周期内保持不变)。
+    const startToken = randomUUID();
     const insertResult = await this.registry.insertStarting(
       {
         runtimeType: "local",
@@ -79,7 +88,8 @@ export class LocalInstanceExecutor {
         ownerId,
       },
       generateId(),
-      "http"
+      "http",
+      startToken
     );
     if (!insertResult.ok) {
       // local worker 进程随 server 进程 fork 出来,server 一重启内存状态就丢了。
@@ -101,6 +111,7 @@ export class LocalInstanceExecutor {
           AGEWORK_WORKER_ROLE: "worker",
           AGEWORK_WORKER_API_BASE: resolveLocalApiBase(),
           AGEWORK_WORKER_OWNER_ID: ownerId,
+          AGEWORK_WORKER_START_TOKEN: startToken,
           AGEWORK_WORKER_RUNTIME_TYPE: "local",
           AGEWORK_WORKER_ISOLATION_SCOPE: "workspace",
           ...(input.runConfig.workerLogFilePath
@@ -124,6 +135,37 @@ export class LocalInstanceExecutor {
     }
 
     const { runtimeInstanceId, channel } = launched;
+
+    // fork 成功只说明进程起来了,不代表它能通信(镜像坏/连不上 API base 等会
+    // 导致进程起来即崩)。等 worker 主动回连 register 带回同一个 startToken,
+    // 才把这个实例判定为 running——见 WorkerHandshakeStore。
+    let handshake: { pid?: number; registeredAt: string };
+    try {
+      handshake = await withTimeout(
+        this.handshakeStore.waitForRegister(ownerId, startToken),
+        this.configService.getLaunchTimeoutSeconds() * 1000,
+        `local worker register timed out for owner ${ownerId}`
+      );
+    } catch (err) {
+      this.handshakeStore.cancel(
+        ownerId,
+        `local worker register failed for owner ${ownerId}`
+      );
+      this.killChannel(ownerId, channel);
+      await this.registry
+        .markErrorByOwner(
+          "local",
+          "workspace",
+          ownerId,
+          err instanceof Error ? err.message : String(err)
+        )
+        .catch(swallow(this.logger, `mark launch error for owner ${ownerId}`));
+      return {
+        outcome: "error",
+        error: `local worker register failed: ${String(err)}`,
+      };
+    }
+
     const state: LocalOwnerState = {
       runtimeInstanceId,
       channel,
@@ -140,7 +182,8 @@ export class LocalInstanceExecutor {
           ownerId,
         },
         runtimeInstanceId,
-        "http"
+        "http",
+        { pid: handshake.pid, registeredAt: handshake.registeredAt }
       )
       .catch(swallow(this.logger, `record local runtime for owner ${ownerId}`));
 
@@ -158,15 +201,7 @@ export class LocalInstanceExecutor {
   shutdownRuntimeInstanceByOwnerId(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     if (!state) return;
-    try {
-      if (!state.channel.killed) {
-        state.channel.kill("SIGTERM");
-      }
-    } catch (err) {
-      this.logger.warn(
-        `terminate local worker failed ${safeLogJson({ ownerId, ...swallowFields(err) })}`
-      );
-    }
+    this.killChannel(ownerId, state.channel);
     this.registry
       .markStoppedByOwner("local", "workspace", ownerId)
       .catch(
@@ -177,6 +212,19 @@ export class LocalInstanceExecutor {
 
   recoverOrphan(runtimeInstanceId: string): Promise<void> {
     return this.runtimeService.recoverOrphanLocal(runtimeInstanceId);
+  }
+
+  /** SIGTERM 一个 fork 出的 worker 子进程,已退出(killed)则跳过,失败只记 warn。 */
+  private killChannel(ownerId: string, channel: ChildProcess): void {
+    try {
+      if (!channel.killed) {
+        channel.kill("SIGTERM");
+      }
+    } catch (err) {
+      this.logger.warn(
+        `terminate local worker failed ${safeLogJson({ ownerId, ...swallowFields(err) })}`
+      );
+    }
   }
 
   private attachChannelListeners(ownerId: string, channel: ChildProcess): void {
