@@ -26,7 +26,8 @@ type WorkerRunState = {
  * 这个区别,也因此不再需要按 runtimeType 分别持有两个执行器类(设计文档第一节)。
  *
  * 就绪后直接对 worker-manager 完成 openSession / 命令下发 / cleanup,命令不绕经 runtime。
- * 就绪/早取消/失败由 resolveInstance 结果一次性回流。
+ * 就绪/失败由 resolveInstance 结果一次性回流;早取消由 run 层自身 state.cancelled 在
+ * ready 分支自处理。
  */
 @Injectable()
 export class WorkerRunExecutor implements RunExecutor {
@@ -83,12 +84,6 @@ export class WorkerRunExecutor implements RunExecutor {
       this.notifyWorkerError(runId, result.error);
       return;
     }
-    if (result.outcome === "cancelledBeforeReady") {
-      this.states.delete(runId);
-      this.notifyCancelledBeforeReady(runId);
-      return;
-    }
-
     // outcome === "ready"：取消若早于就绪到达，释放实例并转 cancelled 终态，不开 session。
     if (state.cancelled) {
       this.workerManager.releaseInstanceForRun(runId);

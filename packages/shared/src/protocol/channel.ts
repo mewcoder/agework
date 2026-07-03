@@ -239,14 +239,13 @@ export type WorkerExecutionStartInput = {
 
 /**
  * runtime 为一次 run 取得（创建/复用/attach）持久容器实例的结果。
- * runtime 退成纯资源层，把就绪/早取消/失败三类事实一次性回传 run 层执行编排：
+ * runtime 退成纯资源层，把就绪/失败两类事实一次性回传 run 层执行编排：
  *   - ready：容器就绪，附带 runtimeInstanceId（run 据此自行 openSession）
- *   - cancelledBeforeReady：取消请求早于容器就绪到达，容器未交付
  *   - error：容器创建/启动失败
+ * 取消请求早于容器就绪到达时，run 层在 ready 分支通过自身 state.cancelled 自处理。
  */
 export type AcquireInstanceResult =
   | { outcome: "ready"; runtimeInstanceId: string }
-  | { outcome: "cancelledBeforeReady" }
   | { outcome: "error"; error: string };
 
 /**
