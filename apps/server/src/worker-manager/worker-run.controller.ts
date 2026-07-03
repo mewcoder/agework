@@ -1,15 +1,17 @@
-import { Controller, Get, Post, Param, Body } from "@nestjs/common";
+import { Controller, Get, Post, Param, Body, UseGuards } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
+import { WorkerTokenGuard } from "./handshake/worker-token.guard";
 
 /**
  * Worker run API（run-scoped）— 仅供 worker 调用，不暴露给前端。
  * 与用户登录态无关，因此标记 @Public() 跳过全局 JwtAuthGuard。
- * 开发阶段暂时移除了 run-scoped worker access key 鉴权，待生命周期管理理清后再补。
+ * URL 里只有 runId，没有 ownerId，鉴权靠 WorkerTokenGuard 退回读
+ * `x-agework-owner-id` header（见 WorkerTokenGuard 注释）。
  *
  * config 下发与事件上报都经 WorkerManagerService facade 进入 worker-manager，
  * controller 不直接依赖内部 store / registry。
@@ -25,6 +27,7 @@ export class WorkerRunController {
    * Worker 启动后拉取 RunConfig（sandbox worker 通过 HTTP 启动时使用）。
    */
   @Get(":runId")
+  @UseGuards(WorkerTokenGuard)
   getRunConfig(@Param() params: WorkerRunParamDto): { config: RunConfig } {
     return this.workerManager.getRunConfig(params.runId);
   }
@@ -34,6 +37,7 @@ export class WorkerRunController {
    * Worker 上报上行事件，转发给 run 层处理。
    */
   @Post(":runId/events")
+  @UseGuards(WorkerTokenGuard)
   async postEvent(
     @Param() params: WorkerRunParamDto,
     @Body() body: WorkerEventPostBodyDto

@@ -373,6 +373,14 @@ export class WorkerRegistryRepository {
     });
   }
 
+  /** 按 activeOwnerKey 查该 owner 当前唯一活跃(starting/running)行的 token,供端点鉴权用。 */
+  findActiveByOwnerId(ownerId: string) {
+    return this.prisma.workerInstance.findUnique({
+      where: { activeOwnerKey: ownerId },
+      select: { startToken: true },
+    });
+  }
+
   /** 按 id 置为 stopped 并写入停机诊断元数据。 */
   async markStoppedById(
     resource: {

@@ -16,6 +16,7 @@ import { RuntimeInstanceLifecycleService } from "./lifecycle/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle/lifecycle.listener";
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
+import { WorkerTokenGuard } from "./handshake/worker-token.guard";
 
 /**
  * worker-manager:API ↔ worker 进程之间的通信边界(配置下发、命令下发、上行事件),
@@ -27,8 +28,8 @@ import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
  *
  * 公开面只暴露 WorkerManagerService。
  *
- * 开发阶段暂时移除了 worker 端点鉴权(原 WorkerAccessService/WorkerAuthGuard),
- * 待生命周期管理理清后再补。
+ * commands/runConfig/events 三个端点靠 WorkerTokenGuard 校验 startToken;
+ * register 端点不接这个 guard,走 WorkerHandshakeStore 那套 token-in-body 机制。
  */
 @Module({
   imports: [RuntimeModule],
@@ -45,6 +46,7 @@ import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
     WorkerEndpointHandler,
     WorkerRegistryRepository,
     WorkerHandshakeStore,
+    WorkerTokenGuard,
     SandboxInstanceExecutor,
     LocalInstanceExecutor,
     RuntimeInstanceLifecycleService,

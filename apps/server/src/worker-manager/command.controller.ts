@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Post,
+  Query,
+  UseGuards,
+} from "@nestjs/common";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerManagerService } from "./worker-manager.service";
@@ -7,6 +15,7 @@ import {
   WorkerOwnerParamDto,
 } from "./dto/worker-command-query.dto";
 import { RegisterWorkerDto } from "./dto/register-worker.dto";
+import { WorkerTokenGuard } from "./handshake/worker-token.guard";
 
 /**
  * Worker command API — 仅供持久容器内的 worker 调用。
@@ -25,6 +34,7 @@ export class WorkerCommandController {
    * 每条 JSON-RPC request 的 meta/params 携带 runId，worker 据此分发到对应的并行 run。
    */
   @Get(":ownerId/commands")
+  @UseGuards(WorkerTokenGuard)
   pollCommands(
     @Param() params: WorkerOwnerParamDto,
     @Query() query: WorkerCommandQueryDto

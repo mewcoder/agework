@@ -8,6 +8,10 @@ import type {
   WorkerRegisterRequest,
 } from "@agework/shared/protocol";
 import {
+  WORKER_OWNER_ID_HEADER,
+  WORKER_TOKEN_HEADER,
+} from "@agework/shared/protocol";
+import {
   commandResultMessageToRpcResponse,
   isWorkerCommandRpcRequest,
   rpcRequestToCommandMessage,
@@ -25,6 +29,7 @@ const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export class WorkerHttpTransport {
   private readonly apiBase: string;
   private readonly ownerId: string;
+  private readonly token: string;
   private commandSeq = 0;
   private emptyPolls = 0;
   private readonly eventSeqs = new Map<string, number>();
@@ -34,6 +39,7 @@ export class WorkerHttpTransport {
   constructor() {
     this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
     this.ownerId = process.env.AGEWORK_WORKER_OWNER_ID ?? "";
+    this.token = process.env.AGEWORK_WORKER_START_TOKEN ?? "";
 
     if (!this.ownerId) {
       throw new Error("AGEWORK_WORKER_OWNER_ID is required for resident worker");
@@ -57,7 +63,7 @@ export class WorkerHttpTransport {
     const url = `${this.apiBase}${commandsPath}?${params.toString()}`;
     let res: Response;
     try {
-      res = await fetch(url);
+      res = await fetch(url, { headers: this.buildAuthHeaders() });
     } catch (err) {
       workerLog("command poll failed", {
         ownerId: this.ownerId,
@@ -76,6 +82,9 @@ export class WorkerHttpTransport {
         status: res.status,
         body,
       }, res.status === 401 ? "error" : "warn");
+      if (this.handleFatalResponse(res, { afterSeq: this.commandSeq })) {
+        return [];
+      }
       if (res.status === 401) {
         workerLog("runtime access key invalid, exiting", {
           ownerId: this.ownerId,
@@ -125,7 +134,9 @@ export class WorkerHttpTransport {
       runId,
       ownerId: this.ownerId,
     }, "debug");
-    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`);
+    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
+      headers: this.buildAuthHeaders(),
+    });
     if (!res.ok) {
       const body = await safeText(res);
       workerLog("fetch run config returned non-ok", {
@@ -134,6 +145,7 @@ export class WorkerHttpTransport {
         status: res.status,
         body,
       }, "warn");
+      this.handleFatalResponse(res, { runId });
       throw new Error(`Failed to fetch run config: ${res.status} ${body}`);
     }
     const data = (await res.json()) as { config: RunConfig };
@@ -201,6 +213,7 @@ export class WorkerHttpTransport {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            ...this.buildAuthHeaders(),
           },
           body,
         });
@@ -220,6 +233,8 @@ export class WorkerHttpTransport {
       }
 
       if (res.ok) return;
+
+      if (this.handleFatalResponse(res, summary)) return;
 
       // 4xx = client error, don't retry. 服务端已拒绝，事件会永久丢失，提级为 error 以保证可见。
       if (res.status >= 400 && res.status < 500) {
@@ -257,6 +272,32 @@ export class WorkerHttpTransport {
       error: lastError?.message,
     }, "error");
     throw lastError ?? new Error("Event POST failed after retries");
+  }
+
+  /** commands/runConfig/events 三个端点共用的鉴权 header。 */
+  private buildAuthHeaders(): Record<string, string> {
+    return {
+      [WORKER_OWNER_ID_HEADER]: this.ownerId,
+      [WORKER_TOKEN_HEADER]: this.token,
+    };
+  }
+
+  /**
+   * 410 = 该 owner 的 token 已被 server 判定为不再有效（比如已经被新的
+   * worker 进程顶替），此时应直接退出进程，不重试、不重连。
+   * 返回是否已经处理，调用方据此决定要不要继续走原来的重试/报错逻辑。
+   */
+  private handleFatalResponse(
+    res: Response,
+    context: Record<string, unknown>
+  ): boolean {
+    if (res.status !== 410) return false;
+    workerLog("worker token evicted by server, exiting", {
+      ownerId: this.ownerId,
+      ...context,
+    }, "error");
+    process.exit(1);
+    return true;
   }
 
   private nextEventSeq(runId: string): number {

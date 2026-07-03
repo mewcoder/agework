@@ -6,11 +6,13 @@ describe("WorkerHttpTransport", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
     vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
+    vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "token-1");
   });
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
   it("polls the workspace commands endpoint with afterSeq", async () => {
@@ -40,7 +42,13 @@ describe("WorkerHttpTransport", () => {
     const commands = await client.pollCommands();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0"
+      "http://api/worker/owners/ws-1/commands?afterSeq=0",
+      {
+        headers: {
+          "x-agework-owner-id": "ws-1",
+          "x-agework-worker-token": "token-1",
+        },
+      }
     );
     expect(commands[0].payload).toMatchObject({
       type: "user_message",
@@ -50,7 +58,8 @@ describe("WorkerHttpTransport", () => {
     // 下一次 poll 用更新后的 afterSeq
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=3"
+      "http://api/worker/owners/ws-1/commands?afterSeq=3",
+      expect.anything()
     );
   });
 
@@ -98,7 +107,8 @@ describe("WorkerHttpTransport", () => {
 
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=4"
+      "http://api/worker/owners/ws-1/commands?afterSeq=4",
+      expect.anything()
     );
   });
 
@@ -112,7 +122,12 @@ describe("WorkerHttpTransport", () => {
 
     const config = await client.fetchRunConfig("run-1");
 
-    expect(fetchMock).toHaveBeenCalledWith("http://api/worker/runs/run-1");
+    expect(fetchMock).toHaveBeenCalledWith("http://api/worker/runs/run-1", {
+      headers: {
+        "x-agework-owner-id": "ws-1",
+        "x-agework-worker-token": "token-1",
+      },
+    });
     expect(config).toMatchObject({ runId: "run-1" });
   });
 
@@ -127,7 +142,8 @@ describe("WorkerHttpTransport", () => {
     await client.pollCommands(25_000);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000"
+      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000",
+      expect.anything()
     );
   });
 
@@ -146,7 +162,13 @@ describe("WorkerHttpTransport", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api/worker/runs/run-1/events",
-      expect.objectContaining({ method: "POST" })
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "x-agework-owner-id": "ws-1",
+          "x-agework-worker-token": "token-1",
+        }),
+      })
     );
     expect(
       JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string)
@@ -337,5 +359,67 @@ describe("WorkerHttpTransport", () => {
 
     await client.emit("run-1", msg); // seq 重新从 1 开始
     expect(seqInLastCall()).toBe(1);
+  });
+
+  describe("410 token eviction", () => {
+    it("exits the process when pollCommands gets a 410", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 410,
+        text: async () => "worker token rejected",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      const commands = await client.pollCommands();
+
+      expect(commands).toEqual([]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it("exits the process when fetchRunConfig gets a 410", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 410,
+        text: async () => "worker token rejected",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await expect(client.fetchRunConfig("run-1")).rejects.toThrow(
+        "Failed to fetch run config: 410 worker token rejected"
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it("exits the process when emit gets a 410, without retrying", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 410,
+        text: async () => "worker token rejected",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await client.emit("run-1", {
+        runId: "run-1",
+        seq: 0,
+        type: "agui.event",
+        payload: { type: "RAW", event: {} },
+        ts: "",
+      } as unknown as UpstreamMessage);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
   });
 });
