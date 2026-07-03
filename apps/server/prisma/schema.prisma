@@ -75,7 +75,6 @@ model Workspace {
   description    String?
   runtimeType    String?
   isolationScope String?
-  sandboxEngine  String?
   userId         String
   user           User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt      DateTime                @default(now())
