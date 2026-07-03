@@ -91,4 +91,18 @@ describe("WorkerProvisioner", () => {
     expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "old" });
     expect(d.runtime.prepareEnvironment).not.toHaveBeenCalled();
   });
+
+  it("clears the owner entry when insertStarting throws, so a retry can start fresh", async () => {
+    const d = deps();
+    d.registry.insertStarting.mockRejectedValueOnce(new Error("db down"));
+    const p = make(d);
+
+    const res = await p.acquireInstanceForRun(input());
+    expect(res.outcome).toBe("error");
+
+    const res2 = await p.acquireInstanceForRun(input());
+    expect(res2).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+    expect(d.registry.insertStarting).toHaveBeenCalledTimes(2);
+    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
+  });
 });

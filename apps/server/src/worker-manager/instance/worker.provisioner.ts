@@ -67,52 +67,52 @@ export class WorkerProvisioner {
     const { runtimeType, isolationScope } = this.identity(input);
     const startToken = randomUUID();
 
-    const insert = await this.registry.insertStarting(
-      {
-        runtimeType,
-        isolationScope,
-        workspaceId: runConfig.workspaceId,
-        ownerId,
-      },
-      randomUUID(),
-      "http",
-      startToken
-    );
-    if (!insert.ok) {
-      if (insert.existing.status === "running") {
-        this.owners.set(ownerId, {
-          status: "ready",
-          runtimeInstanceId: insert.existing.runtimeInstanceId,
-          isolationScope,
+    try {
+      const insert = await this.registry.insertStarting(
+        {
           runtimeType,
-        });
+          isolationScope,
+          workspaceId: runConfig.workspaceId,
+          ownerId,
+        },
+        randomUUID(),
+        "http",
+        startToken
+      );
+      if (!insert.ok) {
+        if (insert.existing.status === "running") {
+          this.owners.set(ownerId, {
+            status: "ready",
+            runtimeInstanceId: insert.existing.runtimeInstanceId,
+            isolationScope,
+            runtimeType,
+          });
+          return {
+            outcome: "ready",
+            runtimeInstanceId: insert.existing.runtimeInstanceId,
+          };
+        }
+        this.owners.delete(ownerId);
         return {
-          outcome: "ready",
-          runtimeInstanceId: insert.existing.runtimeInstanceId,
+          outcome: "error",
+          error: `owner ${ownerId} has a concurrent launch already starting`,
         };
       }
-      this.owners.delete(ownerId);
-      return {
-        outcome: "error",
-        error: `owner ${ownerId} has a concurrent launch already starting`,
-      };
-    }
 
-    const ctx: RuntimeLaunchContext = {
-      runtimeType,
-      ownerId,
-      workspaceId: runConfig.workspaceId,
-      runId: runConfig.runId,
-      placement: runtimeTarget,
-      workerEnv: this.buildWorkerEnv(
-        input,
-        startToken,
+      const ctx: RuntimeLaunchContext = {
         runtimeType,
-        isolationScope
-      ),
-    };
+        ownerId,
+        workspaceId: runConfig.workspaceId,
+        runId: runConfig.runId,
+        placement: runtimeTarget,
+        workerEnv: this.buildWorkerEnv(
+          input,
+          startToken,
+          runtimeType,
+          isolationScope
+        ),
+      };
 
-    try {
       const { runtimeInstanceId } = await withTimeout(
         (async () => {
           const env = await this.runtimeService.prepareEnvironment(ctx);
