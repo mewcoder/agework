@@ -17,8 +17,12 @@ function makeFakeProvider(type: string): RuntimeProvider & {
   return {
     type,
     placementKind: "process",
-    prepareEnvironment: vi.fn().mockResolvedValue({ runtimeInstanceId: `${type}-env` }),
-    launchWorker: vi.fn().mockResolvedValue({ runtimeInstanceId: `${type}-instance` }),
+    prepareEnvironment: vi
+      .fn()
+      .mockResolvedValue({ runtimeInstanceId: `${type}-env` }),
+    launchWorker: vi
+      .fn()
+      .mockResolvedValue({ runtimeInstanceId: `${type}-instance` }),
     teardown: vi.fn().mockResolvedValue(undefined),
     recoverOrphan: vi.fn().mockResolvedValue(undefined),
   };
@@ -79,15 +83,14 @@ describe("RuntimeService", () => {
   });
 
   describe("dispatch by runtimeType", () => {
-    const ctx = (runtimeType: string): RuntimeLaunchContext =>
-      ({
-        runtimeType,
-        ownerId: "owner-1",
-        workspaceId: "ws-1",
-        runId: "run-1",
-        placement: {} as never,
-        workerEnv: {},
-      }) as RuntimeLaunchContext;
+    const ctx = (runtimeType: string): RuntimeLaunchContext => ({
+      runtimeType,
+      ownerId: "owner-1",
+      workspaceId: "ws-1",
+      runId: "run-1",
+      placement: {} as never,
+      workerEnv: {},
+    });
 
     const ref = (runtimeType: string): RuntimeInstanceRef => ({
       runtimeType,
