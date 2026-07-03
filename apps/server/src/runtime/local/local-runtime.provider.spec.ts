@@ -219,5 +219,66 @@ describe("LocalRuntimeProvider", () => {
       });
       expect(fakeChannel.kill).not.toHaveBeenCalled();
     });
+
+    it("calls ctx.onWorkerExit and removes the channel when the process exits", async () => {
+      const provider = new LocalRuntimeProvider();
+      const fakeChannel = makeFakeChannel();
+      vi.spyOn(provider as any, "launch").mockReturnValue({
+        runtimeInstanceId: "12345:some-token",
+        channel: fakeChannel,
+      });
+      const onWorkerExit = vi.fn();
+
+      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
+
+      const exitHandler = fakeChannel.on.mock.calls.find(
+        (call) => call[0] === "exit"
+      )?.[1];
+      exitHandler();
+
+      expect(onWorkerExit).toHaveBeenCalledOnce();
+      provider.teardown({
+        runtimeType: "local",
+        ownerId: "owner-1",
+        runtimeInstanceId: "12345:some-token",
+        isolationScope: "workspace",
+      });
+      expect(fakeChannel.kill).not.toHaveBeenCalled();
+    });
+
+    it("does not call onWorkerExit or delete the current channel when a stale/superseded channel exits", async () => {
+      const provider = new LocalRuntimeProvider();
+      const staleChannel = makeFakeChannel();
+      const currentChannel = makeFakeChannel();
+      const onWorkerExit = vi.fn();
+
+      vi.spyOn(provider as any, "launch").mockReturnValueOnce({
+        runtimeInstanceId: "stale:token",
+        channel: staleChannel,
+      });
+      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
+      const staleExitHandler = staleChannel.on.mock.calls.find(
+        (call) => call[0] === "exit"
+      )?.[1];
+
+      // A newer launch for the same owner supersedes the stale channel.
+      vi.spyOn(provider as any, "launch").mockReturnValueOnce({
+        runtimeInstanceId: "current:token",
+        channel: currentChannel,
+      });
+      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
+
+      // The stale process's exit event fires late.
+      staleExitHandler();
+
+      expect(onWorkerExit).not.toHaveBeenCalled();
+      provider.teardown({
+        runtimeType: "local",
+        ownerId: "owner-1",
+        runtimeInstanceId: "current:token",
+        isolationScope: "workspace",
+      });
+      expect(currentChannel.kill).toHaveBeenCalledWith("SIGTERM");
+    });
   });
 });

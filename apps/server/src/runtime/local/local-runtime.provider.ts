@@ -65,7 +65,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
       env: { ...ctx.workerEnv, AGEWORK_WORKER_API_BASE: resolveLocalApiBase() },
     });
     this.channels.set(ctx.ownerId, channel);
-    channel.on("exit", () => this.channels.delete(ctx.ownerId));
+    channel.on("exit", () => {
+      if (this.channels.get(ctx.ownerId) !== channel) return; // stale process, superseded
+      this.channels.delete(ctx.ownerId);
+      ctx.onWorkerExit?.();
+    });
     return Promise.resolve({ runtimeInstanceId });
   }
 

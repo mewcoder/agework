@@ -96,6 +96,13 @@ export type RuntimeLaunchContext = {
   runId: string;
   placement: RuntimePlacement;
   workerEnv: Record<string, string>;
+  /** DB-backed ownership check for sandbox docker name-conflict recovery
+   *  (see SandboxStartInput.isExpectedRuntimeInstance)。由 worker-manager
+   *  的 WorkerProvisioner 提供,runtime 自身不认识 WorkerRegistry。 */
+  isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
+  /** local provider 的子进程 exit 回调:通知调用方清理 owner 绑定态,使下一次
+   *  run 能立即重新拉起,而不用等 stale registry 行超时。 */
+  onWorkerExit?: () => void;
 };
 
 /** prepareEnvironment 的产物：container 返回容器 id，process 返回空。 */

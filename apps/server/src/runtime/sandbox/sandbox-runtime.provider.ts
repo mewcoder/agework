@@ -104,6 +104,7 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
       },
       runtimeLogHostPath: this.configService.getRuntimeLogDir(),
       runtimeLogMountPath: runtimeLogDir,
+      isExpectedRuntimeInstance: ctx.isExpectedRuntimeInstance,
     };
   }
 }

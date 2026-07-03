@@ -111,6 +111,24 @@ export class WorkerProvisioner {
           runtimeType,
           isolationScope
         ),
+        isExpectedRuntimeInstance: (id) =>
+          this.registry.isRuntimeInstanceBoundToWorkspace(
+            runtimeType,
+            runConfig.workspaceId,
+            id
+          ),
+        onWorkerExit: () => {
+          this.owners.delete(ownerId);
+          void Promise.resolve(
+            this.registry.markStoppedByOwner(
+              runtimeType,
+              isolationScope,
+              ownerId
+            )
+          ).catch(
+            swallow(this.logger, `mark stopped on exit for owner ${ownerId}`)
+          );
+        },
       };
 
       const { runtimeInstanceId } = await withTimeout(

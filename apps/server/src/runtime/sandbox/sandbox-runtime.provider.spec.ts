@@ -53,6 +53,15 @@ describe("SandboxRuntimeProvider", () => {
     expect(handle.runtimeInstanceId).toBe("c1");
   });
 
+  it("prepareEnvironment threads ctx.isExpectedRuntimeInstance into the SandboxStartInput", async () => {
+    const docker = engine("docker");
+    const p = new SandboxRuntimeProvider(cfg, [docker]);
+    const isExpectedRuntimeInstance = vi.fn().mockResolvedValue(true);
+    await p.prepareEnvironment({ ...ctx(), isExpectedRuntimeInstance });
+    const input = (docker.getOrCreate as any).mock.calls[0][0];
+    expect(input.isExpectedRuntimeInstance).toBe(isExpectedRuntimeInstance);
+  });
+
   it("launchWorker echoes the prepared instance id", async () => {
     const p = new SandboxRuntimeProvider(cfg, [engine("docker")]);
     const res = await p.launchWorker(ctx(), { runtimeInstanceId: "c1" });

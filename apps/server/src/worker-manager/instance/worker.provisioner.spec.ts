@@ -15,6 +15,7 @@ function deps() {
       upsertRunning: vi.fn().mockResolvedValue(undefined),
       markErrorByOwner: vi.fn().mockResolvedValue(undefined),
       markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
+      isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(true),
     },
     handshake: {
       waitForRegister: vi.fn().mockResolvedValue({ pid: 1, registeredAt: "t" }),
@@ -59,6 +60,40 @@ describe("WorkerProvisioner", () => {
     expect(d.handshake.waitForRegister).toHaveBeenCalledOnce();
     expect(d.registry.upsertRunning).toHaveBeenCalledOnce();
     expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+  });
+
+  it("threads a ctx.isExpectedRuntimeInstance that delegates to registry.isRuntimeInstanceBoundToWorkspace", async () => {
+    const d = deps();
+    await make(d).acquireInstanceForRun(input());
+    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    expect(typeof ctx.isExpectedRuntimeInstance).toBe("function");
+
+    await ctx.isExpectedRuntimeInstance("runtime-instance-1");
+    expect(d.registry.isRuntimeInstanceBoundToWorkspace).toHaveBeenCalledWith(
+      "local",
+      "ws-1",
+      "runtime-instance-1"
+    );
+  });
+
+  it("threads a ctx.onWorkerExit that clears the owner map and marks the registry row stopped", async () => {
+    const d = deps();
+    const p = make(d);
+    await p.acquireInstanceForRun(input());
+    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    expect(typeof ctx.onWorkerExit).toBe("function");
+
+    ctx.onWorkerExit();
+    expect(d.registry.markStoppedByOwner).toHaveBeenCalledWith(
+      "local",
+      "workspace",
+      "ws-1"
+    );
+
+    // owner map cleared → next acquire launches fresh instead of reusing "ready"
+    d.runtime.prepareEnvironment.mockClear();
+    await p.acquireInstanceForRun(input("r2"));
+    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
   });
 
   it("dedups concurrent runs for the same owner to one launch", async () => {
