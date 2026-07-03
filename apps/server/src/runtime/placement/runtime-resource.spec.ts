@@ -14,9 +14,8 @@ const BASE: ResolveRuntimeTargetInput = {
   workspaceRootPath: "/data/users/user-1/ws-1",
   userWorkspaceRootPath: "/data/users/user-1",
   runtimeLogHostPath: "/data/logs/runtime",
-  runtimeType: "sandbox",
+  runtimeType: "docker",
   isolationScope: "user",
-  sandboxEngine: "docker",
 };
 
 const resolve = (overrides: Partial<ResolveRuntimeTargetInput> = {}) =>
@@ -26,7 +25,7 @@ describe("resolveRuntimeTarget", () => {
   describe("sandbox, user isolation", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, ownerId=userId", () => {
       const r = resolve();
-      expect(r.runtimeType).toBe("sandbox");
+      expect(r.runtimeType).toBe("docker");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
       expect(r.runtimeLogDir).toBe(CONTAINER_RUNTIME_LOG_DIR);

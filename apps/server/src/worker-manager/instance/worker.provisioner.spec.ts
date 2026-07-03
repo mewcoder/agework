@@ -40,6 +40,25 @@ const input = (runId = "run-1") =>
     },
   }) as any;
 
+const dockerInput = (runId = "run-1") =>
+  ({
+    runConfig: { runId, workspaceId: "ws-1", conversationId: "c" },
+    runtimeTarget: {
+      runtimeType: "docker",
+      ownerId: "user-1",
+      userId: "user-1",
+      workspaceId: "ws-1",
+      hostPath: "/w",
+      runtimePath: "/w",
+      runtimeLogDir: "/logs",
+      sandbox: {
+        isolationScope: "user",
+        mountTarget: "/workspaces",
+        sandboxEngineType: "docker",
+      },
+    },
+  }) as any;
+
 function make(d = deps()) {
   return new WorkerProvisioner(
     d.runtime as any,
@@ -60,6 +79,22 @@ describe("WorkerProvisioner", () => {
     expect(d.handshake.waitForRegister).toHaveBeenCalledOnce();
     expect(d.registry.upsertRunning).toHaveBeenCalledOnce();
     expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+  });
+
+  it("routes a docker runtimeTarget by reading isolationScope from target.sandbox (not defaulted to 'workspace')", async () => {
+    const d = deps();
+    await make(d).acquireInstanceForRun(dockerInput());
+    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    expect(ctx.runtimeType).toBe("docker");
+    expect(d.registry.insertStarting).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runtimeType: "docker",
+        isolationScope: "user",
+      }),
+      expect.any(String),
+      "http",
+      expect.any(String)
+    );
   });
 
   it("threads a ctx.isExpectedRuntimeInstance that delegates to registry.isRuntimeInstanceBoundToWorkspace", async () => {

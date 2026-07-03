@@ -205,7 +205,7 @@ export class WorkerProvisioner {
   } {
     const target = input.runtimeTarget;
     const isolationScope =
-      target.runtimeType === "sandbox"
+      target.runtimeType !== "local"
         ? target.sandbox.isolationScope
         : "workspace";
     return { runtimeType: target.runtimeType, isolationScope };

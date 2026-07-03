@@ -15,7 +15,7 @@ import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
 
-function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
+function makePlacement(runtimeType: "local" | "docker"): RuntimePlacement {
   const common = {
     userId: "user-1",
     workspaceId: "ws-1",
@@ -31,7 +31,7 @@ function makePlacement(runtimeType: "local" | "sandbox"): RuntimePlacement {
   }
   return {
     ...common,
-    runtimeType: "sandbox",
+    runtimeType: "docker",
     runtimePath: "/workspace",
     runtimeLogDir: CONTAINER_RUNTIME_LOG_DIR,
     sandbox: {
@@ -46,7 +46,7 @@ function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
   return {
     ...placement,
     ownerId:
-      placement.runtimeType === "sandbox" &&
+      placement.runtimeType !== "local" &&
       placement.sandbox.isolationScope === "user"
         ? placement.userId
         : placement.workspaceId,
@@ -172,9 +172,8 @@ describe("RunLauncher", () => {
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
-      getSandboxEngine: vi.fn().mockReturnValue("docker"),
-      isRuntimeTypeAllowed: (t: string): t is "local" | "sandbox" =>
-        t === "local" || t === "sandbox",
+      isRuntimeTypeAllowed: (t: string): t is "local" | "docker" =>
+        t === "local" || t === "docker",
       isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
@@ -282,7 +281,7 @@ describe("RunLauncher", () => {
   it("throws BadRequestException when the runtime type is not allowed", async () => {
     mockConfigService.isRuntimeTypeAllowed = (
       _t: string
-    ): _t is "local" | "sandbox" => false;
+    ): _t is "local" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
     expect(mockWorkerManager.resolveRuntimeTarget).not.toHaveBeenCalled();
   });
@@ -322,17 +321,17 @@ describe("RunLauncher", () => {
     expect(res.write).not.toHaveBeenCalled();
   });
 
-  it("persists the runtime handle once a sandbox provider resolves the container id asynchronously", async () => {
-    // placement.runtimeType=sandbox，runtimeInstanceId 由 sandbox provider 异步解析
+  it("persists the runtime handle once a docker provider resolves the container id asynchronously", async () => {
+    // placement.runtimeType=docker，runtimeInstanceId 由 container provider 异步解析
     mockWorkerManager.resolveRuntimeTarget = vi
       .fn()
-      .mockReturnValue(makeRuntimeTarget(makePlacement("sandbox")));
+      .mockReturnValue(makeRuntimeTarget(makePlacement("docker")));
     mockExecutor.start = vi
       .fn()
       .mockImplementation(({ onRuntimeInstanceIdReady }) => {
         const handle = {
           runId: "run-1",
-          runtimeType: "sandbox",
+          runtimeType: "docker",
           runtimeInstanceId: "",
           conversationId: "conversation-1",
         };
@@ -341,14 +340,14 @@ describe("RunLauncher", () => {
       });
     await launch(
       makeStartInput({
-        workspace: makeWorkspaceView({ runtimeType: "sandbox" }),
+        workspace: makeWorkspaceView({ runtimeType: "docker" }),
       })
     );
     await new Promise<void>((resolve) => queueMicrotask(resolve));
 
     expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
       "run-1",
-      "sandbox",
+      "docker",
       "container-abc"
     );
     expect(mockExecutor.start).toHaveBeenCalledWith(

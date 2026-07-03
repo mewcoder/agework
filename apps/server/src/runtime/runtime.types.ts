@@ -43,11 +43,11 @@ export type SandboxRuntime = {
   workspaceMountPath: string;
 };
 
-/** 类型守卫:narrow 出 sandbox 分支(placement.sandbox 必填)。 */
+/** 类型守卫:narrow 出 container 分支(docker|opensandbox，placement.sandbox 必填)。 */
 export function isSandboxPlacement(
   placement: RuntimePlacement
 ): placement is SandboxRuntimePlacement {
-  return placement.runtimeType === "sandbox";
+  return placement.runtimeType !== "local";
 }
 
 // ── Local Provider 契约类型(runtime 的 LocalRuntimeProvider fork 机制内部
@@ -78,9 +78,8 @@ export type ResolveRuntimeTargetInput = {
 } & (
   | { runtimeType: "local" }
   | {
-      runtimeType: "sandbox";
+      runtimeType: "docker" | "opensandbox";
       isolationScope: ConfigIsolationScope;
-      sandboxEngine: SandboxEngineType;
     }
 );
 

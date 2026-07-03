@@ -43,7 +43,7 @@ export function resolveRuntimeTarget(
     return { ...local, ownerId: workspaceId };
   }
 
-  const { isolationScope, sandboxEngine } = input;
+  const { isolationScope } = input;
 
   // sandbox 下隔离粒度只影响 hostPath / runtimePath / mountTarget / ownerId：
   //   user      —— 整个用户根挂进共享容器（挂载根 = CONTAINER_WORKSPACES_ROOT），
@@ -76,13 +76,17 @@ export function resolveRuntimeTarget(
   }
 
   const placement: SandboxRuntimePlacement = {
-    runtimeType: "sandbox",
+    runtimeType: input.runtimeType,
     userId,
     workspaceId,
     hostPath,
     runtimePath,
     runtimeLogDir: CONTAINER_RUNTIME_LOG_DIR,
-    sandbox: { isolationScope, mountTarget, sandboxEngineType: sandboxEngine },
+    sandbox: {
+      isolationScope,
+      mountTarget,
+      sandboxEngineType: input.runtimeType,
+    },
   };
   return { ...placement, ownerId };
 }

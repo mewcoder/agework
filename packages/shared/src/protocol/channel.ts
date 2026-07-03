@@ -160,7 +160,7 @@ export type IsolationScope = "user" | "workspace";
 
 /**
  * 沙箱专属放置信息：隔离粒度、容器内挂载目标、沙箱引擎类型。
- * 仅 runtimeType="sandbox" 时存在；local 模式无容器隔离语义，不带此对象。
+ * 仅 runtimeType 为 container（docker|opensandbox）时存在；local 模式无容器隔离语义，不带此对象。
  */
 export type SandboxPlacementInfo = {
   isolationScope: IsolationScope;
@@ -172,12 +172,12 @@ export type SandboxPlacementInfo = {
 /**
  * 一次 run 的 runtime 放置信息：使用哪种 provider、host/容器侧的 workspace 路径。
  *
- * 判别联合，discriminant 为 `runtimeType`：sandbox 分支带 `sandbox` 对象（隔离粒度、
- * 挂载目标、引擎类型），local 分支不带。`runtimePath` 跨 local/sandbox 都有意义
- * （worker 在执行环境内看到的 workspace 路径），留顶层。
+ * 判别联合，discriminant 为 `runtimeType`：container（docker|opensandbox）分支带 `sandbox`
+ * 对象（隔离粒度、挂载目标、引擎类型），local 分支不带。`runtimePath` 跨 local/container 都
+ * 有意义（worker 在执行环境内看到的 workspace 路径），留顶层。
  *
- * sandbox-only 的函数/方法可直接以 `SandboxRuntimePlacement` 为入参——类型上 `sandbox` 必填，
- * 无需运行时守卫；`if (placement.runtimeType === "sandbox")` 后 TS 也会自动 narrow。
+ * container-only 的函数/方法可直接以 `SandboxRuntimePlacement` 为入参——类型上 `sandbox` 必填，
+ * 无需运行时守卫；`if (placement.runtimeType === "docker")`（或 `!== "local"`）后 TS 也会自动 narrow。
  */
 export type LocalRuntimePlacement = {
   runtimeType: "local";
@@ -190,7 +190,7 @@ export type LocalRuntimePlacement = {
 };
 
 export type SandboxRuntimePlacement = {
-  runtimeType: "sandbox";
+  runtimeType: "docker" | "opensandbox";
   userId: string;
   workspaceId: string;
   hostPath: string;

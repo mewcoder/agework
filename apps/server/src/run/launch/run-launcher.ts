@@ -90,9 +90,7 @@ export class RunLauncher {
     const runtimeTarget = this.getPlacement({ workspace, userId });
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
-      runtimeTarget.runtimeType === "sandbox"
-        ? runtimeTarget.sandbox
-        : undefined;
+      runtimeTarget.runtimeType !== "local" ? runtimeTarget.sandbox : undefined;
     const runConfig = this.makeRunConfig({
       agentProviderConfig,
       placement: runtimeTarget,
@@ -212,11 +210,8 @@ export class RunLauncher {
     }
     return this.workerManager.resolveRuntimeTarget({
       ...base,
-      runtimeType: "sandbox",
+      runtimeType,
       isolationScope,
-      sandboxEngine:
-        (workspace.sandboxEngine as "docker" | "opensandbox" | null) ??
-        this.configService.getSandboxEngine(),
     });
   }
 

@@ -25,7 +25,7 @@ const ctx = (): RuntimeLaunchContext => ({
   workspaceId: "ws-1",
   runId: "run-1",
   placement: {
-    runtimeType: "sandbox",
+    runtimeType: "docker",
     userId: "u1",
     workspaceId: "ws-1",
     hostPath: "/host",
