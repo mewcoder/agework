@@ -6,8 +6,8 @@ import type {
 import type { ChildProcess } from "node:child_process";
 import type { IsolationScope as ConfigIsolationScope } from "../config/config.service";
 
-// ── Sandbox engine 契约类型(worker-manager 的 SandboxInstanceExecutor 与 runtime 的
-// DockerSandboxEngine/OpenSandboxEngine 共用,是这两个模块之间唯一合法的类型契约面) ──
+// ── Sandbox engine 契约类型(runtime 的 SandboxRuntimeProvider 与
+// DockerSandboxEngine/OpenSandboxEngine 共用的 runtime 内部类型契约面) ──
 
 export type SandboxEngineType = "docker" | "opensandbox";
 
@@ -50,8 +50,8 @@ export function isSandboxPlacement(
   return placement.runtimeType === "sandbox";
 }
 
-// ── Local Provider 契约类型(worker-manager 的 LocalInstanceExecutor 与 runtime 的
-// LocalRuntimeProvider 之间唯一合法的类型契约面) ──
+// ── Local Provider 契约类型(runtime 的 LocalRuntimeProvider fork 机制内部
+// 使用的类型契约面) ──
 
 export type LocalLaunchInput = {
   runId: string;
@@ -60,7 +60,7 @@ export type LocalLaunchInput = {
 
 export type LocalInstanceHandle = {
   runtimeInstanceId: string;
-  /** fork() 返回的 ChildProcess——调用方(worker-manager 的 LocalInstanceExecutor)只用它接收进程生命周期信号(exit)与终止(kill),业务收发走 HTTP。 */
+  /** fork() 返回的 ChildProcess——调用方(runtime 的 LocalRuntimeProvider)只用它接收进程生命周期信号(exit)与终止(kill),业务收发走 HTTP。 */
   channel: ChildProcess;
 };
 
