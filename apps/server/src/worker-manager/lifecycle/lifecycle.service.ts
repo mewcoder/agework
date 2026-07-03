@@ -97,9 +97,8 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
         );
     }
 
-    const runningSandboxRows =
-      await this.registry.findRunningByRuntimeType("sandbox");
-    for (const row of runningSandboxRows) {
+    const runningContainerRows = await this.registry.findRunningContainerRows();
+    for (const row of runningContainerRows) {
       this.livenessStore.touch(row.ownerId);
     }
   }

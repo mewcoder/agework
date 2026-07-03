@@ -253,6 +253,16 @@ export class WorkerRegistryRepository {
     });
   }
 
+  /** 查找所有 running 状态的 container(docker/opensandbox)行,供重启扫尾用。 */
+  findRunningContainerRows() {
+    return this.prisma.workerInstance.findMany({
+      where: {
+        status: "running",
+        runtimeType: { in: ["docker", "opensandbox"] },
+      },
+    });
+  }
+
   async findActiveResourceByRuntimeId(
     runtimeType: string,
     runtimeInstanceId: string

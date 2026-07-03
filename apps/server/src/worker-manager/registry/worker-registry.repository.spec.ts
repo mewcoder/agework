@@ -484,6 +484,40 @@ describe("WorkerRegistryRepository", () => {
       ]);
     });
   });
+
+  describe("findRunningContainerRows", () => {
+    it("finds all running docker/opensandbox rows", async () => {
+      const prismaMocks = makePrismaMock();
+      prismaMocks.workerInstance.findMany.mockResolvedValue([
+        {
+          id: "rr-1",
+          runtimeType: "docker",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          runtimeInstanceId: "container-1",
+        },
+      ]);
+      const repository = new WorkerRegistryRepository(prismaMocks as never);
+
+      const result = await repository.findRunningContainerRows();
+
+      expect(prismaMocks.workerInstance.findMany).toHaveBeenCalledWith({
+        where: {
+          status: "running",
+          runtimeType: { in: ["docker", "opensandbox"] },
+        },
+      });
+      expect(result).toEqual([
+        {
+          id: "rr-1",
+          runtimeType: "docker",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          runtimeInstanceId: "container-1",
+        },
+      ]);
+    });
+  });
 });
 
 // activeOwnerKey uniqueness is a real SQLite constraint (see schema.prisma

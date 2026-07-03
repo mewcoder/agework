@@ -22,6 +22,7 @@ function makeRegistry(overrides: Record<string, unknown> = {}) {
     markStoppedById: vi.fn().mockResolvedValue(undefined),
     markAllStartingAsError: vi.fn().mockResolvedValue(undefined),
     findRunningByRuntimeType: vi.fn().mockResolvedValue([]),
+    findRunningContainerRows: vi.fn().mockResolvedValue([]),
     ...overrides,
   };
 }
@@ -306,20 +307,20 @@ describe("onApplicationBootstrap", () => {
     expect(registry.markStoppedById).not.toHaveBeenCalled();
   });
 
-  it("touches WorkerLivenessStore for every running sandbox row so a dead owner eventually enters listStale", async () => {
+  it("touches WorkerLivenessStore for every running container row so a dead owner eventually enters listStale", async () => {
     const registry = makeRegistry({
-      findRunningByRuntimeType: vi
-        .fn()
-        .mockImplementation((runtimeType) =>
-          Promise.resolve(
-            runtimeType === "sandbox"
-              ? [
-                  makeResource({ id: "rr-sb-1", ownerId: "ws-sb-1" }),
-                  makeResource({ id: "rr-sb-2", ownerId: "ws-sb-2" }),
-                ]
-              : []
-          )
-        ),
+      findRunningContainerRows: vi.fn().mockResolvedValue([
+        makeResource({
+          id: "rr-sb-1",
+          runtimeType: "docker",
+          ownerId: "ws-sb-1",
+        }),
+        makeResource({
+          id: "rr-sb-2",
+          runtimeType: "opensandbox",
+          ownerId: "ws-sb-2",
+        }),
+      ]),
     });
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
@@ -333,7 +334,7 @@ describe("onApplicationBootstrap", () => {
 
     await service.onApplicationBootstrap();
 
-    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("sandbox");
+    expect(registry.findRunningContainerRows).toHaveBeenCalledTimes(1);
     expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-1");
     expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-2");
     expect(livenessStore.touch).toHaveBeenCalledTimes(2);
