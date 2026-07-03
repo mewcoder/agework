@@ -395,28 +395,43 @@ describe("WorkerRegistryRepository", () => {
   });
 
   describe("findActiveByOwnerId", () => {
-    it("returns the startToken and runtimeType when the owner has a starting row", async () => {
+    it("returns the startToken, runtimeType, runtimeInstanceId, isolationScope and ownerId when the owner has a starting row", async () => {
       prisma.workerInstance.findUnique.mockResolvedValue({
         startToken: "token-starting",
         runtimeType: "sandbox",
+        runtimeInstanceId: "inst-1",
+        isolationScope: "workspace",
+        ownerId: "owner-1",
       });
 
       const result = await repository.findActiveByOwnerId("owner-1");
 
       expect(prisma.workerInstance.findUnique).toHaveBeenCalledWith({
         where: { activeOwnerKey: "owner-1" },
-        select: { startToken: true, runtimeType: true },
+        select: {
+          startToken: true,
+          runtimeType: true,
+          runtimeInstanceId: true,
+          isolationScope: true,
+          ownerId: true,
+        },
       });
       expect(result).toEqual({
         startToken: "token-starting",
         runtimeType: "sandbox",
+        runtimeInstanceId: "inst-1",
+        isolationScope: "workspace",
+        ownerId: "owner-1",
       });
     });
 
-    it("returns the startToken and runtimeType when the owner has a running row", async () => {
+    it("returns the startToken, runtimeType, runtimeInstanceId, isolationScope and ownerId when the owner has a running row", async () => {
       prisma.workerInstance.findUnique.mockResolvedValue({
         startToken: "token-running",
         runtimeType: "local",
+        runtimeInstanceId: "inst-2",
+        isolationScope: "workspace",
+        ownerId: "owner-2",
       });
 
       const result = await repository.findActiveByOwnerId("owner-2");
@@ -424,6 +439,9 @@ describe("WorkerRegistryRepository", () => {
       expect(result).toEqual({
         startToken: "token-running",
         runtimeType: "local",
+        runtimeInstanceId: "inst-2",
+        isolationScope: "workspace",
+        ownerId: "owner-2",
       });
     });
 

@@ -380,7 +380,13 @@ export class WorkerRegistryRepository {
   findActiveByOwnerId(ownerId: string) {
     return this.prisma.workerInstance.findUnique({
       where: { activeOwnerKey: ownerId },
-      select: { startToken: true, runtimeType: true },
+      select: {
+        startToken: true,
+        runtimeType: true,
+        runtimeInstanceId: true,
+        isolationScope: true,
+        ownerId: true,
+      },
     });
   }
 
