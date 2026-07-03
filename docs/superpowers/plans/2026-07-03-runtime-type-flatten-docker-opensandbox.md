@@ -606,7 +606,11 @@ Expected: 0 errors。
 Run: `grep -rn "sandboxEngine\|\"sandbox\"\|'sandbox'" apps/server/src apps/web/src packages/shared/src | grep -v ".spec.\|.test."`
 Expected: 无遗留 `sandboxEngine` 或对 `"sandbox"` runtimeType 的判断(引擎实现类名 DockerSandboxEngine/OpenSandboxEngine 除外)。
 
-- [ ] **Step 5: 冒烟(环境允许时)**
+- [ ] **Step 5: 容器路由回归防线(必做,防中间态断裂活到最后)**
+
+Task 2 删掉 "sandbox" provider 后到域值全迁完之间,`resolveProvider("sandbox")` 会抛 "Unknown runtime provider"。加一个 end-to-end 路由测试兜底:构造/解析一个 `docker`(和 `opensandbox`)的 `RuntimeTarget`,断言经真实 `RuntimeService`(用真实三 provider 的 map,而非 fake `type:"sandbox"` provider)`prepareEnvironment`/`teardown` 路由到正确 provider——即 `resolveProvider("docker")` / `resolveProvider("opensandbox")` 命中,且**没有任何路径再产出 `runtimeType:"sandbox"`**。Run: `pnpm --filter server test -- <该 spec>` → PASS。同时确认 `run-launcher`/`placement` 不再产出 `"sandbox"` 作为 `RuntimeTarget.runtimeType`。
+
+- [ ] **Step 6: 冒烟(环境允许时)**
 
 创建一个 `docker` runtimeType 的 workspace,发一次 run,确认容器起来、worker 注册 ready;创建 `local` workspace 发 run 确认 fork 路径。
 
