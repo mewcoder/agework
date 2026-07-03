@@ -41,7 +41,7 @@ interface WorkspaceDialogProps {
 
 const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
-const RUNTIME_TYPES = ["local", "sandbox"] as const;
+const RUNTIME_TYPES = ["local", "docker", "opensandbox"] as const;
 const ISOLATION_SCOPES = ["user", "workspace"] as const;
 
 function defaultWorkspaceName(): string {
@@ -115,7 +115,7 @@ const workspaceDialogFormSchema = z
     }
     if (
       values.useCustomPath &&
-      values.runtimeType === "sandbox" &&
+      values.runtimeType !== "local" &&
       values.isolationScope !== "workspace"
     ) {
       ctx.addIssue({
@@ -227,7 +227,7 @@ function WorkspaceDialogForm({
         : undefined;
     const runtimeType = values.runtimeType;
     const isolationScope =
-      runtimeType === "sandbox" ? values.isolationScope : undefined;
+      runtimeType !== "local" ? values.isolationScope : undefined;
     if (!name) return;
     setSubmitError(null);
 
@@ -328,12 +328,12 @@ function WorkspaceDialogForm({
     ];
   const canSelectRuntimeType = allowedRuntimeTypes.length > 1;
   const canSelectIsolationScope =
-    runtimeType === "sandbox" && allowedIsolationScopes.length > 1;
+    runtimeType !== "local" && allowedIsolationScopes.length > 1;
   const canSubmitRuntimeType =
     isEdit || (capabilities && allowedRuntimeTypes.includes(runtimeType));
   const canSubmitIsolationScope =
     isEdit ||
-    runtimeType !== "sandbox" ||
+    runtimeType === "local" ||
     (capabilities &&
       allowedIsolationScopes.includes(isolationScope));
   const canShowLocalDirectoryOption = canOfferLocalDirectory(
@@ -445,7 +445,11 @@ function WorkspaceDialogForm({
                             form.setValue("useCustomPath", false);
                           }
                         }}
-                        className="grid w-full grid-cols-2"
+                        className={
+                          allowedRuntimeTypes.length === 3
+                            ? "grid w-full grid-cols-3"
+                            : "grid w-full grid-cols-2"
+                        }
                       >
                         {allowedRuntimeTypes.map((type) => (
                           <ToggleGroupItem
@@ -453,7 +457,7 @@ function WorkspaceDialogForm({
                             value={type}
                             className="w-full"
                           >
-                            {type === "local" ? "本地" : "沙箱"}
+                            {runtimeTypeLabel(type)}
                           </ToggleGroupItem>
                         ))}
                       </ToggleGroup>
@@ -527,7 +531,7 @@ function WorkspaceDialogForm({
                             if (nextChecked) {
                               form.setValue("useGit", false);
                               const nextScope =
-                                runtimeType === "sandbox" &&
+                                runtimeType !== "local" &&
                                 allowedIsolationScopes.includes("workspace")
                                   ? "workspace"
                                   : undefined;
@@ -694,7 +698,18 @@ function WorkspaceDialogForm({
 }
 
 function isWorkspaceRuntimeType(value: string): value is WorkspaceRuntimeType {
-  return value === "local" || value === "sandbox";
+  return RUNTIME_TYPES.includes(value as WorkspaceRuntimeType);
+}
+
+function runtimeTypeLabel(type: WorkspaceRuntimeType) {
+  switch (type) {
+    case "local":
+      return "本地";
+    case "docker":
+      return "Docker";
+    case "opensandbox":
+      return "OpenSandbox";
+  }
 }
 
 function isIsolationScope(
@@ -713,16 +728,14 @@ function supportsLocalDirectory(
   runtimeType: WorkspaceRuntimeType,
   isolationScope?: WorkspaceIsolationScope
 ) {
-  return runtimeType === "local" ||
-    (runtimeType === "sandbox" && isolationScope === "workspace");
+  return runtimeType === "local" || isolationScope === "workspace";
 }
 
 function canOfferLocalDirectory(
   runtimeType: WorkspaceRuntimeType,
   allowedScopes: WorkspaceIsolationScope[]
 ) {
-  return runtimeType === "local" ||
-    (runtimeType === "sandbox" && allowedScopes.includes("workspace"));
+  return runtimeType === "local" || allowedScopes.includes("workspace");
 }
 
 function resolveRuntimeTypeChange({

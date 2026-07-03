@@ -1,6 +1,5 @@
 import { memo, useMemo, useState } from "react";
 import {
-  Container,
   Folder,
   FolderDot,
   FolderGit2,
@@ -114,7 +113,7 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
             }}
             className="h-7 rounded-md pl-4 pr-16 text-sm font-normal text-sidebar-foreground/90 hover:bg-transparent hover:text-sidebar-foreground data-open:hover:bg-transparent"
           >
-            {workspace.runtimeType === "sandbox" ? (
+            {workspace.runtimeType !== "local" ? (
               open ? (
                 <FolderOpenDot className="size-4 shrink-0" />
               ) : (
@@ -251,12 +250,6 @@ function WorkspaceHoverDetails({ workspace }: { workspace: Workspace }) {
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-popover-foreground">
           {workspace.name}
         </span>
-        {workspace.runtimeType === "sandbox" && (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
-            <Container className="size-3" />
-            {sandboxEngineLabel(workspace.sandboxEngine)}
-          </span>
-        )}
       </div>
       <WorkspaceHoverRow label="环境" value={runtimeLabel(workspace)} />
       <WorkspaceHoverRow label="路径" value={workspace.rootPath} mono />
@@ -306,20 +299,12 @@ function WorkspaceHoverRow({
 }
 
 function runtimeLabel(workspace: Workspace) {
-  if (workspace.runtimeType === "local") return "本地";
-  return `容器 · ${isolationScopeLabel(workspace.isolationScope)}`;
-}
-
-function isolationScopeLabel(scope: Workspace["isolationScope"]) {
-  if (scope === "workspace") return "工作空间隔离";
-  if (scope === "user") return "用户共享";
-  return "默认隔离";
-}
-
-function sandboxEngineLabel(engine: Workspace["sandboxEngine"]) {
-  const labels: Record<string, string> = {
-    docker: "Docker",
-    opensandbox: "OpenSandbox",
-  };
-  return engine ? (labels[engine] ?? engine) : "容器";
+  switch (workspace.runtimeType) {
+    case "local":
+      return "本地";
+    case "docker":
+      return "Docker";
+    case "opensandbox":
+      return "OpenSandbox";
+  }
 }

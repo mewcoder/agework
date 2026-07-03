@@ -277,7 +277,8 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const needsWorkspace = !selectedConversationId && !selectedWorkspaceId;
   const needsModelProvider = !selectedModelProviderId;
   const needsNonSystemModelProvider =
-    targetWorkspace?.runtimeType === "sandbox" &&
+    !!targetWorkspace &&
+    targetWorkspace.runtimeType !== "local" &&
     !!selectedModelProvider &&
     isSystemModelProvider(selectedModelProvider);
   const modelProviderAttentionMessage = needsNonSystemModelProvider

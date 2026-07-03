@@ -28,7 +28,11 @@ interface WorkspaceSelectorProps {
   attentionToken?: number;
 }
 
-type WorkspaceItem = { value: string; label: string; runtimeType?: "local" | "sandbox" };
+type WorkspaceItem = {
+  value: string;
+  label: string;
+  runtimeType?: "local" | "docker" | "opensandbox";
+};
 
 export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps) {
   const { onSelectWorkspace } = useAgentChatContext();
@@ -175,7 +179,7 @@ function WorkspaceItemIcon({
   runtimeType?: WorkspaceItem["runtimeType"];
   className?: string;
 }) {
-  if (runtimeType === "sandbox") {
+  if (runtimeType && runtimeType !== "local") {
     return <FolderDot className={className} />;
   }
 
