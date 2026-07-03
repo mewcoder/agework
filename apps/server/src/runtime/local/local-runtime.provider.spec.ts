@@ -46,11 +46,18 @@ describe("LocalRuntimeProvider", () => {
   });
 
   describe("recoverOrphan", () => {
+    const makeRef = (runtimeInstanceId: string) => ({
+      runtimeType: "local",
+      ownerId: "owner-1",
+      runtimeInstanceId,
+      isolationScope: "workspace",
+    });
+
     it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
       const provider = new LocalRuntimeProvider();
 
-      await provider.recoverOrphan("12345:some-token");
+      await provider.recoverOrphan(makeRef("12345:some-token"));
 
       expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
     });
@@ -59,7 +66,7 @@ describe("LocalRuntimeProvider", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
       const provider = new LocalRuntimeProvider();
 
-      await provider.recoverOrphan("not-a-valid-runtime-id");
+      await provider.recoverOrphan(makeRef("not-a-valid-runtime-id"));
 
       expect(killSpy).not.toHaveBeenCalled();
     });
@@ -71,8 +78,35 @@ describe("LocalRuntimeProvider", () => {
       const provider = new LocalRuntimeProvider();
 
       await expect(
-        provider.recoverOrphan("12345:some-token")
+        provider.recoverOrphan(makeRef("12345:some-token"))
       ).resolves.toBeUndefined();
     });
+  });
+
+  it("implements RuntimeProvider surface (type/placementKind)", () => {
+    const provider = new LocalRuntimeProvider();
+    expect(provider.type).toBe("local");
+    expect(provider.placementKind).toBe("process");
+  });
+
+  it("prepareEnvironment is a no-op returning empty handle", async () => {
+    const provider = new LocalRuntimeProvider();
+    await expect(
+      provider.prepareEnvironment({
+        runtimeType: "local",
+        ownerId: "ws-1",
+        workspaceId: "ws-1",
+        runId: "run-1",
+        placement: {
+          runtimeType: "local",
+          userId: "u1",
+          workspaceId: "ws-1",
+          hostPath: "/w",
+          runtimePath: "/w",
+          runtimeLogDir: "/logs",
+        },
+        workerEnv: {},
+      })
+    ).resolves.toEqual({});
   });
 });
