@@ -17,7 +17,7 @@ import { WorkerRegistryRepository } from "./registry/worker-registry.repository"
 import {
   toAdminRuntimeInstanceResponse,
   toRuntimeInstanceResponse,
-} from "./registry/runtime-instance-view";
+} from "./registry/worker-instance-view";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.executor";
@@ -102,7 +102,7 @@ export class WorkerManagerService {
   }
 
   // ── WorkerRegistry 跨模块查询 ────────────────────────────────────────
-  // WorkerRegistry 数据(RuntimeInstance/WorkspaceRuntimeInstance 表)归属 worker-manager,
+  // WorkerRegistry 数据(WorkerInstance/WorkspaceWorkerBinding 表)归属 worker-manager,
   // 这里是唯一对外入口;模块内部(lifecycle 等 internal provider)直接注入
   // WorkerRegistryRepository,不经根 Service 转发。
 
@@ -180,7 +180,7 @@ export class WorkerManagerService {
 
   /**
    * 管理端 run 详情用:按 run 持久化的 runtime handle 取运行实例视图。
-   * runtime 资源归属本领域,run 层经此方法获取,不直接查 runtimeInstance 表。
+   * runtime 资源归属本领域,run 层经此方法获取,不直接查 workerInstance 表。
    */
   async getRuntimeInstanceForAdmin(
     runtimeType: string,

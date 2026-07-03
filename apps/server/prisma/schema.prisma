@@ -69,7 +69,7 @@ model WorkspaceDirectory {
 }
 
 model Workspace {
-  id             String              @id
+  id             String                  @id
   name           String
   gitUrl         String?
   description    String?
@@ -77,13 +77,13 @@ model Workspace {
   isolationScope String?
   sandboxEngine  String?
   userId         String
-  user           User                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  user           User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
   deletedAt      DateTime?
   directory      WorkspaceDirectory?
   conversations  Conversation[]
-  runtime        WorkspaceRuntimeInstance?
+  runtime        WorkspaceWorkerBinding?
 
   @@index([userId])
   @@index([userId, deletedAt, createdAt])
@@ -208,19 +208,19 @@ model RunEvent {
 /// local 模式 one run = one 子进程，runtimeInstanceId 即 `pid:startToken`，只记内存、
 /// 不持久化（进程随 API 重启即销毁，pid 会被 OS 回收复用，入库只会留下过期脏数据）。
 /// 实体语义即"一个活着的容器实例"（有 status / runtimeInstanceId / metadata）。
-model RuntimeInstance {
-  id                String             @id
-  runtimeType       String
-  isolationScope    String
-  ownerId           String
-  runtimeInstanceId String
-  transport         String             @default("http")
-  status            String             @default("running")
-  expiresAt         DateTime?
-  metadata          Json
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  workspaceRuntimeInstances WorkspaceRuntimeInstance[]
+model WorkerInstance {
+  id                      String                   @id
+  runtimeType             String
+  isolationScope          String
+  ownerId                 String
+  runtimeInstanceId       String
+  transport               String                   @default("http")
+  status                  String                   @default("running")
+  expiresAt               DateTime?
+  metadata                Json
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  workspaceWorkerBindings WorkspaceWorkerBinding[]
 
   @@unique([runtimeType, runtimeInstanceId])
   @@index([runtimeType, isolationScope, status])
@@ -230,22 +230,22 @@ model RuntimeInstance {
 /// workspace ↔ 沙箱资源绑定关系表（一对多：user 隔离下多个 workspace 共用一个容器）。
 /// 同样只有 sandbox 写入；local 无持久容器，不建绑定。语义上等价 SandboxWorkspaceBinding。
 ///
-/// 为什么需要独立成表（而非合并进 RuntimeInstance 或 Workspace）：
+/// 为什么需要独立成表（而非合并进 WorkerInstance 或 Workspace）：
 ///   1. findActiveByWorkspace —— 沙箱复用入口：按 workspaceId 反查"当前绑着的 running 容器"，
 ///      workspaceId @unique 保证一个 workspace 同时只绑一个活容器（复用语义基石）。
 ///   2. isRuntimeInstanceBoundToWorkspace —— 安全校验：worker 上报心跳/事件时验证容器确实
 ///      属于该 workspace，防伪造/串扰。
-///   3. 反向查询 —— admin 面板要展示"一个容器绑了哪些 workspace"（workspaceRuntimeInstances 关联 +
-///      @@index([resourceId])）；合并进 Workspace 会丢失此反向查询能力，只能全表扫。
-/// 一对多关系规范化，不宜塞 JSON 数组进 RuntimeInstance（丢失查询能力与唯一约束）。
-model WorkspaceRuntimeInstance {
-  id          String          @id
-  workspaceId String          @unique
-  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  resourceId  String
-  resource    RuntimeInstance @relation(fields: [resourceId], references: [id], onDelete: Cascade)
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+///   3. 反向查询 —— admin 面板要展示"一个容器绑了哪些 workspace"（workspaceWorkerBindings 关联 +
+///      @@index([workerInstanceId])）；合并进 Workspace 会丢失此反向查询能力，只能全表扫。
+/// 一对多关系规范化，不宜塞 JSON 数组进 WorkerInstance（丢失查询能力与唯一约束）。
+model WorkspaceWorkerBinding {
+  id               String         @id
+  workspaceId      String         @unique
+  workspace        Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workerInstanceId String
+  workerInstance   WorkerInstance @relation(fields: [workerInstanceId], references: [id], onDelete: Cascade)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  @@index([resourceId])
+  @@index([workerInstanceId])
 }

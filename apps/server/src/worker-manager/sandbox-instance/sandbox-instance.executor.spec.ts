@@ -64,7 +64,7 @@ function makeService(runtimeService = makeRuntimeService()) {
     insertStarting: vi.fn().mockResolvedValue({ ok: true }),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1", runtimeType: "sandbox" },
-      workspaceRuntimeInstance: { id: "wr-1" },
+      workspaceWorkerBinding: { id: "wr-1" },
     }),
     markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     markErrorByOwner: vi.fn().mockResolvedValue(undefined),

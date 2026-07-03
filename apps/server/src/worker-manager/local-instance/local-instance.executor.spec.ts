@@ -35,7 +35,7 @@ function makeRegistry() {
     insertStarting: vi.fn().mockResolvedValue({ ok: true }),
     upsertRunning: vi.fn().mockResolvedValue({
       resource: { id: "rr-1" },
-      workspaceRuntimeInstance: { id: "wr-1" },
+      workspaceWorkerBinding: { id: "wr-1" },
     }),
     markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
     markErrorByOwner: vi.fn().mockResolvedValue(undefined),

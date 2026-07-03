@@ -3,7 +3,7 @@ import { WorkerRegistryRepository } from "./worker-registry.repository";
 
 function makePrismaMock() {
   return {
-    runtimeInstance: {
+    workerInstance: {
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       findMany: vi.fn(),
@@ -13,7 +13,7 @@ function makePrismaMock() {
       deleteMany: vi.fn(),
       count: vi.fn(),
     },
-    workspaceRuntimeInstance: {
+    workspaceWorkerBinding: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
       deleteMany: vi.fn(),
@@ -25,27 +25,27 @@ function makePrismaMock() {
 }
 
 function makePrismaWithTransaction(
-  runtimeInstanceMocks: {
+  workerInstanceMocks: {
     findFirst: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
   },
-  workspaceRuntimeInstanceMocks: {
+  workspaceWorkerBindingMocks: {
     upsert: ReturnType<typeof vi.fn>;
   }
 ) {
   const baseMock = makePrismaMock();
   return {
     ...baseMock,
-    runtimeInstance: { ...baseMock.runtimeInstance, ...runtimeInstanceMocks },
-    workspaceRuntimeInstance: {
-      ...baseMock.workspaceRuntimeInstance,
-      ...workspaceRuntimeInstanceMocks,
+    workerInstance: { ...baseMock.workerInstance, ...workerInstanceMocks },
+    workspaceWorkerBinding: {
+      ...baseMock.workspaceWorkerBinding,
+      ...workspaceWorkerBindingMocks,
     },
     $transaction: vi.fn(async (fn: (tx: unknown) => unknown) =>
       fn({
-        runtimeInstance: runtimeInstanceMocks,
-        workspaceRuntimeInstance: workspaceRuntimeInstanceMocks,
+        workerInstance: workerInstanceMocks,
+        workspaceWorkerBinding: workspaceWorkerBindingMocks,
       })
     ),
   };
@@ -62,28 +62,28 @@ describe("WorkerRegistryRepository", () => {
 
   describe("findActiveByWorkspace", () => {
     it("returns the binding when resource status is running", async () => {
-      prisma.workspaceRuntimeInstance.findUnique.mockResolvedValue({
+      prisma.workspaceWorkerBinding.findUnique.mockResolvedValue({
         workspaceId: "ws-1",
-        resource: { status: "running" },
+        workerInstance: { status: "running" },
       });
       const result = await repository.findActiveByWorkspace("ws-1");
       expect(result).toEqual({
         workspaceId: "ws-1",
-        resource: { status: "running" },
+        workerInstance: { status: "running" },
       });
     });
 
     it("returns null when resource status is not running", async () => {
-      prisma.workspaceRuntimeInstance.findUnique.mockResolvedValue({
+      prisma.workspaceWorkerBinding.findUnique.mockResolvedValue({
         workspaceId: "ws-1",
-        resource: { status: "stopped" },
+        workerInstance: { status: "stopped" },
       });
       const result = await repository.findActiveByWorkspace("ws-1");
       expect(result).toBeNull();
     });
 
     it("returns null when no binding exists", async () => {
-      prisma.workspaceRuntimeInstance.findUnique.mockResolvedValue(null);
+      prisma.workspaceWorkerBinding.findUnique.mockResolvedValue(null);
       const result = await repository.findActiveByWorkspace("ws-1");
       expect(result).toBeNull();
     });
@@ -97,7 +97,7 @@ describe("WorkerRegistryRepository", () => {
       ownerId: "ws-1",
     };
 
-    it("creates a new RuntimeInstance row when none exists for the owner", async () => {
+    it("creates a new WorkerInstance row when none exists for the owner", async () => {
       const findFirst = vi.fn().mockResolvedValue(null);
       const create = vi.fn().mockResolvedValue({ id: "new-id" });
       const upsert = vi.fn().mockResolvedValue({ id: "binding-id" });
@@ -160,9 +160,9 @@ describe("WorkerRegistryRepository", () => {
 
   describe("markStoppedByOwner", () => {
     it("updates matching rows to status stopped", async () => {
-      prisma.runtimeInstance.updateMany.mockResolvedValue({ count: 1 });
+      prisma.workerInstance.updateMany.mockResolvedValue({ count: 1 });
       await repository.markStoppedByOwner("sandbox", "workspace", "ws-1");
-      expect(prisma.runtimeInstance.updateMany).toHaveBeenCalledWith({
+      expect(prisma.workerInstance.updateMany).toHaveBeenCalledWith({
         where: {
           runtimeType: "sandbox",
           isolationScope: "workspace",
@@ -175,8 +175,8 @@ describe("WorkerRegistryRepository", () => {
 
   describe("isRuntimeInstanceBoundToWorkspace", () => {
     it("returns true when runtimeType and runtimeInstanceId both match the binding", async () => {
-      prisma.workspaceRuntimeInstance.findUnique.mockResolvedValue({
-        resource: { runtimeType: "sandbox", runtimeInstanceId: "inst-1" },
+      prisma.workspaceWorkerBinding.findUnique.mockResolvedValue({
+        workerInstance: { runtimeType: "sandbox", runtimeInstanceId: "inst-1" },
       });
       const result = await repository.isRuntimeInstanceBoundToWorkspace(
         "sandbox",
@@ -187,8 +187,11 @@ describe("WorkerRegistryRepository", () => {
     });
 
     it("returns false when runtimeInstanceId does not match", async () => {
-      prisma.workspaceRuntimeInstance.findUnique.mockResolvedValue({
-        resource: { runtimeType: "sandbox", runtimeInstanceId: "inst-other" },
+      prisma.workspaceWorkerBinding.findUnique.mockResolvedValue({
+        workerInstance: {
+          runtimeType: "sandbox",
+          runtimeInstanceId: "inst-other",
+        },
       });
       const result = await repository.isRuntimeInstanceBoundToWorkspace(
         "sandbox",
@@ -201,14 +204,14 @@ describe("WorkerRegistryRepository", () => {
 
   describe("listResourcesPage", () => {
     it("filters by status when provided and returns items + total", async () => {
-      prisma.runtimeInstance.findMany.mockResolvedValue([{ id: "1" }]);
-      prisma.runtimeInstance.count.mockResolvedValue(1);
+      prisma.workerInstance.findMany.mockResolvedValue([{ id: "1" }]);
+      prisma.workerInstance.count.mockResolvedValue(1);
       const result = await repository.listResourcesPage({
         status: "running",
         take: 10,
         skip: 0,
       });
-      expect(prisma.runtimeInstance.findMany).toHaveBeenCalledWith(
+      expect(prisma.workerInstance.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { status: "running" } })
       );
       expect(result).toEqual({ items: [{ id: "1" }], total: 1 });
@@ -218,7 +221,7 @@ describe("WorkerRegistryRepository", () => {
   describe("insertStarting", () => {
     it("creates a starting row and returns ok:true when no active row exists for the owner", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.runtimeInstance.create.mockResolvedValue({ id: "rr-1" });
+      prismaMocks.workerInstance.create.mockResolvedValue({ id: "rr-1" });
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       const result = await repository.insertStarting(
@@ -233,7 +236,7 @@ describe("WorkerRegistryRepository", () => {
       );
 
       expect(result).toEqual({ ok: true });
-      expect(prismaMocks.runtimeInstance.create).toHaveBeenCalledWith(
+      expect(prismaMocks.workerInstance.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             runtimeType: "sandbox",
@@ -249,8 +252,8 @@ describe("WorkerRegistryRepository", () => {
 
     it("returns ok:false with the existing active row when the unique constraint is violated", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.runtimeInstance.create.mockRejectedValue({ code: "P2002" });
-      prismaMocks.runtimeInstance.findFirst.mockResolvedValue({
+      prismaMocks.workerInstance.create.mockRejectedValue({ code: "P2002" });
+      prismaMocks.workerInstance.findFirst.mockResolvedValue({
         runtimeInstanceId: "docker-resource-1",
         status: "running",
       });
@@ -271,7 +274,7 @@ describe("WorkerRegistryRepository", () => {
         ok: false,
         existing: { runtimeInstanceId: "docker-resource-1", status: "running" },
       });
-      expect(prismaMocks.runtimeInstance.findFirst).toHaveBeenCalledWith({
+      expect(prismaMocks.workerInstance.findFirst).toHaveBeenCalledWith({
         where: { ownerId: "ws-1", status: { in: ["starting", "running"] } },
       });
     });
@@ -279,8 +282,8 @@ describe("WorkerRegistryRepository", () => {
     it("rethrows a P2002 error when no active row is found for the owner (unexpected constraint)", async () => {
       const prismaMocks = makePrismaMock();
       const err = { code: "P2002" };
-      prismaMocks.runtimeInstance.create.mockRejectedValue(err);
-      prismaMocks.runtimeInstance.findFirst.mockResolvedValue(null);
+      prismaMocks.workerInstance.create.mockRejectedValue(err);
+      prismaMocks.workerInstance.findFirst.mockResolvedValue(null);
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       await expect(
@@ -300,7 +303,7 @@ describe("WorkerRegistryRepository", () => {
     it("rethrows a non-unique-constraint error unchanged", async () => {
       const prismaMocks = makePrismaMock();
       const err = new Error("connection refused");
-      prismaMocks.runtimeInstance.create.mockRejectedValue(err);
+      prismaMocks.workerInstance.create.mockRejectedValue(err);
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       await expect(
@@ -315,13 +318,13 @@ describe("WorkerRegistryRepository", () => {
           "http"
         )
       ).rejects.toBe(err);
-      expect(prismaMocks.runtimeInstance.findFirst).not.toHaveBeenCalled();
+      expect(prismaMocks.workerInstance.findFirst).not.toHaveBeenCalled();
     });
 
     it("deletes stale terminal rows for the owner before creating the starting row", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.runtimeInstance.deleteMany.mockResolvedValue({ count: 1 });
-      prismaMocks.runtimeInstance.create.mockResolvedValue({ id: "rr-2" });
+      prismaMocks.workerInstance.deleteMany.mockResolvedValue({ count: 1 });
+      prismaMocks.workerInstance.create.mockResolvedValue({ id: "rr-2" });
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       const result = await repository.insertStarting(
@@ -336,7 +339,7 @@ describe("WorkerRegistryRepository", () => {
       );
 
       expect(result).toEqual({ ok: true });
-      expect(prismaMocks.runtimeInstance.deleteMany).toHaveBeenCalledWith({
+      expect(prismaMocks.workerInstance.deleteMany).toHaveBeenCalledWith({
         where: {
           runtimeType: "sandbox",
           isolationScope: "workspace",
@@ -348,9 +351,9 @@ describe("WorkerRegistryRepository", () => {
       // upsertRunning's later findFirst can't pick a stale row instead of
       // this new starting row.
       expect(
-        prismaMocks.runtimeInstance.deleteMany.mock.invocationCallOrder[0]
+        prismaMocks.workerInstance.deleteMany.mock.invocationCallOrder[0]
       ).toBeLessThan(
-        prismaMocks.runtimeInstance.create.mock.invocationCallOrder[0]
+        prismaMocks.workerInstance.create.mock.invocationCallOrder[0]
       );
     });
   });
@@ -358,12 +361,12 @@ describe("WorkerRegistryRepository", () => {
   describe("markAllStartingAsError", () => {
     it("updates every starting row to error, regardless of runtimeType", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.runtimeInstance.updateMany.mockResolvedValue({ count: 2 });
+      prismaMocks.workerInstance.updateMany.mockResolvedValue({ count: 2 });
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       await repository.markAllStartingAsError();
 
-      expect(prismaMocks.runtimeInstance.updateMany).toHaveBeenCalledWith({
+      expect(prismaMocks.workerInstance.updateMany).toHaveBeenCalledWith({
         where: { status: "starting" },
         data: expect.objectContaining({ status: "error" }),
       });
@@ -373,7 +376,7 @@ describe("WorkerRegistryRepository", () => {
   describe("findRunningByRuntimeType", () => {
     it("finds all running rows for the given runtimeType", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.runtimeInstance.findMany.mockResolvedValue([
+      prismaMocks.workerInstance.findMany.mockResolvedValue([
         {
           id: "rr-1",
           runtimeType: "local",
@@ -386,7 +389,7 @@ describe("WorkerRegistryRepository", () => {
 
       const result = await repository.findRunningByRuntimeType("local");
 
-      expect(prismaMocks.runtimeInstance.findMany).toHaveBeenCalledWith({
+      expect(prismaMocks.workerInstance.findMany).toHaveBeenCalledWith({
         where: { runtimeType: "local", status: "running" },
       });
       expect(result).toEqual([

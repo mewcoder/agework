@@ -47,7 +47,7 @@ describe("RuntimeInstanceLifecycleService", () => {
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          resource: makeResource(),
+          workerInstance: makeResource(),
         }),
       });
       const sandboxInstances = makeSandboxInstances();
@@ -76,7 +76,10 @@ describe("RuntimeInstanceLifecycleService", () => {
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          resource: makeResource({ isolationScope: "user", ownerId: "user-1" }),
+          workerInstance: makeResource({
+            isolationScope: "user",
+            ownerId: "user-1",
+          }),
         }),
       });
       const sandboxInstances = makeSandboxInstances();
@@ -101,7 +104,7 @@ describe("RuntimeInstanceLifecycleService", () => {
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          resource: makeResource({ runtimeType: "local" }),
+          workerInstance: makeResource({ runtimeType: "local" }),
         }),
       });
       const sandboxInstances = makeSandboxInstances();

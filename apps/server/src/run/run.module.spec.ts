@@ -91,7 +91,7 @@ async function createRunsTestingModule(
     // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-manager 模块内）
     // 在 init() 时经 WorkerRegistryRepository 做重启扫尾，这里给对应查询空实现。
     .useValue({
-      runtimeInstance: {
+      workerInstance: {
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
         findMany: vi.fn().mockResolvedValue([]),
       },

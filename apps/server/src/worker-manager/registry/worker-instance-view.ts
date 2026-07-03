@@ -1,17 +1,17 @@
 import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
-import { runtimeInstanceDiagnostics } from "./worker-registry-metadata";
+import { workerInstanceDiagnostics } from "./worker-registry-metadata";
 
-// RuntimeInstance 行的管理端响应组装(纯函数)。行形状由 WorkerRegistryRepository
+// WorkerInstance 行的管理端响应组装(纯函数)。行形状由 WorkerRegistryRepository
 // 的查询 select 决定,这里只消费。
 
-type WorkspaceRuntimeBindingRow = {
+type WorkspaceWorkerBindingRow = {
   id: string;
   workspaceId: string;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
 
-export type RuntimeInstanceRow = {
+export type WorkerInstanceRow = {
   id: string;
   runtimeType: string;
   isolationScope: string;
@@ -22,13 +22,13 @@ export type RuntimeInstanceRow = {
   metadata: unknown;
   createdAt: Date | string;
   updatedAt: Date | string;
-  workspaceRuntimeInstances?: WorkspaceRuntimeBindingRow[];
+  workspaceWorkerBindings?: WorkspaceWorkerBindingRow[];
 };
 
 /** 管理端 runtime 资源列表行:附 isReusable / workspaceCount / diagnostics 汇总。 */
-export function toRuntimeInstanceResponse(resource: RuntimeInstanceRow) {
-  const diagnostics = runtimeInstanceDiagnostics(resource.metadata);
-  const workspaceRuntimes = resource.workspaceRuntimeInstances?.map(
+export function toRuntimeInstanceResponse(resource: WorkerInstanceRow) {
+  const diagnostics = workerInstanceDiagnostics(resource.metadata);
+  const workspaceRuntimes = resource.workspaceWorkerBindings?.map(
     toWorkspaceRuntimeBinding
   );
 
@@ -57,21 +57,21 @@ export function toRuntimeInstanceResponse(resource: RuntimeInstanceRow) {
 
 /** 管理端 run 详情里的 runtime 实例视图(findRunInstanceView 的行,不含 metadata)。 */
 export function toAdminRuntimeInstanceResponse(
-  record: Omit<RuntimeInstanceRow, "metadata" | "workspaceRuntimeInstances"> & {
-    workspaceRuntimeInstances: WorkspaceRuntimeBindingRow[];
+  record: Omit<WorkerInstanceRow, "metadata" | "workspaceWorkerBindings"> & {
+    workspaceWorkerBindings: WorkspaceWorkerBindingRow[];
   }
 ): AdminRunRuntimeInstanceResponse {
-  const { workspaceRuntimeInstances, ...resource } = record;
+  const { workspaceWorkerBindings, ...resource } = record;
   return {
     ...resource,
     expiresAt: resource.expiresAt ? toIsoString(resource.expiresAt) : null,
     createdAt: toIsoString(resource.createdAt),
     updatedAt: toIsoString(resource.updatedAt),
-    workspaceRuntimes: workspaceRuntimeInstances.map(toWorkspaceRuntimeBinding),
+    workspaceRuntimes: workspaceWorkerBindings.map(toWorkspaceRuntimeBinding),
   };
 }
 
-function toWorkspaceRuntimeBinding(binding: WorkspaceRuntimeBindingRow) {
+function toWorkspaceRuntimeBinding(binding: WorkspaceWorkerBindingRow) {
   return {
     id: binding.id,
     workspaceId: binding.workspaceId,

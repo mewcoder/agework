@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   isMetadataRecord,
   runningInstanceMetadata,
-  runtimeInstanceDiagnostics,
+  workerInstanceDiagnostics,
   statusInstanceMetadata,
   stoppedInstanceMetadata,
 } from "./worker-registry-metadata";
@@ -66,8 +66,8 @@ describe("worker-registry-metadata", () => {
     expect(result.errorMessage).toBe("boom");
   });
 
-  it("runtimeInstanceDiagnostics extracts known string fields and ignores non-record input", () => {
-    expect(runtimeInstanceDiagnostics(null)).toEqual({
+  it("workerInstanceDiagnostics extracts known string fields and ignores non-record input", () => {
+    expect(workerInstanceDiagnostics(null)).toEqual({
       ownerId: undefined,
       workspaceId: undefined,
       statusReason: undefined,
@@ -78,7 +78,7 @@ describe("worker-registry-metadata", () => {
       runtimeInstanceId: undefined,
     });
     expect(
-      runtimeInstanceDiagnostics({
+      workerInstanceDiagnostics({
         ownerId: "ws-1",
         statusReason: "running",
         extra: 1,

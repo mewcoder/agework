@@ -2,7 +2,7 @@ import type { Prisma } from "../../../generated/prisma/client.js";
 
 type RuntimeInstanceMetadata = Record<string, unknown>;
 
-export type RuntimeInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
+export type WorkerInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
   ownerId: string;
   workspaceId?: string;
   statusReason: string;
@@ -29,7 +29,7 @@ export function runningInstanceMetadata(input: {
   existing?: unknown;
   metadata?: object;
   now?: Date;
-}): RuntimeInstanceDiagnosticMetadata {
+}): WorkerInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     ...(isMetadataRecord(input.existing) ? input.existing : {}),
@@ -50,7 +50,7 @@ export function stoppedInstanceMetadata(input: {
   reason: string;
   errorMessage?: string;
   now?: Date;
-}): RuntimeInstanceDiagnosticMetadata {
+}): WorkerInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     ownerId: input.ownerId,
@@ -70,7 +70,7 @@ export function statusInstanceMetadata(input: {
   reason: string;
   errorMessage?: string;
   now?: Date;
-}): RuntimeInstanceDiagnosticMetadata {
+}): WorkerInstanceDiagnosticMetadata {
   const now = (input.now ?? new Date()).toISOString();
   return {
     ownerId: input.ownerId,
@@ -82,7 +82,7 @@ export function statusInstanceMetadata(input: {
   };
 }
 
-export function runtimeInstanceDiagnostics(metadata: unknown) {
+export function workerInstanceDiagnostics(metadata: unknown) {
   const record = isMetadataRecord(metadata) ? metadata : {};
   return {
     ownerId: typeof record.ownerId === "string" ? record.ownerId : undefined,
@@ -107,8 +107,8 @@ export function runtimeInstanceDiagnostics(metadata: unknown) {
   };
 }
 
-export function runtimeInstanceMetadataJson(
-  metadata: RuntimeInstanceDiagnosticMetadata
+export function workerInstanceMetadataJson(
+  metadata: WorkerInstanceDiagnosticMetadata
 ): Prisma.InputJsonValue {
   return metadata as Prisma.InputJsonValue;
 }

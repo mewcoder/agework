@@ -29,8 +29,8 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
   /** 关闭专属于该 workspace 的 runtime 资源(user 隔离下的共享资源不受影响)。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
     const binding = await this.registry.findBindingWithResource(workspaceId);
-    if (binding?.resource.status === "running") {
-      const resource = binding.resource;
+    if (binding?.workerInstance.status === "running") {
+      const resource = binding.workerInstance;
       if (
         resource.isolationScope === "workspace" &&
         resource.ownerId === workspaceId

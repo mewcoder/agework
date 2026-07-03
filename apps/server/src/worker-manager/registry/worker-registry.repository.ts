@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import { PrismaService } from "../../prisma/prisma.service";
 import {
-  runtimeInstanceMetadataJson,
+  workerInstanceMetadataJson,
   runningInstanceMetadata,
   statusInstanceMetadata,
   stoppedInstanceMetadata,
@@ -38,8 +38,8 @@ function isPrismaUniqueError(err: unknown): boolean {
 
 /**
  * WorkerRegistry 的 repository 层:维护 workspace -> runtime resource 的绑定关系,
- * 以及实例本身的生命周期数据。数据表继续叫 RuntimeInstance/WorkspaceRuntimeInstance
- * (不改名),只是 repository 归属从 runtime 模块搬到 worker-manager 模块——WorkerRegistry
+ * 以及实例本身的生命周期数据。数据表是 WorkerInstance/WorkspaceWorkerBinding,
+ * repository 归属从 runtime 模块搬到 worker-manager 模块——WorkerRegistry
  * 数据天然是 worker-manager 自注册/心跳端点要读写的东西,归 runtime 会导致 worker-manager
  * 反过来依赖 runtime,破坏 runtime 的零依赖身份。
  */
@@ -48,11 +48,11 @@ export class WorkerRegistryRepository {
   constructor(private prisma: PrismaService) {}
 
   async findActiveByWorkspace(workspaceId: string) {
-    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
+    const binding = await this.prisma.workspaceWorkerBinding.findUnique({
       where: { workspaceId },
-      include: { resource: true },
+      include: { workerInstance: true },
     });
-    return binding?.resource.status === "running" ? binding : null;
+    return binding?.workerInstance.status === "running" ? binding : null;
   }
 
   async upsertRunning(
@@ -67,13 +67,13 @@ export class WorkerRegistryRepository {
       input.ownerId
     );
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.runtimeInstance.findFirst({ where });
+      const existing = await tx.workerInstance.findFirst({ where });
       const data = {
         runtimeInstanceId,
         transport,
         status: "running",
         expiresAt: null,
-        metadata: runtimeInstanceMetadataJson(
+        metadata: workerInstanceMetadataJson(
           runningInstanceMetadata({
             workspaceId: input.workspaceId,
             ownerId: input.ownerId,
@@ -84,31 +84,29 @@ export class WorkerRegistryRepository {
         ),
       };
       const resource = existing
-        ? await tx.runtimeInstance.update({
+        ? await tx.workerInstance.update({
             where: { id: existing.id },
             data,
           })
-        : await tx.runtimeInstance.create({
+        : await tx.workerInstance.create({
             data: {
               id: generateId(),
               ...where,
               ...data,
             },
           });
-      const workspaceRuntimeInstance = await tx.workspaceRuntimeInstance.upsert(
-        {
-          where: { workspaceId: input.workspaceId },
-          create: {
-            id: generateId(),
-            workspaceId: input.workspaceId,
-            resourceId: resource.id,
-          },
-          update: {
-            resourceId: resource.id,
-          },
-        }
-      );
-      return { resource, workspaceRuntimeInstance };
+      const workspaceWorkerBinding = await tx.workspaceWorkerBinding.upsert({
+        where: { workspaceId: input.workspaceId },
+        create: {
+          id: generateId(),
+          workspaceId: input.workspaceId,
+          workerInstanceId: resource.id,
+        },
+        update: {
+          workerInstanceId: resource.id,
+        },
+      });
+      return { resource, workspaceWorkerBinding };
     });
   }
 
@@ -131,18 +129,18 @@ export class WorkerRegistryRepository {
       input.isolationScope,
       input.ownerId
     );
-    await this.prisma.runtimeInstance.deleteMany({
+    await this.prisma.workerInstance.deleteMany({
       where: { ...where, status: { in: ["stopped", "error"] } },
     });
     try {
-      await this.prisma.runtimeInstance.create({
+      await this.prisma.workerInstance.create({
         data: {
           id: generateId(),
           ...where,
           runtimeInstanceId,
           transport,
           status: "starting",
-          metadata: runtimeInstanceMetadataJson(
+          metadata: workerInstanceMetadataJson(
             statusInstanceMetadata({
               runtimeType: input.runtimeType,
               isolationScope: input.isolationScope,
@@ -155,7 +153,7 @@ export class WorkerRegistryRepository {
       return { ok: true };
     } catch (err) {
       if (!isPrismaUniqueError(err)) throw err;
-      const existing = await this.prisma.runtimeInstance.findFirst({
+      const existing = await this.prisma.workerInstance.findFirst({
         where: {
           ownerId: input.ownerId,
           status: { in: ["starting", "running"] },
@@ -177,11 +175,11 @@ export class WorkerRegistryRepository {
     isolationScope: string,
     ownerId: string
   ) {
-    await this.prisma.runtimeInstance.updateMany({
+    await this.prisma.workerInstance.updateMany({
       where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "stopped",
-        metadata: runtimeInstanceMetadataJson(
+        metadata: workerInstanceMetadataJson(
           stoppedInstanceMetadata({
             runtimeType,
             isolationScope,
@@ -199,11 +197,11 @@ export class WorkerRegistryRepository {
     ownerId: string,
     errorMessage: string
   ) {
-    await this.prisma.runtimeInstance.updateMany({
+    await this.prisma.workerInstance.updateMany({
       where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "error",
-        metadata: runtimeInstanceMetadataJson(
+        metadata: workerInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType,
             isolationScope,
@@ -223,11 +221,11 @@ export class WorkerRegistryRepository {
    * 不区分 runtimeType:starting 行本身的语义跟放置方式无关。
    */
   async markAllStartingAsError(): Promise<void> {
-    await this.prisma.runtimeInstance.updateMany({
+    await this.prisma.workerInstance.updateMany({
       where: { status: "starting" },
       data: {
         status: "error",
-        metadata: runtimeInstanceMetadataJson(
+        metadata: workerInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType: "",
             isolationScope: "",
@@ -241,7 +239,7 @@ export class WorkerRegistryRepository {
 
   /** 按 runtimeType 查找所有 running 状态的行,供重启扫尾用。 */
   findRunningByRuntimeType(runtimeType: string) {
-    return this.prisma.runtimeInstance.findMany({
+    return this.prisma.workerInstance.findMany({
       where: { runtimeType, status: "running" },
     });
   }
@@ -250,7 +248,7 @@ export class WorkerRegistryRepository {
     runtimeType: string,
     runtimeInstanceId: string
   ) {
-    const resource = await this.prisma.runtimeInstance.findUnique({
+    const resource = await this.prisma.workerInstance.findUnique({
       where: {
         runtimeType_runtimeInstanceId: {
           runtimeType,
@@ -266,28 +264,28 @@ export class WorkerRegistryRepository {
     workspaceId: string,
     runtimeInstanceId: string
   ) {
-    const binding = await this.prisma.workspaceRuntimeInstance.findUnique({
+    const binding = await this.prisma.workspaceWorkerBinding.findUnique({
       where: { workspaceId },
-      include: { resource: true },
+      include: { workerInstance: true },
     });
     return (
-      binding?.resource.runtimeType === runtimeType &&
-      binding.resource.runtimeInstanceId === runtimeInstanceId
+      binding?.workerInstance.runtimeType === runtimeType &&
+      binding.workerInstance.runtimeInstanceId === runtimeInstanceId
     );
   }
 
   async deleteWorkspaceBinding(workspaceId: string) {
-    await this.prisma.workspaceRuntimeInstance.deleteMany({
+    await this.prisma.workspaceWorkerBinding.deleteMany({
       where: { workspaceId },
     });
   }
 
   countRunning(): Promise<number> {
-    return this.prisma.runtimeInstance.count({ where: { status: "running" } });
+    return this.prisma.workerInstance.count({ where: { status: "running" } });
   }
 
   findByRuntimeId(runtimeType: string, runtimeInstanceId: string) {
-    return this.prisma.runtimeInstance.findUnique({
+    return this.prisma.workerInstance.findUnique({
       where: {
         runtimeType_runtimeInstanceId: { runtimeType, runtimeInstanceId },
       },
@@ -296,7 +294,7 @@ export class WorkerRegistryRepository {
 
   /** 管理端 run 详情用:运行实例视图 + 绑定的 workspace。 */
   findRunInstanceView(runtimeType: string, runtimeInstanceId: string) {
-    return this.prisma.runtimeInstance.findUnique({
+    return this.prisma.workerInstance.findUnique({
       where: {
         runtimeType_runtimeInstanceId: { runtimeType, runtimeInstanceId },
       },
@@ -310,7 +308,7 @@ export class WorkerRegistryRepository {
         expiresAt: true,
         createdAt: true,
         updatedAt: true,
-        workspaceRuntimeInstances: {
+        workspaceWorkerBindings: {
           select: {
             id: true,
             workspaceId: true,
@@ -329,27 +327,27 @@ export class WorkerRegistryRepository {
   }) {
     const where = opts.status ? { status: opts.status } : {};
     const [items, total] = await Promise.all([
-      this.prisma.runtimeInstance.findMany({
+      this.prisma.workerInstance.findMany({
         where,
-        include: { workspaceRuntimeInstances: true },
+        include: { workspaceWorkerBindings: true },
         orderBy: { updatedAt: "desc" },
         take: opts.take,
         skip: opts.skip,
       }),
-      this.prisma.runtimeInstance.count({ where }),
+      this.prisma.workerInstance.count({ where }),
     ]);
     return { items, total };
   }
 
   findById(id: string) {
-    return this.prisma.runtimeInstance.findUnique({ where: { id } });
+    return this.prisma.workerInstance.findUnique({ where: { id } });
   }
 
   /** 绑定 + 资源(不限状态),供生命周期清理判断隔离归属。 */
   findBindingWithResource(workspaceId: string) {
-    return this.prisma.workspaceRuntimeInstance.findUnique({
+    return this.prisma.workspaceWorkerBinding.findUnique({
       where: { workspaceId },
-      include: { resource: true },
+      include: { workerInstance: true },
     });
   }
 
@@ -361,7 +359,7 @@ export class WorkerRegistryRepository {
   }
 
   findRunningByOwners(ownerIds: string[]) {
-    return this.prisma.runtimeInstance.findMany({
+    return this.prisma.workerInstance.findMany({
       where: { ownerId: { in: ownerIds }, status: "running" },
     });
   }
@@ -376,11 +374,11 @@ export class WorkerRegistryRepository {
     },
     reason: string
   ): Promise<void> {
-    await this.prisma.runtimeInstance.update({
+    await this.prisma.workerInstance.update({
       where: { id: resource.id },
       data: {
         status: "stopped",
-        metadata: runtimeInstanceMetadataJson(
+        metadata: workerInstanceMetadataJson(
           stoppedInstanceMetadata({
             runtimeType: resource.runtimeType,
             isolationScope: resource.isolationScope,
