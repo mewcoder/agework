@@ -15,13 +15,13 @@ import {
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
- * Keep-alive worker 的 worker-host HTTP 客户端。
+ * 常驻 worker 的 worker-manager HTTP 客户端。
  * commands 轮询是 ownerId 级（`/worker/owners/:ownerId/commands`，
  * ownerId 由 env AGEWORK_WORKER_OWNER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
-export class HttpTransport {
+export class WorkerHttpTransport {
   private readonly apiBase: string;
   private readonly ownerId: string;
   private commandSeq = 0;
@@ -35,10 +35,10 @@ export class HttpTransport {
     this.ownerId = process.env.AGEWORK_WORKER_OWNER_ID ?? "";
 
     if (!this.ownerId) {
-      throw new Error("AGEWORK_WORKER_OWNER_ID is required for keep-alive worker");
+      throw new Error("AGEWORK_WORKER_OWNER_ID is required for resident worker");
     }
 
-    workerLog("worker host http client initialized", {
+    workerLog("worker-manager http client initialized", {
       apiBase: this.apiBase,
       ownerId: this.ownerId,
       logFile:

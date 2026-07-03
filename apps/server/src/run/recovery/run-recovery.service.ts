@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import { RunRepository } from "../run.repository";
-import { WorkerHostService } from "../../worker-host/worker-host.service";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { ConversationService } from "../../conversation/conversation.service";
 import { swallow } from "../../common/swallow";
 
@@ -19,7 +19,7 @@ export class RunRecoveryService {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversations: ConversationService,
-    private readonly workerHost: WorkerHostService
+    private readonly workerManager: WorkerManagerService
   ) {}
 
   async failInterruptedRuns(): Promise<void> {
@@ -70,13 +70,13 @@ export class RunRecoveryService {
     // 在 bootstrap 已经杀掉孤儿并标 stopped,这里再发 cancel 纯属打空气,直接跳过。只有 sandbox
     // 容器可能还活着,才有必要发 cancel 让仍在 poll 的 worker 自己收尾。
     if (run.runtimeType === "local") return;
-    const resource = await this.workerHost.findRuntimeByRuntimeId(
+    const resource = await this.workerManager.findRuntimeByRuntimeId(
       run.runtimeType,
       run.runtimeInstanceId
     );
     if (!resource) return;
 
-    this.workerHost.sendCommand(resource.ownerId, run.id, {
+    this.workerManager.sendCommand(resource.ownerId, run.id, {
       type: "cancel",
       commandId: generateId(),
       runId: run.id,

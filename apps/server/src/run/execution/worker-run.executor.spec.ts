@@ -5,9 +5,9 @@ import type {
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { WorkerRunExecutor } from "./worker-run.executor";
-import { WorkerHostService } from "../../worker-host/worker-host.service";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
-function makeWorkerHost() {
+function makeWorkerManager() {
   return {
     resolveInstance: vi.fn(),
     releaseInstanceForRun: vi.fn(),
@@ -52,7 +52,7 @@ function makeInput(
 describe.each(["local", "sandbox"] as const)(
   "WorkerRunExecutor (%s)",
   (runtimeType) => {
-    let workerHost: ReturnType<typeof makeWorkerHost>;
+    let workerManager: ReturnType<typeof makeWorkerManager>;
     let executor: WorkerRunExecutor;
     let receiver: {
       recordCommandSent: ReturnType<typeof vi.fn>;
@@ -61,9 +61,9 @@ describe.each(["local", "sandbox"] as const)(
     };
 
     beforeEach(() => {
-      workerHost = makeWorkerHost();
+      workerManager = makeWorkerManager();
       executor = new WorkerRunExecutor(
-        workerHost as unknown as WorkerHostService
+        workerManager as unknown as WorkerManagerService
       );
       receiver = {
         recordCommandSent: vi.fn().mockResolvedValue(undefined),
@@ -78,22 +78,22 @@ describe.each(["local", "sandbox"] as const)(
         outcome: "ready",
         runtimeInstanceId: "instance-1",
       };
-      workerHost.resolveInstance.mockResolvedValue(ready);
+      workerManager.resolveInstance.mockResolvedValue(ready);
       const input = makeInput(runtimeType);
 
       const handle = executor.start(input);
       expect(handle.runtimeType).toBe(runtimeType);
-      expect(workerHost.resolveInstance).toHaveBeenCalledWith(input);
+      expect(workerManager.resolveInstance).toHaveBeenCalledWith(input);
 
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(workerHost.openSession).toHaveBeenCalledWith({
+      expect(workerManager.openSession).toHaveBeenCalledWith({
         runId: "run-1",
         ownerId: "ws-1",
         runConfig: input.runConfig,
       });
-      expect(workerHost.sendCommand).toHaveBeenCalledWith(
+      expect(workerManager.sendCommand).toHaveBeenCalledWith(
         "ws-1",
         "run-1",
         expect.objectContaining({ type: "user_message" })
@@ -101,7 +101,7 @@ describe.each(["local", "sandbox"] as const)(
     });
 
     it("notifies worker error when resolveInstance settles as error", async () => {
-      workerHost.resolveInstance.mockResolvedValue({
+      workerManager.resolveInstance.mockResolvedValue({
         outcome: "error",
         error: "boom",
       });
@@ -114,7 +114,7 @@ describe.each(["local", "sandbox"] as const)(
     });
 
     it("releases the instance through releaseInstanceForRun on cleanup", () => {
-      workerHost.resolveInstance.mockResolvedValue(
+      workerManager.resolveInstance.mockResolvedValue(
         new Promise(() => {
           /* never resolves */
         })
@@ -123,8 +123,8 @@ describe.each(["local", "sandbox"] as const)(
 
       executor.cleanup("run-1");
 
-      expect(workerHost.cleanupRun).toHaveBeenCalledWith("run-1");
-      expect(workerHost.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
+      expect(workerManager.cleanupRun).toHaveBeenCalledWith("run-1");
+      expect(workerManager.releaseInstanceForRun).toHaveBeenCalledWith("run-1");
     });
   }
 );

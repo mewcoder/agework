@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query } from "@nestjs/common";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerHostService } from "./worker-host.service";
+import { WorkerManagerService } from "./worker-manager.service";
 import {
   WorkerCommandQueryDto,
   WorkerOwnerParamDto,
@@ -16,7 +16,7 @@ import {
 @RawResponse()
 @Controller("worker/owners")
 export class WorkerCommandController {
-  constructor(private readonly workerHost: WorkerHostService) {}
+  constructor(private readonly workerManager: WorkerManagerService) {}
 
   /**
    * GET /worker/owners/:ownerId/commands?afterSeq=N
@@ -28,6 +28,6 @@ export class WorkerCommandController {
     @Param() params: WorkerOwnerParamDto,
     @Query() query: WorkerCommandQueryDto
   ) {
-    return this.workerHost.pollCommands(params.ownerId, query);
+    return this.workerManager.pollCommands(params.ownerId, query);
   }
 }

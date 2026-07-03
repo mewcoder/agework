@@ -11,7 +11,7 @@ import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunService } from "./run.service";
 import { WorkerEventService } from "./upstream/worker-event.service";
-import { WorkerHostService } from "../worker-host/worker-host.service";
+import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunModule } from "./run.module";
 import { RunStartupService } from "./startup/run-startup.service";
 
@@ -49,8 +49,8 @@ describe("RunModule wiring", () => {
       RunStartupService
     );
     const setRunEventPort = vi.spyOn(workerRunExecutor, "setRunEventPort");
-    const workerHost = testingModule.get(WorkerHostService);
-    const setUpstreamPort = vi.spyOn(workerHost, "setUpstreamPort");
+    const workerManager = testingModule.get(WorkerManagerService);
+    const setUpstreamPort = vi.spyOn(workerManager, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorPort = vi.spyOn(liveRuns, "setTimeoutErrorPort");
     await testingModule.init();
@@ -88,7 +88,7 @@ async function createRunsTestingModule(
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())
     .overrideProvider(PrismaService)
-    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-host 模块内）
+    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-manager 模块内）
     // 在 init() 时经 WorkerRegistryRepository 做重启扫尾，这里给对应查询空实现。
     .useValue({
       runtimeInstance: {

@@ -66,7 +66,7 @@ function makeExecutor(
 
 describe("LocalInstanceExecutor", () => {
   describe("acquireInstanceForRun", () => {
-    it("launches a new keep-alive process, registers the channel, and writes WorkerRegistry when no active binding exists", async () => {
+    it("launches a new resident worker process, registers the channel, and writes WorkerRegistry when no active binding exists", async () => {
       const { executor, runtimeService, registry } = makeExecutor();
 
       const result = await executor.acquireInstanceForRun({
@@ -82,7 +82,7 @@ describe("LocalInstanceExecutor", () => {
         expect.objectContaining({
           runId: "run-1",
           env: expect.objectContaining({
-            AGEWORK_WORKER_KEEP_ALIVE: "true",
+            AGEWORK_WORKER_ROLE: "worker",
             AGEWORK_WORKER_CHANNEL: "ipc",
           }),
         })

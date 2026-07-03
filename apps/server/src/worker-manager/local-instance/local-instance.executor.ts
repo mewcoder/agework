@@ -29,13 +29,13 @@ type LocalOwnerState = {
 };
 
 /**
- * local 实例编排:owner 长期复用一个 keep-alive 进程,`worker-host` 直接持有并接管
+ * local 实例编排:owner 长期复用一个常驻 worker 进程,`worker-manager` 直接持有并接管
  * IPC channel 收发——跟 sandbox 走同一套 WorkerRegistry 记录路径,但物理载体是
  * fork 出的进程而不是容器。本轮不做 idle 回收(见计划文档 Architecture 一节),
  * 只在进程 exit 或显式 owner 删除时释放。
  *
  * 只注入 RuntimeService(下层)、WorkerRegistryRepository/WorkerUpstreamRegistry
- * (同模块兄弟 provider),不注入 WorkerHostService 本身——避免重蹈 Phase 2 Task 7
+ * (同模块兄弟 provider),不注入 WorkerManagerService 本身——避免重蹈 Phase 2 Task 7
  * 那次循环依赖的覆辙。
  */
 @Injectable()
@@ -49,7 +49,7 @@ export class LocalInstanceExecutor {
     private readonly upstream: WorkerUpstreamRegistry
   ) {}
 
-  /** owner 当前是否持有存活的 local 实例(WorkerHostService 据此路由命令下发)。 */
+  /** owner 当前是否持有存活的 local 实例(WorkerManagerService 据此路由命令下发)。 */
   has(ownerId: string): boolean {
     return this.ownerStates.has(ownerId);
   }
@@ -100,7 +100,7 @@ export class LocalInstanceExecutor {
       launched = this.runtimeService.launchLocal({
         runId: input.runConfig.runId,
         env: {
-          AGEWORK_WORKER_KEEP_ALIVE: "true",
+          AGEWORK_WORKER_ROLE: "worker",
           AGEWORK_WORKER_CHANNEL: "ipc",
           ...(input.runConfig.workerLogFilePath
             ? { AGEWORK_WORKER_LOG_FILE: input.runConfig.workerLogFilePath }
@@ -145,7 +145,7 @@ export class LocalInstanceExecutor {
       .catch(swallow(this.logger, `record local runtime for owner ${ownerId}`));
 
     this.logger.log(
-      `local worker keep-alive started ${safeLogJson({ ownerId, pid: channel.pid })}`
+      `local worker started ${safeLogJson({ ownerId, pid: channel.pid })}`
     );
     return { outcome: "ready", runtimeInstanceId };
   }
@@ -197,7 +197,7 @@ export class LocalInstanceExecutor {
       }
     } catch (err) {
       this.logger.warn(
-        `terminate local keep-alive worker failed ${safeLogJson({ ownerId, ...swallowFields(err) })}`
+        `terminate local worker failed ${safeLogJson({ ownerId, ...swallowFields(err) })}`
       );
     }
     this.registry
@@ -224,9 +224,7 @@ export class LocalInstanceExecutor {
     });
 
     channel.on("exit", (code) => {
-      this.logger.warn(
-        `local keep-alive worker exited ${safeLogJson({ ownerId, code })}`
-      );
+      this.logger.warn(`local worker exited ${safeLogJson({ ownerId, code })}`);
       this.registry
         .markStoppedByOwner("local", "workspace", ownerId)
         .catch(

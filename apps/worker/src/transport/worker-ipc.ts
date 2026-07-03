@@ -31,15 +31,15 @@ type PendingConfigFetch = {
 };
 
 /**
- * Keep-alive worker 的 IPC 版通信客户端。跟 HttpTransport 实现完全相同的
+ * 常驻 worker 的 IPC 版通信客户端。跟 WorkerHttpTransport 实现完全相同的
  * CommandClient/RunnerManagerClient 接口,背后走 process.send/process.on("message")
  * 而不是 HTTP 长轮询——RunnerManager/WorkerCommands 因此不需要认识这个类的存在。
  *
  * 命令用一个内存队列缓冲(process 推送式到达,pollCommands 拉取式消费,两者速率不
- * 匹配时靠这个队列做适配层);run config 按 runId 单独等待,因为同一个 keep-alive
+ * 匹配时靠这个队列做适配层);run config 按 runId 单独等待,因为同一个常驻
  * 进程生命周期内会依次服务多个 run,每个 run 各自 fetch 一次。
  */
-export class IpcKeepAliveTransport
+export class WorkerIpcTransport
   implements CommandClient, RunnerManagerClient
 {
   private readonly commandBuffer: RunChannelMessage<CommandPayload>[] = [];
@@ -51,14 +51,14 @@ export class IpcKeepAliveTransport
    * fetchRunConfig 第一次被调用之前就到达,这种情况下必须先缓存,否则会被 handleMessage
    * 直接丢弃,导致 fetchRunConfig 的 waiter 永远等不到已经错过的消息(深层后果:
    * RunnerManager.handle 顺序 await,一个 run 的 fetchRunConfig 卡死会拖死同一个
-   * keep-alive worker 后续所有 run 的处理)。
+   * worker 进程后续所有 run 的处理)。
    */
   private readonly configBuffer = new Map<string, RunConfig>();
 
   constructor() {
     if (!process.send) {
       throw new Error(
-        "IpcKeepAliveTransport requires process to be forked with IPC"
+        "WorkerIpcTransport requires process to be forked with IPC"
       );
     }
     process.on("message", (msg: unknown) => this.handleMessage(msg));
@@ -107,7 +107,7 @@ export class IpcKeepAliveTransport
       process.send!(wireMessage, (err: Error | null) => {
         if (err) {
           workerLog(
-            "ipc keep-alive emit failed",
+            "worker ipc emit failed",
             { runId, type: msg.type, ...errorDetails(err) },
             "error"
           );

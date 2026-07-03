@@ -8,9 +8,9 @@ import type {
   RuntimeChannel,
 } from "@agework/shared/protocol";
 import { WorkerCommands } from "./commands.js";
-import { HttpTransport } from "./transport/http.js";
-import { IpcKeepAliveTransport } from "./transport/ipc-keep-alive.js";
-import { IpcTransport } from "./transport/ipc.js";
+import { WorkerHttpTransport } from "./transport/worker-http.js";
+import { WorkerIpcTransport } from "./transport/worker-ipc.js";
+import { RunnerIpcTransport } from "./transport/runner-ipc.js";
 import { RunnerManager } from "./runner-manager.js";
 import {
   errorDetails,
@@ -25,14 +25,7 @@ const COMMAND_LONG_POLL_MS = 25_000;
 const COMMAND_EMPTY_RETRY_DELAY_MS = 1_000;
 const SHUTDOWN_GRACE_MS = 8_000;
 
-export async function runWorker(keepAlive: boolean) {
-  if (keepAlive) {
-    return runKeepAliveWorker();
-  }
-  return runOneShotWorker();
-}
-
-async function runOneShotWorker() {
+export async function runRunner() {
   const transport = createInitialRunChannel();
   const config: RunConfig = await transport.fetchRunConfig();
   setWorkerLogFilePath(config.workerLogFilePath);
@@ -45,7 +38,7 @@ async function runOneShotWorker() {
     runtimePath: config.runtimePath,
     agentProviderSource: config.agentProviderConfig.source,
   });
-  workerLog("one-shot worker config loaded");
+  workerLog("runner config loaded");
   const trace = new TraceLogWriter(config.agentEventTrace);
 
   const driver = createAgentDriver(
@@ -67,7 +60,7 @@ async function runOneShotWorker() {
     const command = message.payload;
     if (processedCommands.has(command.commandId)) return;
     processedCommands.add(command.commandId);
-    workerLog("one-shot worker received command", {
+    workerLog("runner received command", {
       runId,
       commandId: command.commandId,
       source: "command",
@@ -112,7 +105,7 @@ async function runOneShotWorker() {
           });
         break;
       case "user_message":
-        // Keep-alive workers handle reusable multi-run command routing.
+        // Multi-run command routing is the resident worker's job, not the runner's.
         break;
     }
   });
@@ -155,7 +148,7 @@ async function runOneShotWorker() {
 
     const forceExitTimer = setTimeout(() => {
       workerLog(
-        "one-shot worker interrupt grace period exceeded",
+        "runner interrupt grace period exceeded",
         {
           runId,
           reason,
@@ -170,7 +163,7 @@ async function runOneShotWorker() {
       await driver.interrupt();
     } catch (err) {
       workerLog(
-        "one-shot worker interrupt before exit failed",
+        "runner interrupt before exit failed",
         {
           runId,
           reason,
@@ -229,14 +222,14 @@ async function runOneShotWorker() {
   }
 }
 
-async function runKeepAliveWorker() {
-  const client = resolveKeepAliveClient();
+export async function runWorker() {
+  const client = resolveWorkerClient();
   const commands = new WorkerCommands(client, {
     waitMs: COMMAND_LONG_POLL_MS,
     emptyRetryDelayMs: COMMAND_EMPTY_RETRY_DELAY_MS,
   });
   const runnerManager = new RunnerManager(client, commands);
-  workerLog("keep-alive worker started", {
+  workerLog("worker started", {
     ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
     runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
   });
@@ -246,7 +239,7 @@ async function runKeepAliveWorker() {
   const requestShutdown = (signal: NodeJS.Signals) => {
     shutdownPromise ??= shutdown(signal).catch((err) => {
       workerLog(
-        "keep-alive worker shutdown failed",
+        "worker shutdown failed",
         {
           signal,
           ...errorDetails(err),
@@ -266,7 +259,7 @@ async function runKeepAliveWorker() {
 
     const forceExitTimer = setTimeout(() => {
       workerLog(
-        "keep-alive worker shutdown grace period exceeded",
+        "worker shutdown grace period exceeded",
         {
           signal,
           activeRunCount: runnerManager.size(),
@@ -287,21 +280,21 @@ async function runKeepAliveWorker() {
 function createInitialRunChannel(): RuntimeChannel {
   if (!process.send) {
     workerLog(
-      "one-shot worker requires an initial run channel",
+      "runner requires an initial run channel",
       undefined,
       "error"
     );
     process.exit(1);
   }
-  return new IpcTransport();
+  return new RunnerIpcTransport();
 }
 
-function resolveKeepAliveClient(): HttpTransport | IpcKeepAliveTransport {
+function resolveWorkerClient(): WorkerHttpTransport | WorkerIpcTransport {
   const channel = process.env.AGEWORK_WORKER_CHANNEL;
   if (channel === "ipc") {
-    return new IpcKeepAliveTransport();
+    return new WorkerIpcTransport();
   }
-  return new HttpTransport();
+  return new WorkerHttpTransport();
 }
 
 function emitStatus(

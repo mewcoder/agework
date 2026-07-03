@@ -80,7 +80,7 @@ export class RunnerManager {
 
   async shutdown(signal: NodeJS.Signals): Promise<void> {
     const active = [...this.runners.values()];
-    workerLog("keep-alive worker received shutdown signal", {
+    workerLog("worker received shutdown signal", {
       signal,
       activeRuns: active.map((runner) => ({ runId: runner.runId })),
     }, active.length > 0 ? "warn" : "info");
@@ -231,7 +231,7 @@ export class RunnerManager {
     const child = fork(modulePath, process.argv.slice(2), {
       env: {
         ...process.env,
-        AGEWORK_WORKER_KEEP_ALIVE: "false",
+        AGEWORK_WORKER_ROLE: "runner",
         AGEWORK_WORKER_CHANNEL: "ipc",
         AGEWORK_WORKER_RUN_ID: config.runId,
         ...(config.workerLogFilePath

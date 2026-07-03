@@ -2,11 +2,11 @@ import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import { ConversationService } from "../../conversation/conversation.service";
-import { WorkerHostService } from "../../worker-host/worker-host.service";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
-function makeWorkerHost(
+function makeWorkerManager(
   overrides: Record<string, unknown> = {}
-): Partial<WorkerHostService> {
+): Partial<WorkerManagerService> {
   return {
     findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
     sendCommand: vi.fn(),
@@ -30,23 +30,23 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const workerHost = makeWorkerHost({
+    const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
     });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      workerHost as WorkerHostService
+      workerManager as WorkerManagerService
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerHost.findRuntimeByRuntimeId).toHaveBeenCalledWith(
+    expect(workerManager.findRuntimeByRuntimeId).toHaveBeenCalledWith(
       "sandbox",
       "container-abc"
     );
-    expect(workerHost.sendCommand).toHaveBeenCalledWith(
+    expect(workerManager.sendCommand).toHaveBeenCalledWith(
       "ws-1",
       "run-1",
       expect.objectContaining({
@@ -80,18 +80,18 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const workerHost = makeWorkerHost();
+    const workerManager = makeWorkerManager();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      workerHost as WorkerHostService
+      workerManager as WorkerManagerService
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerHost.findRuntimeByRuntimeId).not.toHaveBeenCalled();
-    expect(workerHost.sendCommand).not.toHaveBeenCalled();
+    expect(workerManager.findRuntimeByRuntimeId).not.toHaveBeenCalled();
+    expect(workerManager.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -113,23 +113,23 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const workerHost = makeWorkerHost({
+    const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
     });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      workerHost as WorkerHostService
+      workerManager as WorkerManagerService
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerHost.findRuntimeByRuntimeId).toHaveBeenCalledWith(
+    expect(workerManager.findRuntimeByRuntimeId).toHaveBeenCalledWith(
       "sandbox",
       "container-xyz"
     );
-    expect(workerHost.sendCommand).not.toHaveBeenCalled();
+    expect(workerManager.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -151,21 +151,21 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversations: Partial<ConversationService> = {
       setRunStatus: vi.fn().mockResolvedValue(undefined),
     };
-    const workerHost = makeWorkerHost({
+    const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
     });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversations as ConversationService,
-      workerHost as WorkerHostService
+      workerManager as WorkerManagerService
     );
 
     await service.failInterruptedRuns();
 
     // local 分支在查 WorkerRegistry 之前就早退,连 findRuntimeByRuntimeId 都不该调。
-    expect(workerHost.findRuntimeByRuntimeId).not.toHaveBeenCalled();
-    expect(workerHost.sendCommand).not.toHaveBeenCalled();
+    expect(workerManager.findRuntimeByRuntimeId).not.toHaveBeenCalled();
+    expect(workerManager.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"

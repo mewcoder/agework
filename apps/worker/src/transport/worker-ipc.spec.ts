@@ -4,7 +4,7 @@ import {
   commandMessageToRpcRequest,
   runConfigMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
-import { IpcKeepAliveTransport } from "./ipc-keep-alive";
+import { WorkerIpcTransport } from "./worker-ipc";
 
 const processMock = vi.hoisted(() => ({
   send: vi.fn((_msg: unknown, cb?: (err: Error | null) => void) => {
@@ -33,7 +33,7 @@ function makeRunConfig(overrides: Partial<RunConfig> = {}): RunConfig {
   } as RunConfig;
 }
 
-describe("IpcKeepAliveTransport", () => {
+describe("WorkerIpcTransport", () => {
   beforeEach(() => {
     processMock.send.mockClear();
     processMock.handlers.clear();
@@ -53,7 +53,7 @@ describe("IpcKeepAliveTransport", () => {
 
   describe("pollCommands", () => {
     it("resolves immediately with buffered commands received before polling", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const message = commandMessageToRpcRequest({
         runId: "run-1",
         seq: 1,
@@ -70,7 +70,7 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("waits for a command to arrive within waitMs", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pending = transport.pollCommands(5000);
 
       const message = commandMessageToRpcRequest({
@@ -94,7 +94,7 @@ describe("IpcKeepAliveTransport", () => {
 
     it("resolves with an empty array when waitMs elapses with nothing received", async () => {
       vi.useFakeTimers();
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pending = transport.pollCommands(50);
       await vi.advanceTimersByTimeAsync(60);
       await expect(pending).resolves.toEqual([]);
@@ -102,14 +102,14 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("resolves immediately with an empty array when waitMs is 0 and nothing is buffered", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       await expect(transport.pollCommands(0)).resolves.toEqual([]);
     });
   });
 
   describe("fetchRunConfig", () => {
     it("resolves once the matching run.config notification arrives, keyed by runId", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pending = transport.fetchRunConfig("run-7");
 
       const config = makeRunConfig({ runId: "run-7", conversationId: "c-7" });
@@ -127,7 +127,7 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("ignores a run.config notification for a different runId", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pending = transport.fetchRunConfig("run-8");
 
       emitMessage(
@@ -154,7 +154,7 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("resolves immediately from the buffer when run.config arrives before fetchRunConfig is called (production push-then-pull ordering)", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const config = makeRunConfig({ runId: "run-10" });
 
       // openSession pushes run.config first, sendCommand's user_message triggers
@@ -175,7 +175,7 @@ describe("IpcKeepAliveTransport", () => {
 
     it("rejects if no run.config arrives within the timeout", async () => {
       vi.useFakeTimers();
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pending = transport.fetchRunConfig("run-11");
       const assertion = expect(pending).rejects.toThrow(
         "Timed out waiting for run.config for run run-11"
@@ -189,7 +189,7 @@ describe("IpcKeepAliveTransport", () => {
 
   describe("emit", () => {
     it("sends command.result payloads through process.send", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const msg: UpstreamMessage = {
         runId: "run-1",
         seq: 1,
@@ -204,7 +204,7 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("sends other upstream messages as notifications through process.send", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const msg: UpstreamMessage = {
         runId: "run-1",
         seq: 1,
@@ -225,7 +225,7 @@ describe("IpcKeepAliveTransport", () => {
           return false;
         }
       );
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
 
       await expect(
         transport.emit("run-1", {
@@ -241,7 +241,7 @@ describe("IpcKeepAliveTransport", () => {
 
   describe("cleanup", () => {
     it("discards any pending fetchRunConfig wait for that runId without resolving or rejecting other runs", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       const pendingOther = transport.fetchRunConfig("run-keep");
       void transport.fetchRunConfig("run-drop");
 
@@ -261,7 +261,7 @@ describe("IpcKeepAliveTransport", () => {
     });
 
     it("discards a buffered run.config that arrived before fetchRunConfig was ever called", async () => {
-      const transport = new IpcKeepAliveTransport();
+      const transport = new WorkerIpcTransport();
       emitMessage(
         runConfigMessageToRpcNotification({
           runId: "run-drop",

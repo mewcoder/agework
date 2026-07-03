@@ -16,7 +16,7 @@ import type {
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { WorkerHostService } from "../../worker-host/worker-host.service";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { WorkerRunExecutor } from "../execution/worker-run.executor";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
@@ -61,7 +61,7 @@ export class RunLauncher {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly workerHost: WorkerHostService,
+    private readonly workerManager: WorkerManagerService,
     private readonly executor: WorkerRunExecutor,
     private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
@@ -199,7 +199,7 @@ export class RunLauncher {
       runtimeLogHostPath: this.readRuntimeLogHostPath(),
     };
     if (runtimeType === "local") {
-      return this.workerHost.resolveRuntimeTarget({
+      return this.workerManager.resolveRuntimeTarget({
         ...base,
         runtimeType: "local",
       });
@@ -210,7 +210,7 @@ export class RunLauncher {
     if (!this.configService.isIsolationScopeAllowed(isolationScope)) {
       throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
     }
-    return this.workerHost.resolveRuntimeTarget({
+    return this.workerManager.resolveRuntimeTarget({
       ...base,
       runtimeType: "sandbox",
       isolationScope,

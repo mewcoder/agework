@@ -3,12 +3,12 @@ import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
-import type { WorkerUpstreamPort } from "./worker-host.types";
-import { WorkerHostService } from "./worker-host.service";
+import type { WorkerUpstreamPort } from "./worker-manager.types";
+import { WorkerManagerService } from "./worker-manager.service";
 import type { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 
 /**
- * WorkerHostService 是 worker-host 唯一 export 的公开面,所有跨模块调用方
+ * WorkerManagerService 是 worker-manager 唯一 export 的公开面,所有跨模块调用方
  * (sandbox.executor / runs.module)都依赖它。controller spec 直接 new
  * WorkerEndpointHandler、sandbox spec 整体 mock 掉 facade,因此没有任何
  * 测试穿过 facade 验证委托接线。这里 mock 全套 internal provider,固定
@@ -35,7 +35,7 @@ function makeService() {
   const runtimeService = {
     resolveRuntimeTarget: vi.fn(),
   };
-  const service = new WorkerHostService(
+  const service = new WorkerManagerService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
     commandDispatcher as unknown as WorkerCommandDispatcher,
@@ -53,7 +53,7 @@ function makeService() {
   };
 }
 
-describe("WorkerHostService — facade routing", () => {
+describe("WorkerManagerService — facade routing", () => {
   it("routes pollCommands to the endpoint handler", async () => {
     const { service, endpointHandler } = makeService();
     endpointHandler.pollCommands.mockResolvedValue({ messages: [] });
@@ -181,13 +181,13 @@ function makeRepositoryMock() {
   } as unknown as WorkerRegistryRepository;
 }
 
-describe("WorkerHostService WorkerRegistry cross-module queries", () => {
+describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
   let repository: ReturnType<typeof makeRepositoryMock>;
-  let service: WorkerHostService;
+  let service: WorkerManagerService;
 
   beforeEach(() => {
     repository = makeRepositoryMock();
-    service = new WorkerHostService(
+    service = new WorkerManagerService(
       {} as any,
       {} as any,
       {} as any,
@@ -214,7 +214,7 @@ describe("WorkerHostService WorkerRegistry cross-module queries", () => {
   });
 });
 
-describe("WorkerHostService sandbox instance orchestration", () => {
+describe("WorkerManagerService sandbox instance orchestration", () => {
   function makeService() {
     const runtimeService = { getRuntimePolicy: vi.fn() };
     const sandboxInstances = {
@@ -223,7 +223,7 @@ describe("WorkerHostService sandbox instance orchestration", () => {
       recoverOrphan: vi.fn(),
       shutdownRuntimeInstanceByOwnerId: vi.fn(),
     };
-    const service = new WorkerHostService(
+    const service = new WorkerManagerService(
       {} as never,
       {} as never,
       {} as never,
@@ -242,7 +242,7 @@ describe("WorkerHostService sandbox instance orchestration", () => {
   });
 });
 
-describe("WorkerHostService local instance orchestration", () => {
+describe("WorkerManagerService local instance orchestration", () => {
   function makeService() {
     const localInstances = {
       has: vi.fn().mockReturnValue(false),
@@ -259,7 +259,7 @@ describe("WorkerHostService local instance orchestration", () => {
       cleanupRun: vi.fn(),
       cleanupByOwnerId: vi.fn(),
     };
-    const service = new WorkerHostService(
+    const service = new WorkerManagerService(
       {} as never,
       {} as never,
       commandDispatcher as never,
@@ -316,7 +316,7 @@ describe("WorkerHostService local instance orchestration", () => {
   });
 });
 
-describe("WorkerHostService.stopRuntimeInstance", () => {
+describe("WorkerManagerService.stopRuntimeInstance", () => {
   function makeService() {
     const registry = {
       findById: vi.fn(),
@@ -326,7 +326,7 @@ describe("WorkerHostService.stopRuntimeInstance", () => {
     const localInstances = {
       shutdownRuntimeInstanceByOwnerId: vi.fn(),
     };
-    const service = new WorkerHostService(
+    const service = new WorkerManagerService(
       {} as never,
       {} as never,
       {} as never,
@@ -401,7 +401,7 @@ describe("WorkerHostService.stopRuntimeInstance", () => {
   });
 });
 
-describe("WorkerHostService — resolveInstance unified dispatch", () => {
+describe("WorkerManagerService — resolveInstance unified dispatch", () => {
   function makeService() {
     const sandboxInstances = {
       acquireInstanceForRun: vi.fn(),
@@ -413,7 +413,7 @@ describe("WorkerHostService — resolveInstance unified dispatch", () => {
       releaseInstanceForRun: vi.fn(),
       shutdownRuntimeInstanceByOwnerId: vi.fn(),
     };
-    const service = new WorkerHostService(
+    const service = new WorkerManagerService(
       {} as never,
       {} as never,
       {} as never,

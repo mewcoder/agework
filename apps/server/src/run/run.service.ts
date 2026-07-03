@@ -9,7 +9,7 @@ import type { Response } from "express";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
-import { WorkerHostService } from "../worker-host/worker-host.service";
+import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
@@ -29,7 +29,7 @@ export class RunService implements OnApplicationBootstrap {
     private readonly executor: WorkerRunExecutor,
     private readonly runEvents: RunEventService,
     private readonly runLauncher: RunLauncher,
-    private readonly workerHost: WorkerHostService,
+    private readonly workerManager: WorkerManagerService,
     private readonly runRecovery: RunRecoveryService
   ) {}
 
@@ -48,11 +48,11 @@ export class RunService implements OnApplicationBootstrap {
     return this.runRepository.listAdmin(params);
   }
 
-  /** 管理端：单个 run 详情；runtime 实例视图经 WorkerHostService 补齐。 */
+  /** 管理端：单个 run 详情；runtime 实例视图经 WorkerManagerService 补齐。 */
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const runtimeInstance = detail.runtimeInstanceId
-      ? await this.workerHost.getRuntimeInstanceForAdmin(
+      ? await this.workerManager.getRuntimeInstanceForAdmin(
           detail.runtimeType,
           detail.runtimeInstanceId
         )

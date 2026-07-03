@@ -35,7 +35,7 @@ type CommandPhase = CommandTracePayload["phase"];
 type CommandStatus = CommandResultPayload["status"];
 
 /**
- * Owns the keep-alive worker command lifecycle:
+ * Owns the resident worker command lifecycle:
  * poll commands, dedupe them, dispatch them, and report command receipts.
  */
 export class WorkerCommands {

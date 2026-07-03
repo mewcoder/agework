@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { UpstreamMessage } from "@agework/shared/protocol";
-import { HttpTransport } from "./http";
+import { WorkerHttpTransport } from "./worker-http";
 
-describe("HttpTransport", () => {
+describe("WorkerHttpTransport", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
     vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
@@ -35,7 +35,7 @@ describe("HttpTransport", () => {
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     const commands = await client.pollCommands();
 
@@ -77,7 +77,7 @@ describe("HttpTransport", () => {
       }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     const commands = await client.pollCommands();
 
@@ -108,7 +108,7 @@ describe("HttpTransport", () => {
       json: async () => ({ config: { runId: "run-1", conversationId: "conversation-1", agentProviderConfig: { agentType: "claude", source: "custom" } } }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     const config = await client.fetchRunConfig("run-1");
 
@@ -122,7 +122,7 @@ describe("HttpTransport", () => {
       json: async () => ({ messages: [] }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await client.pollCommands(25_000);
 
@@ -134,7 +134,7 @@ describe("HttpTransport", () => {
   it("emits an event to the run's events endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -167,7 +167,7 @@ describe("HttpTransport", () => {
   it("emits command results as JSON-RPC responses", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -204,7 +204,7 @@ describe("HttpTransport", () => {
       .mockRejectedValueOnce(new TypeError("fetch failed"))
       .mockResolvedValueOnce({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -223,7 +223,7 @@ describe("HttpTransport", () => {
       .mockResolvedValueOnce({ ok: false, status: 502 })
       .mockResolvedValueOnce({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await client.emit("run-1", {
       runId: "run-1",
@@ -243,7 +243,7 @@ describe("HttpTransport", () => {
       text: async () => "bad request",
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     await expect(
       client.emit("run-1", {
@@ -266,7 +266,7 @@ describe("HttpTransport", () => {
       text: async () => "bad gateway",
     });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
 
     const emitPromise = client.emit("run-1", {
       runId: "run-1",
@@ -288,7 +288,7 @@ describe("HttpTransport", () => {
   it("cleanup resets the per-run seq counter", async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
-    const client = new HttpTransport();
+    const client = new WorkerHttpTransport();
     const msg = {
       runId: "run-1", seq: 0, type: "agui.event", payload: { type: "RAW" }, ts: "",
     } as unknown as UpstreamMessage;

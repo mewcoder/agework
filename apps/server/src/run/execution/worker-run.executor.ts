@@ -7,7 +7,7 @@ import type {
   CommandPayload,
 } from "@agework/shared/protocol";
 import type { RunEventPort, RunExecutor } from "./executor";
-import { WorkerHostService } from "../../worker-host/worker-host.service";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 
@@ -21,11 +21,11 @@ type WorkerRunState = {
 
 /**
  * 统一 run executor:per-run 执行编排归 run 层,取得/释放 runtime 实例统一经
- * `WorkerHostService.resolveInstance()`/`releaseInstanceForRun()`
- * 完成——runtimeType(sandbox/local)判断被 worker-host 内部吸收,run 层不再需要认识
+ * `WorkerManagerService.resolveInstance()`/`releaseInstanceForRun()`
+ * 完成——runtimeType(sandbox/local)判断被 worker-manager 内部吸收,run 层不再需要认识
  * 这个区别,也因此不再需要按 runtimeType 分别持有两个执行器类(设计文档第一节)。
  *
- * 就绪后直接对 worker-host 完成 openSession / 命令下发 / cleanup,命令不绕经 runtime。
+ * 就绪后直接对 worker-manager 完成 openSession / 命令下发 / cleanup,命令不绕经 runtime。
  * 就绪/早取消/失败由 resolveInstance 结果一次性回流。
  */
 @Injectable()
@@ -34,7 +34,7 @@ export class WorkerRunExecutor implements RunExecutor {
   private readonly states = new Map<string, WorkerRunState>();
   private receiver!: RunEventPort;
 
-  constructor(private readonly workerHost: WorkerHostService) {}
+  constructor(private readonly workerManager: WorkerManagerService) {}
 
   setRunEventPort(receiver: RunEventPort): void {
     this.receiver = receiver;
@@ -59,7 +59,7 @@ export class WorkerRunExecutor implements RunExecutor {
     // 用 try/catch 把同步异常与 .catch 的异步 rejection 收敛到同一清理，run 转 error
     // 终态而非卡在 acquiring。
     try {
-      this.workerHost
+      this.workerManager
         .resolveInstance(input)
         .then((result) => this.onAcquired(input, result))
         .catch((err) => this.onAcquireFailed(runConfig.runId, err));
@@ -91,7 +91,7 @@ export class WorkerRunExecutor implements RunExecutor {
 
     // outcome === "ready"：取消若早于就绪到达，释放实例并转 cancelled 终态，不开 session。
     if (state.cancelled) {
-      this.workerHost.releaseInstanceForRun(runId);
+      this.workerManager.releaseInstanceForRun(runId);
       this.states.delete(runId);
       this.notifyCancelledBeforeReady(runId);
       return;
@@ -101,7 +101,7 @@ export class WorkerRunExecutor implements RunExecutor {
     state.status = "ready";
     input.onRuntimeInstanceIdReady?.(result.runtimeInstanceId);
 
-    this.workerHost.openSession({
+    this.workerManager.openSession({
       runId,
       ownerId: state.ownerId,
       runConfig: input.runConfig,
@@ -125,7 +125,7 @@ export class WorkerRunExecutor implements RunExecutor {
       );
       return;
     }
-    this.workerHost.sendCommand(state.ownerId, handle.runId, command);
+    this.workerManager.sendCommand(state.ownerId, handle.runId, command);
     this.recordCommandSent(handle.runId, command);
   }
 
@@ -144,7 +144,7 @@ export class WorkerRunExecutor implements RunExecutor {
     // 实例 ready 之前到达的取消不下发命令：标记 cancelled，由 resolveInstance 就绪
     // 那刻转 cancelled 终态。
     state.cancelled = true;
-    this.workerHost.releaseInstanceForRun(handle.runId);
+    this.workerManager.releaseInstanceForRun(handle.runId);
   }
 
   private recordCommandSent(runId: string, command: CommandPayload): void {
@@ -198,11 +198,11 @@ export class WorkerRunExecutor implements RunExecutor {
   }
 
   cleanup(runId: string): void {
-    // local/sandbox 路由现在收在 worker-host 内部（resolveInstance 时按 owner/run 记录），
-    // release 只需 runId；worker-host 查不到该 runId 就按 sandbox 处理（对未知 runId 幂等
+    // local/sandbox 路由现在收在 worker-manager 内部（resolveInstance 时按 owner/run 记录），
+    // release 只需 runId；worker-manager 查不到该 runId 就按 sandbox 处理（对未知 runId 幂等
     // no-op），因此这里不再需要先取 state 拿 runtimeType，直接清理 + 释放即可。
-    this.workerHost.cleanupRun(runId);
-    this.workerHost.releaseInstanceForRun(runId);
+    this.workerManager.cleanupRun(runId);
+    this.workerManager.releaseInstanceForRun(runId);
     this.states.delete(runId);
   }
 }

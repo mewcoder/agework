@@ -16,8 +16,8 @@ import type { LocalInstanceHandle, LocalLaunchInput } from "./runtime.types";
 
 /**
  * Runtime 层对上层的门面:纯 Provider 引擎 + placement 计算。不认识 WorkerRegistry、
- * owner 复用规则、idle 决策——那些是 worker-host 的事(设计文档 1.1/3.6 节)。
- * `runtime` 因此是零依赖模块,唯一调用方是 `worker-host`。
+ * owner 复用规则、idle 决策——那些是 worker-manager 的事(设计文档 1.1/3.6 节)。
+ * `runtime` 因此是零依赖模块,唯一调用方是 `worker-manager`。
  */
 @Injectable()
 export class RuntimeService {
@@ -51,7 +51,7 @@ export class RuntimeService {
 
   /**
    * 取得(或复用)一个 sandbox 运行时并在其上拉起 worker,一步返回就绪实例。
-   * getOrCreate + startWorker 的引擎时序收在 runtime 内,worker-host 只需调一次。
+   * getOrCreate + startWorker 的引擎时序收在 runtime 内,worker-manager 只需调一次。
    */
   async startSandbox(
     engineType: SandboxEngineType,

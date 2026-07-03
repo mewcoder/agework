@@ -58,7 +58,7 @@ type AcquireRunState = {
 
 /**
  * sandbox 实例编排:owner 复用判断、idle watchdog、WorkerRegistry 读写——这些是
- * "要不要新开一个实例、这个 owner 现在绑的实例还活不活"的编排决策,归属 worker-host
+ * "要不要新开一个实例、这个 owner 现在绑的实例还活不活"的编排决策,归属 worker-manager
  * (设计文档 1.1 节)。物理 sandbox 操作(docker/opensandbox 的 getOrCreate/resume/
  * startWorker/stop)经 `RuntimeService` 转发给 `runtime` 模块,本类不直接认识
  * 具体 engine。
@@ -85,7 +85,7 @@ export class SandboxInstanceExecutor {
   /**
    * 为一次 run 取得持久容器实例(创建/复用/attach),把就绪结果一次性回传 run 层执行编排。
    * 自身只管资源生命周期:发 owner accessKey、retain 引用计数、attach/start 实例;
-   * worker session 的 openSession / 命令下发由 run 层在 ready 后自行对 worker-host 完成。
+   * worker session 的 openSession / 命令下发由 run 层在 ready 后自行对 worker-manager 完成。
    */
   acquireInstanceForRun(
     input: WorkerExecutionStartInput
@@ -258,7 +258,7 @@ export class SandboxInstanceExecutor {
     this.startRuntimeInstanceForOwner(context, ownerState);
   }
 
-  /** 停止并删除某 owner 的持久容器/沙箱,并清掉其 worker-host 资源。 */
+  /** 停止并删除某 owner 的持久容器/沙箱,并清掉其 worker-manager 资源。 */
   shutdownRuntimeInstanceByOwnerId(ownerId: string): void {
     const state = this.ownerStates.get(ownerId);
     this.idleWatchdog.cancel(ownerId);
@@ -419,7 +419,7 @@ export class SandboxInstanceExecutor {
       image: DEFAULT_WORKER_IMAGE,
       apiBaseUrl: apiBase,
       env: {
-        AGEWORK_WORKER_KEEP_ALIVE: "true",
+        AGEWORK_WORKER_ROLE: "worker",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBase,
         AGEWORK_WORKER_OWNER_ID: context.ownerId,

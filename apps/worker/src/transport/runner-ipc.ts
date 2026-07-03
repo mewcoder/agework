@@ -22,15 +22,15 @@ const CONFIG_TIMEOUT_MS = 10_000;
 /**
  * RuntimeChannel 的本地子进程实现。
  * 通过 Node.js IPC channel（process.send / process.on("message")）
- * 与父进程（API）通信。
+ * 与父进程（常驻 worker）通信。
  */
-export class IpcTransport implements RuntimeChannel {
+export class RunnerIpcTransport implements RuntimeChannel {
   private seq = 0;
   private readonly runId: string;
 
   constructor() {
     if (!process.send) {
-      throw new Error("IpcTransport requires process to be forked with IPC");
+      throw new Error("RunnerIpcTransport requires process to be forked with IPC");
     }
     this.runId = process.env.AGEWORK_WORKER_RUN_ID ?? "";
   }

@@ -18,7 +18,7 @@ import { ConfigService } from "../config/config.service";
 /**
  * Runtime 领域:纯 Provider 引擎(docker/opensandbox engine + local fork 机制)
  * + placement 计算。不认识 WorkerRegistry、owner 复用规则、idle 决策,不碰 DB——
- * 是零依赖模块,唯一的调用方是 `worker-host`。
+ * 是零依赖模块,唯一的调用方是 `worker-manager`。
  */
 @Module({
   providers: [

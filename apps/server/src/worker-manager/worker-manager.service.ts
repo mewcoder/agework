@@ -12,7 +12,7 @@ import type { ResolveRuntimeTargetInput } from "../runtime/runtime.types";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
-import type { WorkerUpstreamPort } from "./worker-host.types";
+import type { WorkerUpstreamPort } from "./worker-manager.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import {
   toAdminRuntimeInstanceResponse,
@@ -30,7 +30,7 @@ import { LocalInstanceExecutor } from "./local-instance/local-instance.executor"
  * 不需要回传 runtimeType 的原因。
  */
 @Injectable()
-export class WorkerHostService {
+export class WorkerManagerService {
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
@@ -102,7 +102,7 @@ export class WorkerHostService {
   }
 
   // ── WorkerRegistry 跨模块查询 ────────────────────────────────────────
-  // WorkerRegistry 数据(RuntimeInstance/WorkspaceRuntimeInstance 表)归属 worker-host,
+  // WorkerRegistry 数据(RuntimeInstance/WorkspaceRuntimeInstance 表)归属 worker-manager,
   // 这里是唯一对外入口;模块内部(lifecycle 等 internal provider)直接注入
   // WorkerRegistryRepository,不经根 Service 转发。
 
@@ -125,7 +125,7 @@ export class WorkerHostService {
   }
 
   /**
-   * 释放一次 run 对 runtime 实例的引用。local 没有 per-run 引用计数(keep-alive 常驻,
+   * 释放一次 run 对 runtime 实例的引用。local 没有 per-run 引用计数(worker 常驻,
    * 只随 owner 关闭/进程 exit 整体释放),sandbox 侧对未知 runId 幂等 no-op,
    * 因此统一走 sandbox 执行器,调用方不传 runtimeType。
    */
@@ -146,7 +146,7 @@ export class WorkerHostService {
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry
-  // 数据搬迁——admin 查询本来就是读这份数据,归属 worker-host 更直接) ──
+  // 数据搬迁——admin 查询本来就是读这份数据,归属 worker-manager 更直接) ──
 
   /** 管理端查询当前 runtime 资源策略（配额等）。 */
   getRuntimePolicy() {

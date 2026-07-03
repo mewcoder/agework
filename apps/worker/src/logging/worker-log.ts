@@ -190,7 +190,7 @@ function safeJson(value: Record<string, unknown>): string {
 
 function initialWorkerLogContext(): Record<string, unknown> {
   return compactObject({
-    workerKeepAlive: process.env.AGEWORK_WORKER_KEEP_ALIVE,
+    workerRole: process.env.AGEWORK_WORKER_ROLE,
     runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
     runtimeType: process.env.AGEWORK_WORKER_RUNTIME_TYPE,
     sandboxEngine: process.env.AGEWORK_WORKER_SANDBOX_ENGINE,

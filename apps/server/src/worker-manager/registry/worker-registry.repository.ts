@@ -39,8 +39,8 @@ function isPrismaUniqueError(err: unknown): boolean {
 /**
  * WorkerRegistry 的 repository 层:维护 workspace -> runtime resource 的绑定关系,
  * 以及实例本身的生命周期数据。数据表继续叫 RuntimeInstance/WorkspaceRuntimeInstance
- * (不改名),只是 repository 归属从 runtime 模块搬到 worker-host 模块——WorkerRegistry
- * 数据天然是 worker-host 自注册/心跳端点要读写的东西,归 runtime 会导致 worker-host
+ * (不改名),只是 repository 归属从 runtime 模块搬到 worker-manager 模块——WorkerRegistry
+ * 数据天然是 worker-manager 自注册/心跳端点要读写的东西,归 runtime 会导致 worker-manager
  * 反过来依赖 runtime,破坏 runtime 的零依赖身份。
  */
 @Injectable()

@@ -221,7 +221,7 @@ describe("SandboxInstanceExecutor", () => {
     );
   });
 
-  it("shutdownRuntimeInstanceByOwnerId stops the resource and cleans worker-host owner state", async () => {
+  it("shutdownRuntimeInstanceByOwnerId stops the resource and cleans worker-manager owner state", async () => {
     const { executor, runtimeService, registry, commandDispatcher } =
       makeService();
 

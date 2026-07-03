@@ -38,7 +38,7 @@ export class OpenSandboxEngine implements SandboxEngine {
     const sandbox = await this.client.createSandbox({
       image,
       env: {
-        AGEWORK_WORKER_KEEP_ALIVE: "true",
+        AGEWORK_WORKER_ROLE: "worker",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
         AGEWORK_WORKER_OWNER_ID: ownerId,
@@ -132,7 +132,7 @@ export class OpenSandboxEngine implements SandboxEngine {
 
     try {
       const envs: Record<string, string> = {
-        AGEWORK_WORKER_KEEP_ALIVE: "true",
+        AGEWORK_WORKER_ROLE: "worker",
         AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_OWNER_ID: ownerId,
         AGEWORK_WORKER_API_BASE: apiBaseUrl,
@@ -146,9 +146,7 @@ export class OpenSandboxEngine implements SandboxEngine {
         workingDirectory: workspaceMountPath,
       });
 
-      this.logger.log(
-        `Started keep-alive worker in sandbox ${sandbox.id.slice(0, 12)}`
-      );
+      this.logger.log(`Started worker in sandbox ${sandbox.id.slice(0, 12)}`);
     } catch (err) {
       this.logger.warn(
         `Failed to start worker in sandbox ${sandbox.id.slice(0, 12)}: ${String(err)}. ` +

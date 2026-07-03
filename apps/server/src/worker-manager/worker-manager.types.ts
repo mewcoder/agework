@@ -1,7 +1,7 @@
 import type { RunChannelMessage } from "@agework/shared/protocol";
 
 /**
- * Receiver registered by the run module so worker-host can forward worker
+ * Receiver registered by the run module so worker-manager can forward worker
  * upstream events without importing run internals.
  */
 export interface WorkerUpstreamPort {

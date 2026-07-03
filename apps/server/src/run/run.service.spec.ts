@@ -5,7 +5,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { WorkerRunExecutor } from "./execution/worker-run.executor";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
-import { WorkerHostService } from "../worker-host/worker-host.service";
+import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 describe("RunService", () => {
@@ -15,7 +15,7 @@ describe("RunService", () => {
   let mockExecutor: Partial<WorkerRunExecutor>;
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
-  let mockWorkerHost: Partial<WorkerHostService>;
+  let mockWorkerManager: Partial<WorkerManagerService>;
   let mockRunRecovery: Partial<RunRecoveryService>;
 
   beforeEach(() => {
@@ -36,7 +36,7 @@ describe("RunService", () => {
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
     };
-    mockWorkerHost = {
+    mockWorkerManager = {
       getRuntimeInstanceForAdmin: vi.fn().mockResolvedValue(null),
     };
     mockRunRecovery = {
@@ -49,7 +49,7 @@ describe("RunService", () => {
       mockExecutor as WorkerRunExecutor,
       mockRunEvents,
       mockRunLauncher as RunLauncher,
-      mockWorkerHost as WorkerHostService,
+      mockWorkerManager as WorkerManagerService,
       mockRunRecovery as RunRecoveryService
     );
   });

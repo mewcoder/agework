@@ -2,7 +2,7 @@ import { Controller, Get, Post, Param, Body } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
-import { WorkerHostService } from "./worker-host.service";
+import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
 
@@ -11,14 +11,14 @@ import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
  * 与用户登录态无关，因此标记 @Public() 跳过全局 JwtAuthGuard。
  * 开发阶段暂时移除了 run-scoped worker access key 鉴权，待生命周期管理理清后再补。
  *
- * config 下发与事件上报都经 WorkerHostService facade 进入 worker-host，
+ * config 下发与事件上报都经 WorkerManagerService facade 进入 worker-manager，
  * controller 不直接依赖内部 store / registry。
  */
 @Public()
 @RawResponse()
 @Controller("worker/runs")
 export class WorkerRunController {
-  constructor(private readonly workerHost: WorkerHostService) {}
+  constructor(private readonly workerManager: WorkerManagerService) {}
 
   /**
    * GET /worker/runs/:runId
@@ -26,7 +26,7 @@ export class WorkerRunController {
    */
   @Get(":runId")
   getRunConfig(@Param() params: WorkerRunParamDto): { config: RunConfig } {
-    return this.workerHost.getRunConfig(params.runId);
+    return this.workerManager.getRunConfig(params.runId);
   }
 
   /**
@@ -38,6 +38,6 @@ export class WorkerRunController {
     @Param() params: WorkerRunParamDto,
     @Body() body: WorkerEventPostBodyDto
   ): Promise<{ ok: boolean }> {
-    return this.workerHost.postEvent(params.runId, body);
+    return this.workerManager.postEvent(params.runId, body);
   }
 }

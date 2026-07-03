@@ -6,7 +6,7 @@ import type {
 import type { ChildProcess } from "node:child_process";
 import type { IsolationScope as ConfigIsolationScope } from "../config/config.service";
 
-// ── Sandbox engine 契约类型(worker-host 的 SandboxInstanceExecutor 与 runtime 的
+// ── Sandbox engine 契约类型(worker-manager 的 SandboxInstanceExecutor 与 runtime 的
 // DockerSandboxEngine/OpenSandboxEngine 共用,是这两个模块之间唯一合法的类型契约面) ──
 
 export type SandboxEngineType = "docker" | "opensandbox";
@@ -50,7 +50,7 @@ export function isSandboxPlacement(
   return placement.runtimeType === "sandbox";
 }
 
-// ── Local Provider 契约类型(worker-host 的 LocalInstanceExecutor 与 runtime 的
+// ── Local Provider 契约类型(worker-manager 的 LocalInstanceExecutor 与 runtime 的
 // LocalRuntimeProvider 之间唯一合法的类型契约面) ──
 
 export type LocalLaunchInput = {
@@ -60,11 +60,11 @@ export type LocalLaunchInput = {
 
 export type LocalInstanceHandle = {
   runtimeInstanceId: string;
-  /** fork() 返回的 ChildProcess——调用方(worker-host 的 LocalInstanceExecutor)自行接手后续 IPC 收发。 */
+  /** fork() 返回的 ChildProcess——调用方(worker-manager 的 LocalInstanceExecutor)自行接手后续 IPC 收发。 */
   channel: ChildProcess;
 };
 
-// ── Placement 解析契约类型(worker-host 的 WorkerHostService.resolveRuntimeTarget()
+// ── Placement 解析契约类型(worker-manager 的 WorkerManagerService.resolveRuntimeTarget()
 // 与 runtime 的 RuntimeService.resolveRuntimeTarget() 之间唯一合法的类型契约面) ──
 
 /** 入参由 run 层用部署默认值补齐并校验完毕,这里只做纯 placement 计算。 */

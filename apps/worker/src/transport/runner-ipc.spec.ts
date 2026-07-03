@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpstreamMessage } from "@agework/shared/protocol";
-import { IpcTransport } from "./ipc";
+import { RunnerIpcTransport } from "./runner-ipc";
 
 const originalSend = process.send;
 
-describe("IpcTransport", () => {
+describe("RunnerIpcTransport", () => {
   let send: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -32,7 +32,7 @@ describe("IpcTransport", () => {
   });
 
   it("fetches run config from a JSON-RPC notification", async () => {
-    const channel = new IpcTransport();
+    const channel = new RunnerIpcTransport();
     const configPromise = channel.fetchRunConfig();
 
     (process.emit as (event: string, message: unknown) => boolean)("message", {
@@ -64,7 +64,7 @@ describe("IpcTransport", () => {
   });
 
   it("emits upstream events as JSON-RPC notifications", async () => {
-    const channel = new IpcTransport();
+    const channel = new RunnerIpcTransport();
 
     await channel.emit({
       runId: "run-1",
@@ -92,7 +92,7 @@ describe("IpcTransport", () => {
   });
 
   it("subscribes to JSON-RPC command requests", () => {
-    const channel = new IpcTransport();
+    const channel = new RunnerIpcTransport();
     const received: unknown[] = [];
     const unsubscribe = channel.subscribeCommands((command) => {
       received.push(command);

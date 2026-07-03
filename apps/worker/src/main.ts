@@ -1,16 +1,16 @@
-import { runWorker } from "./worker.js";
+import { runRunner, runWorker } from "./worker.js";
 import { errorDetails, workerLog } from "./logging/worker-log.js";
 
 async function main() {
-  return runWorker(resolveWorkerKeepAlive(process.env));
+  const role = resolveWorkerRole(process.env);
+  return role === "runner" ? runRunner() : runWorker();
 }
 
-function resolveWorkerKeepAlive(env: NodeJS.ProcessEnv): boolean {
-  const keepAlive = env.AGEWORK_WORKER_KEEP_ALIVE?.toLowerCase();
-  if (keepAlive === "true" || keepAlive === "1") return true;
-  if (keepAlive === "false" || keepAlive === "0") return false;
+function resolveWorkerRole(env: NodeJS.ProcessEnv): "worker" | "runner" {
+  const role = env.AGEWORK_WORKER_ROLE;
+  if (role === "worker" || role === "runner") return role;
   throw new Error(
-    `AGEWORK_WORKER_KEEP_ALIVE must be "true" or "false", got: ${keepAlive ?? "(unset)"}`
+    `AGEWORK_WORKER_ROLE must be "worker" or "runner", got: ${role ?? "(unset)"}`
   );
 }
 

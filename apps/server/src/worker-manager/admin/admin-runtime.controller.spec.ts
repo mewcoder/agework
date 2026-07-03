@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 import { AdminRuntimeController } from "./admin-runtime.controller";
 
-function makeController(workerHost: Record<string, unknown> = {}) {
+function makeController(workerManager: Record<string, unknown> = {}) {
   return new AdminRuntimeController({
     getRuntimePolicy: vi.fn(),
     getRuntimeStats: vi.fn(),
     listResources: vi.fn(),
     stopRuntimeInstance: vi.fn(),
-    ...workerHost,
+    ...workerManager,
   } as never);
 }
 
 describe("AdminRuntimeController", () => {
-  it("delegates resource listing to WorkerHostService", async () => {
+  it("delegates resource listing to WorkerManagerService", async () => {
     const listResources = vi
       .fn()
       .mockResolvedValue({ list: [], total: 0, pageNo: 1, pageSize: 10 });
@@ -24,7 +24,7 @@ describe("AdminRuntimeController", () => {
     expect(listResources).toHaveBeenCalledWith(query);
   });
 
-  it("delegates stop to WorkerHostService by id", async () => {
+  it("delegates stop to WorkerManagerService by id", async () => {
     const stopRuntimeInstance = vi.fn().mockResolvedValue({ ok: true });
     const controller = makeController({ stopRuntimeInstance });
 
@@ -34,7 +34,7 @@ describe("AdminRuntimeController", () => {
     expect(stopRuntimeInstance).toHaveBeenCalledWith("rr-1");
   });
 
-  it("delegates policy and stats to WorkerHostService", async () => {
+  it("delegates policy and stats to WorkerManagerService", async () => {
     const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "local" });
     const getRuntimeStats = vi.fn().mockResolvedValue({ activeRuntimes: 0 });
     const controller = makeController({ getRuntimePolicy, getRuntimeStats });

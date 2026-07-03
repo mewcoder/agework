@@ -8,7 +8,7 @@ import type {
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import type { RunEventPort } from "../execution/executor";
-import type { WorkerUpstreamPort } from "../../worker-host/worker-host.types";
+import type { WorkerUpstreamPort } from "../../worker-manager/worker-manager.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,

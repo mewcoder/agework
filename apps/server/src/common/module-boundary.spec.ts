@@ -29,7 +29,7 @@ const FEATURES = new Set([
   "runtime",
   "system",
   "user",
-  "worker-host",
+  "worker-manager",
   "workspace",
 ]);
 
