@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import type {
@@ -28,6 +29,9 @@ import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.exe
 import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
 import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
+import { WorkerLivenessStore } from "./liveness/worker-liveness.store";
+import { safeLogJson } from "../common/logging";
+import { swallow } from "../common/swallow";
 
 /**
  * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
@@ -37,6 +41,16 @@ import type { RegisterWorkerDto } from "./dto/register-worker.dto";
  */
 @Injectable()
 export class WorkerManagerService {
+  private readonly logger = new Logger(WorkerManagerService.name);
+
+  // owner → 其名下 in-flight runId 的索引,供 fenceOwner 终结用。必须放在这个
+  // facade 层而不是 local/sandbox 各自的 executor 里:releaseInstanceForRun 统一
+  // 路由到 sandboxInstances,local 的释放路径本来就是 no-op,索引放 executor 层
+  // 会让 local run 在这里"泄漏"、永远不被摘除。resolveInstance/releaseInstanceForRun/
+  // cleanupRun 是 local 与 sandbox 两条路径都会经过的地方,索引维护收在这里。
+  private readonly ownerRunIds = new Map<string, Set<string>>();
+  private readonly runOwner = new Map<string, string>();
+
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
@@ -45,14 +59,20 @@ export class WorkerManagerService {
     private readonly runtimeService: RuntimeService,
     private readonly sandboxInstances: SandboxInstanceExecutor,
     private readonly localInstances: LocalInstanceExecutor,
-    private readonly handshakeStore: WorkerHandshakeStore
+    private readonly handshakeStore: WorkerHandshakeStore,
+    private readonly livenessStore: WorkerLivenessStore
   ) {}
 
-  /** worker 长轮询拉取下行命令，按 ownerId + afterSeq 增量返回。 */
+  /**
+   * worker 长轮询拉取下行命令，按 ownerId + afterSeq 增量返回。长轮询本身就是心跳
+   * 信号,不加独立心跳 RPC——这里是 local/sandbox 唯一共用的 poll 入口,touch 记
+   * 一次该 owner 最后被看见的时间。
+   */
   async pollCommands(
     ownerId: string,
     query: { afterSeq?: number; waitMs?: number }
   ): Promise<{ messages: WorkerCommandRpcRequest[] }> {
+    this.livenessStore.touch(ownerId);
     return this.endpointHandler.pollCommands(ownerId, query);
   }
 
@@ -107,6 +127,7 @@ export class WorkerManagerService {
 
   /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
+    this.unregisterRun(runId);
     this.commandDispatcher.cleanupRun(runId);
   }
 
@@ -138,10 +159,16 @@ export class WorkerManagerService {
   // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
   // 专属方法——runtimeType 判断收进这里,run 层不再需要认识 sandbox/local 的区别) ──
 
-  /** 为一次 run 取得(创建/复用/attach)runtime 实例,按 runtimeType 内部分流。 */
+  /**
+   * 为一次 run 取得(创建/复用/attach)runtime 实例,按 runtimeType 内部分流。
+   * 调用 executor 之前先登记 runId → ownerId,不等待 acquire 结果——早登记的
+   * 坏处最多是索引里多留了几毫秒一个"还没成功"的条目,releaseInstanceForRun/
+   * cleanupRun 迟早会清掉它,不会造成持久污染。
+   */
   resolveInstance(
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
+    this.registerRun(input.runConfig.runId, input.runtimeTarget.ownerId);
     if (input.runtimeTarget.runtimeType === "local") {
       return this.localInstances.acquireInstanceForRun(input);
     }
@@ -151,9 +178,11 @@ export class WorkerManagerService {
   /**
    * 释放一次 run 对 runtime 实例的引用。local 没有 per-run 引用计数(worker 常驻,
    * 只随 owner 关闭/进程 exit 整体释放),sandbox 侧对未知 runId 幂等 no-op,
-   * 因此统一走 sandbox 执行器,调用方不传 runtimeType。
+   * 因此统一走 sandbox 执行器,调用方不传 runtimeType。先清 owner→runId 索引,
+   * 再转发给下游执行器——顺序不能反,防止 watchdog 在两步之间读到脏索引。
    */
   releaseInstanceForRun(runId: string): void {
+    this.unregisterRun(runId);
     this.sandboxInstances.releaseInstanceForRun(runId);
   }
 
@@ -167,6 +196,63 @@ export class WorkerManagerService {
     } else {
       this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
     }
+  }
+
+  // ── 心跳 fence:watchdog 判定某 owner 超时未见心跳后调用的唯一入口 ──────────
+
+  /**
+   * fence 一个 unhealthy 的 owner:超时即判死,不做"确认死亡"(卡死但进程没退出
+   * 正是本机制要抓的场景)。物理停止载体是幂等操作,对已经死透的容器/进程重复
+   * 调用无害。找不到活跃行说明该 owner 已经被别的路径清理过,直接 return。
+   */
+  async fenceOwner(ownerId: string, reason: string): Promise<void> {
+    const active = await this.registry.findActiveByOwnerId(ownerId);
+    if (!active) return;
+
+    const runIds = this.runIdsForOwner(ownerId);
+    for (const runId of runIds) {
+      await this.upstream
+        .notifyWorkerLost(runId, reason)
+        .catch(swallow(this.logger, `notify worker lost for run ${runId}`));
+    }
+
+    this.shutdownInstanceByOwnerId(active.runtimeType, ownerId);
+    this.commandDispatcher.cleanupByOwnerId(ownerId);
+    this.livenessStore.remove(ownerId);
+
+    this.logger.warn(
+      `fenced unhealthy owner ${safeLogJson({
+        ownerId,
+        reason,
+        terminatedRuns: runIds.length,
+      })}`
+    );
+  }
+
+  private registerRun(runId: string, ownerId: string): void {
+    this.runOwner.set(runId, ownerId);
+    let runIds = this.ownerRunIds.get(ownerId);
+    if (!runIds) {
+      runIds = new Set();
+      this.ownerRunIds.set(ownerId, runIds);
+    }
+    runIds.add(runId);
+  }
+
+  private unregisterRun(runId: string): void {
+    const ownerId = this.runOwner.get(runId);
+    if (!ownerId) return;
+    this.runOwner.delete(runId);
+    const runIds = this.ownerRunIds.get(ownerId);
+    if (!runIds) return;
+    runIds.delete(runId);
+    if (runIds.size === 0) {
+      this.ownerRunIds.delete(ownerId);
+    }
+  }
+
+  private runIdsForOwner(ownerId: string): string[] {
+    return Array.from(this.ownerRunIds.get(ownerId) ?? []);
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry

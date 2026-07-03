@@ -4,6 +4,8 @@ import {
   DEFAULT_IDLE_TIMEOUT_SECONDS,
   DEFAULT_RUN_TIMEOUT_SECONDS,
   DEFAULT_LAUNCH_TIMEOUT_SECONDS,
+  DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
+  DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS,
 } from "./defaults";
 
 /**
@@ -16,6 +18,10 @@ export const SettingKey = {
   RUNTIME_IDLE_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_IDLE_TIMEOUT_SECONDS",
   RUNTIME_RUN_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_RUN_TIMEOUT_SECONDS",
   RUNTIME_LAUNCH_TIMEOUT_SECONDS: "AGEWORK_RUNTIME_LAUNCH_TIMEOUT_SECONDS",
+  RUNTIME_HEARTBEAT_TIMEOUT_SECONDS:
+    "AGEWORK_RUNTIME_HEARTBEAT_TIMEOUT_SECONDS",
+  RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS:
+    "AGEWORK_RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS",
 } as const;
 
 export type SettingKey = (typeof SettingKey)[keyof typeof SettingKey];
@@ -62,6 +68,21 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     label: "Runtime 启动超时(秒)",
     description: "新建 runtime 实例(容器/进程)超过该时长未就绪则判定为启动失败",
     defaultValue: String(DEFAULT_LAUNCH_TIMEOUT_SECONDS),
+  },
+  {
+    key: SettingKey.RUNTIME_HEARTBEAT_TIMEOUT_SECONDS,
+    type: "number",
+    label: "Worker 心跳超时(秒)",
+    description:
+      "worker 长轮询超过该时长没有被看见则判定为 unhealthy,触发 fence",
+    defaultValue: String(DEFAULT_HEARTBEAT_TIMEOUT_SECONDS),
+  },
+  {
+    key: SettingKey.RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS,
+    type: "number",
+    label: "Worker 心跳检查间隔(秒)",
+    description: "watchdog 扫描一次所有 owner 心跳的间隔",
+    defaultValue: String(DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS),
   },
 ];
 

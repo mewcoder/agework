@@ -166,6 +166,22 @@ describe("WorkerEventService", () => {
     expect(forceErrorStatus).toHaveBeenCalledWith("run-1", "crashed");
   });
 
+  it("notifyWorkerLost delegates to notifyWorkerError (fence terminates via the same terminal-status path)", async () => {
+    const notifyWorkerError = vi
+      .spyOn(workerEventsService, "notifyWorkerError")
+      .mockResolvedValue(undefined);
+
+    await workerEventsService.notifyWorkerLost(
+      "run-1",
+      "worker heartbeat timeout"
+    );
+
+    expect(notifyWorkerError).toHaveBeenCalledWith(
+      "run-1",
+      "worker heartbeat timeout"
+    );
+  });
+
   it("notifyCancelledBeforeReady forces cancelled when run not terminal", async () => {
     vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
       false

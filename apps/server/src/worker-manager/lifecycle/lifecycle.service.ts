@@ -6,6 +6,7 @@ import {
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { SandboxInstanceExecutor } from "../sandbox-instance/sandbox-instance.executor";
 import { LocalInstanceExecutor } from "../local-instance/local-instance.executor";
+import { WorkerLivenessStore } from "../liveness/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 
 /**
@@ -23,7 +24,8 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
   constructor(
     private readonly registry: WorkerRegistryRepository,
     private readonly sandboxInstances: SandboxInstanceExecutor,
-    private readonly localInstances: LocalInstanceExecutor
+    private readonly localInstances: LocalInstanceExecutor,
+    private readonly livenessStore: WorkerLivenessStore
   ) {}
 
   /** 关闭专属于该 workspace 的 runtime 资源(user 隔离下的共享资源不受影响)。 */
@@ -61,7 +63,13 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
    * 不存在"重连"这回事(设计文档 2.4 节),物理杀掉可能还在跑的孤儿进程
    * 并把行标记为 stopped。sandbox 的 running 行不在这次扫尾范围内:容器
    * 是独立进程,大概率在 API 重启后还活着,盲目清空会把仍在正常工作的
-   * 容器错误标记为已停止(Phase 1 移除的 blanket 清理正是这个教训)。
+   * 容器错误标记为已停止(Phase 1 移除的 blanket 清理正是这个教训)。(3) 给
+   * sandbox running 行一次被 WorkerLivenessStore track 的机会——重启后这份
+   * 内存 store 是空的,不 touch 的话真的已经死透的 sandbox owner(容器随
+   * server 一起没了、不会再来 poll)永远不会进入 listStale。这只是一次普通
+   * 的 touch(),让这些 owner 从 boot 起获得一个完整的心跳超时窗口:真的还
+   * 活着的会在窗口内 poll 一次自然刷新,真的已经死了的会被同一条 watchdog
+   * sweep 逻辑 fence 掉,不需要单独的宽限窗/特殊标记。
    */
   async onApplicationBootstrap(): Promise<void> {
     await this.registry.markAllStartingAsError();
@@ -81,6 +89,12 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
         .catch(
           swallow(this.logger, `mark stopped for orphaned local row ${row.id}`)
         );
+    }
+
+    const runningSandboxRows =
+      await this.registry.findRunningByRuntimeType("sandbox");
+    for (const row of runningSandboxRows) {
+      this.livenessStore.touch(row.ownerId);
     }
   }
 

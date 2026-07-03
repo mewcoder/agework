@@ -40,6 +40,13 @@ function makeLocalInstances(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeLivenessStore(overrides: Record<string, unknown> = {}) {
+  return {
+    touch: vi.fn(),
+    ...overrides,
+  };
+}
+
 describe("RuntimeInstanceLifecycleService", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned sandbox resource and deletes the workspace binding", async () => {
@@ -52,10 +59,12 @@ describe("RuntimeInstanceLifecycleService", () => {
       });
       const sandboxInstances = makeSandboxInstances();
       const localInstances = makeLocalInstances();
+      const livenessStore = makeLivenessStore();
       const service = new RuntimeInstanceLifecycleService(
         registry as never,
         sandboxInstances as never,
-        localInstances as never
+        localInstances as never,
+        livenessStore as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -84,10 +93,12 @@ describe("RuntimeInstanceLifecycleService", () => {
       });
       const sandboxInstances = makeSandboxInstances();
       const localInstances = makeLocalInstances();
+      const livenessStore = makeLivenessStore();
       const service = new RuntimeInstanceLifecycleService(
         registry as never,
         sandboxInstances as never,
-        localInstances as never
+        localInstances as never,
+        livenessStore as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -109,10 +120,12 @@ describe("RuntimeInstanceLifecycleService", () => {
       });
       const sandboxInstances = makeSandboxInstances();
       const localInstances = makeLocalInstances();
+      const livenessStore = makeLivenessStore();
       const service = new RuntimeInstanceLifecycleService(
         registry as never,
         sandboxInstances as never,
-        localInstances as never
+        localInstances as never,
+        livenessStore as never
       );
 
       await service.shutdownForWorkspace("ws-1");
@@ -146,10 +159,12 @@ describe("RuntimeInstanceLifecycleService", () => {
       });
       const sandboxInstances = makeSandboxInstances();
       const localInstances = makeLocalInstances();
+      const livenessStore = makeLivenessStore();
       const service = new RuntimeInstanceLifecycleService(
         registry as never,
         sandboxInstances as never,
-        localInstances as never
+        localInstances as never,
+        livenessStore as never
       );
 
       await service.shutdownForUser("user-1");
@@ -198,10 +213,12 @@ describe("RuntimeInstanceLifecycleService", () => {
       shutdownRuntimeInstanceByOwnerId,
     });
     const localInstances = makeLocalInstances();
+    const livenessStore = makeLivenessStore();
     const service = new RuntimeInstanceLifecycleService(
       registry as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      livenessStore as never
     );
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
@@ -233,10 +250,12 @@ describe("onApplicationBootstrap", () => {
     const localInstances = makeLocalInstances({
       recoverOrphan: vi.fn().mockResolvedValue(undefined),
     });
+    const livenessStore = makeLivenessStore();
     const service = new RuntimeInstanceLifecycleService(
       registry as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      livenessStore as never
     );
 
     await service.onApplicationBootstrap();
@@ -255,22 +274,61 @@ describe("onApplicationBootstrap", () => {
     );
   });
 
-  it("does not touch running sandbox rows (containers survive an API restart)", async () => {
+  it("does not physically clean up running sandbox rows (containers survive an API restart)", async () => {
     const registry = makeRegistry();
     const sandboxInstances = makeSandboxInstances();
     const localInstances = makeLocalInstances();
+    const livenessStore = makeLivenessStore();
     const service = new RuntimeInstanceLifecycleService(
       registry as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      livenessStore as never
     );
 
     await service.onApplicationBootstrap();
 
     expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
-    expect(registry.findRunningByRuntimeType).not.toHaveBeenCalledWith(
-      "sandbox"
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).not.toHaveBeenCalled();
+    expect(registry.markStoppedById).not.toHaveBeenCalled();
+  });
+
+  it("touches WorkerLivenessStore for every running sandbox row so a dead owner eventually enters listStale", async () => {
+    const registry = makeRegistry({
+      findRunningByRuntimeType: vi
+        .fn()
+        .mockImplementation((runtimeType) =>
+          Promise.resolve(
+            runtimeType === "sandbox"
+              ? [
+                  makeResource({ id: "rr-sb-1", ownerId: "ws-sb-1" }),
+                  makeResource({ id: "rr-sb-2", ownerId: "ws-sb-2" }),
+                ]
+              : []
+          )
+        ),
+    });
+    const sandboxInstances = makeSandboxInstances();
+    const localInstances = makeLocalInstances();
+    const livenessStore = makeLivenessStore();
+    const service = new RuntimeInstanceLifecycleService(
+      registry as never,
+      sandboxInstances as never,
+      localInstances as never,
+      livenessStore as never
     );
+
+    await service.onApplicationBootstrap();
+
+    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("sandbox");
+    expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-1");
+    expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-2");
+    expect(livenessStore.touch).toHaveBeenCalledTimes(2);
+    expect(
+      sandboxInstances.shutdownRuntimeInstanceByOwnerId
+    ).not.toHaveBeenCalled();
   });
 
   it("logs a warning and continues when recovering one orphaned local row throws", async () => {
@@ -298,10 +356,12 @@ describe("onApplicationBootstrap", () => {
       .mockRejectedValueOnce(new Error("ESRCH"))
       .mockResolvedValueOnce(undefined);
     const localInstances = makeLocalInstances({ recoverOrphan });
+    const livenessStore = makeLivenessStore();
     const service = new RuntimeInstanceLifecycleService(
       registry as never,
       sandboxInstances as never,
-      localInstances as never
+      localInstances as never,
+      livenessStore as never
     );
 
     await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();

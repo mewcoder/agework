@@ -373,11 +373,14 @@ export class WorkerRegistryRepository {
     });
   }
 
-  /** 按 activeOwnerKey 查该 owner 当前唯一活跃(starting/running)行的 token,供端点鉴权用。 */
+  /**
+   * 按 activeOwnerKey 查该 owner 当前唯一活跃(starting/running)行,供端点鉴权
+   * (startToken)和 fence(runtimeType,判断走 local 还是 sandbox 的物理停止路径)复用。
+   */
   findActiveByOwnerId(ownerId: string) {
     return this.prisma.workerInstance.findUnique({
       where: { activeOwnerKey: ownerId },
-      select: { startToken: true },
+      select: { startToken: true, runtimeType: true },
     });
   }
 

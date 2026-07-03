@@ -17,6 +17,8 @@ import { RuntimeInstanceLifecycleListener } from "./lifecycle/lifecycle.listener
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
 import { WorkerTokenGuard } from "./handshake/worker-token.guard";
+import { WorkerLivenessStore } from "./liveness/worker-liveness.store";
+import { WorkerLivenessWatchdog } from "./liveness/worker-liveness.watchdog";
 
 /**
  * worker-manager:API ↔ worker 进程之间的通信边界(配置下发、命令下发、上行事件),
@@ -51,6 +53,8 @@ import { WorkerTokenGuard } from "./handshake/worker-token.guard";
     LocalInstanceExecutor,
     RuntimeInstanceLifecycleService,
     RuntimeInstanceLifecycleListener,
+    WorkerLivenessStore,
+    WorkerLivenessWatchdog,
     WorkerManagerService,
   ],
   exports: [WorkerManagerService],

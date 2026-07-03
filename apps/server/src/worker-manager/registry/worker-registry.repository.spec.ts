@@ -395,28 +395,36 @@ describe("WorkerRegistryRepository", () => {
   });
 
   describe("findActiveByOwnerId", () => {
-    it("returns the startToken when the owner has a starting row", async () => {
+    it("returns the startToken and runtimeType when the owner has a starting row", async () => {
       prisma.workerInstance.findUnique.mockResolvedValue({
         startToken: "token-starting",
+        runtimeType: "sandbox",
       });
 
       const result = await repository.findActiveByOwnerId("owner-1");
 
       expect(prisma.workerInstance.findUnique).toHaveBeenCalledWith({
         where: { activeOwnerKey: "owner-1" },
-        select: { startToken: true },
+        select: { startToken: true, runtimeType: true },
       });
-      expect(result).toEqual({ startToken: "token-starting" });
+      expect(result).toEqual({
+        startToken: "token-starting",
+        runtimeType: "sandbox",
+      });
     });
 
-    it("returns the startToken when the owner has a running row", async () => {
+    it("returns the startToken and runtimeType when the owner has a running row", async () => {
       prisma.workerInstance.findUnique.mockResolvedValue({
         startToken: "token-running",
+        runtimeType: "local",
       });
 
       const result = await repository.findActiveByOwnerId("owner-2");
 
-      expect(result).toEqual({ startToken: "token-running" });
+      expect(result).toEqual({
+        startToken: "token-running",
+        runtimeType: "local",
+      });
     });
 
     it("returns null when the owner has no active row", async () => {

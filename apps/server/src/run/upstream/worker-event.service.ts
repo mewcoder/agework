@@ -80,6 +80,11 @@ export class WorkerEventService
     await this.forceErrorStatus(runId, error);
   }
 
+  /** worker 心跳超时被 fence 掉时终结其名下 in-flight run,复用 notifyWorkerError 的终态判断。 */
+  async notifyWorkerLost(runId: string, reason: string): Promise<void> {
+    await this.notifyWorkerError(runId, reason);
+  }
+
   async notifyCancelledBeforeReady(runId: string): Promise<void> {
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceCancelledStatus(runId);

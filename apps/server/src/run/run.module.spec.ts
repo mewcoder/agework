@@ -113,6 +113,8 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     getRunTimeoutSeconds: vi.fn().mockReturnValue(120),
+    getHeartbeatCheckIntervalSeconds: vi.fn().mockReturnValue(20),
+    getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(75),
     getOpenSandboxConfig: vi.fn().mockReturnValue({
       domain: "opensandbox.test",
       protocol: "https",
