@@ -104,12 +104,23 @@ describe("runtime capability config", () => {
   });
 
   it("parses allowed runtime types and uses the first as the create default", async () => {
-    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "sandbox,local";
+    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "docker,local";
     const { service } = createService([]);
 
-    expect(service.getAllowedRuntimeTypes()).toEqual(["sandbox", "local"]);
-    expect(service.getDefaultRuntimeType()).toBe("sandbox");
+    expect(service.getAllowedRuntimeTypes()).toEqual(["docker", "local"]);
+    expect(service.getDefaultRuntimeType()).toBe("docker");
     expect(service.isRuntimeTypeAllowed("local")).toBe(true);
+  });
+
+  it("accepts all three runtime types (local, docker, opensandbox)", async () => {
+    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "local,docker,opensandbox";
+    const { service } = createService([]);
+
+    expect(service.getAllowedRuntimeTypes()).toEqual([
+      "local",
+      "docker",
+      "opensandbox",
+    ]);
   });
 
   it("fails fast on invalid runtime capability values", async () => {
@@ -117,7 +128,7 @@ describe("runtime capability config", () => {
     const { service } = createService([]);
 
     expect(() => service.getAllowedRuntimeTypes()).toThrow(
-      'AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "local", "sandbox"'
+      'AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "local", "docker", "opensandbox"'
     );
   });
 

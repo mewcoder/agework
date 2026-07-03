@@ -16,7 +16,6 @@ export const DEV_JWT_SECRET = "agework-dev-secret";
 
 export const DEFAULT_ALLOWED_RUNTIME_TYPES = ["local"] as const;
 export const DEFAULT_ALLOWED_ISOLATION_SCOPES = ["user"] as const;
-export const DEFAULT_SANDBOX_ENGINE = "docker";
 export const DEFAULT_WORKER_IMAGE = "agework/worker:latest";
 export const DEFAULT_IDLE_TIMEOUT_SECONDS = 1800;
 export const DEFAULT_RUN_TIMEOUT_SECONDS = 1800;
