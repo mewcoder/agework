@@ -109,7 +109,6 @@ function createConfigServiceMock(): Partial<ConfigService> {
   return {
     getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
     getDefaultIsolationScope: vi.fn().mockReturnValue("workspace"),
-    getSandboxEngine: vi.fn().mockReturnValue("docker"),
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     getRunTimeoutSeconds: vi.fn().mockReturnValue(120),
