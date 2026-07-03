@@ -29,7 +29,6 @@ export class WorkspaceController {
       description: body.description,
       rootPath: body.rootPath,
       runtimeType: body.runtimeType,
-      sandboxEngine: body.sandboxEngine,
       isolationScope: body.isolationScope,
     });
   }

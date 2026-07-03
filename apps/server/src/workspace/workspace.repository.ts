@@ -27,7 +27,6 @@ export type WorkspaceCreateInput = {
   userId: string;
   runtimeType: string;
   isolationScope: string | null;
-  sandboxEngine: string | null;
   rootPath: string;
   directorySource: string;
 };
@@ -90,7 +89,6 @@ export class WorkspaceRepository {
           userId: input.userId,
           runtimeType: input.runtimeType,
           isolationScope: input.isolationScope,
-          sandboxEngine: input.sandboxEngine,
         },
       });
       const directory = await tx.workspaceDirectory.create({

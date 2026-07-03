@@ -37,7 +37,6 @@ function workspaceRowFromCreate(input: WorkspaceCreateInput) {
     userId: input.userId,
     runtimeType: input.runtimeType,
     isolationScope: input.isolationScope,
-    sandboxEngine: input.sandboxEngine,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,
@@ -89,7 +88,6 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
     getAllowedIsolationScopes: () => ["user"],
     getDefaultIsolationScope: () => "user",
     isIsolationScopeAllowed: (scope: string) => scope === "user",
-    getSandboxEngine: () => "docker",
     ...overrides,
   };
 }
@@ -134,7 +132,6 @@ describe("WorkspaceService", () => {
         userId: "admin-1",
         runtimeType: "local",
         isolationScope: null,
-        sandboxEngine: null,
         rootPath: expectedRootPath,
         directorySource: "managed",
       })
@@ -171,9 +168,9 @@ describe("WorkspaceService", () => {
   it("auto-selects workspace isolation for sandbox custom directories when allowed", async () => {
     const repo = makeRepo();
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
       getAllowedIsolationScopes: () => ["user", "workspace"],
       isIsolationScopeAllowed: (scope: string) =>
         scope === "user" || scope === "workspace",
@@ -184,14 +181,13 @@ describe("WorkspaceService", () => {
       userId: "admin-1",
       name: "Sandbox workspace",
       rootPath: "/tmp/other-project",
-      runtimeType: "sandbox",
+      runtimeType: "docker",
     });
 
     expect(repo.createWithDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "workspace",
-        sandboxEngine: "docker",
       })
     );
   });
@@ -203,9 +199,9 @@ describe("WorkspaceService", () => {
     );
     const repo = makeRepo();
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
       getAllowedIsolationScopes: () => ["user", "workspace"],
       isIsolationScopeAllowed: (scope: string) =>
         scope === "user" || scope === "workspace",
@@ -215,15 +211,14 @@ describe("WorkspaceService", () => {
     const workspace = await service.create({
       userId: "admin-1",
       name: "Sandbox workspace",
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       isolationScope: "workspace",
     });
 
     expect(repo.createWithDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "workspace",
-        sandboxEngine: "docker",
         rootPath: expectedRootPath,
         directorySource: "managed",
       })
@@ -234,9 +229,9 @@ describe("WorkspaceService", () => {
 
   it("rejects workspace-isolated custom directories inside the user root", async () => {
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
       getAllowedIsolationScopes: () => ["user", "workspace"],
       isIsolationScopeAllowed: (scope: string) =>
         scope === "user" || scope === "workspace",
@@ -248,7 +243,7 @@ describe("WorkspaceService", () => {
         userId: "admin-1",
         name: "Sandbox workspace",
         rootPath: "/tmp/workspace/admin-1/my-project",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "workspace",
       })
     ).rejects.toThrow("工作空间隔离的自定义目录不能在用户工作空间目录内");
@@ -256,9 +251,9 @@ describe("WorkspaceService", () => {
 
   it("rejects sandbox custom directories when user isolation is explicitly selected", async () => {
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
       getAllowedIsolationScopes: () => ["user", "workspace"],
       isIsolationScopeAllowed: (scope: string) =>
         scope === "user" || scope === "workspace",
@@ -270,7 +265,7 @@ describe("WorkspaceService", () => {
         userId: "admin-1",
         name: "Local workspace",
         rootPath: "/tmp/other-project",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "user",
       })
     ).rejects.toThrow("沙箱工作空间指定本地目录时必须使用工作空间级隔离");
@@ -278,9 +273,9 @@ describe("WorkspaceService", () => {
 
   it("rejects sandbox custom directories when workspace isolation is not allowed", async () => {
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
     });
     const service = makeService(makeRepo(), config);
 
@@ -289,16 +284,16 @@ describe("WorkspaceService", () => {
         userId: "admin-1",
         name: "Sandbox workspace",
         rootPath: "/tmp/other-project",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
       })
     ).rejects.toThrow("当前部署不支持沙箱工作空间使用自定义本地目录");
   });
 
   it("rejects sandbox isolation scopes outside deployment capabilities", async () => {
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["local", "sandbox"],
+      getAllowedRuntimeTypes: () => ["local", "docker"],
       isRuntimeTypeAllowed: (runtimeType: string) =>
-        runtimeType === "local" || runtimeType === "sandbox",
+        runtimeType === "local" || runtimeType === "docker",
     });
     const service = makeService(makeRepo(), config);
 
@@ -306,7 +301,7 @@ describe("WorkspaceService", () => {
       service.create({
         userId: "admin-1",
         name: "Sandbox workspace",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "workspace",
       })
     ).rejects.toThrow("当前部署不支持该沙箱隔离级别: workspace");
@@ -319,7 +314,7 @@ describe("WorkspaceService", () => {
       service.create({
         userId: "admin-1",
         name: "Sandbox workspace",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
       })
     ).rejects.toThrow("当前部署不支持该工作空间运行环境");
   });
@@ -332,9 +327,8 @@ describe("WorkspaceService", () => {
           name: "Sandbox workspace",
           gitUrl: null,
           description: null,
-          runtimeType: "sandbox",
+          runtimeType: "docker",
           isolationScope: "workspace",
-          sandboxEngine: "docker",
           userId: "admin-1",
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -348,8 +342,8 @@ describe("WorkspaceService", () => {
       ]),
     });
     const config = makeConfig({
-      getAllowedRuntimeTypes: () => ["sandbox"],
-      getDefaultRuntimeType: () => "sandbox",
+      getAllowedRuntimeTypes: () => ["docker"],
+      getDefaultRuntimeType: () => "docker",
     });
     const service = makeService(repo, config);
 
@@ -405,9 +399,8 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
           id: "ws-1",
-          runtimeType: "sandbox",
+          runtimeType: "docker",
           isolationScope: "workspace",
-          sandboxEngine: "docker",
           directory: { rootPath: "/tmp/ws" },
           user: { username: "mew" },
         }),
@@ -419,9 +412,8 @@ describe("WorkspaceService", () => {
       expect(view).toEqual({
         workspaceId: "ws-1",
         workspaceRootPath: "/tmp/ws",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "workspace",
-        sandboxEngine: "docker",
         username: "mew",
       });
     });
@@ -441,7 +433,6 @@ describe("WorkspaceService", () => {
           id: "ws-1",
           runtimeType: "local",
           isolationScope: null,
-          sandboxEngine: null,
           directory: null,
           user: { username: "mew" },
         }),

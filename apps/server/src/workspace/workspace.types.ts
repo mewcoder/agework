@@ -8,6 +8,5 @@ export type WorkspaceRunContext = {
   workspaceRootPath: string;
   runtimeType?: string;
   isolationScope?: string | null;
-  sandboxEngine?: string | null;
   username: string;
 };

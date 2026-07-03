@@ -34,20 +34,18 @@ describe("CreateWorkspaceDto", () => {
   it("accepts runtime type in create payloads", async () => {
     const result = await transformBody(CreateWorkspaceDto, {
       name: "My Workspace",
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       isolationScope: "workspace",
-      sandboxEngine: "docker",
     });
-    expect(result.runtimeType).toBe("sandbox");
+    expect(result.runtimeType).toBe("docker");
     expect(result.isolationScope).toBe("workspace");
-    expect(result.sandboxEngine).toBe("docker");
   });
 
   it("rejects invalid runtime isolation scope in create payloads", async () => {
     await expect(
       transformBody(CreateWorkspaceDto, {
         name: "My Workspace",
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         isolationScope: "project",
       })
     ).rejects.toThrow(BadRequestException);
@@ -57,7 +55,7 @@ describe("CreateWorkspaceDto", () => {
     await expect(
       transformBody(CreateWorkspaceDto, {
         name: "My Workspace",
-        runtimeType: "docker",
+        runtimeType: "vm",
       })
     ).rejects.toThrow(BadRequestException);
   });

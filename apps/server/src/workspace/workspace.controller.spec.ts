@@ -52,7 +52,6 @@ describe("WorkspaceController", () => {
         description: "test",
         rootPath: "/tmp",
         runtimeType: "local",
-        sandboxEngine: "docker",
         isolationScope: "workspace",
       } as never;
       await controller.create(body, mockUser);

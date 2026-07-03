@@ -75,7 +75,6 @@ function makeWorkspaceView(
     workspaceRootPath: "/tmp/ws",
     runtimeType: "local",
     isolationScope: null,
-    sandboxEngine: null,
     username: "admin-1",
     ...overrides,
   };

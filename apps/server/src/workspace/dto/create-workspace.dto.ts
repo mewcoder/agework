@@ -19,14 +19,10 @@ export class CreateWorkspaceDto implements CreateWorkspaceRequest {
   rootPath?: string;
 
   @IsOptional()
-  @IsIn(["local", "sandbox"])
-  runtimeType?: "local" | "sandbox";
+  @IsIn(["local", "docker", "opensandbox"])
+  runtimeType?: "local" | "docker" | "opensandbox";
 
   @IsOptional()
   @IsIn(["user", "workspace"])
   isolationScope?: "user" | "workspace";
-
-  @IsOptional()
-  @IsIn(["docker", "opensandbox"])
-  sandboxEngine?: "docker" | "opensandbox";
 }

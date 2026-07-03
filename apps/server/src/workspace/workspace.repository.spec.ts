@@ -52,7 +52,6 @@ describe("WorkspaceRepository", () => {
       userId: "admin-1",
       runtimeType: "local",
       isolationScope: null,
-      sandboxEngine: null,
       rootPath: "/tmp/ws-1",
       directorySource: "managed",
     });
@@ -63,7 +62,6 @@ describe("WorkspaceRepository", () => {
       userId: "admin-1",
       runtimeType: "local",
       isolationScope: null,
-      sandboxEngine: null,
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {

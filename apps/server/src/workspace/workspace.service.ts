@@ -30,7 +30,6 @@ type CreateWorkspaceInput = {
   description?: string;
   rootPath?: string;
   runtimeType?: string;
-  sandboxEngine?: string;
   isolationScope?: string;
 };
 
@@ -96,7 +95,6 @@ export class WorkspaceService {
       workspaceRootPath: workspace.directory.rootPath,
       runtimeType: workspace.runtimeType ?? undefined,
       isolationScope: workspace.isolationScope,
-      sandboxEngine: workspace.sandboxEngine,
       username: workspace.user.username,
     };
   }
@@ -127,16 +125,14 @@ export class WorkspaceService {
       description,
       rootPath: requestedRootPath,
       runtimeType: requestedRuntimeType,
-      sandboxEngine: requestedSandboxEngine,
       isolationScope: requestedIsolationScope,
     } = input;
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
-    const { runtimeType, sandboxEngine, isolationScope } =
+    const { runtimeType, isolationScope } =
       this.runtimePolicy.resolveCreateRuntime({
         runtimeType: requestedRuntimeType,
-        sandboxEngine: requestedSandboxEngine,
         isolationScope: requestedIsolationScope,
         hasCustomRootPath: Boolean(requestedRootPath?.trim()),
       });
@@ -159,7 +155,6 @@ export class WorkspaceService {
         userId,
         runtimeType,
         isolationScope,
-        sandboxEngine,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
       });
@@ -230,7 +225,6 @@ export class WorkspaceService {
       } | null;
       runtimeType?: string | null;
       isolationScope?: string | null;
-      sandboxEngine?: string | null;
     },
   >(workspace: T) {
     const {
@@ -247,7 +241,7 @@ export class WorkspaceService {
     const runtimeType =
       storedRuntimeType ?? this.runtimePolicy.defaultRuntimeType();
     const workspaceIsolationScope =
-      runtimeType === "sandbox"
+      runtimeType !== "local"
         ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)
         : null;
     return {

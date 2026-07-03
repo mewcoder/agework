@@ -7,7 +7,6 @@ import {
   ConfigService,
   type IsolationScope,
   type RuntimeType,
-  type SandboxEngineType,
 } from "../../config/config.service";
 
 @Injectable()
@@ -21,13 +20,12 @@ export class WorkspaceRuntimePolicy {
     const isolationScope = this.config.getDefaultIsolationScope();
     const canSelectLocalDirectory =
       allowedRuntimeTypes.includes("local") ||
-      (allowedRuntimeTypes.includes("sandbox") &&
+      (allowedRuntimeTypes.some((type) => type !== "local") &&
         allowedIsolationScopes.includes("workspace"));
     return {
       canSelectLocalDirectory,
       runtimeType,
       allowedRuntimeTypes,
-      sandboxEngine: this.config.getSandboxEngine(),
       isolationScope,
       allowedIsolationScopes,
     };
@@ -39,25 +37,19 @@ export class WorkspaceRuntimePolicy {
 
   resolveCreateRuntime(input: {
     runtimeType?: string;
-    sandboxEngine?: string;
     isolationScope?: string;
     hasCustomRootPath: boolean;
   }): {
     runtimeType: RuntimeType;
-    sandboxEngine: SandboxEngineType | null;
     isolationScope: IsolationScope | null;
   } {
     const runtimeType = this.normalizeRuntimeType(input.runtimeType);
-    const sandboxEngine = this.normalizeSandboxEngine(
-      runtimeType,
-      input.sandboxEngine
-    );
     const isolationScope = this.normalizeIsolationScope(
       runtimeType,
       input.isolationScope,
       input.hasCustomRootPath
     );
-    return { runtimeType, sandboxEngine, isolationScope };
+    return { runtimeType, isolationScope };
   }
 
   resolveStoredIsolationScope(
@@ -78,10 +70,7 @@ export class WorkspaceRuntimePolicy {
     runtimeType: RuntimeType,
     isolationScope: IsolationScope | null
   ) {
-    return (
-      runtimeType === "local" ||
-      (runtimeType === "sandbox" && isolationScope === "workspace")
-    );
+    return runtimeType === "local" || isolationScope === "workspace";
   }
 
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {
@@ -94,30 +83,13 @@ export class WorkspaceRuntimePolicy {
     return value;
   }
 
-  private normalizeSandboxEngine(
-    runtimeType: RuntimeType,
-    sandboxEngine?: string
-  ): SandboxEngineType | null {
-    const value = sandboxEngine?.trim();
-    if (runtimeType !== "sandbox") {
-      if (value)
-        throw new BadRequestException("本地工作空间不能设置 sandboxEngine");
-      return null;
-    }
-    if (!value) return this.config.getSandboxEngine();
-    if (value !== "docker" && value !== "opensandbox") {
-      throw new BadRequestException(`不支持的 sandboxEngine: ${value}`);
-    }
-    return value;
-  }
-
   private normalizeIsolationScope(
     runtimeType: RuntimeType,
     isolationScope: string | undefined,
     hasCustomRootPath: boolean
   ): IsolationScope | null {
     const value = isolationScope?.trim();
-    if (runtimeType !== "sandbox") {
+    if (runtimeType === "local") {
       if (value) {
         throw new BadRequestException("本地工作空间不能设置 isolationScope");
       }
