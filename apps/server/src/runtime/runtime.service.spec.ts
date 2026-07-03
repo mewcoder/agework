@@ -1,16 +1,33 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeService } from "./runtime.service";
 import { ConfigService } from "../config/config.service";
-import type { SandboxEngine } from "./sandbox/sandbox-engine";
-import type { LocalRuntimeProvider } from "./local/local-runtime.provider";
+import type {
+  RuntimeProvider,
+  RuntimeLaunchContext,
+  RuntimeEnvHandle,
+  RuntimeInstanceRef,
+} from "./runtime.types";
+
+function makeFakeProvider(type: string): RuntimeProvider & {
+  prepareEnvironment: ReturnType<typeof vi.fn>;
+  launchWorker: ReturnType<typeof vi.fn>;
+  teardown: ReturnType<typeof vi.fn>;
+  recoverOrphan: ReturnType<typeof vi.fn>;
+} {
+  return {
+    type,
+    placementKind: "process",
+    prepareEnvironment: vi.fn().mockResolvedValue({ runtimeInstanceId: `${type}-env` }),
+    launchWorker: vi.fn().mockResolvedValue({ runtimeInstanceId: `${type}-instance` }),
+    teardown: vi.fn().mockResolvedValue(undefined),
+    recoverOrphan: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 describe("RuntimeService", () => {
   let configService: Partial<ConfigService>;
-  let engine: SandboxEngine;
-  let localProvider: {
-    launch: ReturnType<typeof vi.fn>;
-    recoverOrphan: ReturnType<typeof vi.fn>;
-  };
+  let fakeLocal: ReturnType<typeof makeFakeProvider>;
+  let fakeSandbox: ReturnType<typeof makeFakeProvider>;
   let service: RuntimeService;
 
   beforeEach(() => {
@@ -22,33 +39,12 @@ describe("RuntimeService", () => {
       getAllowedIsolationScopes: vi.fn().mockReturnValue(["user", "workspace"]),
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     };
-    engine = {
-      type: "docker",
-      getOrCreate: vi.fn().mockResolvedValue({
-        engineType: "docker",
-        runtimeInstanceId: "container-1",
-        workspaceMountPath: "/workspace",
-      }),
-      startWorker: vi.fn().mockResolvedValue(undefined),
-      stop: vi.fn().mockResolvedValue(undefined),
-      resume: vi.fn().mockResolvedValue({
-        engineType: "docker",
-        runtimeInstanceId: "container-1",
-        workspaceMountPath: "/workspace",
-      }),
-    };
-    localProvider = {
-      launch: vi.fn().mockReturnValue({
-        runtimeInstanceId: "12345:token",
-        channel: {} as never,
-      }),
-      recoverOrphan: vi.fn().mockResolvedValue(undefined),
-    };
-    service = new RuntimeService(
-      configService as ConfigService,
-      [engine],
-      localProvider as unknown as LocalRuntimeProvider
-    );
+    fakeLocal = makeFakeProvider("local");
+    fakeSandbox = makeFakeProvider("sandbox");
+    service = new RuntimeService(configService as ConfigService, [
+      fakeLocal,
+      fakeSandbox,
+    ]);
   });
 
   it("resolveRuntimeTarget delegates to the pure resolver", () => {
@@ -82,62 +78,64 @@ describe("RuntimeService", () => {
     });
   });
 
-  describe("sandbox engine facade", () => {
-    it("startSandbox creates the runtime and starts the worker in one step", async () => {
-      const input = { placement: {} } as never;
-      await expect(service.startSandbox("docker", input)).resolves.toEqual({
-        engineType: "docker",
-        runtimeInstanceId: "container-1",
-        workspaceMountPath: "/workspace",
+  describe("dispatch by runtimeType", () => {
+    const ctx = (runtimeType: string): RuntimeLaunchContext =>
+      ({
+        runtimeType,
+        ownerId: "owner-1",
+        workspaceId: "ws-1",
+        runId: "run-1",
+        placement: {} as never,
+        workerEnv: {},
+      }) as RuntimeLaunchContext;
+
+    const ref = (runtimeType: string): RuntimeInstanceRef => ({
+      runtimeType,
+      ownerId: "owner-1",
+      runtimeInstanceId: "instance-1",
+      isolationScope: "user",
+    });
+
+    it("prepareEnvironment dispatches to the provider matching runtimeType", async () => {
+      const input = ctx("sandbox");
+      await expect(service.prepareEnvironment(input)).resolves.toEqual({
+        runtimeInstanceId: "sandbox-env",
       });
-      expect(engine.getOrCreate).toHaveBeenCalledWith(input);
-      expect(engine.startWorker).toHaveBeenCalledWith(
-        expect.objectContaining({ runtimeInstanceId: "container-1" }),
-        input
-      );
+      expect(fakeSandbox.prepareEnvironment).toHaveBeenCalledWith(input);
+      expect(fakeLocal.prepareEnvironment).not.toHaveBeenCalled();
     });
 
-    it("resumeSandbox resumes the engine then starts the worker", async () => {
-      const input = { placement: {} } as never;
-      await expect(
-        service.resumeSandbox("docker", "container-1", input)
-      ).resolves.toEqual({
-        engineType: "docker",
-        runtimeInstanceId: "container-1",
-        workspaceMountPath: "/workspace",
+    it("launchWorker dispatches to the provider matching runtimeType", async () => {
+      const input = ctx("local");
+      const env: RuntimeEnvHandle = {};
+      await expect(service.launchWorker(input, env)).resolves.toEqual({
+        runtimeInstanceId: "local-instance",
       });
-      expect(engine.resume).toHaveBeenCalledWith("container-1", input);
-      expect(engine.startWorker).toHaveBeenCalledWith(
-        expect.objectContaining({ runtimeInstanceId: "container-1" }),
-        input
+      expect(fakeLocal.launchWorker).toHaveBeenCalledWith(input, env);
+      expect(fakeSandbox.launchWorker).not.toHaveBeenCalled();
+    });
+
+    it("teardown dispatches to the provider matching runtimeType", async () => {
+      const input = ref("sandbox");
+      await service.teardown(input);
+      expect(fakeSandbox.teardown).toHaveBeenCalledWith(input);
+      expect(fakeLocal.teardown).not.toHaveBeenCalled();
+    });
+
+    it("recoverOrphan dispatches to the provider matching runtimeType", async () => {
+      const input = ref("local");
+      await service.recoverOrphan(input);
+      expect(fakeLocal.recoverOrphan).toHaveBeenCalledWith(input);
+      expect(fakeSandbox.recoverOrphan).not.toHaveBeenCalled();
+    });
+
+    it("throws for an unknown runtimeType", () => {
+      expect(() => service.prepareEnvironment(ctx("unknown"))).toThrow(
+        /Unknown runtime provider/
       );
-    });
-
-    it("resumeSandbox returns undefined (and skips startWorker) when the engine has no resume support", async () => {
-      engine.resume = undefined;
-      await expect(
-        service.resumeSandbox("docker", "container-1", {} as never)
-      ).resolves.toBeUndefined();
-      expect(engine.startWorker).not.toHaveBeenCalled();
-    });
-
-    it("stopSandbox delegates to the resolved engine", async () => {
-      await service.stopSandbox("docker", "container-1");
-      expect(engine.stop).toHaveBeenCalledWith("container-1");
-    });
-  });
-
-  describe("local provider facade", () => {
-    it("launchLocal delegates to the local provider", () => {
-      const input = { runId: "run-1", env: {} };
-      const result = service.launchLocal(input);
-      expect(localProvider.launch).toHaveBeenCalledWith(input);
-      expect(result).toEqual({ runtimeInstanceId: "12345:token", channel: {} });
-    });
-
-    it("recoverOrphanLocal delegates to the local provider", async () => {
-      await service.recoverOrphanLocal("12345:token");
-      expect(localProvider.recoverOrphan).toHaveBeenCalledWith("12345:token");
+      expect(() => service.teardown(ref("unknown"))).toThrow(
+        /Unknown runtime provider/
+      );
     });
   });
 });
