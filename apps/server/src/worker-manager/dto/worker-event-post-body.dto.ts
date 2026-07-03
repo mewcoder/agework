@@ -16,7 +16,7 @@ import {
  * 剥离掉这些幽灵 key，才能让下面复用的 `"x" in value` 判别联合类型守卫按真实
  * 传入的字段判断。
  */
-function stripUndefinedKeys(value: unknown): unknown {
+export function stripUndefinedKeys(value: unknown): unknown {
   if (typeof value !== "object" || value === null) return value;
   const result: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(value)) {

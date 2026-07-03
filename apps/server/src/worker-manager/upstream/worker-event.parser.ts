@@ -5,6 +5,7 @@ import {
   rpcNotificationToUpstreamMessage,
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
+import { stripUndefinedKeys } from "../dto/worker-event-post-body.dto";
 
 export function parseWorkerEventPostBody(
   body: unknown,
@@ -26,9 +27,10 @@ export function parseWorkerEventPostBody(
 }
 
 function parseWorkerEventPostItem(
-  body: unknown,
+  rawBody: unknown,
   routeRunId?: string
 ): RunChannelMessage | undefined {
+  const body = stripUndefinedKeys(rawBody);
   if (isWorkerEventRpcNotification(body)) {
     return rpcNotificationToUpstreamMessage(body);
   }
