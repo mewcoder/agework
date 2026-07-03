@@ -33,7 +33,9 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     this.engines = new Map(engines.map((e) => [e.type, e]));
   }
 
-  async prepareEnvironment(ctx: RuntimeLaunchContext): Promise<RuntimeEnvHandle> {
+  async prepareEnvironment(
+    ctx: RuntimeLaunchContext
+  ): Promise<RuntimeEnvHandle> {
     const placement = ctx.placement as SandboxRuntimePlacement;
     const engineType = placement.sandbox.sandboxEngineType;
     const engine = this.resolveEngine(engineType);
@@ -44,11 +46,11 @@ export class SandboxRuntimeProvider implements RuntimeProvider {
     return { runtimeInstanceId: runtime.runtimeInstanceId };
   }
 
-  async launchWorker(
+  launchWorker(
     _ctx: RuntimeLaunchContext,
     env: RuntimeEnvHandle
   ): Promise<{ runtimeInstanceId: string }> {
-    return { runtimeInstanceId: env.runtimeInstanceId ?? "" };
+    return Promise.resolve({ runtimeInstanceId: env.runtimeInstanceId ?? "" });
   }
 
   async teardown(ref: RuntimeInstanceRef): Promise<void> {

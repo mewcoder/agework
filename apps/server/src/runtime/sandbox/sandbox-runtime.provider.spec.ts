@@ -5,7 +5,11 @@ import type { RuntimeLaunchContext } from "../runtime.types";
 
 const engine = (type: "docker" | "opensandbox"): SandboxEngine => ({
   type,
-  getOrCreate: vi.fn().mockResolvedValue({ engineType: type, runtimeInstanceId: "c1", workspaceMountPath: "/w" }),
+  getOrCreate: vi.fn().mockResolvedValue({
+    engineType: type,
+    runtimeInstanceId: "c1",
+    workspaceMountPath: "/w",
+  }),
   startWorker: vi.fn().mockResolvedValue(undefined),
   stop: vi.fn().mockResolvedValue(undefined),
 });
@@ -22,7 +26,11 @@ const ctx = (): RuntimeLaunchContext => ({
     hostPath: "/host",
     runtimePath: "/rt",
     runtimeLogDir: "/logs",
-    sandbox: { isolationScope: "workspace", mountTarget: "/rt", sandboxEngineType: "docker" },
+    sandbox: {
+      isolationScope: "workspace",
+      mountTarget: "/rt",
+      sandboxEngineType: "docker",
+    },
   },
   workerEnv: { AGEWORK_WORKER_OWNER_ID: "ws-1" },
 });
@@ -54,7 +62,12 @@ describe("SandboxRuntimeProvider", () => {
   it("teardown stops via the engine", async () => {
     const docker = engine("docker");
     const p = new SandboxRuntimeProvider(cfg, [docker]);
-    await p.teardown({ runtimeType: "sandbox", ownerId: "ws-1", runtimeInstanceId: "c1", isolationScope: "workspace" });
+    await p.teardown({
+      runtimeType: "sandbox",
+      ownerId: "ws-1",
+      runtimeInstanceId: "c1",
+      isolationScope: "workspace",
+    });
     expect(docker.stop).toHaveBeenCalledWith("c1");
   });
 });
