@@ -6,7 +6,7 @@ import type {
 import type { ChildProcess } from "node:child_process";
 import type { IsolationScope as ConfigIsolationScope } from "../config/config.service";
 
-// ── Sandbox engine 契约类型(runtime 的 SandboxRuntimeProvider 与
+// ── Sandbox engine 契约类型(runtime 的 ContainerRuntimeProvider 与
 // DockerSandboxEngine/OpenSandboxEngine 共用的 runtime 内部类型契约面) ──
 
 export type SandboxEngineType = "docker" | "opensandbox";

@@ -9,8 +9,9 @@ import {
   OpenSandboxClient,
   OPENSANDBOX_CLIENT,
 } from "./sandbox/opensandbox-client";
-import { SANDBOX_ENGINES, type SandboxEngine } from "./sandbox/sandbox-engine";
 import { LocalRuntimeProvider } from "./local/local-runtime.provider";
+import { DockerRuntimeProvider } from "./sandbox/docker-runtime.provider";
+import { OpenSandboxRuntimeProvider } from "./sandbox/opensandbox-runtime.provider";
 import { RuntimeService } from "./runtime.service";
 import { RuntimeModule } from "./runtime.module";
 
@@ -37,17 +38,17 @@ describe("RuntimeModule wiring", () => {
   it("compiles with zero imports and resolves runtime provider tokens", async () => {
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 
-    const engines = testingModule.get<SandboxEngine[]>(SANDBOX_ENGINES);
-    expect(engines.map((engine) => engine.type).sort()).toEqual([
-      "docker",
-      "opensandbox",
-    ]);
-
     expect(testingModule.get(OPENSANDBOX_CLIENT)).toBeInstanceOf(
       OpenSandboxClient
     );
     expect(testingModule.get(LocalRuntimeProvider)).toBeInstanceOf(
       LocalRuntimeProvider
+    );
+    expect(testingModule.get(DockerRuntimeProvider)).toBeInstanceOf(
+      DockerRuntimeProvider
+    );
+    expect(testingModule.get(OpenSandboxRuntimeProvider)).toBeInstanceOf(
+      OpenSandboxRuntimeProvider
     );
     expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);
   });

@@ -52,12 +52,3 @@ export interface SandboxEngine {
    */
   isHealthy?(runtimeInstanceId: string): Promise<boolean>;
 }
-
-// ── DI token ──────────────────────────────────────────────────────────
-
-/**
- * DI token：聚合所有已注册的 SandboxEngine 实现。
- * 新增 engine 时，只需新建一个实现类并加入 runtime.module.ts
- * 的 providers 数组与本 token 的 inject 列表。
- */
-export const SANDBOX_ENGINES = Symbol("SANDBOX_ENGINES");

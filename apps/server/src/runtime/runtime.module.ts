@@ -6,10 +6,9 @@ import {
   OpenSandboxClient,
   OPENSANDBOX_CLIENT,
 } from "./sandbox/opensandbox-client";
-import { SANDBOX_ENGINES } from "./sandbox/sandbox-engine";
-import type { SandboxEngine } from "./sandbox/sandbox-engine";
 import { LocalRuntimeProvider } from "./local/local-runtime.provider";
-import { SandboxRuntimeProvider } from "./sandbox/sandbox-runtime.provider";
+import { DockerRuntimeProvider } from "./sandbox/docker-runtime.provider";
+import { OpenSandboxRuntimeProvider } from "./sandbox/opensandbox-runtime.provider";
 import { RUNTIME_PROVIDERS } from "./runtime.types";
 import type { RuntimeProvider } from "./runtime.types";
 
@@ -33,17 +32,17 @@ import { ConfigService } from "../config/config.service";
       inject: [ConfigService],
     },
     OpenSandboxEngine,
-    {
-      provide: SANDBOX_ENGINES,
-      useFactory: (...engines: SandboxEngine[]) => engines,
-      inject: [DockerSandboxEngine, OpenSandboxEngine],
-    },
     LocalRuntimeProvider,
-    SandboxRuntimeProvider,
+    DockerRuntimeProvider,
+    OpenSandboxRuntimeProvider,
     {
       provide: RUNTIME_PROVIDERS,
       useFactory: (...providers: RuntimeProvider[]) => providers,
-      inject: [LocalRuntimeProvider, SandboxRuntimeProvider],
+      inject: [
+        LocalRuntimeProvider,
+        DockerRuntimeProvider,
+        OpenSandboxRuntimeProvider,
+      ],
     },
     RuntimeService,
   ],
