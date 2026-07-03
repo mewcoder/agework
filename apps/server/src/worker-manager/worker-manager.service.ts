@@ -13,7 +13,10 @@ import type {
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
-import type { ResolveRuntimeTargetInput } from "../runtime/runtime.types";
+import type {
+  ResolveRuntimeTargetInput,
+  RuntimeInstanceRef,
+} from "../runtime/runtime.types";
 import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
 import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
@@ -25,8 +28,7 @@ import {
 } from "./registry/worker-instance-view";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
-import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.executor";
-import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
+import { WorkerProvisioner } from "./instance/worker.provisioner";
 import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 import { WorkerLivenessStore } from "./liveness/worker-liveness.store";
@@ -36,17 +38,15 @@ import { swallow } from "../common/swallow";
 /**
  * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
  * runtimeType 分流,统一经 `commandDispatcher` 下发——local 与 sandbox 的差异
- * 只剩"怎么把进程弄起来"(fork vs 起容器),归 LocalInstanceExecutor / SandboxInstanceExecutor
- * 各自负责。
+ * 只剩"怎么把进程弄起来"(fork vs 起容器),归 `WorkerProvisioner` 统一编排,
+ * 物理动作再转发给 `RuntimeService` 按 runtimeType 分发给对应 provider。
  */
 @Injectable()
 export class WorkerManagerService {
   private readonly logger = new Logger(WorkerManagerService.name);
 
   // owner → 其名下 in-flight runId 的索引,供 fenceOwner 终结用。必须放在这个
-  // facade 层而不是 local/sandbox 各自的 executor 里:releaseInstanceForRun 统一
-  // 路由到 sandboxInstances,local 的释放路径本来就是 no-op,索引放 executor 层
-  // 会让 local run 在这里"泄漏"、永远不被摘除。resolveInstance/releaseInstanceForRun/
+  // facade 层而不是 provisioner 里:resolveInstance/releaseInstanceForRun/
   // cleanupRun 是 local 与 sandbox 两条路径都会经过的地方,索引维护收在这里。
   private readonly ownerRunIds = new Map<string, Set<string>>();
   private readonly runOwner = new Map<string, string>();
@@ -57,8 +57,7 @@ export class WorkerManagerService {
     private readonly commandDispatcher: WorkerCommandDispatcher,
     private readonly registry: WorkerRegistryRepository,
     private readonly runtimeService: RuntimeService,
-    private readonly sandboxInstances: SandboxInstanceExecutor,
-    private readonly localInstances: LocalInstanceExecutor,
+    private readonly provisioner: WorkerProvisioner,
     private readonly handshakeStore: WorkerHandshakeStore,
     private readonly livenessStore: WorkerLivenessStore
   ) {}
@@ -157,45 +156,46 @@ export class WorkerManagerService {
   }
 
   // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
-  // 专属方法——runtimeType 判断收进这里,run 层不再需要认识 sandbox/local 的区别) ──
+  // 专属方法——runtimeType 判断收在 provisioner/RuntimeService 内部,run 层不再
+  // 需要认识 sandbox/local 的区别) ──
 
   /**
-   * 为一次 run 取得(创建/复用/attach)runtime 实例,按 runtimeType 内部分流。
-   * 调用 executor 之前先登记 runId → ownerId,不等待 acquire 结果——早登记的
-   * 坏处最多是索引里多留了几毫秒一个"还没成功"的条目,releaseInstanceForRun/
-   * cleanupRun 迟早会清掉它,不会造成持久污染。
+   * 为一次 run 取得(创建/复用/attach)runtime 实例,交给 provisioner 统一编排
+   * (runtimeType 分流收在 provisioner/RuntimeService 内部)。调用 provisioner
+   * 之前先登记 runId → ownerId,不等待 acquire 结果——早登记的坏处最多是索引里
+   * 多留了几毫秒一个"还没成功"的条目,releaseInstanceForRun/cleanupRun 迟早会
+   * 清掉它,不会造成持久污染。
    */
   resolveInstance(
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
     this.registerRun(input.runConfig.runId, input.runtimeTarget.ownerId);
-    if (input.runtimeTarget.runtimeType === "local") {
-      return this.localInstances.acquireInstanceForRun(input);
-    }
-    return this.sandboxInstances.acquireInstanceForRun(input);
+    return this.provisioner.acquireInstanceForRun(input);
   }
 
   /**
-   * 释放一次 run 对 runtime 实例的引用。local 没有 per-run 引用计数(worker 常驻,
-   * 只随 owner 关闭/进程 exit 整体释放),sandbox 侧对未知 runId 幂等 no-op,
-   * 因此统一走 sandbox 执行器,调用方不传 runtimeType。先清 owner→runId 索引,
-   * 再转发给下游执行器——顺序不能反,防止 watchdog 在两步之间读到脏索引。
+   * 释放一次 run 对 runtime 实例的引用。回收(引用计数/idle/settle)已经砍掉,
+   * 这里只清 owner→runId 的 fence 索引,不再触发任何实例侧动作。
    */
   releaseInstanceForRun(runId: string): void {
     this.unregisterRun(runId);
-    this.sandboxInstances.releaseInstanceForRun(runId);
   }
 
   /**
-   * 终止并清理指定 owner 的 runtime 实例。runtimeType 由 admin / 生命周期路径从 DB 取出后
-   * 传入(权威来源),故这里按参数分流。
+   * 终止并清理指定 owner 的 runtime 实例:从 registry 取出该 owner 当前活跃行
+   * (权威来源),按行内容构造 ref 交给 provisioner.teardown。找不到活跃行说明
+   * 已经被别的路径清理过,no-op。
    */
-  shutdownInstanceByOwnerId(runtimeType: string, ownerId: string): void {
-    if (runtimeType === "local") {
-      this.localInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
-    } else {
-      this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(ownerId);
-    }
+  private async teardownOwner(ownerId: string): Promise<void> {
+    const row = await this.registry.findActiveByOwnerId(ownerId);
+    if (!row) return;
+    const ref: RuntimeInstanceRef = {
+      runtimeType: row.runtimeType,
+      ownerId: row.ownerId,
+      runtimeInstanceId: row.runtimeInstanceId,
+      isolationScope: row.isolationScope,
+    };
+    await this.provisioner.teardown(ref);
   }
 
   // ── 心跳 fence:watchdog 判定某 owner 超时未见心跳后调用的唯一入口 ──────────
@@ -216,8 +216,7 @@ export class WorkerManagerService {
         .catch(swallow(this.logger, `notify worker lost for run ${runId}`));
     }
 
-    this.shutdownInstanceByOwnerId(active.runtimeType, ownerId);
-    this.commandDispatcher.cleanupByOwnerId(ownerId);
+    await this.teardownOwner(ownerId);
     this.livenessStore.remove(ownerId);
 
     this.logger.warn(
@@ -311,7 +310,13 @@ export class WorkerManagerService {
         `Runtime resource ${id} not found or not running`
       );
     }
-    this.shutdownInstanceByOwnerId(resource.runtimeType, resource.ownerId);
+    const ref: RuntimeInstanceRef = {
+      runtimeType: resource.runtimeType,
+      ownerId: resource.ownerId,
+      runtimeInstanceId: resource.runtimeInstanceId,
+      isolationScope: resource.isolationScope,
+    };
+    await this.provisioner.teardown(ref);
     await this.registry.markStoppedById(resource, "manual_stop");
     return { ok: true };
   }

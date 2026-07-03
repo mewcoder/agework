@@ -9,9 +9,8 @@ import type { WorkerRegistryRepository } from "./registry/worker-registry.reposi
 
 /**
  * WorkerManagerService 是 worker-manager 唯一 export 的公开面,所有跨模块调用方
- * (sandbox.executor / runs.module)都依赖它。controller spec 直接 new
- * WorkerEndpointHandler、sandbox spec 整体 mock 掉 facade,因此没有任何
- * 测试穿过 facade 验证委托接线。这里 mock 全套 internal provider,固定
+ * (run 模块)都依赖它。controller spec 直接 new WorkerEndpointHandler,因此没有
+ * 任何测试穿过 facade 验证委托接线。这里 mock 全套 internal provider,固定
  * facade 把每个公开方法路由到正确的 internal provider。
  */
 function makeService() {
@@ -29,7 +28,10 @@ function makeService() {
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
-  const localInstances = {};
+  const provisioner = {
+    acquireInstanceForRun: vi.fn(),
+    teardown: vi.fn(),
+  };
   const runtimeService = {
     resolveRuntimeTarget: vi.fn(),
   };
@@ -45,8 +47,7 @@ function makeService() {
     commandDispatcher as unknown as WorkerCommandDispatcher,
     {} as unknown as WorkerRegistryRepository,
     runtimeService as never,
-    {} as never,
-    localInstances as never,
+    provisioner as never,
     {} as never,
     livenessStore as never
   );
@@ -55,6 +56,7 @@ function makeService() {
     endpointHandler,
     upstream,
     commandDispatcher,
+    provisioner,
     runtimeService,
     livenessStore,
   };
@@ -194,6 +196,7 @@ function makeRepositoryMock() {
     findRunningByOwners: vi.fn(),
     markStoppedById: vi.fn(),
     deleteWorkspaceBinding: vi.fn(),
+    findActiveByOwnerId: vi.fn(),
   } as unknown as WorkerRegistryRepository;
 }
 
@@ -208,7 +211,6 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
       {} as any,
       {} as any,
       repository,
-      {} as any,
       {} as any,
       {} as any,
       {} as any,
@@ -232,27 +234,20 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
   });
 });
 
-describe("WorkerManagerService sandbox instance orchestration", () => {
+describe("WorkerManagerService runtime policy", () => {
   function makeService() {
     const runtimeService = { getRuntimePolicy: vi.fn() };
-    const sandboxInstances = {
-      acquireInstanceForRun: vi.fn(),
-      releaseInstanceForRun: vi.fn(),
-      recoverOrphan: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
-    };
     const service = new WorkerManagerService(
       {} as never,
       {} as never,
       {} as never,
       {} as never,
       runtimeService as never,
-      sandboxInstances as never,
       {} as never,
       {} as never,
       {} as never
     );
-    return { service, runtimeService, sandboxInstances };
+    return { service, runtimeService };
   }
 
   it("getRuntimePolicy forwards to RuntimeService", () => {
@@ -268,31 +263,28 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       findById: vi.fn(),
       markStoppedById: vi.fn().mockResolvedValue(undefined),
     };
-    const sandboxInstances = { shutdownRuntimeInstanceByOwnerId: vi.fn() };
-    const localInstances = {
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
-    };
+    const provisioner = { teardown: vi.fn().mockResolvedValue(undefined) };
     const service = new WorkerManagerService(
       {} as never,
       {} as never,
       {} as never,
       registry as never,
       {} as never,
-      sandboxInstances as never,
-      localInstances as never,
+      provisioner as never,
       {} as never,
       {} as never
     );
-    return { service, registry, sandboxInstances, localInstances };
+    return { service, registry, provisioner };
   }
 
-  it("physically shuts down the sandbox executor for a running sandbox resource", async () => {
-    const { service, registry, sandboxInstances, localInstances } =
-      makeService();
+  it("tears down the sandbox resource through the provisioner using a ref built from the DB row", async () => {
+    const { service, registry, provisioner } = makeService();
     registry.findById.mockResolvedValue({
       id: "rr-1",
       runtimeType: "sandbox",
       ownerId: "ws-1",
+      runtimeInstanceId: "container-1",
+      isolationScope: "workspace",
       status: "running",
     });
 
@@ -300,25 +292,26 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       ok: true,
     });
 
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-1");
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).not.toHaveBeenCalled();
+    expect(provisioner.teardown).toHaveBeenCalledWith({
+      runtimeType: "sandbox",
+      ownerId: "ws-1",
+      runtimeInstanceId: "container-1",
+      isolationScope: "workspace",
+    });
     expect(registry.markStoppedById).toHaveBeenCalledWith(
       expect.objectContaining({ id: "rr-1" }),
       "manual_stop"
     );
   });
 
-  it("physically shuts down the local executor for a running local resource", async () => {
-    const { service, registry, sandboxInstances, localInstances } =
-      makeService();
+  it("tears down the local resource through the provisioner using a ref built from the DB row", async () => {
+    const { service, registry, provisioner } = makeService();
     registry.findById.mockResolvedValue({
       id: "rr-2",
       runtimeType: "local",
       ownerId: "ws-2",
+      runtimeInstanceId: "4242:token",
+      isolationScope: "workspace",
       status: "running",
     });
 
@@ -326,12 +319,12 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       ok: true,
     });
 
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-2");
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).not.toHaveBeenCalled();
+    expect(provisioner.teardown).toHaveBeenCalledWith({
+      runtimeType: "local",
+      ownerId: "ws-2",
+      runtimeInstanceId: "4242:token",
+      isolationScope: "workspace",
+    });
     expect(registry.markStoppedById).toHaveBeenCalledWith(
       expect.objectContaining({ id: "rr-2" }),
       "manual_stop"
@@ -339,27 +332,22 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
   });
 
   it("throws when the resource is missing or not running", async () => {
-    const { service, registry } = makeService();
+    const { service, registry, provisioner } = makeService();
     registry.findById.mockResolvedValue({ status: "stopped" });
 
     await expect(service.stopRuntimeInstance("rr-3")).rejects.toThrow(
       "not found or not running"
     );
     expect(registry.markStoppedById).not.toHaveBeenCalled();
+    expect(provisioner.teardown).not.toHaveBeenCalled();
   });
 });
 
-describe("WorkerManagerService — resolveInstance unified dispatch", () => {
+describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () => {
   function makeService() {
-    const sandboxInstances = {
+    const provisioner = {
       acquireInstanceForRun: vi.fn(),
-      releaseInstanceForRun: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
-    };
-    const localInstances = {
-      acquireInstanceForRun: vi.fn(),
-      releaseInstanceForRun: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+      teardown: vi.fn(),
     };
     const service = new WorkerManagerService(
       {} as never,
@@ -367,21 +355,20 @@ describe("WorkerManagerService — resolveInstance unified dispatch", () => {
       {} as never,
       {} as never,
       {} as never,
-      sandboxInstances as never,
-      localInstances as never,
+      provisioner as never,
       {} as never,
       {} as never
     );
-    return { service, sandboxInstances, localInstances };
+    return { service, provisioner };
   }
 
-  it("resolveInstance dispatches to the local executor for local placements", async () => {
-    const { service, localInstances } = makeService();
+  it("resolveInstance forwards local placements to the provisioner", async () => {
+    const { service, provisioner } = makeService();
     const input = {
       runtimeTarget: { runtimeType: "local", ownerId: "ws-1" },
       runConfig: { runId: "run-1" },
     } as never;
-    localInstances.acquireInstanceForRun.mockResolvedValue({
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "1:token",
     });
@@ -390,16 +377,16 @@ describe("WorkerManagerService — resolveInstance unified dispatch", () => {
       outcome: "ready",
       runtimeInstanceId: "1:token",
     });
-    expect(localInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+    expect(provisioner.acquireInstanceForRun).toHaveBeenCalledWith(input);
   });
 
-  it("resolveInstance dispatches to the sandbox executor for sandbox placements", async () => {
-    const { service, sandboxInstances } = makeService();
+  it("resolveInstance forwards sandbox placements to the provisioner", async () => {
+    const { service, provisioner } = makeService();
     const input = {
       runtimeTarget: { runtimeType: "sandbox", ownerId: "ws-2" },
       runConfig: { runId: "run-2" },
     } as never;
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-1",
     });
@@ -408,28 +395,14 @@ describe("WorkerManagerService — resolveInstance unified dispatch", () => {
       outcome: "ready",
       runtimeInstanceId: "container-1",
     });
-    expect(sandboxInstances.acquireInstanceForRun).toHaveBeenCalledWith(input);
+    expect(provisioner.acquireInstanceForRun).toHaveBeenCalledWith(input);
   });
 
-  it("releaseInstanceForRun always delegates to the sandbox executor (local has no per-run release)", () => {
-    const { service, sandboxInstances, localInstances } = makeService();
+  it("releaseInstanceForRun only clears the fence index (no reclaim/instance-side action)", () => {
+    const { service, provisioner } = makeService();
     service.releaseInstanceForRun("run-1");
-    expect(sandboxInstances.releaseInstanceForRun).toHaveBeenCalledWith(
-      "run-1"
-    );
-    expect(localInstances.releaseInstanceForRun).not.toHaveBeenCalled();
-  });
-
-  it("shutdownInstanceByOwnerId dispatches by runtimeType", () => {
-    const { service, sandboxInstances, localInstances } = makeService();
-    service.shutdownInstanceByOwnerId("local", "ws-1");
-    service.shutdownInstanceByOwnerId("sandbox", "ws-2");
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-1");
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("ws-2");
+    expect(provisioner.acquireInstanceForRun).not.toHaveBeenCalled();
+    expect(provisioner.teardown).not.toHaveBeenCalled();
   });
 });
 
@@ -437,7 +410,6 @@ describe("WorkerManagerService.registerWorker", () => {
   function makeService() {
     const handshakeStore = { registerWorker: vi.fn() };
     const service = new WorkerManagerService(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,
@@ -486,14 +458,9 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       cleanupRun: vi.fn(),
       cleanupByOwnerId: vi.fn(),
     };
-    const sandboxInstances = {
+    const provisioner = {
       acquireInstanceForRun: vi.fn(),
-      releaseInstanceForRun: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
-    };
-    const localInstances = {
-      acquireInstanceForRun: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
+      teardown: vi.fn().mockResolvedValue(undefined),
     };
     const livenessStore = {
       remove: vi.fn(),
@@ -504,8 +471,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       commandDispatcher as never,
       registry as never,
       {} as never,
-      sandboxInstances as never,
-      localInstances as never,
+      provisioner as never,
       {} as never,
       livenessStore as never
     );
@@ -514,8 +480,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       registry,
       upstream,
       commandDispatcher,
-      sandboxInstances,
-      localInstances,
+      provisioner,
       livenessStore,
     };
   }
@@ -527,17 +492,27 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     } as never;
   }
 
+  function activeRow(overrides: Record<string, unknown> = {}) {
+    return {
+      startToken: "token",
+      runtimeType: "sandbox",
+      ownerId: "owner-1",
+      runtimeInstanceId: "container-1",
+      isolationScope: "workspace",
+      ...overrides,
+    };
+  }
+
   it("fenceOwner terminates the run registered via resolveInstance", async () => {
-    const { service, registry, upstream, sandboxInstances } = makeService();
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+    const { service, registry, upstream, provisioner } = makeService();
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-1",
     });
     await service.resolveInstance(acquireInput("run-1", "owner-1"));
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-1",
-      runtimeType: "sandbox",
-    });
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({ ownerId: "owner-1" })
+    );
 
     await service.fenceOwner("owner-1", "heartbeat timeout");
 
@@ -548,42 +523,26 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
   });
 
   it("releaseInstanceForRun clears the index so a later fenceOwner does not re-terminate the run", async () => {
-    const { service, registry, upstream, sandboxInstances } = makeService();
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+    const { service, registry, upstream, provisioner } = makeService();
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-2",
     });
     await service.resolveInstance(acquireInput("run-2", "owner-2"));
     service.releaseInstanceForRun("run-2");
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-2",
-      runtimeType: "sandbox",
-    });
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({ ownerId: "owner-2" })
+    );
 
     await service.fenceOwner("owner-2", "heartbeat timeout");
 
     expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
   });
 
-  it("releaseInstanceForRun clears the index before delegating to the sandbox executor", () => {
-    const { service, sandboxInstances } = makeService();
-    const callOrder: string[] = [];
-    sandboxInstances.releaseInstanceForRun.mockImplementation(() => {
-      callOrder.push("executor.releaseInstanceForRun");
-    });
-
-    service.releaseInstanceForRun("run-x");
-
-    // index-clear happens synchronously before the executor call within the
-    // same synchronous method body; asserting the executor still receives
-    // the call confirms the delegation still happens after clearing.
-    expect(callOrder).toEqual(["executor.releaseInstanceForRun"]);
-  });
-
   it("cleanupRun clears the index so a later fenceOwner does not terminate the run", async () => {
-    const { service, registry, upstream, sandboxInstances, commandDispatcher } =
+    const { service, registry, upstream, provisioner, commandDispatcher } =
       makeService();
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-3",
     });
@@ -592,35 +551,27 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     service.cleanupRun("run-3");
 
     expect(commandDispatcher.cleanupRun).toHaveBeenCalledWith("run-3");
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-3",
-      runtimeType: "sandbox",
-    });
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({ ownerId: "owner-3" })
+    );
 
     await service.fenceOwner("owner-3", "heartbeat timeout");
 
     expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
   });
 
-  it("fenceOwner: full flow terminates every in-flight run, shuts down the instance, clears the queue and liveness entry", async () => {
-    const {
-      service,
-      registry,
-      upstream,
-      sandboxInstances,
-      commandDispatcher,
-      livenessStore,
-    } = makeService();
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+  it("fenceOwner: full flow terminates every in-flight run, tears down the instance via the provisioner, and clears the liveness entry", async () => {
+    const { service, registry, upstream, provisioner, livenessStore } =
+      makeService();
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-4",
     });
     await service.resolveInstance(acquireInput("run-4a", "owner-4"));
     await service.resolveInstance(acquireInput("run-4b", "owner-4"));
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-4",
-      runtimeType: "sandbox",
-    });
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({ ownerId: "owner-4", runtimeInstanceId: "container-4" })
+    );
 
     await service.fenceOwner("owner-4", "heartbeat timeout");
 
@@ -633,75 +584,68 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       "run-4b",
       "heartbeat timeout"
     );
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("owner-4");
-    expect(commandDispatcher.cleanupByOwnerId).toHaveBeenCalledWith("owner-4");
+    expect(provisioner.teardown).toHaveBeenCalledWith({
+      runtimeType: "sandbox",
+      ownerId: "owner-4",
+      runtimeInstanceId: "container-4",
+      isolationScope: "workspace",
+    });
     expect(livenessStore.remove).toHaveBeenCalledWith("owner-4");
   });
 
-  it("fenceOwner dispatches the physical stop by the active row's runtimeType (local)", async () => {
-    const { service, registry, localInstances, sandboxInstances } =
-      makeService();
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-5",
-      runtimeType: "local",
-    });
+  it("fenceOwner builds the teardown ref from the active row's runtimeType (local)", async () => {
+    const { service, registry, provisioner } = makeService();
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({
+        ownerId: "owner-5",
+        runtimeType: "local",
+        runtimeInstanceId: "4242:token",
+      })
+    );
 
     await service.fenceOwner("owner-5", "heartbeat timeout");
 
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("owner-5");
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).not.toHaveBeenCalled();
+    expect(provisioner.teardown).toHaveBeenCalledWith({
+      runtimeType: "local",
+      ownerId: "owner-5",
+      runtimeInstanceId: "4242:token",
+      isolationScope: "workspace",
+    });
   });
 
   it("fenceOwner no-ops when the owner has no active registry row", async () => {
-    const {
-      service,
-      registry,
-      upstream,
-      sandboxInstances,
-      localInstances,
-      commandDispatcher,
-      livenessStore,
-    } = makeService();
+    const { service, registry, upstream, provisioner, livenessStore } =
+      makeService();
     registry.findActiveByOwnerId.mockResolvedValue(null);
 
     await service.fenceOwner("owner-gone", "heartbeat timeout");
 
     expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).not.toHaveBeenCalled();
-    expect(
-      localInstances.shutdownRuntimeInstanceByOwnerId
-    ).not.toHaveBeenCalled();
-    expect(commandDispatcher.cleanupByOwnerId).not.toHaveBeenCalled();
+    expect(provisioner.teardown).not.toHaveBeenCalled();
     expect(livenessStore.remove).not.toHaveBeenCalled();
   });
 
-  it("fenceOwner swallows a notifyWorkerLost rejection and still shuts down the instance", async () => {
-    const { service, registry, upstream, sandboxInstances } = makeService();
-    sandboxInstances.acquireInstanceForRun.mockResolvedValue({
+  it("fenceOwner swallows a notifyWorkerLost rejection and still tears down the instance", async () => {
+    const { service, registry, upstream, provisioner } = makeService();
+    provisioner.acquireInstanceForRun.mockResolvedValue({
       outcome: "ready",
       runtimeInstanceId: "container-6",
     });
     await service.resolveInstance(acquireInput("run-6", "owner-6"));
     upstream.notifyWorkerLost.mockRejectedValue(new Error("run already gone"));
-    registry.findActiveByOwnerId.mockResolvedValue({
-      startToken: "token-6",
-      runtimeType: "sandbox",
-    });
+    registry.findActiveByOwnerId.mockResolvedValue(
+      activeRow({ ownerId: "owner-6", runtimeInstanceId: "container-6" })
+    );
 
     await expect(
       service.fenceOwner("owner-6", "heartbeat timeout")
     ).resolves.toBeUndefined();
 
-    expect(
-      sandboxInstances.shutdownRuntimeInstanceByOwnerId
-    ).toHaveBeenCalledWith("owner-6");
+    expect(provisioner.teardown).toHaveBeenCalledWith({
+      runtimeType: "sandbox",
+      ownerId: "owner-6",
+      runtimeInstanceId: "container-6",
+      isolationScope: "workspace",
+    });
   });
 });

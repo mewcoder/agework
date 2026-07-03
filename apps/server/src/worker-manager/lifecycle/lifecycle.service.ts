@@ -4,8 +4,9 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
-import { SandboxInstanceExecutor } from "../sandbox-instance/sandbox-instance.executor";
-import { LocalInstanceExecutor } from "../local-instance/local-instance.executor";
+import { WorkerProvisioner } from "../instance/worker.provisioner";
+import { RuntimeService } from "../../runtime/runtime.service";
+import type { RuntimeInstanceRef } from "../../runtime/runtime.types";
 import { WorkerLivenessStore } from "../liveness/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 
@@ -14,8 +15,8 @@ import { swallow } from "../../common/swallow";
  * - workspace 删除:解除 workspace runtime 绑定,只关闭专属于该 workspace 的资源。
  * - user 删除:关闭该用户名下的所有 user/workspace 隔离资源。
  *
- * sandbox 资源经同模块的 SandboxInstanceExecutor 物理关闭;local 资源现在也写
- * WorkerRegistry(owner 长期复用),经同模块的 LocalInstanceExecutor 物理关闭。
+ * 物理关闭统一经同模块的 WorkerProvisioner(local/sandbox 差异收在
+ * WorkerProvisioner/RuntimeService 内部,这里不再区分)。
  */
 @Injectable()
 export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
@@ -23,8 +24,8 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
 
   constructor(
     private readonly registry: WorkerRegistryRepository,
-    private readonly sandboxInstances: SandboxInstanceExecutor,
-    private readonly localInstances: LocalInstanceExecutor,
+    private readonly provisioner: WorkerProvisioner,
+    private readonly runtimeService: RuntimeService,
     private readonly livenessStore: WorkerLivenessStore
   ) {}
 
@@ -78,7 +79,12 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
       await this.registry.findRunningByRuntimeType("local");
     for (const row of staleLocalRows) {
       try {
-        await this.localInstances.recoverOrphan(row.runtimeInstanceId);
+        await this.runtimeService.recoverOrphan({
+          runtimeType: "local",
+          ownerId: row.ownerId,
+          runtimeInstanceId: row.runtimeInstanceId,
+          isolationScope: row.isolationScope,
+        });
       } catch (err) {
         this.logger.warn(
           `Failed to recover orphaned local instance ${row.runtimeInstanceId}: ${err instanceof Error ? err.message : String(err)}`
@@ -103,19 +109,16 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
     runtimeType: string;
     isolationScope: string;
     ownerId: string;
+    runtimeInstanceId: string;
   }): Promise<void> {
     try {
-      if (resource.runtimeType === "sandbox") {
-        await Promise.resolve(
-          this.sandboxInstances.shutdownRuntimeInstanceByOwnerId(
-            resource.ownerId
-          )
-        );
-      } else if (resource.runtimeType === "local") {
-        await Promise.resolve(
-          this.localInstances.shutdownRuntimeInstanceByOwnerId(resource.ownerId)
-        );
-      }
+      const ref: RuntimeInstanceRef = {
+        runtimeType: resource.runtimeType,
+        ownerId: resource.ownerId,
+        runtimeInstanceId: resource.runtimeInstanceId,
+        isolationScope: resource.isolationScope,
+      };
+      await this.provisioner.teardown(ref);
       await this.registry.markStoppedById(resource, "owner_released");
     } catch (err) {
       this.logger.warn(

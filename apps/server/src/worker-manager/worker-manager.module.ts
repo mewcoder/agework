@@ -10,8 +10,7 @@ import { WorkerRunController } from "./worker-run.controller";
 import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
-import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.executor";
-import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
+import { WorkerProvisioner } from "./instance/worker.provisioner";
 import { RuntimeInstanceLifecycleService } from "./lifecycle/lifecycle.service";
 import { RuntimeInstanceLifecycleListener } from "./lifecycle/lifecycle.listener";
 import { AdminRuntimeController } from "./admin/admin-runtime.controller";
@@ -49,8 +48,7 @@ import { WorkerLivenessWatchdog } from "./liveness/worker-liveness.watchdog";
     WorkerRegistryRepository,
     WorkerHandshakeStore,
     WorkerTokenGuard,
-    SandboxInstanceExecutor,
-    LocalInstanceExecutor,
+    WorkerProvisioner,
     RuntimeInstanceLifecycleService,
     RuntimeInstanceLifecycleListener,
     WorkerLivenessStore,
