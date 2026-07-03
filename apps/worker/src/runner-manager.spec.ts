@@ -91,7 +91,6 @@ describe("RunnerManager", () => {
       expect.objectContaining({
         env: expect.objectContaining({
           AGEWORK_WORKER_ROLE: "runner",
-          AGEWORK_WORKER_CHANNEL: "ipc",
           AGEWORK_WORKER_RUN_ID: "run-1",
           AGEWORK_WORKER_LOG_FILE: "/tmp/agework-run-1.log",
         }),

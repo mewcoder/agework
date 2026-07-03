@@ -232,7 +232,6 @@ export class RunnerManager {
       env: {
         ...process.env,
         AGEWORK_WORKER_ROLE: "runner",
-        AGEWORK_WORKER_CHANNEL: "ipc",
         AGEWORK_WORKER_RUN_ID: config.runId,
         ...(config.workerLogFilePath
           ? { AGEWORK_WORKER_LOG_FILE: config.workerLogFilePath }

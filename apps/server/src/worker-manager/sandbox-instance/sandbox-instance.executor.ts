@@ -420,7 +420,6 @@ export class SandboxInstanceExecutor {
       apiBaseUrl: apiBase,
       env: {
         AGEWORK_WORKER_ROLE: "worker",
-        AGEWORK_WORKER_CHANNEL: "http",
         AGEWORK_WORKER_API_BASE: apiBase,
         AGEWORK_WORKER_OWNER_ID: context.ownerId,
         AGEWORK_WORKER_RUNTIME_TYPE: "sandbox",

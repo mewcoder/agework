@@ -60,7 +60,7 @@ export type LocalLaunchInput = {
 
 export type LocalInstanceHandle = {
   runtimeInstanceId: string;
-  /** fork() 返回的 ChildProcess——调用方(worker-manager 的 LocalInstanceExecutor)自行接手后续 IPC 收发。 */
+  /** fork() 返回的 ChildProcess——调用方(worker-manager 的 LocalInstanceExecutor)只用它接收进程生命周期信号(exit)与终止(kill),业务收发走 HTTP。 */
   channel: ChildProcess;
 };
 

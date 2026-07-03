@@ -3,40 +3,44 @@ import type { ChildProcess } from "node:child_process";
 import { generateId } from "@agework/shared";
 import type {
   AcquireInstanceResult,
-  CommandPayload,
-  RunChannelMessage,
-  RunConfig,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import {
-  commandMessageToRpcRequest,
-  isWorkerCommandResultRpcResponse,
-  isWorkerEventRpcNotification,
-  rpcNotificationToUpstreamMessage,
-  rpcResponseToCommandResultMessage,
-  runConfigMessageToRpcNotification,
-} from "@agework/shared/protocol/rpc";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
-import { WorkerUpstreamRegistry } from "../upstream/worker-upstream.registry";
 import { swallow } from "../../common/swallow";
 import { safeLogJson } from "../../common/logging";
+import { resolveApiBasePath } from "../../common/path.util";
+import { EnvKey } from "../../config/registry/env-key";
 
 type LocalOwnerState = {
   runtimeInstanceId: string;
   channel: ChildProcess;
-  commandSeq: number;
 };
 
 /**
- * local 实例编排:owner 长期复用一个常驻 worker 进程,`worker-manager` 直接持有并接管
- * IPC channel 收发——跟 sandbox 走同一套 WorkerRegistry 记录路径,但物理载体是
- * fork 出的进程而不是容器。本轮不做 idle 回收(见计划文档 Architecture 一节),
- * 只在进程 exit 或显式 owner 删除时释放。
+ * local worker 访问宿主 API 的 base URL。跟 sandbox 侧 `resolveDockerApiBase()`
+ * 同构,只是 host 换成 loopback——local worker 和 server 在同一台机器/同一网络
+ * 命名空间,不需要 `host.docker.internal` 这层容器网络转发。
+ */
+function resolveLocalApiBase(
+  env: Partial<
+    Pick<NodeJS.ProcessEnv, "PORT" | "AGEWORK_CONTEXT">
+  > = process.env
+): string {
+  const port = env[EnvKey.PORT] ?? "3000";
+  return `http://127.0.0.1:${port}${resolveApiBasePath(env[EnvKey.CONTEXT])}`;
+}
+
+/**
+ * local 实例编排:owner 长期复用一个常驻 worker 进程,`worker-manager` 负责把
+ * 进程 fork 起来——跟 sandbox 走同一套 WorkerRegistry 记录路径,也跟 sandbox
+ * 走同一条 HTTP 长轮询通道收发命令/事件(command.controller / worker-run.controller),
+ * 物理载体只是 fork 出的进程而不是容器。本轮不做 idle 回收(见计划文档 Architecture
+ * 一节),只在进程 exit 或显式 owner 删除时释放。`ChildProcess` 句柄(`state.channel`)
+ * 仍然持有,但只用于进程生命周期信号(exit)和终止(kill),不再承载业务收发。
  *
- * 只注入 RuntimeService(下层)、WorkerRegistryRepository/WorkerUpstreamRegistry
- * (同模块兄弟 provider),不注入 WorkerManagerService 本身——避免重蹈 Phase 2 Task 7
- * 那次循环依赖的覆辙。
+ * 只注入 RuntimeService(下层)、WorkerRegistryRepository(同模块兄弟 provider),
+ * 不注入 WorkerManagerService 本身——避免重蹈 Phase 2 Task 7 那次循环依赖的覆辙。
  */
 @Injectable()
 export class LocalInstanceExecutor {
@@ -45,14 +49,8 @@ export class LocalInstanceExecutor {
 
   constructor(
     private readonly runtimeService: RuntimeService,
-    private readonly registry: WorkerRegistryRepository,
-    private readonly upstream: WorkerUpstreamRegistry
+    private readonly registry: WorkerRegistryRepository
   ) {}
-
-  /** owner 当前是否持有存活的 local 实例(WorkerManagerService 据此路由命令下发)。 */
-  has(ownerId: string): boolean {
-    return this.ownerStates.has(ownerId);
-  }
 
   async acquireInstanceForRun(
     input: WorkerExecutionStartInput
@@ -81,10 +79,10 @@ export class LocalInstanceExecutor {
         ownerId,
       },
       generateId(),
-      "ipc"
+      "http"
     );
     if (!insertResult.ok) {
-      // local 走 IPC,父子进程关系一旦断了就没有重连这回事(设计文档 2.4 节)。
+      // local worker 进程随 server 进程 fork 出来,server 一重启内存状态就丢了。
       // 已有行不管是 starting 还是 running,都不能安全复用,统一报错。
       return {
         outcome: "error",
@@ -101,7 +99,10 @@ export class LocalInstanceExecutor {
         runId: input.runConfig.runId,
         env: {
           AGEWORK_WORKER_ROLE: "worker",
-          AGEWORK_WORKER_CHANNEL: "ipc",
+          AGEWORK_WORKER_API_BASE: resolveLocalApiBase(),
+          AGEWORK_WORKER_OWNER_ID: ownerId,
+          AGEWORK_WORKER_RUNTIME_TYPE: "local",
+          AGEWORK_WORKER_ISOLATION_SCOPE: "workspace",
           ...(input.runConfig.workerLogFilePath
             ? { AGEWORK_WORKER_LOG_FILE: input.runConfig.workerLogFilePath }
             : {}),
@@ -126,7 +127,6 @@ export class LocalInstanceExecutor {
     const state: LocalOwnerState = {
       runtimeInstanceId,
       channel,
-      commandSeq: 0,
     };
     this.ownerStates.set(ownerId, state);
     this.attachChannelListeners(ownerId, channel);
@@ -140,7 +140,7 @@ export class LocalInstanceExecutor {
           ownerId,
         },
         runtimeInstanceId,
-        "ipc"
+        "http"
       )
       .catch(swallow(this.logger, `record local runtime for owner ${ownerId}`));
 
@@ -153,39 +153,6 @@ export class LocalInstanceExecutor {
   /** local 本轮不做 idle 回收,保留方法只为跟 sandbox 侧的调用形状对齐。 */
   releaseInstanceForRun(_runId: string): void {
     // no-op
-  }
-
-  openSession(ownerId: string, runConfig: RunConfig): void {
-    const state = this.ownerStates.get(ownerId);
-    if (!state) return;
-    state.channel.send(
-      runConfigMessageToRpcNotification({
-        runId: runConfig.runId,
-        seq: 0,
-        type: "run.config",
-        payload: runConfig,
-        ts: new Date().toISOString(),
-      })
-    );
-  }
-
-  sendCommand(ownerId: string, command: CommandPayload): void {
-    const state = this.ownerStates.get(ownerId);
-    if (!state) {
-      this.logger.warn(
-        `local send command dropped ${safeLogJson({ ownerId, commandType: command.type, reason: "no_active_state" })}`
-      );
-      return;
-    }
-    state.commandSeq += 1;
-    const message: RunChannelMessage<CommandPayload> = {
-      runId: (command as Record<string, string>).runId ?? "",
-      seq: state.commandSeq,
-      type: command.type,
-      payload: command,
-      ts: new Date().toISOString(),
-    };
-    state.channel.send(commandMessageToRpcRequest(message));
   }
 
   shutdownRuntimeInstanceByOwnerId(ownerId: string): void {
@@ -213,16 +180,6 @@ export class LocalInstanceExecutor {
   }
 
   private attachChannelListeners(ownerId: string, channel: ChildProcess): void {
-    channel.on("message", (msg: unknown) => {
-      const message = normalizeIpcMessage(msg);
-      if (!message) return;
-      this.upstream.sendEvent(message.runId, message).catch((err) => {
-        this.logger.warn(
-          `local worker message forward failed ${safeLogJson({ ownerId, ...swallowFields(err) })}`
-        );
-      });
-    });
-
     channel.on("exit", (code) => {
       this.logger.warn(`local worker exited ${safeLogJson({ ownerId, code })}`);
       this.registry
@@ -236,16 +193,6 @@ export class LocalInstanceExecutor {
       this.ownerStates.delete(ownerId);
     });
   }
-}
-
-function normalizeIpcMessage(msg: unknown) {
-  if (isWorkerEventRpcNotification(msg)) {
-    return rpcNotificationToUpstreamMessage(msg);
-  }
-  if (isWorkerCommandResultRpcResponse(msg)) {
-    return rpcResponseToCommandResultMessage(msg, { runId: "" });
-  }
-  return undefined;
 }
 
 function swallowFields(err: unknown): { error: string } {

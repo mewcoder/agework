@@ -29,9 +29,7 @@ function makeService() {
     cleanupRun: vi.fn(),
     cleanupByOwnerId: vi.fn(),
   };
-  const localInstances = {
-    has: vi.fn().mockReturnValue(false),
-  };
+  const localInstances = {};
   const runtimeService = {
     resolveRuntimeTarget: vi.fn(),
   };
@@ -239,80 +237,6 @@ describe("WorkerManagerService sandbox instance orchestration", () => {
     const { service, runtimeService } = makeService();
     runtimeService.getRuntimePolicy.mockReturnValue({ runtimeType: "local" });
     expect(service.getRuntimePolicy()).toEqual({ runtimeType: "local" });
-  });
-});
-
-describe("WorkerManagerService local instance orchestration", () => {
-  function makeService() {
-    const localInstances = {
-      has: vi.fn().mockReturnValue(false),
-      acquireInstanceForRun: vi.fn(),
-      releaseInstanceForRun: vi.fn(),
-      recoverOrphan: vi.fn(),
-      shutdownRuntimeInstanceByOwnerId: vi.fn(),
-      sendCommand: vi.fn(),
-      openSession: vi.fn(),
-    };
-    const commandDispatcher = {
-      openSession: vi.fn(),
-      sendCommand: vi.fn(),
-      cleanupRun: vi.fn(),
-      cleanupByOwnerId: vi.fn(),
-    };
-    const service = new WorkerManagerService(
-      {} as never,
-      {} as never,
-      commandDispatcher as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      localInstances as never
-    );
-    return { service, localInstances, commandDispatcher };
-  }
-
-  // 命令路由以 LocalInstanceExecutor 当前是否持有该 owner 的存活实例为准;
-  // 查不到(含重启后内存清空、进程已 exit)一律回落 HTTP dispatcher。
-
-  it("sendCommand routes through the local executor when the owner holds a live local instance", () => {
-    const { service, localInstances, commandDispatcher } = makeService();
-    localInstances.has.mockReturnValue(true);
-
-    service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
-
-    expect(localInstances.sendCommand).toHaveBeenCalledWith("ws-1", {
-      type: "cancel",
-    });
-    expect(commandDispatcher.sendCommand).not.toHaveBeenCalled();
-  });
-
-  it("sendCommand falls back to the HTTP queue for an owner with no live local instance", () => {
-    const { service, localInstances, commandDispatcher } = makeService();
-
-    service.sendCommand("ws-1", "run-1", { type: "cancel" } as never);
-
-    expect(commandDispatcher.sendCommand).toHaveBeenCalledWith(
-      "ws-1",
-      "run-1",
-      {
-        type: "cancel",
-      }
-    );
-    expect(localInstances.sendCommand).not.toHaveBeenCalled();
-  });
-
-  it("openSession routes through the local executor when the owner holds a live local instance", () => {
-    const { service, localInstances, commandDispatcher } = makeService();
-    localInstances.has.mockReturnValue(true);
-    const params = { runId: "run-1", ownerId: "ws-1", runConfig: {} as never };
-
-    service.openSession(params);
-
-    expect(localInstances.openSession).toHaveBeenCalledWith(
-      "ws-1",
-      params.runConfig
-    );
-    expect(commandDispatcher.openSession).not.toHaveBeenCalled();
   });
 });
 

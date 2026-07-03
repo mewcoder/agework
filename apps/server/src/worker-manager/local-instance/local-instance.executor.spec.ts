@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { upstreamMessageToRpcNotification } from "@agework/shared/protocol/rpc";
 import { LocalInstanceExecutor } from "./local-instance.executor";
 
 function makeChannel() {
@@ -42,26 +41,19 @@ function makeRegistry() {
   };
 }
 
-function makeUpstream() {
-  return { sendEvent: vi.fn().mockResolvedValue(undefined) };
-}
-
 function makeExecutor(
   overrides: {
     runtimeService?: ReturnType<typeof makeRuntimeService>;
     registry?: ReturnType<typeof makeRegistry>;
-    upstream?: ReturnType<typeof makeUpstream>;
   } = {}
 ) {
   const runtimeService = overrides.runtimeService ?? makeRuntimeService();
   const registry = overrides.registry ?? makeRegistry();
-  const upstream = overrides.upstream ?? makeUpstream();
   const executor = new LocalInstanceExecutor(
     runtimeService as never,
-    registry as never,
-    upstream as never
+    registry as never
   );
-  return { executor, runtimeService, registry, upstream };
+  return { executor, runtimeService, registry };
 }
 
 describe("LocalInstanceExecutor", () => {
@@ -83,7 +75,10 @@ describe("LocalInstanceExecutor", () => {
           runId: "run-1",
           env: expect.objectContaining({
             AGEWORK_WORKER_ROLE: "worker",
-            AGEWORK_WORKER_CHANNEL: "ipc",
+            AGEWORK_WORKER_API_BASE: expect.stringContaining("/api/v1"),
+            AGEWORK_WORKER_OWNER_ID: "ws-1",
+            AGEWORK_WORKER_RUNTIME_TYPE: "local",
+            AGEWORK_WORKER_ISOLATION_SCOPE: "workspace",
           }),
         })
       );
@@ -95,7 +90,7 @@ describe("LocalInstanceExecutor", () => {
           ownerId: "ws-1",
         },
         "4242:token-1",
-        "ipc"
+        "http"
       );
       expect(result).toEqual({
         outcome: "ready",
@@ -151,7 +146,7 @@ describe("LocalInstanceExecutor", () => {
           ownerId: "ws-1",
         },
         expect.any(String),
-        "ipc"
+        "http"
       );
       expect(registry.upsertRunning).toHaveBeenCalledWith(
         {
@@ -161,7 +156,7 @@ describe("LocalInstanceExecutor", () => {
           ownerId: "ws-1",
         },
         "4242:token-1",
-        "ipc"
+        "http"
       );
     });
 
@@ -211,62 +206,6 @@ describe("LocalInstanceExecutor", () => {
     });
   });
 
-  describe("channel message handling", () => {
-    it("forwards an event notification arriving over the channel to the upstream registry", async () => {
-      const channel = makeChannel();
-      const runtimeService = makeRuntimeService(channel);
-      const { executor, upstream } = makeExecutor({ runtimeService });
-      await executor.acquireInstanceForRun({
-        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
-        runtimeTarget: {
-          runtimeType: "local",
-          ownerId: "ws-1",
-          workspaceId: "ws-1",
-        } as never,
-      });
-
-      channel.emit(
-        "message",
-        upstreamMessageToRpcNotification({
-          runId: "run-1",
-          seq: 1,
-          type: "run.status",
-          payload: { status: "running" },
-          ts: "2026-01-01T00:00:00.000Z",
-        })
-      );
-      await Promise.resolve();
-
-      expect(upstream.sendEvent).toHaveBeenCalledWith(
-        "run-1",
-        expect.objectContaining({
-          runId: "run-1",
-          type: "run.status",
-          payload: { status: "running" },
-        })
-      );
-    });
-
-    it("ignores a channel message that is neither an event notification nor a command result", async () => {
-      const channel = makeChannel();
-      const runtimeService = makeRuntimeService(channel);
-      const { executor, upstream } = makeExecutor({ runtimeService });
-      await executor.acquireInstanceForRun({
-        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
-        runtimeTarget: {
-          runtimeType: "local",
-          ownerId: "ws-1",
-          workspaceId: "ws-1",
-        } as never,
-      });
-
-      channel.emit("message", { garbage: true });
-      await Promise.resolve();
-
-      expect(upstream.sendEvent).not.toHaveBeenCalled();
-    });
-  });
-
   describe("channel exit handling", () => {
     it("marks the owner stopped in WorkerRegistry and removes the in-memory binding when the process exits", async () => {
       const channel = makeChannel();
@@ -289,54 +228,18 @@ describe("LocalInstanceExecutor", () => {
         "workspace",
         "ws-1"
       );
-      expect(executor.has("ws-1")).toBe(false);
-    });
-  });
 
-  describe("sendCommand / openSession", () => {
-    it("sends commands directly over the registered channel", async () => {
-      const channel = makeChannel();
-      const runtimeService = makeRuntimeService(channel);
-      const { executor } = makeExecutor({ runtimeService });
+      // in-memory binding cleared: acquiring again for the same owner forks a new process.
+      runtimeService.launchLocal.mockClear();
       await executor.acquireInstanceForRun({
-        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
+        runConfig: { runId: "run-2", workspaceId: "ws-1" } as never,
         runtimeTarget: {
           runtimeType: "local",
           ownerId: "ws-1",
           workspaceId: "ws-1",
         } as never,
       });
-      channel.send.mockClear();
-
-      executor.sendCommand("ws-1", {
-        type: "cancel",
-        commandId: "cmd-1",
-        runId: "run-1",
-      } as never);
-
-      expect(channel.send).toHaveBeenCalledTimes(1);
-    });
-
-    it("sends the run config over the channel on openSession", async () => {
-      const channel = makeChannel();
-      const runtimeService = makeRuntimeService(channel);
-      const { executor } = makeExecutor({ runtimeService });
-      await executor.acquireInstanceForRun({
-        runConfig: { runId: "run-1", workspaceId: "ws-1" } as never,
-        runtimeTarget: {
-          runtimeType: "local",
-          ownerId: "ws-1",
-          workspaceId: "ws-1",
-        } as never,
-      });
-      channel.send.mockClear();
-
-      executor.openSession("ws-1", {
-        runId: "run-1",
-        workspaceId: "ws-1",
-      } as never);
-
-      expect(channel.send).toHaveBeenCalledTimes(1);
+      expect(runtimeService.launchLocal).toHaveBeenCalled();
     });
   });
 
@@ -362,7 +265,18 @@ describe("LocalInstanceExecutor", () => {
         "workspace",
         "ws-1"
       );
-      expect(executor.has("ws-1")).toBe(false);
+
+      // in-memory binding cleared: acquiring again for the same owner forks a new process.
+      runtimeService.launchLocal.mockClear();
+      await executor.acquireInstanceForRun({
+        runConfig: { runId: "run-2", workspaceId: "ws-1" } as never,
+        runtimeTarget: {
+          runtimeType: "local",
+          ownerId: "ws-1",
+          workspaceId: "ws-1",
+        } as never,
+      });
+      expect(runtimeService.launchLocal).toHaveBeenCalled();
     });
 
     it("is a no-op when the owner has no registered channel", () => {

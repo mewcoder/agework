@@ -9,7 +9,6 @@ import type {
 } from "@agework/shared/protocol";
 import { WorkerCommands } from "./commands.js";
 import { WorkerHttpTransport } from "./transport/worker-http.js";
-import { WorkerIpcTransport } from "./transport/worker-ipc.js";
 import { RunnerIpcTransport } from "./transport/runner-ipc.js";
 import { RunnerManager } from "./runner-manager.js";
 import {
@@ -231,7 +230,6 @@ export async function runWorker() {
   const runnerManager = new RunnerManager(client, commands);
   workerLog("worker started", {
     ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
-    runtimeChannel: process.env.AGEWORK_WORKER_CHANNEL,
   });
 
   let shutdownPromise: Promise<void> | undefined;
@@ -289,11 +287,7 @@ function createInitialRunChannel(): RuntimeChannel {
   return new RunnerIpcTransport();
 }
 
-function resolveWorkerClient(): WorkerHttpTransport | WorkerIpcTransport {
-  const channel = process.env.AGEWORK_WORKER_CHANNEL;
-  if (channel === "ipc") {
-    return new WorkerIpcTransport();
-  }
+function resolveWorkerClient(): WorkerHttpTransport {
   return new WorkerHttpTransport();
 }
 

@@ -24,10 +24,10 @@ import { SandboxInstanceExecutor } from "./sandbox-instance/sandbox-instance.exe
 import { LocalInstanceExecutor } from "./local-instance/local-instance.executor";
 
 /**
- * local / sandbox 的命令路由不另设记录:owner 的 local 归属以 LocalInstanceExecutor
- * 当前是否持有存活实例(`localInstances.has()`)为准,查不到的一律按 sandbox / HTTP
- * dispatcher 处理——这天然覆盖重启恢复(内存清空后回落 dispatcher),也是 run 层
- * 不需要回传 runtimeType 的原因。
+ * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
+ * runtimeType 分流,统一经 `commandDispatcher` 下发——local 与 sandbox 的差异
+ * 只剩"怎么把进程弄起来"(fork vs 起容器),归 LocalInstanceExecutor / SandboxInstanceExecutor
+ * 各自负责。
  */
 @Injectable()
 export class WorkerManagerService {
@@ -59,25 +59,17 @@ export class WorkerManagerService {
     return this.endpointHandler.postEvent(runId, body);
   }
 
-  /** 为一次 run 打开命令下行会话,按 owner 是否持有存活 local 实例内部分流。 */
+  /** 为一次 run 打开命令下行会话。 */
   openSession(params: {
     runId: string;
     ownerId: string;
     runConfig: RunConfig;
   }): void {
-    if (this.localInstances.has(params.ownerId)) {
-      this.localInstances.openSession(params.ownerId, params.runConfig);
-      return;
-    }
     this.commandDispatcher.openSession(params);
   }
 
-  /** 向 owner 下发一条命令,按 owner 是否持有存活 local 实例内部分流。 */
+  /** 向 owner 下发一条命令。 */
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
-    if (this.localInstances.has(ownerId)) {
-      this.localInstances.sendCommand(ownerId, command);
-      return;
-    }
     this.commandDispatcher.sendCommand(ownerId, runId, command);
   }
 
