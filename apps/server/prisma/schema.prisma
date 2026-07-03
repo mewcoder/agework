@@ -213,6 +213,7 @@ model WorkerInstance {
   runtimeType             String
   isolationScope          String
   ownerId                 String
+  activeOwnerKey          String?                  @unique
   runtimeInstanceId       String
   transport               String                   @default("http")
   status                  String                   @default("running")

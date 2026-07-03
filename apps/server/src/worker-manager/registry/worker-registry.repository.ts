@@ -72,6 +72,7 @@ export class WorkerRegistryRepository {
         runtimeInstanceId,
         transport,
         status: "running",
+        activeOwnerKey: input.ownerId,
         expiresAt: null,
         metadata: workerInstanceMetadataJson(
           runningInstanceMetadata({
@@ -111,10 +112,12 @@ export class WorkerRegistryRepository {
   }
 
   /**
-   * 冷启动前插入一条 starting 记录,靠 Phase 1 建好的 partial unique index
-   * (runtime_instance_active_owner_idx,ON ownerId WHERE status IN
-   * ('starting','running'))做并发防重。撞见冲突时返回已存在的活跃行,由
-   * 调用方决定是复用还是报错(sandbox/local 的策略不同,不在这一层判断)。
+   * 冷启动前插入一条 starting 记录,靠 WorkerInstance.activeOwnerKey 列的
+   * @@unique 约束做并发防重:行处于 starting/running 时 activeOwnerKey =
+   * ownerId,终态(stopped/error)时置 null,SQLite 把多个 NULL 视为互不冲突,
+   * 于是"同一 ownerId 同时只能有一条活跃行"由 DB 唯一约束原生保证。撞见冲突时
+   * 返回已存在的活跃行,由调用方决定是复用还是报错(sandbox/local 的策略不同,
+   * 不在这一层判断)。
    * 插入前先删掉该 owner 名下的历史终态行(stopped/error),避免它们跟新插入的
    * starting 行同时存在导致 upsertRunning 后续的 findFirst(无 orderBy)有概率
    * 选中旧行,把 starting 行晾成孤儿。
@@ -140,6 +143,7 @@ export class WorkerRegistryRepository {
           runtimeInstanceId,
           transport,
           status: "starting",
+          activeOwnerKey: input.ownerId,
           metadata: workerInstanceMetadataJson(
             statusInstanceMetadata({
               runtimeType: input.runtimeType,
@@ -179,6 +183,7 @@ export class WorkerRegistryRepository {
       where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "stopped",
+        activeOwnerKey: null,
         metadata: workerInstanceMetadataJson(
           stoppedInstanceMetadata({
             runtimeType,
@@ -201,6 +206,7 @@ export class WorkerRegistryRepository {
       where: ownerWhere(runtimeType, isolationScope, ownerId),
       data: {
         status: "error",
+        activeOwnerKey: null,
         metadata: workerInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType,
@@ -225,6 +231,7 @@ export class WorkerRegistryRepository {
       where: { status: "starting" },
       data: {
         status: "error",
+        activeOwnerKey: null,
         metadata: workerInstanceMetadataJson(
           statusInstanceMetadata({
             runtimeType: "",
@@ -378,6 +385,7 @@ export class WorkerRegistryRepository {
       where: { id: resource.id },
       data: {
         status: "stopped",
+        activeOwnerKey: null,
         metadata: workerInstanceMetadataJson(
           stoppedInstanceMetadata({
             runtimeType: resource.runtimeType,

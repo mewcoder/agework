@@ -1,4 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
+import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaClient } from "../../../generated/prisma/client.js";
 import { WorkerRegistryRepository } from "./worker-registry.repository";
 
 function makePrismaMock() {
@@ -402,5 +417,127 @@ describe("WorkerRegistryRepository", () => {
         },
       ]);
     });
+  });
+});
+
+// activeOwnerKey uniqueness is a real SQLite constraint (see schema.prisma
+// WorkerInstance.activeOwnerKey @unique) — mocking prisma calls can't exercise
+// it, so this suite runs against a real, disposable SQLite database pushed
+// from the current schema.
+describe("WorkerRegistryRepository — activeOwnerKey uniqueness (real sqlite)", () => {
+  const serverRoot = path.resolve(__dirname, "../../..");
+  let tmpDir: string;
+  let prisma: InstanceType<typeof PrismaClient>;
+  let repository: WorkerRegistryRepository;
+
+  const baseInput = {
+    runtimeType: "sandbox",
+    isolationScope: "workspace",
+    workspaceId: "ws-real-1",
+    ownerId: "owner-real-1",
+  };
+
+  beforeAll(async () => {
+    tmpDir = mkdtempSync(path.join(tmpdir(), "worker-registry-repo-test-"));
+    const dbPath = path.join(tmpDir, "test.db");
+    execFileSync(
+      path.join(serverRoot, "node_modules", ".bin", "prisma"),
+      ["db", "push", "--accept-data-loss", "--url", `file:${dbPath}`],
+      { cwd: serverRoot, stdio: "pipe" }
+    );
+    prisma = new PrismaClient({
+      adapter: new PrismaBetterSqlite3({ url: `file:${dbPath}` }),
+    });
+    repository = new WorkerRegistryRepository(prisma as never);
+    // upsertRunning creates a WorkspaceWorkerBinding row, which FK-references
+    // Workspace -> User; seed the minimum rows those foreign keys need.
+    await prisma.user.create({
+      data: {
+        id: "user-real-1",
+        username: "worker-registry-real-test",
+        passwordHash: "x",
+      },
+    });
+    await prisma.workspace.create({
+      data: {
+        id: baseInput.workspaceId,
+        name: "worker-registry real test workspace",
+        userId: "user-real-1",
+      },
+    });
+  });
+
+  afterAll(async () => {
+    await prisma.$disconnect();
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  afterEach(async () => {
+    await prisma.workerInstance.deleteMany({});
+  });
+
+  it("rejects a concurrent insertStarting for the same owner instead of inserting a duplicate row", async () => {
+    const first = await repository.insertStarting(
+      baseInput,
+      "inst-real-1",
+      "http"
+    );
+    expect(first).toEqual({ ok: true });
+
+    const second = await repository.insertStarting(
+      baseInput,
+      "inst-real-2",
+      "http"
+    );
+    expect(second.ok).toBe(false);
+    if (!second.ok) {
+      expect(second.existing).toEqual({
+        runtimeInstanceId: "inst-real-1",
+        status: "starting",
+      });
+    }
+
+    const rows = await prisma.workerInstance.findMany({
+      where: { ownerId: baseInput.ownerId },
+    });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("allows a new insertStarting once the owner's previous row reaches a terminal state", async () => {
+    await repository.insertStarting(baseInput, "inst-real-3", "http");
+    await repository.markStoppedByOwner(
+      baseInput.runtimeType,
+      baseInput.isolationScope,
+      baseInput.ownerId
+    );
+
+    const result = await repository.insertStarting(
+      baseInput,
+      "inst-real-4",
+      "http"
+    );
+
+    expect(result).toEqual({ ok: true });
+    const rows = await prisma.workerInstance.findMany({
+      where: { ownerId: baseInput.ownerId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("starting");
+  });
+
+  it("upsertRunning stores activeOwnerKey equal to ownerId, blocking a concurrent insertStarting", async () => {
+    await repository.upsertRunning(baseInput, "inst-real-5", "http");
+
+    const row = await prisma.workerInstance.findFirst({
+      where: { ownerId: baseInput.ownerId },
+    });
+    expect(row?.activeOwnerKey).toBe(baseInput.ownerId);
+
+    const conflict = await repository.insertStarting(
+      baseInput,
+      "inst-real-6",
+      "http"
+    );
+    expect(conflict.ok).toBe(false);
   });
 });
