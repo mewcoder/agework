@@ -166,7 +166,6 @@ export type SandboxPlacementInfo = {
   isolationScope: IsolationScope;
   /** 容器/沙箱内 hostPath 的挂载目标路径（如 `/workspace` 或 `/workspaces`）。 */
   mountTarget: string;
-  sandboxEngineType: "docker" | "opensandbox";
 };
 
 /**

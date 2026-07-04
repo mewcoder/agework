@@ -14,7 +14,6 @@ import type {
  */
 export function buildSandboxStartInput(
   ctx: RuntimeLaunchContext,
-  engineType: string,
   cfg: SandboxProviderConfig
 ): SandboxStartInput {
   const placement = ctx.placement as SandboxRuntimeSpec;
@@ -33,7 +32,6 @@ export function buildSandboxStartInput(
     env: {
       ...ctx.workerEnv,
       AGEWORK_WORKER_API_BASE: cfg.apiBaseUrl,
-      AGEWORK_WORKER_SANDBOX_ENGINE: engineType,
       AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(ctx.ownerId)}`,
       AGEWORK_WORKER_LOG_DIR: runtimeLogDir,
       AGEWORK_WORKER_LOG_FILE: `${runtimeLogDir}/${safePathPart(ctx.ownerId)}.runtime.worker.log`,

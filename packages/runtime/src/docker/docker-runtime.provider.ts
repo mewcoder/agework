@@ -28,7 +28,7 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   async start(
     ctx: RuntimeLaunchContext
   ): Promise<{ runtimeInstanceId: string }> {
-    const input = buildSandboxStartInput(ctx, this.type, this.config);
+    const input = buildSandboxStartInput(ctx, this.config);
     const containerId = await this.runContainer(input);
     return { runtimeInstanceId: containerId };
   }

@@ -52,7 +52,6 @@ const dockerInput = (runId = "run-1") =>
       sandbox: {
         isolationScope: "user",
         mountTarget: "/workspaces",
-        sandboxEngineType: "docker",
       },
     },
   }) as any;

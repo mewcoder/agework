@@ -32,7 +32,6 @@ describe("resolveRuntimeSpec", () => {
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
         isolationScope: "user",
         mountTarget: CONTAINER_WORKSPACES_ROOT,
-        sandboxEngineType: "docker",
       });
     });
 

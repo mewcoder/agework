@@ -38,7 +38,6 @@ function makePlacement(runtimeType: "local" | "docker"): RuntimeSpec {
     sandbox: {
       isolationScope: "workspace",
       mountTarget: "/workspace",
-      sandboxEngineType: "docker",
     },
   };
 }

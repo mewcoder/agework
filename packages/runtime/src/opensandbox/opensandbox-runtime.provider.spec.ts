@@ -71,7 +71,6 @@ function makeCtx(
       sandbox: {
         isolationScope: "workspace",
         mountTarget: "/workspace",
-        sandboxEngineType: "opensandbox",
       },
     } as never,
     workerEnv: {},
@@ -128,7 +127,6 @@ describe("OpenSandboxRuntimeProvider", () => {
         expect.objectContaining({
           env: expect.objectContaining({
             AGEWORK_WORKER_OWNER_ID: "ws-1",
-            AGEWORK_WORKER_SANDBOX_ENGINE: "opensandbox",
           }),
           metadata: expect.objectContaining({
             "agework.io/runtime-owner-id": "ws-1",

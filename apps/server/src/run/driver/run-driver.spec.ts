@@ -30,7 +30,6 @@ function makeRuntimeSpec(runtimeType: "local" | "sandbox"): RuntimeSpec {
           sandbox: {
             isolationScope: "workspace" as const,
             mountTarget: "/workspace",
-            sandboxEngineType: "docker" as const,
           },
         }
       : {}),

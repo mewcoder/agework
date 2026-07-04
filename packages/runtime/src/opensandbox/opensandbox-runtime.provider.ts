@@ -29,7 +29,7 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   async start(
     ctx: RuntimeLaunchContext
   ): Promise<{ runtimeInstanceId: string }> {
-    const input = buildSandboxStartInput(ctx, this.type, this.config);
+    const input = buildSandboxStartInput(ctx, this.config);
     const sandbox = await this.createSandbox(input);
     await this.startWorkerInSandbox(sandbox, input);
     return { runtimeInstanceId: sandbox.id };

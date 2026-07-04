@@ -112,7 +112,6 @@ export function resolveRuntimeSpec(
       isolationScope: input.isolationScope,
       // sandbox 分支 resolveWorkspaceMount 必定填了 mountTarget。
       mountTarget: mount.mountTarget as string,
-      sandboxEngineType: input.runtimeType,
     },
     ownerId,
   };

@@ -147,7 +147,6 @@ export class RunLauncher {
       conversationId,
       runtimeType,
       isolationScope: sandbox?.isolationScope,
-      sandboxEngineType: sandbox?.sandboxEngineType,
       runConfig,
       runtimeTarget,
       stream,
@@ -470,7 +469,6 @@ export class RunLauncher {
     conversationId: string;
     runtimeType: string;
     isolationScope?: string;
-    sandboxEngineType?: string;
     runConfig: RunConfig;
     runtimeTarget: RuntimeSpec;
     stream: RunStream;
@@ -480,7 +478,6 @@ export class RunLauncher {
       conversationId,
       runtimeType,
       isolationScope,
-      sandboxEngineType,
       runConfig,
       runtimeTarget,
       stream,
@@ -493,7 +490,6 @@ export class RunLauncher {
           status: "starting",
           runtimeType,
           isolationScope,
-          sandboxEngineType,
         }),
         `record runtime starting for run ${runId}`
       );

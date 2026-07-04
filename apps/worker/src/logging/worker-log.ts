@@ -192,7 +192,6 @@ function initialWorkerLogContext(): Record<string, unknown> {
   return compactObject({
     workerRole: process.env.AGEWORK_WORKER_ROLE,
     runtimeType: process.env.AGEWORK_WORKER_RUNTIME_TYPE,
-    sandboxEngine: process.env.AGEWORK_WORKER_SANDBOX_ENGINE,
     isolationScope: process.env.AGEWORK_WORKER_ISOLATION_SCOPE,
     runtimeOwnerId: process.env.AGEWORK_WORKER_OWNER_ID,
     runtimeResourceName: process.env.AGEWORK_WORKER_RUNTIME_RESOURCE_NAME,

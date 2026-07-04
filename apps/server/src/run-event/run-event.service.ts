@@ -138,7 +138,6 @@ export class RunEventService {
       runtimeType?: string;
       runtimeInstanceId?: string;
       isolationScope?: string;
-      sandboxEngineType?: string;
       error?: string;
     }
   ): RecordRunEventInput {
@@ -157,7 +156,6 @@ export class RunEventService {
         runtimeType: input.runtimeType,
         runtimeInstanceId: input.runtimeInstanceId,
         isolationScope: input.isolationScope,
-        sandboxEngineType: input.sandboxEngineType,
         error: input.error,
         ...input.data,
       }),

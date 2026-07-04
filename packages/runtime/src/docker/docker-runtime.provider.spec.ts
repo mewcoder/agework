@@ -42,7 +42,6 @@ function makeCtx(
       sandbox: {
         isolationScope: "workspace",
         mountTarget: "/workspace",
-        sandboxEngineType: "docker",
       },
     } as never,
     workerEnv: {},
@@ -108,7 +107,7 @@ describe("DockerRuntimeProvider", () => {
       expect(runArgs).toContain("agework.io/isolation-scope=workspace");
     });
 
-    it("passes workerEnv through as -e args plus the sandbox-engine marker", async () => {
+    it("passes workerEnv through as -e args", async () => {
       mockExecFile.mockImplementation(((...args: any[]) => {
         args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
       }) as any);
@@ -119,7 +118,6 @@ describe("DockerRuntimeProvider", () => {
 
       const runArgs = runArgsOf();
       expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
-      expect(runArgs).toContain("AGEWORK_WORKER_SANDBOX_ENGINE=docker");
       expect(runArgs).toContain(
         "AGEWORK_WORKER_API_BASE=http://host.docker.internal:3000/api/v1"
       );
