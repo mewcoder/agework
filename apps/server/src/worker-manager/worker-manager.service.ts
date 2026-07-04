@@ -179,11 +179,11 @@ export class WorkerManagerService {
   }
 
   /**
-   * 终止并清理指定 owner 的 worker 载体:从 registry 取出该 owner 当前活跃行
-   * (权威来源),按行内容构造 ref 交给 provisioner.teardown。找不到活跃行说明
-   * 已经被别的路径清理过,no-op。
+   * 停掉指定 owner 的 worker(owner 仍在):从 registry 取出该 owner 当前活跃行
+   * (权威来源),按行内容构造 ref 交给 provisioner.stop(保留载体)。找不到活跃行
+   * 说明已经被别的路径清理过,no-op。
    */
-  private async teardownOwner(ownerId: string): Promise<void> {
+  private async stopOwner(ownerId: string): Promise<void> {
     const row = await this.registry.findActiveByOwnerId(ownerId);
     if (!row) return;
     const ref: RuntimeInstanceRef = {
@@ -192,7 +192,7 @@ export class WorkerManagerService {
       runtimeInstanceId: row.runtimeInstanceId,
       isolationScope: row.isolationScope,
     };
-    await this.provisioner.teardown(ref);
+    await this.provisioner.stop(ref);
   }
 
   // ── 心跳 fence:watchdog 判定某 owner 超时未见心跳后调用的唯一入口 ──────────
@@ -213,7 +213,7 @@ export class WorkerManagerService {
         .catch(swallow(this.logger, `notify worker lost for run ${runId}`));
     }
 
-    await this.teardownOwner(ownerId);
+    await this.stopOwner(ownerId);
     this.livenessStore.remove(ownerId);
 
     this.logger.warn(
@@ -313,7 +313,7 @@ export class WorkerManagerService {
       runtimeInstanceId: resource.runtimeInstanceId,
       isolationScope: resource.isolationScope,
     };
-    await this.provisioner.teardown(ref);
+    await this.provisioner.stop(ref);
     await this.registry.markStoppedById(resource, "manual_stop");
     return { ok: true };
   }
@@ -346,9 +346,8 @@ type WorkerInstanceRow = {
 /** 管理端 runtime 资源列表行:附 isReusable / workspaceCount / diagnostics 汇总。 */
 function toWorkerInstanceResponse(resource: WorkerInstanceRow) {
   const diagnostics = workerInstanceDiagnostics(resource.metadata);
-  const workspaceBindings = resource.workspaceWorkerBindings?.map(
-    toWorkspaceBinding
-  );
+  const workspaceBindings =
+    resource.workspaceWorkerBindings?.map(toWorkspaceBinding);
 
   return {
     id: resource.id,

@@ -49,7 +49,6 @@ export interface OpenSandboxClientLike {
   createSandbox(input: OpenSandboxCreateInput): Promise<OpenSandboxSandboxLike>;
   getSandbox(id: string): Promise<OpenSandboxSandboxLike | null>;
   pauseSandbox(id: string): Promise<void>;
-  resumeSandbox(id: string): Promise<OpenSandboxSandboxLike>;
   deleteSandbox(id: string): Promise<void>;
 }
 
@@ -105,15 +104,6 @@ export class OpenSandboxClient implements OpenSandboxClientLike {
 
   async pauseSandbox(id: string): Promise<void> {
     await this.withManager((manager) => manager.pauseSandbox(id as any));
-  }
-
-  async resumeSandbox(id: string): Promise<OpenSandboxSandboxLike> {
-    const sandbox = await Sandbox.resume({
-      connectionConfig: this.connectionConfig,
-      sandboxId: id,
-      skipHealthCheck: false,
-    });
-    return new OpenSandboxSandboxAdapter(sandbox);
   }
 
   async deleteSandbox(id: string): Promise<void> {

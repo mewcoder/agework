@@ -4,11 +4,9 @@ import { WorkerProvisioner } from "./worker.provisioner";
 function deps() {
   return {
     runtime: {
-      prepareEnvironment: vi
-        .fn()
-        .mockResolvedValue({ runtimeInstanceId: "c1" }),
-      launchWorker: vi.fn().mockResolvedValue({ runtimeInstanceId: "c1" }),
-      teardown: vi.fn().mockResolvedValue(undefined),
+      start: vi.fn().mockResolvedValue({ runtimeInstanceId: "c1" }),
+      stop: vi.fn().mockResolvedValue(undefined),
+      destroy: vi.fn().mockResolvedValue(undefined),
     },
     registry: {
       insertStarting: vi.fn().mockResolvedValue({ ok: true }),
@@ -70,12 +68,11 @@ function make(d = deps()) {
 }
 
 describe("WorkerProvisioner", () => {
-  it("runs insertStarting → prepare → launch → waitForRegister → upsertRunning and returns ready", async () => {
+  it("runs insertStarting → start → waitForRegister → upsertRunning and returns ready", async () => {
     const d = deps();
     const res = await make(d).acquireInstanceForRun(input());
     expect(d.registry.insertStarting).toHaveBeenCalledOnce();
-    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
-    expect(d.runtime.launchWorker).toHaveBeenCalledOnce();
+    expect(d.runtime.start).toHaveBeenCalledOnce();
     expect(d.handshake.waitForRegister).toHaveBeenCalledOnce();
     expect(d.registry.upsertRunning).toHaveBeenCalledOnce();
     expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
@@ -84,7 +81,7 @@ describe("WorkerProvisioner", () => {
   it("routes a docker runtimeTarget by reading isolationScope from target.sandbox (not defaulted to 'workspace')", async () => {
     const d = deps();
     await make(d).acquireInstanceForRun(dockerInput());
-    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    const ctx = d.runtime.start.mock.calls[0][0];
     expect(ctx.runtimeType).toBe("docker");
     expect(d.registry.insertStarting).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -100,7 +97,7 @@ describe("WorkerProvisioner", () => {
   it("threads a ctx.isExpectedRuntimeInstance that delegates to registry.isRuntimeInstanceBoundToWorkspace", async () => {
     const d = deps();
     await make(d).acquireInstanceForRun(input());
-    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    const ctx = d.runtime.start.mock.calls[0][0];
     expect(typeof ctx.isExpectedRuntimeInstance).toBe("function");
 
     await ctx.isExpectedRuntimeInstance("runtime-instance-1");
@@ -115,7 +112,7 @@ describe("WorkerProvisioner", () => {
     const d = deps();
     const p = make(d);
     await p.acquireInstanceForRun(input());
-    const ctx = d.runtime.prepareEnvironment.mock.calls[0][0];
+    const ctx = d.runtime.start.mock.calls[0][0];
     expect(typeof ctx.onWorkerExit).toBe("function");
 
     ctx.onWorkerExit();
@@ -126,9 +123,9 @@ describe("WorkerProvisioner", () => {
     );
 
     // owner map cleared → next acquire launches fresh instead of reusing "ready"
-    d.runtime.prepareEnvironment.mockClear();
+    d.runtime.start.mockClear();
     await p.acquireInstanceForRun(input("r2"));
-    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
+    expect(d.runtime.start).toHaveBeenCalledOnce();
   });
 
   it("dedups concurrent runs for the same owner to one launch", async () => {
@@ -140,12 +137,12 @@ describe("WorkerProvisioner", () => {
     ]);
     expect(a).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
     expect(b).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
-    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
+    expect(d.runtime.start).toHaveBeenCalledOnce();
   });
 
   it("returns error and marks error when launch fails", async () => {
     const d = deps();
-    d.runtime.prepareEnvironment.mockRejectedValueOnce(new Error("boom"));
+    d.runtime.start.mockRejectedValueOnce(new Error("boom"));
     const res = await make(d).acquireInstanceForRun(input());
     expect(res.outcome).toBe("error");
     expect(d.registry.markErrorByOwner).toHaveBeenCalledOnce();
@@ -159,7 +156,7 @@ describe("WorkerProvisioner", () => {
     });
     const res = await make(d).acquireInstanceForRun(input());
     expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "old" });
-    expect(d.runtime.prepareEnvironment).not.toHaveBeenCalled();
+    expect(d.runtime.start).not.toHaveBeenCalled();
   });
 
   it("clears the owner entry when insertStarting throws, so a retry can start fresh", async () => {
@@ -170,9 +167,9 @@ describe("WorkerProvisioner", () => {
     const res = await p.acquireInstanceForRun(input());
     expect(res.outcome).toBe("error");
 
-    const res2 = await p.acquireInstanceForRun(input());
+    const res2 = await p.acquireInstanceForRun(input("r2"));
     expect(res2).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
     expect(d.registry.insertStarting).toHaveBeenCalledTimes(2);
-    expect(d.runtime.prepareEnvironment).toHaveBeenCalledOnce();
+    expect(d.runtime.start).toHaveBeenCalledOnce();
   });
 });

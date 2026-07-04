@@ -30,7 +30,7 @@ function makeService() {
   };
   const provisioner = {
     acquireInstanceForRun: vi.fn(),
-    teardown: vi.fn(),
+    stop: vi.fn(),
   };
   const runtimeService = {
     resolveRuntimeTarget: vi.fn(),
@@ -263,7 +263,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       findById: vi.fn(),
       markStoppedById: vi.fn().mockResolvedValue(undefined),
     };
-    const provisioner = { teardown: vi.fn().mockResolvedValue(undefined) };
+    const provisioner = { stop: vi.fn().mockResolvedValue(undefined) };
     const service = new WorkerManagerService(
       {} as never,
       {} as never,
@@ -292,7 +292,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       ok: true,
     });
 
-    expect(provisioner.teardown).toHaveBeenCalledWith({
+    expect(provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "sandbox",
       ownerId: "ws-1",
       runtimeInstanceId: "container-1",
@@ -319,7 +319,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       ok: true,
     });
 
-    expect(provisioner.teardown).toHaveBeenCalledWith({
+    expect(provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "local",
       ownerId: "ws-2",
       runtimeInstanceId: "4242:token",
@@ -339,7 +339,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       "not found or not running"
     );
     expect(registry.markStoppedById).not.toHaveBeenCalled();
-    expect(provisioner.teardown).not.toHaveBeenCalled();
+    expect(provisioner.stop).not.toHaveBeenCalled();
   });
 });
 
@@ -347,7 +347,7 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
   function makeService() {
     const provisioner = {
       acquireInstanceForRun: vi.fn(),
-      teardown: vi.fn(),
+      stop: vi.fn(),
     };
     const service = new WorkerManagerService(
       {} as never,
@@ -402,7 +402,7 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
     const { service, provisioner } = makeService();
     service.releaseInstanceForRun("run-1");
     expect(provisioner.acquireInstanceForRun).not.toHaveBeenCalled();
-    expect(provisioner.teardown).not.toHaveBeenCalled();
+    expect(provisioner.stop).not.toHaveBeenCalled();
   });
 });
 
@@ -460,7 +460,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     };
     const provisioner = {
       acquireInstanceForRun: vi.fn(),
-      teardown: vi.fn().mockResolvedValue(undefined),
+      stop: vi.fn().mockResolvedValue(undefined),
     };
     const livenessStore = {
       remove: vi.fn(),
@@ -584,7 +584,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       "run-4b",
       "heartbeat timeout"
     );
-    expect(provisioner.teardown).toHaveBeenCalledWith({
+    expect(provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "sandbox",
       ownerId: "owner-4",
       runtimeInstanceId: "container-4",
@@ -605,7 +605,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
 
     await service.fenceOwner("owner-5", "heartbeat timeout");
 
-    expect(provisioner.teardown).toHaveBeenCalledWith({
+    expect(provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "local",
       ownerId: "owner-5",
       runtimeInstanceId: "4242:token",
@@ -621,7 +621,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     await service.fenceOwner("owner-gone", "heartbeat timeout");
 
     expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
-    expect(provisioner.teardown).not.toHaveBeenCalled();
+    expect(provisioner.stop).not.toHaveBeenCalled();
     expect(livenessStore.remove).not.toHaveBeenCalled();
   });
 
@@ -641,7 +641,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       service.fenceOwner("owner-6", "heartbeat timeout")
     ).resolves.toBeUndefined();
 
-    expect(provisioner.teardown).toHaveBeenCalledWith({
+    expect(provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "sandbox",
       ownerId: "owner-6",
       runtimeInstanceId: "container-6",

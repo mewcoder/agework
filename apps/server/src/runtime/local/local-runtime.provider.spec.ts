@@ -1,284 +1,193 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime.provider";
 
-const childProcessMock = vi.hoisted(() => {
-  const child = { pid: 12345, connected: true };
-  return { child, fork: vi.fn(() => child) };
+const forkMock = vi.hoisted(() => {
+  const children: Array<{
+    pid: number;
+    killed: boolean;
+    kill: ReturnType<typeof vi.fn>;
+    on: ReturnType<typeof vi.fn>;
+  }> = [];
+  const fork = vi.fn(() => {
+    const child = { pid: 12345, killed: false, kill: vi.fn(), on: vi.fn() };
+    children.push(child);
+    return child;
+  });
+  return { fork, children };
 });
 
-vi.mock("node:child_process", () => ({
-  fork: childProcessMock.fork,
-}));
+vi.mock("node:child_process", () => ({ fork: forkMock.fork }));
+
+const makeCtx = (over: Record<string, unknown> = {}) => ({
+  runtimeType: "local" as const,
+  ownerId: "owner-1",
+  workspaceId: "ws-1",
+  runId: "run-1",
+  placement: {
+    runtimeType: "local" as const,
+    userId: "u1",
+    workspaceId: "ws-1",
+    hostPath: "/w",
+    runtimePath: "/w",
+    runtimeLogDir: "/logs",
+  },
+  workerEnv: {},
+  ...over,
+});
+
+const makeRef = (over: Record<string, unknown> = {}) => ({
+  runtimeType: "local",
+  ownerId: "owner-1",
+  runtimeInstanceId: "12345:some-token",
+  isolationScope: "workspace",
+  ...over,
+});
+
+const exitHandlerOf = (child: { on: ReturnType<typeof vi.fn> }) =>
+  child.on.mock.calls.find((call) => call[0] === "exit")?.[1] as () => void;
 
 describe("LocalRuntimeProvider", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    forkMock.fork.mockClear();
+    forkMock.children.length = 0;
   });
-  describe("launch", () => {
-    it("forks a worker process and returns the instanceId + channel", () => {
+
+  describe("start", () => {
+    it("forks a worker process and returns a pid:token instanceId", async () => {
       const provider = new LocalRuntimeProvider();
 
-      const handle = provider.launch({
-        runId: "run-1",
-        env: { AGEWORK_WORKER_RUN_ID: "run-1" },
-      });
+      const { runtimeInstanceId } = await provider.start(
+        makeCtx({
+          workerEnv: { AGEWORK_WORKER_START_TOKEN: "provisioner-tok" },
+        })
+      );
 
-      expect(childProcessMock.fork).toHaveBeenCalledWith(
+      expect(forkMock.fork).toHaveBeenCalledWith(
         expect.any(String),
         expect.any(Array),
         expect.objectContaining({
-          env: expect.objectContaining({ AGEWORK_WORKER_RUN_ID: "run-1" }),
+          env: expect.objectContaining({
+            AGEWORK_WORKER_START_TOKEN: "provisioner-tok",
+            AGEWORK_WORKER_RUN_START_TOKEN: expect.any(String),
+          }),
           stdio: ["ignore", "pipe", "pipe", "ipc"],
         })
       );
-      expect(handle.channel).toBe(childProcessMock.child);
-      expect(handle.runtimeInstanceId).toMatch(/^12345:.+/);
+      expect(runtimeInstanceId).toMatch(/^12345:.+/);
     });
 
-    it("generates a distinct startToken per launch", () => {
+    it("generates a distinct startToken per start", async () => {
       const provider = new LocalRuntimeProvider();
 
-      const first = provider.launch({ runId: "run-1", env: {} });
-      const second = provider.launch({ runId: "run-2", env: {} });
+      const first = await provider.start(makeCtx());
+      const second = await provider.start(makeCtx({ runId: "run-2" }));
 
       expect(first.runtimeInstanceId).not.toBe(second.runtimeInstanceId);
     });
   });
 
-  describe("recoverOrphan", () => {
-    const makeRef = (runtimeInstanceId: string) => ({
-      runtimeType: "local",
-      ownerId: "owner-1",
-      runtimeInstanceId,
-      isolationScope: "workspace",
+  describe("stop", () => {
+    it("SIGTERMs the stored channel and is idempotent", async () => {
+      const provider = new LocalRuntimeProvider();
+      await provider.start(makeCtx());
+      const child = forkMock.children[0];
+
+      provider.stop(makeRef());
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(child.kill).toHaveBeenCalledTimes(1);
+
+      expect(() => provider.stop(makeRef())).not.toThrow();
+      expect(child.kill).toHaveBeenCalledTimes(1);
     });
 
-    it("sends SIGTERM to the pid encoded in a 'pid:token' runtimeInstanceId", async () => {
+    it("does nothing for an unknown owner", () => {
+      const provider = new LocalRuntimeProvider();
+      expect(() =>
+        provider.stop(makeRef({ ownerId: "unknown", runtimeInstanceId: "9:x" }))
+      ).not.toThrow();
+    });
+  });
+
+  describe("destroy", () => {
+    it("kills the tracked channel when one is present", async () => {
+      const provider = new LocalRuntimeProvider();
+      await provider.start(makeCtx());
+      const child = forkMock.children[0];
+
+      provider.destroy(makeRef());
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+    });
+
+    it("SIGTERMs the pid encoded in runtimeInstanceId when no channel is tracked", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
       const provider = new LocalRuntimeProvider();
 
-      await provider.recoverOrphan(makeRef("12345:some-token"));
+      provider.destroy(makeRef({ runtimeInstanceId: "12345:some-token" }));
 
       expect(killSpy).toHaveBeenCalledWith(12345, "SIGTERM");
+      killSpy.mockRestore();
     });
 
-    it("does nothing for a malformed runtimeInstanceId", async () => {
+    it("does nothing for a malformed runtimeInstanceId", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
       const provider = new LocalRuntimeProvider();
 
-      await provider.recoverOrphan(makeRef("not-a-valid-runtime-id"));
+      provider.destroy(
+        makeRef({ runtimeInstanceId: "not-a-valid-runtime-id" })
+      );
 
       expect(killSpy).not.toHaveBeenCalled();
+      killSpy.mockRestore();
     });
 
-    it("ignores ESRCH when the process is already gone", async () => {
+    it("ignores ESRCH when the process is already gone", () => {
       vi.spyOn(process, "kill").mockImplementation(() => {
         throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
       });
       const provider = new LocalRuntimeProvider();
 
-      await expect(
-        provider.recoverOrphan(makeRef("12345:some-token"))
-      ).resolves.toBeUndefined();
-    });
-  });
-
-  it("implements RuntimeProvider surface (type/placementKind)", () => {
-    const provider = new LocalRuntimeProvider();
-    expect(provider.type).toBe("local");
-    expect(provider.placementKind).toBe("process");
-  });
-
-  it("prepareEnvironment is a no-op returning empty handle", async () => {
-    const provider = new LocalRuntimeProvider();
-    await expect(
-      provider.prepareEnvironment({
-        runtimeType: "local",
-        ownerId: "ws-1",
-        workspaceId: "ws-1",
-        runId: "run-1",
-        placement: {
-          runtimeType: "local",
-          userId: "u1",
-          workspaceId: "ws-1",
-          hostPath: "/w",
-          runtimePath: "/w",
-          runtimeLogDir: "/logs",
-        },
-        workerEnv: {},
-      })
-    ).resolves.toEqual({});
-  });
-
-  describe("launchWorker / teardown", () => {
-    const makeCtx = () => ({
-      runtimeType: "local" as const,
-      ownerId: "owner-1",
-      workspaceId: "ws-1",
-      runId: "run-1",
-      placement: {
-        runtimeType: "local" as const,
-        userId: "u1",
-        workspaceId: "ws-1",
-        hostPath: "/w",
-        runtimePath: "/w",
-        runtimeLogDir: "/logs",
-      },
-      workerEnv: {},
-    });
-
-    const makeFakeChannel = () => ({
-      pid: 12345,
-      killed: false,
-      kill: vi.fn(),
-      on: vi.fn(),
-    });
-
-    it("returns the launched runtimeInstanceId and stores the channel", async () => {
-      const provider = new LocalRuntimeProvider();
-      const fakeChannel = makeFakeChannel();
-      vi.spyOn(provider as any, "launch").mockReturnValue({
-        runtimeInstanceId: "12345:some-token",
-        channel: fakeChannel,
-      });
-
-      const result = await provider.launchWorker(makeCtx(), {});
-
-      expect(result).toEqual({ runtimeInstanceId: "12345:some-token" });
-
-      provider.teardown({
-        runtimeType: "local",
-        ownerId: "owner-1",
-        runtimeInstanceId: "12345:some-token",
-        isolationScope: "workspace",
-      });
-      expect(fakeChannel.kill).toHaveBeenCalledWith("SIGTERM");
-    });
-
-    it("teardown kills the stored channel and is idempotent afterwards", async () => {
-      const provider = new LocalRuntimeProvider();
-      const fakeChannel = makeFakeChannel();
-      vi.spyOn(provider as any, "launch").mockReturnValue({
-        runtimeInstanceId: "12345:some-token",
-        channel: fakeChannel,
-      });
-
-      await provider.launchWorker(makeCtx(), {});
-
-      const ref = {
-        runtimeType: "local" as const,
-        ownerId: "owner-1",
-        runtimeInstanceId: "12345:some-token",
-        isolationScope: "workspace" as const,
-      };
-
-      provider.teardown(ref);
-      expect(fakeChannel.kill).toHaveBeenCalledTimes(1);
-      expect(fakeChannel.kill).toHaveBeenCalledWith("SIGTERM");
-
-      expect(() => provider.teardown(ref)).not.toThrow();
-      expect(fakeChannel.kill).toHaveBeenCalledTimes(1);
-    });
-
-    it("teardown for an unknown owner does nothing and does not throw", () => {
-      const provider = new LocalRuntimeProvider();
-
       expect(() =>
-        provider.teardown({
-          runtimeType: "local",
-          ownerId: "unknown-owner",
-          runtimeInstanceId: "99999:no-token",
-          isolationScope: "workspace",
-        })
+        provider.destroy(makeRef({ runtimeInstanceId: "12345:some-token" }))
       ).not.toThrow();
     });
+  });
 
-    it("removes the channel on exit so a later teardown is a no-op", async () => {
-      const provider = new LocalRuntimeProvider();
-      const fakeChannel = makeFakeChannel();
-      vi.spyOn(provider as any, "launch").mockReturnValue({
-        runtimeInstanceId: "12345:some-token",
-        channel: fakeChannel,
-      });
-
-      await provider.launchWorker(makeCtx(), {});
-
-      expect(fakeChannel.on).toHaveBeenCalledWith("exit", expect.any(Function));
-      const exitHandler = fakeChannel.on.mock.calls.find(
-        (call) => call[0] === "exit"
-      )?.[1];
-      expect(exitHandler).toBeInstanceOf(Function);
-
-      exitHandler();
-
-      provider.teardown({
-        runtimeType: "local",
-        ownerId: "owner-1",
-        runtimeInstanceId: "12345:some-token",
-        isolationScope: "workspace",
-      });
-      expect(fakeChannel.kill).not.toHaveBeenCalled();
-    });
-
+  describe("exit handling", () => {
     it("calls ctx.onWorkerExit and removes the channel when the process exits", async () => {
       const provider = new LocalRuntimeProvider();
-      const fakeChannel = makeFakeChannel();
-      vi.spyOn(provider as any, "launch").mockReturnValue({
-        runtimeInstanceId: "12345:some-token",
-        channel: fakeChannel,
-      });
       const onWorkerExit = vi.fn();
+      await provider.start(makeCtx({ onWorkerExit }));
+      const child = forkMock.children[0];
 
-      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
-
-      const exitHandler = fakeChannel.on.mock.calls.find(
-        (call) => call[0] === "exit"
-      )?.[1];
-      exitHandler();
+      exitHandlerOf(child)();
 
       expect(onWorkerExit).toHaveBeenCalledOnce();
-      provider.teardown({
-        runtimeType: "local",
-        ownerId: "owner-1",
-        runtimeInstanceId: "12345:some-token",
-        isolationScope: "workspace",
-      });
-      expect(fakeChannel.kill).not.toHaveBeenCalled();
+      // channel removed → later stop is a no-op
+      provider.stop(makeRef());
+      expect(child.kill).not.toHaveBeenCalled();
     });
 
-    it("does not call onWorkerExit or delete the current channel when a stale/superseded channel exits", async () => {
+    it("ignores a stale/superseded channel's late exit", async () => {
       const provider = new LocalRuntimeProvider();
-      const staleChannel = makeFakeChannel();
-      const currentChannel = makeFakeChannel();
       const onWorkerExit = vi.fn();
 
-      vi.spyOn(provider as any, "launch").mockReturnValueOnce({
-        runtimeInstanceId: "stale:token",
-        channel: staleChannel,
-      });
-      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
-      const staleExitHandler = staleChannel.on.mock.calls.find(
-        (call) => call[0] === "exit"
-      )?.[1];
+      await provider.start(makeCtx({ onWorkerExit }));
+      const stale = forkMock.children[0];
+      const staleExit = exitHandlerOf(stale);
 
-      // A newer launch for the same owner supersedes the stale channel.
-      vi.spyOn(provider as any, "launch").mockReturnValueOnce({
-        runtimeInstanceId: "current:token",
-        channel: currentChannel,
-      });
-      await provider.launchWorker({ ...makeCtx(), onWorkerExit }, {});
+      // A newer start for the same owner supersedes the stale channel.
+      await provider.start(makeCtx({ onWorkerExit }));
+      const current = forkMock.children[1];
 
-      // The stale process's exit event fires late.
-      staleExitHandler();
+      staleExit();
 
       expect(onWorkerExit).not.toHaveBeenCalled();
-      provider.teardown({
-        runtimeType: "local",
-        ownerId: "owner-1",
-        runtimeInstanceId: "current:token",
-        isolationScope: "workspace",
-      });
-      expect(currentChannel.kill).toHaveBeenCalledWith("SIGTERM");
+      provider.stop(makeRef());
+      expect(current.kill).toHaveBeenCalledWith("SIGTERM");
     });
+  });
+
+  it("self-declares its type as local", () => {
+    expect(new LocalRuntimeProvider().type).toBe("local");
   });
 });

@@ -9,7 +9,6 @@ import {
   RUNTIME_PROVIDERS,
   type RuntimeProvider,
   type RuntimeLaunchContext,
-  type RuntimeEnvHandle,
   type RuntimeInstanceRef,
 } from "./runtime.types";
 
@@ -45,31 +44,19 @@ export class RuntimeService {
     };
   }
 
-  /** 准备目标 runtimeType 的执行环境(容器/进程),交由对应 RuntimeProvider 处理。 */
-  prepareEnvironment(ctx: RuntimeLaunchContext): Promise<RuntimeEnvHandle> {
-    return Promise.resolve(
-      this.resolveProvider(ctx.runtimeType).prepareEnvironment(ctx)
-    );
+  /** 建环境 + 起 worker,返回运行时实例 id。交由对应 RuntimeProvider 处理。 */
+  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
+    return this.resolveProvider(ctx.runtimeType).start(ctx);
   }
 
-  /** 在已准备好的环境上拉起 worker。 */
-  launchWorker(
-    ctx: RuntimeLaunchContext,
-    env: RuntimeEnvHandle
-  ): Promise<{ runtimeInstanceId: string }> {
-    return Promise.resolve(
-      this.resolveProvider(ctx.runtimeType).launchWorker(ctx, env)
-    );
+  /** owner 仍在:停 worker,保留载体。 */
+  stop(ref: RuntimeInstanceRef): Promise<void> | void {
+    return this.resolveProvider(ref.runtimeType).stop(ref);
   }
 
-  /** 拆除指定的运行时实例。 */
-  teardown(ref: RuntimeInstanceRef): Promise<void> | void {
-    return this.resolveProvider(ref.runtimeType).teardown(ref);
-  }
-
-  /** 回收一个孤儿运行时实例(若对应 provider 未实现回收则为 no-op)。 */
-  recoverOrphan(ref: RuntimeInstanceRef): Promise<void> | void {
-    return this.resolveProvider(ref.runtimeType).recoverOrphan?.(ref);
+  /** owner 永久消失:删除载体。 */
+  destroy(ref: RuntimeInstanceRef): Promise<void> | void {
+    return this.resolveProvider(ref.runtimeType).destroy(ref);
   }
 
   private resolveProvider(type: string): RuntimeProvider {

@@ -4,27 +4,19 @@ import { ConfigService } from "../config/config.service";
 import type {
   RuntimeProvider,
   RuntimeLaunchContext,
-  RuntimeEnvHandle,
   RuntimeInstanceRef,
 } from "./runtime.types";
 
 function makeFakeProvider(type: string): RuntimeProvider & {
-  prepareEnvironment: ReturnType<typeof vi.fn>;
-  launchWorker: ReturnType<typeof vi.fn>;
-  teardown: ReturnType<typeof vi.fn>;
-  recoverOrphan: ReturnType<typeof vi.fn>;
+  start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
 } {
   return {
     type,
-    placementKind: "process",
-    prepareEnvironment: vi
-      .fn()
-      .mockResolvedValue({ runtimeInstanceId: `${type}-env` }),
-    launchWorker: vi
-      .fn()
-      .mockResolvedValue({ runtimeInstanceId: `${type}-instance` }),
-    teardown: vi.fn().mockResolvedValue(undefined),
-    recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    start: vi.fn().mockResolvedValue({ runtimeInstanceId: `${type}-instance` }),
+    stop: vi.fn().mockResolvedValue(undefined),
+    destroy: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -70,12 +62,6 @@ describe("RuntimeService", () => {
   });
 
   it("getRuntimePolicy reads from ConfigService", () => {
-    configService.getAllowedRuntimeTypes = vi
-      .fn()
-      .mockReturnValue(["local", "docker", "opensandbox"]);
-    configService.getAllowedIsolationScopes = vi
-      .fn()
-      .mockReturnValue(["user", "workspace"]);
     const policy = service.getRuntimePolicy();
     expect(policy).toEqual({
       runtimeType: "local",
@@ -103,85 +89,65 @@ describe("RuntimeService", () => {
       isolationScope: "user",
     });
 
-    it("prepareEnvironment dispatches to the docker provider for runtimeType 'docker'", async () => {
+    it("start dispatches to the docker provider for runtimeType 'docker'", async () => {
       const input = ctx("docker");
-      await expect(service.prepareEnvironment(input)).resolves.toEqual({
-        runtimeInstanceId: "docker-env",
+      await expect(service.start(input)).resolves.toEqual({
+        runtimeInstanceId: "docker-instance",
       });
-      expect(fakeDocker.prepareEnvironment).toHaveBeenCalledWith(input);
-      expect(fakeLocal.prepareEnvironment).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.prepareEnvironment).not.toHaveBeenCalled();
+      expect(fakeDocker.start).toHaveBeenCalledWith(input);
+      expect(fakeLocal.start).not.toHaveBeenCalled();
+      expect(fakeOpenSandbox.start).not.toHaveBeenCalled();
     });
 
-    it("prepareEnvironment dispatches to the opensandbox provider for runtimeType 'opensandbox'", async () => {
+    it("start dispatches to the opensandbox provider for runtimeType 'opensandbox'", async () => {
       const input = ctx("opensandbox");
-      await expect(service.prepareEnvironment(input)).resolves.toEqual({
-        runtimeInstanceId: "opensandbox-env",
+      await expect(service.start(input)).resolves.toEqual({
+        runtimeInstanceId: "opensandbox-instance",
       });
-      expect(fakeOpenSandbox.prepareEnvironment).toHaveBeenCalledWith(input);
-      expect(fakeLocal.prepareEnvironment).not.toHaveBeenCalled();
-      expect(fakeDocker.prepareEnvironment).not.toHaveBeenCalled();
+      expect(fakeOpenSandbox.start).toHaveBeenCalledWith(input);
+      expect(fakeLocal.start).not.toHaveBeenCalled();
+      expect(fakeDocker.start).not.toHaveBeenCalled();
     });
 
-    it("launchWorker dispatches to the provider matching runtimeType", async () => {
-      const input = ctx("local");
-      const env: RuntimeEnvHandle = {};
-      await expect(service.launchWorker(input, env)).resolves.toEqual({
-        runtimeInstanceId: "local-instance",
-      });
-      expect(fakeLocal.launchWorker).toHaveBeenCalledWith(input, env);
-      expect(fakeDocker.launchWorker).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.launchWorker).not.toHaveBeenCalled();
-    });
-
-    it("teardown dispatches to the docker provider for runtimeType 'docker'", async () => {
+    it("stop dispatches to the provider matching runtimeType", async () => {
       const input = ref("docker");
-      await service.teardown(input);
-      expect(fakeDocker.teardown).toHaveBeenCalledWith(input);
-      expect(fakeLocal.teardown).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.teardown).not.toHaveBeenCalled();
+      await service.stop(input);
+      expect(fakeDocker.stop).toHaveBeenCalledWith(input);
+      expect(fakeLocal.stop).not.toHaveBeenCalled();
+      expect(fakeOpenSandbox.stop).not.toHaveBeenCalled();
     });
 
-    it("teardown dispatches to the opensandbox provider for runtimeType 'opensandbox'", async () => {
+    it("destroy dispatches to the provider matching runtimeType", async () => {
       const input = ref("opensandbox");
-      await service.teardown(input);
-      expect(fakeOpenSandbox.teardown).toHaveBeenCalledWith(input);
-      expect(fakeLocal.teardown).not.toHaveBeenCalled();
-      expect(fakeDocker.teardown).not.toHaveBeenCalled();
-    });
-
-    it("recoverOrphan dispatches to the provider matching runtimeType", async () => {
-      const input = ref("local");
-      await service.recoverOrphan(input);
-      expect(fakeLocal.recoverOrphan).toHaveBeenCalledWith(input);
-      expect(fakeDocker.recoverOrphan).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.recoverOrphan).not.toHaveBeenCalled();
+      await service.destroy(input);
+      expect(fakeOpenSandbox.destroy).toHaveBeenCalledWith(input);
+      expect(fakeLocal.destroy).not.toHaveBeenCalled();
+      expect(fakeDocker.destroy).not.toHaveBeenCalled();
     });
 
     it("throws for an unknown runtimeType", () => {
-      expect(() => service.prepareEnvironment(ctx("unknown"))).toThrow(
+      expect(() => service.start(ctx("unknown"))).toThrow(
         /Unknown runtime provider/
       );
-      expect(() => service.teardown(ref("unknown"))).toThrow(
+      expect(() => service.stop(ref("unknown"))).toThrow(
+        /Unknown runtime provider/
+      );
+      expect(() => service.destroy(ref("unknown"))).toThrow(
         /Unknown runtime provider/
       );
     });
 
-    it("the legacy 'sandbox' runtimeType is dead: no provider registers under it, so routing throws", () => {
-      // Regression guard: mid-refactor, providers were briefly registered under
-      // type:"sandbox" before the domain value fully migrated to docker/opensandbox.
-      // This proves that intermediate state did not survive to the final tree —
-      // "sandbox" resolves to nothing, it does NOT silently hit docker or opensandbox.
-      expect(() => service.prepareEnvironment(ctx("sandbox"))).toThrow(
+    it("the legacy 'sandbox' runtimeType is dead: routing throws, never silently hits docker/opensandbox", () => {
+      expect(() => service.start(ctx("sandbox"))).toThrow(
         /Unknown runtime provider/
       );
-      expect(() => service.teardown(ref("sandbox"))).toThrow(
+      expect(() => service.stop(ref("sandbox"))).toThrow(
         /Unknown runtime provider/
       );
-      expect(fakeDocker.prepareEnvironment).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.prepareEnvironment).not.toHaveBeenCalled();
-      expect(fakeDocker.teardown).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.teardown).not.toHaveBeenCalled();
+      expect(fakeDocker.start).not.toHaveBeenCalled();
+      expect(fakeOpenSandbox.start).not.toHaveBeenCalled();
+      expect(fakeDocker.stop).not.toHaveBeenCalled();
+      expect(fakeOpenSandbox.stop).not.toHaveBeenCalled();
     });
   });
 });

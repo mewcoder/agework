@@ -133,8 +133,7 @@ export class WorkerProvisioner {
 
       const { runtimeInstanceId } = await withTimeout(
         (async () => {
-          const env = await this.runtimeService.prepareEnvironment(ctx);
-          const launched = await this.runtimeService.launchWorker(ctx, env);
+          const launched = await this.runtimeService.start(ctx);
           await this.handshakeStore.waitForRegister(ownerId, startToken);
           return launched;
         })(),
@@ -186,12 +185,25 @@ export class WorkerProvisioner {
     }
   }
 
-  /** 拆除某 owner 的实例:清内存态 + command dispatcher + registry markStopped +
-   *  provider.teardown。ref 由调用方从 DB 行派生(重启后无内存态也能停)。 */
-  async teardown(ref: RuntimeInstanceRef): Promise<void> {
+  /** owner 仍在(fence 判死 / admin 手动停):停 worker,保留载体。 */
+  stop(ref: RuntimeInstanceRef): Promise<void> {
+    return this.finalize(ref, (r) => this.runtimeService.stop(r));
+  }
+
+  /** owner 永久消失(删 workspace / user):删除载体。 */
+  destroy(ref: RuntimeInstanceRef): Promise<void> {
+    return this.finalize(ref, (r) => this.runtimeService.destroy(r));
+  }
+
+  /** 收尾公共编排:清内存态 + command dispatcher + provider 物理动作 + registry
+   *  markStopped。ref 由调用方从 DB 行派生(重启后无内存态也能收尾)。 */
+  private async finalize(
+    ref: RuntimeInstanceRef,
+    runtimeAction: (ref: RuntimeInstanceRef) => Promise<void> | void
+  ): Promise<void> {
     this.owners.delete(ref.ownerId);
     this.commandDispatcher.cleanupByOwnerId(ref.ownerId);
-    await Promise.resolve(this.runtimeService.teardown(ref)).catch(
+    await Promise.resolve(runtimeAction(ref)).catch(
       swallow(this.logger, `provider teardown for owner ${ref.ownerId}`)
     );
     await this.registry

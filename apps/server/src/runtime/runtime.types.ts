@@ -1,15 +1,11 @@
 import type {
   IsolationScope,
   RuntimePlacement,
-  SandboxRuntimePlacement,
 } from "@agework/shared/protocol";
-import type { ChildProcess } from "node:child_process";
 import type { IsolationScope as ConfigIsolationScope } from "../config/config.service";
 
-// ── Sandbox engine 契约类型(runtime 的 ContainerRuntimeProvider 与
-// DockerSandboxEngine/OpenSandboxEngine 共用的 runtime 内部类型契约面) ──
-
-export type SandboxEngineType = "docker" | "opensandbox";
+// ── Sandbox 启动输入契约（docker / opensandbox 两个 provider 与共享 helper
+// `buildSandboxStartInput` 之间的内部类型契约面） ──
 
 export type SandboxPlacement = {
   isolationScope: IsolationScope;
@@ -33,35 +29,6 @@ export type SandboxStartInput = {
    * from names or labels.
    */
   isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
-  /** OpenSandbox 专用:resource 恢复时传已有的 RuntimeTarget.id */
-  runtimeInstanceId?: string;
-};
-
-export type SandboxRuntime = {
-  engineType: SandboxEngineType;
-  runtimeInstanceId: string;
-  workspaceMountPath: string;
-};
-
-/** 类型守卫:narrow 出 container 分支(docker|opensandbox，placement.sandbox 必填)。 */
-export function isSandboxPlacement(
-  placement: RuntimePlacement
-): placement is SandboxRuntimePlacement {
-  return placement.runtimeType !== "local";
-}
-
-// ── Local Provider 契约类型(runtime 的 LocalRuntimeProvider fork 机制内部
-// 使用的类型契约面) ──
-
-export type LocalLaunchInput = {
-  runId: string;
-  env: Record<string, string>;
-};
-
-export type LocalInstanceHandle = {
-  runtimeInstanceId: string;
-  /** fork() 返回的 ChildProcess——调用方(runtime 的 LocalRuntimeProvider)只用它接收进程生命周期信号(exit)与终止(kill),业务收发走 HTTP。 */
-  channel: ChildProcess;
 };
 
 // ── Placement 解析契约类型(worker-manager 的 WorkerManagerService.resolveRuntimeTarget()
@@ -104,10 +71,7 @@ export type RuntimeLaunchContext = {
   onWorkerExit?: () => void;
 };
 
-/** prepareEnvironment 的产物：container 返回容器 id，process 返回空。 */
-export type RuntimeEnvHandle = { runtimeInstanceId?: string };
-
-/** 停止/回收一个实例所需的最小信息，由调用方从 WorkerRegistry DB 行派生。 */
+/** 停止/销毁一个实例所需的最小信息，由调用方从 WorkerRegistry DB 行派生。 */
 export type RuntimeInstanceRef = {
   runtimeType: string;
   ownerId: string;
@@ -115,17 +79,18 @@ export type RuntimeInstanceRef = {
   isolationScope: string;
 };
 
-/** 某一 runtimeType 的运行形态：自声明类型 + 备环境/拉 worker/拆除/回收孤儿。 */
+/**
+ * 某一 runtimeType 的运行形态：自声明类型 + 三段生命周期。
+ * - start：建环境 + 起 worker（容器 create/start 合一，local 是 fork）。
+ * - stop：owner 仍在，停 worker 但保留载体（容器 stop/pause，local 杀进程）。
+ * - destroy：owner 永久消失，删除载体（容器 rm/delete，local 杀进程）。
+ * local 无独立载体，stop 与 destroy 同为杀进程。
+ */
 export interface RuntimeProvider {
   readonly type: string;
-  readonly placementKind: "container" | "process";
-  prepareEnvironment(ctx: RuntimeLaunchContext): Promise<RuntimeEnvHandle>;
-  launchWorker(
-    ctx: RuntimeLaunchContext,
-    env: RuntimeEnvHandle
-  ): Promise<{ runtimeInstanceId: string }>;
-  teardown(ref: RuntimeInstanceRef): Promise<void> | void;
-  recoverOrphan?(ref: RuntimeInstanceRef): Promise<void> | void;
+  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }>;
+  stop(ref: RuntimeInstanceRef): Promise<void> | void;
+  destroy(ref: RuntimeInstanceRef): Promise<void> | void;
 }
 
 export const RUNTIME_PROVIDERS = Symbol("RUNTIME_PROVIDERS");

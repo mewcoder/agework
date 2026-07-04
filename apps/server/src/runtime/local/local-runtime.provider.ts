@@ -5,11 +5,8 @@ import { safeLogJson } from "../../common/logging";
 import { resolveApiBasePath } from "../../common/path.util";
 import { EnvKey } from "../../config/registry/env-key";
 import type {
-  LocalInstanceHandle,
-  LocalLaunchInput,
   RuntimeProvider,
   RuntimeLaunchContext,
-  RuntimeEnvHandle,
   RuntimeInstanceRef,
 } from "../runtime.types";
 
@@ -38,91 +35,80 @@ const WORKER_MAIN = require.resolve("@agework/worker");
 const TSX_CLI = require.resolve("tsx/cli");
 
 /**
- * local 放置机制的 Provider:fork 一个 worker 子进程,IPC 通信。只负责物理
- * 拉起/终止进程,不参与后续通信内容——channel 随 launch() 返回值交给调用方
- * (目前是 run 模块的 RunDriver)自行收发,这条边界在设计文档 1.1 节
- * "local 场景的 channel 交接"里有说明。
+ * local 运行形态的 Provider:fork 一个 worker 子进程,IPC channel 只在内部用于
+ * 接收进程 exit 信号与 SIGTERM 终止,业务收发走 HTTP。local 无独立载体,
+ * `stop` 与 `destroy` 都是杀进程——`stop` 杀内存中跟踪的 channel,`destroy`
+ * 在无内存态时(如 server 重启后清孤儿)按 `runtimeInstanceId` 里的 pid 杀。
  */
 @Injectable()
 export class LocalRuntimeProvider implements RuntimeProvider {
   readonly type = "local";
-  readonly placementKind = "process" as const;
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly channels = new Map<string, ChildProcess>();
 
-  /** RuntimeProvider 接口方法:local 没有环境准备阶段,直接返回空 handle。 */
-  prepareEnvironment(_ctx: RuntimeLaunchContext): Promise<RuntimeEnvHandle> {
-    return Promise.resolve({});
-  }
-
-  /** RuntimeProvider 接口方法:复用 launch(),并接管进程句柄供 teardown/exit 监听用。 */
-  launchWorker(
-    ctx: RuntimeLaunchContext,
-    _env: RuntimeEnvHandle
-  ): Promise<{ runtimeInstanceId: string }> {
-    const { runtimeInstanceId, channel } = this.launch({
-      runId: ctx.runId,
-      env: { ...ctx.workerEnv, AGEWORK_WORKER_API_BASE: resolveLocalApiBase() },
+  /** fork 一个本地 worker 子进程,接管进程句柄供 stop/exit 用,返回逻辑实例标识。 */
+  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
+    const startToken = randomUUID();
+    const child = fork(TSX_CLI, [WORKER_MAIN], {
+      env: {
+        ...process.env,
+        ...ctx.workerEnv,
+        AGEWORK_WORKER_API_BASE: resolveLocalApiBase(),
+        AGEWORK_WORKER_RUN_START_TOKEN: startToken,
+      },
+      stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
-    this.channels.set(ctx.ownerId, channel);
-    channel.on("exit", () => {
-      if (this.channels.get(ctx.ownerId) !== channel) return; // stale process, superseded
+    const runtimeInstanceId = `${child.pid}:${startToken}`;
+    this.logger.log(
+      `local worker forked ${safeLogJson({ runId: ctx.runId, pid: child.pid })}`
+    );
+
+    this.channels.set(ctx.ownerId, child);
+    child.on("exit", () => {
+      if (this.channels.get(ctx.ownerId) !== child) return; // stale process, superseded
       this.channels.delete(ctx.ownerId);
       ctx.onWorkerExit?.();
     });
     return Promise.resolve({ runtimeInstanceId });
   }
 
-  /** RuntimeProvider 接口方法:SIGTERM owner 持有的进程句柄。 */
-  teardown(ref: RuntimeInstanceRef): void {
-    const channel = this.channels.get(ref.ownerId);
+  /** owner 仍在:SIGTERM owner 持有的进程句柄。 */
+  stop(ref: RuntimeInstanceRef): void {
+    this.terminateChannel(ref.ownerId);
+  }
+
+  /** owner 永久消失:有内存 channel 杀 channel,否则按 pid 杀(重启后清孤儿)。 */
+  destroy(ref: RuntimeInstanceRef): void {
+    if (this.channels.has(ref.ownerId)) {
+      this.terminateChannel(ref.ownerId);
+      return;
+    }
+    this.killByInstanceId(ref.runtimeInstanceId);
+  }
+
+  private terminateChannel(ownerId: string): void {
+    const channel = this.channels.get(ownerId);
     if (channel && !channel.killed) {
       try {
         channel.kill("SIGTERM");
       } catch (err) {
         this.logger.warn(
-          `terminate local worker failed ${safeLogJson({ ownerId: ref.ownerId, error: err instanceof Error ? err.message : String(err) })}`
+          `terminate local worker failed ${safeLogJson({ ownerId, error: err instanceof Error ? err.message : String(err) })}`
         );
       }
     }
-    this.channels.delete(ref.ownerId);
-  }
-
-  /** fork 一个本地 worker 子进程,返回逻辑实例标识与 IPC channel。 */
-  launch(input: LocalLaunchInput): LocalInstanceHandle {
-    const startToken = randomUUID();
-    const child = fork(TSX_CLI, [WORKER_MAIN], {
-      env: {
-        ...process.env,
-        ...input.env,
-        AGEWORK_WORKER_RUN_START_TOKEN: startToken,
-      },
-      stdio: ["ignore", "pipe", "pipe", "ipc"],
-    });
-    this.logger.log(
-      `local worker forked ${safeLogJson({ runId: input.runId, pid: child.pid })}`
-    );
-    return {
-      runtimeInstanceId: `${child.pid}:${startToken}`,
-      channel: child,
-    };
-  }
-
-  /** RuntimeProvider 接口方法:按 ref.runtimeInstanceId 回收孤儿进程。 */
-  recoverOrphan(ref: RuntimeInstanceRef): Promise<void> {
-    return this.recoverOrphanByInstanceId(ref.runtimeInstanceId);
+    this.channels.delete(ownerId);
   }
 
   /** runtimeInstanceId 格式为 `pid:startToken`;向 pid 发送 SIGTERM,进程已退出(ESRCH)时忽略。 */
-  private recoverOrphanByInstanceId(runtimeInstanceId: string): Promise<void> {
+  private killByInstanceId(runtimeInstanceId: string): void {
     const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
-    if (!Number.isInteger(pid)) return Promise.resolve();
+    if (!Number.isInteger(pid)) return;
     try {
       process.kill(pid, "SIGTERM");
     } catch {
       // ESRCH: process already gone
     }
-    return Promise.resolve();
   }
 }

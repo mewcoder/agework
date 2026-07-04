@@ -79,7 +79,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
       await this.registry.findRunningByRuntimeType("local");
     for (const row of staleLocalRows) {
       try {
-        await this.runtimeService.recoverOrphan({
+        await this.runtimeService.destroy({
           runtimeType: "local",
           ownerId: row.ownerId,
           runtimeInstanceId: row.runtimeInstanceId,
@@ -117,7 +117,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
         runtimeInstanceId: resource.runtimeInstanceId,
         isolationScope: resource.isolationScope,
       };
-      await this.provisioner.teardown(ref);
+      await this.provisioner.destroy(ref);
       await this.registry.markStoppedById(resource, "owner_released");
     } catch (err) {
       this.logger.warn(

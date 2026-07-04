@@ -29,14 +29,15 @@ function makeRegistry(overrides: Record<string, unknown> = {}) {
 
 function makeProvisioner(overrides: Record<string, unknown> = {}) {
   return {
-    teardown: vi.fn().mockResolvedValue(undefined),
+    stop: vi.fn().mockResolvedValue(undefined),
+    destroy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
 
 function makeRuntimeService(overrides: Record<string, unknown> = {}) {
   return {
-    recoverOrphan: vi.fn().mockResolvedValue(undefined),
+    destroy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -71,7 +72,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
       await service.shutdownForWorkspace("ws-1");
 
       expect(registry.findBindingWithResource).toHaveBeenCalledWith("ws-1");
-      expect(provisioner.teardown).toHaveBeenCalledWith({
+      expect(provisioner.destroy).toHaveBeenCalledWith({
         runtimeType: "sandbox",
         ownerId: "ws-1",
         runtimeInstanceId: "container-1",
@@ -107,7 +108,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
 
       await service.shutdownForWorkspace("ws-1");
 
-      expect(provisioner.teardown).not.toHaveBeenCalled();
+      expect(provisioner.destroy).not.toHaveBeenCalled();
       expect(registry.markStoppedById).not.toHaveBeenCalled();
       expect(registry.deleteWorkspaceBinding).toHaveBeenCalledWith("ws-1");
     });
@@ -135,7 +136,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
 
       await service.shutdownForWorkspace("ws-1");
 
-      expect(provisioner.teardown).toHaveBeenCalledWith({
+      expect(provisioner.destroy).toHaveBeenCalledWith({
         runtimeType: "local",
         ownerId: "ws-1",
         runtimeInstanceId: "4242:token",
@@ -184,13 +185,13 @@ describe("WorkerInstanceLifecycleHandler", () => {
         "user-1",
         "ws-2",
       ]);
-      expect(provisioner.teardown).toHaveBeenCalledWith(
+      expect(provisioner.destroy).toHaveBeenCalledWith(
         expect.objectContaining({ ownerId: "user-1" })
       );
-      expect(provisioner.teardown).toHaveBeenCalledWith(
+      expect(provisioner.destroy).toHaveBeenCalledWith(
         expect.objectContaining({ ownerId: "ws-2" })
       );
-      expect(provisioner.teardown).toHaveBeenCalledTimes(2);
+      expect(provisioner.destroy).toHaveBeenCalledTimes(2);
       expect(registry.markStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-user" }),
         "owner_released"
@@ -211,13 +212,13 @@ describe("WorkerInstanceLifecycleHandler", () => {
           makeResource({ id: "rr-2", ownerId: "ws-2" }),
         ]),
     });
-    const teardown = vi
+    const destroy = vi
       .fn()
       .mockImplementationOnce(() => {
         throw new Error("boom");
       })
       .mockImplementationOnce(() => Promise.resolve());
-    const provisioner = makeProvisioner({ teardown });
+    const provisioner = makeProvisioner({ destroy });
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
     const service = new WorkerInstanceLifecycleHandler(
@@ -228,7 +229,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
     );
 
     await expect(service.shutdownForUser("user-1")).resolves.toBeUndefined();
-    expect(teardown).toHaveBeenCalledTimes(2);
+    expect(destroy).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -266,13 +267,13 @@ describe("onApplicationBootstrap", () => {
 
     expect(registry.markAllStartingAsError).toHaveBeenCalledTimes(1);
     expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
-    expect(runtimeService.recoverOrphan).toHaveBeenCalledWith({
+    expect(runtimeService.destroy).toHaveBeenCalledWith({
       runtimeType: "local",
       ownerId: "ws-1",
       runtimeInstanceId: "4242:token",
       isolationScope: "workspace",
     });
-    expect(runtimeService.recoverOrphan).toHaveBeenCalledWith({
+    expect(runtimeService.destroy).toHaveBeenCalledWith({
       runtimeType: "local",
       ownerId: "ws-2",
       runtimeInstanceId: "5555:token",
@@ -303,7 +304,7 @@ describe("onApplicationBootstrap", () => {
     await service.onApplicationBootstrap();
 
     expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
-    expect(provisioner.teardown).not.toHaveBeenCalled();
+    expect(provisioner.destroy).not.toHaveBeenCalled();
     expect(registry.markStoppedById).not.toHaveBeenCalled();
   });
 
@@ -338,7 +339,7 @@ describe("onApplicationBootstrap", () => {
     expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-1");
     expect(livenessStore.touch).toHaveBeenCalledWith("ws-sb-2");
     expect(livenessStore.touch).toHaveBeenCalledTimes(2);
-    expect(provisioner.teardown).not.toHaveBeenCalled();
+    expect(provisioner.destroy).not.toHaveBeenCalled();
   });
 
   it("logs a warning and continues when recovering one orphaned local row throws", async () => {
@@ -361,11 +362,11 @@ describe("onApplicationBootstrap", () => {
       ]),
     });
     const provisioner = makeProvisioner();
-    const recoverOrphan = vi
+    const destroy = vi
       .fn()
       .mockRejectedValueOnce(new Error("ESRCH"))
       .mockResolvedValueOnce(undefined);
-    const runtimeService = makeRuntimeService({ recoverOrphan });
+    const runtimeService = makeRuntimeService({ destroy });
     const livenessStore = makeLivenessStore();
     const service = new WorkerInstanceLifecycleHandler(
       registry as never,
@@ -375,7 +376,7 @@ describe("onApplicationBootstrap", () => {
     );
 
     await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
-    expect(recoverOrphan).toHaveBeenCalledTimes(2);
+    expect(destroy).toHaveBeenCalledTimes(2);
     expect(registry.markStoppedById).toHaveBeenCalledTimes(2);
   });
 });
