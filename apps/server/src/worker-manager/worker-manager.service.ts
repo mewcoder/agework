@@ -8,15 +8,16 @@ import type {
   AcquireInstanceResult,
   CommandPayload,
   RunConfig,
-  RuntimeTarget,
+  RuntimeSpec,
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type { AdminRunWorkerInstanceResponse } from "@agework/shared/api";
-import type {
-  ResolveRuntimeTargetInput,
-  RuntimeInstanceRef,
-} from "../runtime/runtime.types";
+import {
+  isRuntimeType,
+  type RuntimeSpecInput,
+  type RuntimeInstanceRef,
+} from "@agework/runtime";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
 import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
@@ -138,8 +139,8 @@ export class WorkerManagerService {
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker)。直通转发 runtime 模块。 */
-  resolveRuntimeTarget(input: ResolveRuntimeTargetInput): RuntimeTarget {
-    return this.runtimeService.resolveRuntimeTarget(input);
+  resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
+    return this.runtimeService.resolveRuntimeSpec(input);
   }
 
   // ── WorkerRegistry 跨模块查询 ────────────────────────────────────────
@@ -186,6 +187,7 @@ export class WorkerManagerService {
   private async stopOwner(ownerId: string): Promise<void> {
     const row = await this.registry.findActiveByOwnerId(ownerId);
     if (!row) return;
+    if (!isRuntimeType(row.runtimeType)) return;
     const ref: RuntimeInstanceRef = {
       runtimeType: row.runtimeType,
       ownerId: row.ownerId,
@@ -305,6 +307,11 @@ export class WorkerManagerService {
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(
         `Runtime resource ${id} not found or not running`
+      );
+    }
+    if (!isRuntimeType(resource.runtimeType)) {
+      throw new NotFoundException(
+        `Runtime resource ${id} has unknown runtimeType ${resource.runtimeType}`
       );
     }
     const ref: RuntimeInstanceRef = {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime.provider";
+import type { LocalProviderConfig, RuntimeInstanceRef } from "../types";
 
 const forkMock = vi.hoisted(() => {
   const children: Array<{
@@ -18,6 +19,14 @@ const forkMock = vi.hoisted(() => {
 
 vi.mock("node:child_process", () => ({ fork: forkMock.fork }));
 
+const CONFIG: LocalProviderConfig = {
+  apiBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerEntryPath: "/pkg/worker/main.ts",
+  tsxCliPath: "/pkg/tsx/cli",
+};
+
+const makeProvider = () => new LocalRuntimeProvider(CONFIG);
+
 const makeCtx = (over: Record<string, unknown> = {}) => ({
   runtimeType: "local" as const,
   ownerId: "owner-1",
@@ -35,7 +44,7 @@ const makeCtx = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const makeRef = (over: Record<string, unknown> = {}) => ({
+const makeRef = (over: Partial<RuntimeInstanceRef> = {}): RuntimeInstanceRef => ({
   runtimeType: "local",
   ownerId: "owner-1",
   runtimeInstanceId: "12345:some-token",
@@ -53,20 +62,19 @@ describe("LocalRuntimeProvider", () => {
   });
 
   describe("start", () => {
-    it("forks a worker process and returns a pid:token instanceId", async () => {
-      const provider = new LocalRuntimeProvider();
+    it("forks the configured worker entry via tsx and returns a pid:token instanceId", async () => {
+      const provider = makeProvider();
 
       const { runtimeInstanceId } = await provider.start(
-        makeCtx({
-          workerEnv: { AGEWORK_WORKER_START_TOKEN: "provisioner-tok" },
-        })
+        makeCtx({ workerEnv: { AGEWORK_WORKER_START_TOKEN: "provisioner-tok" } })
       );
 
       expect(forkMock.fork).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.any(Array),
+        "/pkg/tsx/cli",
+        ["/pkg/worker/main.ts"],
         expect.objectContaining({
           env: expect.objectContaining({
+            AGEWORK_WORKER_API_BASE: "http://127.0.0.1:3000/api/v1",
             AGEWORK_WORKER_START_TOKEN: "provisioner-tok",
             AGEWORK_WORKER_RUN_START_TOKEN: expect.any(String),
           }),
@@ -77,7 +85,7 @@ describe("LocalRuntimeProvider", () => {
     });
 
     it("generates a distinct startToken per start", async () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
 
       const first = await provider.start(makeCtx());
       const second = await provider.start(makeCtx({ runId: "run-2" }));
@@ -88,7 +96,7 @@ describe("LocalRuntimeProvider", () => {
 
   describe("stop", () => {
     it("SIGTERMs the stored channel and is idempotent", async () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
       await provider.start(makeCtx());
       const child = forkMock.children[0];
 
@@ -101,7 +109,7 @@ describe("LocalRuntimeProvider", () => {
     });
 
     it("does nothing for an unknown owner", () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
       expect(() =>
         provider.stop(makeRef({ ownerId: "unknown", runtimeInstanceId: "9:x" }))
       ).not.toThrow();
@@ -110,7 +118,7 @@ describe("LocalRuntimeProvider", () => {
 
   describe("destroy", () => {
     it("kills the tracked channel when one is present", async () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
       await provider.start(makeCtx());
       const child = forkMock.children[0];
 
@@ -120,7 +128,7 @@ describe("LocalRuntimeProvider", () => {
 
     it("SIGTERMs the pid encoded in runtimeInstanceId when no channel is tracked", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
 
       provider.destroy(makeRef({ runtimeInstanceId: "12345:some-token" }));
 
@@ -130,11 +138,9 @@ describe("LocalRuntimeProvider", () => {
 
     it("does nothing for a malformed runtimeInstanceId", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
 
-      provider.destroy(
-        makeRef({ runtimeInstanceId: "not-a-valid-runtime-id" })
-      );
+      provider.destroy(makeRef({ runtimeInstanceId: "not-a-valid-runtime-id" }));
 
       expect(killSpy).not.toHaveBeenCalled();
       killSpy.mockRestore();
@@ -144,7 +150,7 @@ describe("LocalRuntimeProvider", () => {
       vi.spyOn(process, "kill").mockImplementation(() => {
         throw Object.assign(new Error("ESRCH"), { code: "ESRCH" });
       });
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
 
       expect(() =>
         provider.destroy(makeRef({ runtimeInstanceId: "12345:some-token" }))
@@ -154,7 +160,7 @@ describe("LocalRuntimeProvider", () => {
 
   describe("exit handling", () => {
     it("calls ctx.onWorkerExit and removes the channel when the process exits", async () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
       const onWorkerExit = vi.fn();
       await provider.start(makeCtx({ onWorkerExit }));
       const child = forkMock.children[0];
@@ -162,20 +168,18 @@ describe("LocalRuntimeProvider", () => {
       exitHandlerOf(child)();
 
       expect(onWorkerExit).toHaveBeenCalledOnce();
-      // channel removed → later stop is a no-op
       provider.stop(makeRef());
       expect(child.kill).not.toHaveBeenCalled();
     });
 
     it("ignores a stale/superseded channel's late exit", async () => {
-      const provider = new LocalRuntimeProvider();
+      const provider = makeProvider();
       const onWorkerExit = vi.fn();
 
       await provider.start(makeCtx({ onWorkerExit }));
       const stale = forkMock.children[0];
       const staleExit = exitHandlerOf(stale);
 
-      // A newer start for the same owner supersedes the stale channel.
       await provider.start(makeCtx({ onWorkerExit }));
       const current = forkMock.children[1];
 
@@ -188,6 +192,6 @@ describe("LocalRuntimeProvider", () => {
   });
 
   it("self-declares its type as local", () => {
-    expect(new LocalRuntimeProvider().type).toBe("local");
+    expect(makeProvider().type).toBe("local");
   });
 });

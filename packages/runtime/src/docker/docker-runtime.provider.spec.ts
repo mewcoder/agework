@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { execFile } from "node:child_process";
 import { DockerRuntimeProvider } from "./docker-runtime.provider";
-import { ConfigService } from "../../config/config.service";
 import type {
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-} from "../runtime.types";
+  SandboxProviderConfig,
+} from "../types";
 
 vi.mock("node:child_process", () => ({
   execFile: vi.fn(),
@@ -16,12 +16,13 @@ const mockExecFile = vi.mocked(execFile);
 const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 
-function makeProvider(): DockerRuntimeProvider {
-  const configService = {
-    getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_HOST),
-  } as unknown as ConfigService;
-  return new DockerRuntimeProvider(configService);
-}
+const CONFIG: SandboxProviderConfig = {
+  workerImage: "agework/worker:latest",
+  runtimeLogHostPath: RUNTIME_LOG_HOST,
+  apiBaseUrl: "http://host.docker.internal:3000/api/v1",
+};
+
+const makeProvider = () => new DockerRuntimeProvider(CONFIG);
 
 function makeCtx(
   overrides: Partial<RuntimeLaunchContext> = {}
@@ -92,6 +93,7 @@ describe("DockerRuntimeProvider", () => {
       expect(runArgs[nameIdx + 1]).toBe("agework-worker-ws-1");
       expect(runArgs).toContain("com.docker.compose.project=agework");
       expect(runArgs).toContain("host.docker.internal:host-gateway");
+      expect(runArgs).toContain("agework/worker:latest");
     });
 
     it("adds --label args from the fixed ownership metadata", async () => {
@@ -118,6 +120,9 @@ describe("DockerRuntimeProvider", () => {
       const runArgs = runArgsOf();
       expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
       expect(runArgs).toContain("AGEWORK_WORKER_SANDBOX_ENGINE=docker");
+      expect(runArgs).toContain(
+        "AGEWORK_WORKER_API_BASE=http://host.docker.internal:3000/api/v1"
+      );
     });
 
     it("mounts the workspace and runtime-log volumes", async () => {

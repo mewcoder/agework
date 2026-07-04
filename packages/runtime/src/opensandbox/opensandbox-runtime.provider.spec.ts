@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { OpenSandboxRuntimeProvider } from "./opensandbox-runtime.provider";
-import { ConfigService } from "../../config/config.service";
 import type {
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-} from "../runtime.types";
+  SandboxProviderConfig,
+} from "../types";
 import type {
   OpenSandboxClientLike,
   OpenSandboxSandboxLike,
@@ -12,6 +12,12 @@ import type {
 
 const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
+
+const CONFIG: SandboxProviderConfig = {
+  workerImage: "agework/worker:latest",
+  runtimeLogHostPath: RUNTIME_LOG_HOST,
+  apiBaseUrl: "http://host.docker.internal:3000/api/v1",
+};
 
 function makeSandboxMock(id: string): OpenSandboxSandboxLike {
   const sandbox = {
@@ -44,10 +50,7 @@ function makeClient(): OpenSandboxClientLike {
 function makeProvider(
   client: OpenSandboxClientLike
 ): OpenSandboxRuntimeProvider {
-  const configService = {
-    getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_HOST),
-  } as unknown as ConfigService;
-  return new OpenSandboxRuntimeProvider(client, configService);
+  return new OpenSandboxRuntimeProvider(CONFIG, client);
 }
 
 function makeCtx(
@@ -99,6 +102,7 @@ describe("OpenSandboxRuntimeProvider", () => {
       expect(result.runtimeInstanceId).toMatch(/^sandbox-/);
       expect(client.createSandbox).toHaveBeenCalledWith(
         expect.objectContaining({
+          image: "agework/worker:latest",
           workspaceHostPath: "/tmp/workspace",
           workspaceMountPath: "/workspace",
           runtimeLogHostPath: RUNTIME_LOG_HOST,

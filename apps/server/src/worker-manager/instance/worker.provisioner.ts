@@ -7,7 +7,8 @@ import type {
 import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
-} from "../../runtime/runtime.types";
+  RuntimeType,
+} from "@agework/runtime";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerHandshakeStore } from "../connection/worker-handshake.store";
@@ -212,7 +213,7 @@ export class WorkerProvisioner {
   }
 
   private identity(input: WorkerExecutionStartInput): {
-    runtimeType: string;
+    runtimeType: RuntimeType;
     isolationScope: string;
   } {
     const target = input.runtimeTarget;

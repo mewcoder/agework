@@ -10,16 +10,17 @@ import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
-import type { RuntimePlacement, RuntimeTarget } from "@agework/shared/protocol";
+import type { RuntimeSpec } from "@agework/shared/protocol";
 import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
 
-function makePlacement(runtimeType: "local" | "docker"): RuntimePlacement {
+function makePlacement(runtimeType: "local" | "docker"): RuntimeSpec {
   const common = {
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/tmp/ws",
+    ownerId: "ws-1",
   };
   if (runtimeType === "local") {
     return {
@@ -42,7 +43,7 @@ function makePlacement(runtimeType: "local" | "docker"): RuntimePlacement {
   };
 }
 
-function makeRuntimeTarget(placement = makePlacement("local")): RuntimeTarget {
+function makeRuntimeSpec(placement = makePlacement("local")): RuntimeSpec {
   return {
     ...placement,
     ownerId:
@@ -143,9 +144,9 @@ describe("RunLauncher", () => {
       get: vi.fn().mockReturnValue(undefined),
     };
     mockWorkerManager = {
-      resolveRuntimeTarget: vi
+      resolveRuntimeSpec: vi
         .fn()
-        .mockReturnValue(makeRuntimeTarget(makePlacement("local"))),
+        .mockReturnValue(makeRuntimeSpec(makePlacement("local"))),
     };
     mockExecutor = {
       start: vi.fn().mockReturnValue({
@@ -200,7 +201,7 @@ describe("RunLauncher", () => {
     const res = makeRes();
     await launch(makeStartInput({ res }));
 
-    expect(mockWorkerManager.resolveRuntimeTarget).toHaveBeenCalledWith(
+    expect(mockWorkerManager.resolveRuntimeSpec).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
     );
     expect(mockRunRepository.create).toHaveBeenCalledWith({
@@ -282,7 +283,7 @@ describe("RunLauncher", () => {
       _t: string
     ): _t is "local" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
-    expect(mockWorkerManager.resolveRuntimeTarget).not.toHaveBeenCalled();
+    expect(mockWorkerManager.resolveRuntimeSpec).not.toHaveBeenCalled();
   });
 
   it("wraps RunConfig assembly errors as BadRequestException", async () => {
@@ -322,9 +323,9 @@ describe("RunLauncher", () => {
 
   it("persists the runtime handle once a docker provider resolves the container id asynchronously", async () => {
     // placement.runtimeType=docker，runtimeInstanceId 由 container provider 异步解析
-    mockWorkerManager.resolveRuntimeTarget = vi
+    mockWorkerManager.resolveRuntimeSpec = vi
       .fn()
-      .mockReturnValue(makeRuntimeTarget(makePlacement("docker")));
+      .mockReturnValue(makeRuntimeSpec(makePlacement("docker")));
     mockExecutor.start = vi
       .fn()
       .mockImplementation(({ onRuntimeInstanceIdReady }) => {

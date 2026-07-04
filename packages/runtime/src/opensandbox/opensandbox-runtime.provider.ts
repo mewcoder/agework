@@ -1,42 +1,35 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { isAbsolute } from "node:path";
 import type {
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
+  SandboxProviderConfig,
   SandboxStartInput,
-} from "../runtime.types";
-import { ConfigService } from "../../config/config.service";
-import { buildSandboxStartInput } from "./sandbox-utils";
-import { swallow } from "../../common/swallow";
-import {
-  OPENSANDBOX_CLIENT,
-  type OpenSandboxClientLike,
-  type OpenSandboxSandboxLike,
+} from "../types";
+import { buildSandboxStartInput } from "../common/sandbox-launch";
+import { swallow } from "../common/util";
+import type {
+  OpenSandboxClientLike,
+  OpenSandboxSandboxLike,
 } from "./opensandbox-client";
 
 /** opensandbox 运行形态:createSandbox 建沙箱 + runCommand 起 worker;stop 暂停
  *  沙箱(pauseSandbox),destroy 删除沙箱(deleteSandbox)。 */
-@Injectable()
 export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   readonly type = "opensandbox";
   private readonly logger = new Logger(OpenSandboxRuntimeProvider.name);
   private readonly sandboxes = new Map<string, OpenSandboxSandboxLike>();
 
   constructor(
-    @Inject(OPENSANDBOX_CLIENT)
-    private readonly client: OpenSandboxClientLike,
-    private readonly configService: ConfigService
+    private readonly config: SandboxProviderConfig,
+    private readonly client: OpenSandboxClientLike
   ) {}
 
   async start(
     ctx: RuntimeLaunchContext
   ): Promise<{ runtimeInstanceId: string }> {
-    const input = buildSandboxStartInput(
-      ctx,
-      this.type,
-      this.configService.getRuntimeLogDir()
-    );
+    const input = buildSandboxStartInput(ctx, this.type, this.config);
     const sandbox = await this.createSandbox(input);
     await this.startWorkerInSandbox(sandbox, input);
     return { runtimeInstanceId: sandbox.id };

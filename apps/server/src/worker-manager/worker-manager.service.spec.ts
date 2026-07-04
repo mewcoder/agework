@@ -33,7 +33,7 @@ function makeService() {
     stop: vi.fn(),
   };
   const runtimeService = {
-    resolveRuntimeTarget: vi.fn(),
+    resolveRuntimeSpec: vi.fn(),
   };
   const livenessStore = {
     touch: vi.fn(),
@@ -161,10 +161,10 @@ describe("WorkerManagerService — facade routing", () => {
     expect(upstream.setUpstreamPort).toHaveBeenCalledWith(receiver);
   });
 
-  it("routes resolveRuntimeTarget to RuntimeService", () => {
+  it("routes resolveRuntimeSpec to RuntimeService", () => {
     const { service, runtimeService } = makeService();
     const target = { runtimeType: "local", ownerId: "ws-1" } as never;
-    runtimeService.resolveRuntimeTarget.mockReturnValue(target);
+    runtimeService.resolveRuntimeSpec.mockReturnValue(target);
 
     const input = {
       userId: "user-1",
@@ -174,8 +174,8 @@ describe("WorkerManagerService — facade routing", () => {
       runtimeLogHostPath: "/tmp/logs/runtime",
       runtimeType: "local" as const,
     };
-    expect(service.resolveRuntimeTarget(input)).toBe(target);
-    expect(runtimeService.resolveRuntimeTarget).toHaveBeenCalledWith(input);
+    expect(service.resolveRuntimeSpec(input)).toBe(target);
+    expect(runtimeService.resolveRuntimeSpec).toHaveBeenCalledWith(input);
   });
 });
 
@@ -281,7 +281,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
     const { service, registry, provisioner } = makeService();
     registry.findById.mockResolvedValue({
       id: "rr-1",
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       ownerId: "ws-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
@@ -293,7 +293,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
     });
 
     expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       ownerId: "ws-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
@@ -383,7 +383,7 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
   it("resolveInstance forwards sandbox placements to the provisioner", async () => {
     const { service, provisioner } = makeService();
     const input = {
-      runtimeTarget: { runtimeType: "sandbox", ownerId: "ws-2" },
+      runtimeTarget: { runtimeType: "docker", ownerId: "ws-2" },
       runConfig: { runId: "run-2" },
     } as never;
     provisioner.acquireInstanceForRun.mockResolvedValue({
@@ -487,7 +487,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
 
   function acquireInput(runId: string, ownerId: string) {
     return {
-      runtimeTarget: { runtimeType: "sandbox", ownerId },
+      runtimeTarget: { runtimeType: "docker", ownerId },
       runConfig: { runId },
     } as never;
   }
@@ -495,7 +495,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
   function activeRow(overrides: Record<string, unknown> = {}) {
     return {
       startToken: "token",
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       ownerId: "owner-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
@@ -585,7 +585,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       "heartbeat timeout"
     );
     expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       ownerId: "owner-4",
       runtimeInstanceId: "container-4",
       isolationScope: "workspace",
@@ -642,7 +642,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     ).resolves.toBeUndefined();
 
     expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "sandbox",
+      runtimeType: "docker",
       ownerId: "owner-6",
       runtimeInstanceId: "container-6",
       isolationScope: "workspace",

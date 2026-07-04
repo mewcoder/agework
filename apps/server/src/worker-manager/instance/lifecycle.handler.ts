@@ -6,7 +6,7 @@ import {
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerProvisioner } from "./worker.provisioner";
 import { RuntimeService } from "../../runtime/runtime.service";
-import type { RuntimeInstanceRef } from "../../runtime/runtime.types";
+import { isRuntimeType, type RuntimeInstanceRef } from "@agework/runtime";
 import { WorkerLivenessStore } from "../connection/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 
@@ -110,6 +110,12 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
     ownerId: string;
     runtimeInstanceId: string;
   }): Promise<void> {
+    if (!isRuntimeType(resource.runtimeType)) {
+      this.logger.warn(
+        `skip shutdown for resource ${resource.id}: unknown runtimeType ${resource.runtimeType}`
+      );
+      return;
+    }
     try {
       const ref: RuntimeInstanceRef = {
         runtimeType: resource.runtimeType,

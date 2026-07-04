@@ -153,7 +153,7 @@ export interface RuntimeChannel {
   close(): Promise<void>;
 }
 
-// ── RuntimePlacement ──────────────────────────────────────────────────────
+// ── RuntimeSpec ──────────────────────────────────────────────────────
 
 /** Runtime 隔离粒度：user（按用户隔离）或 workspace（按工作空间隔离）。 */
 export type IsolationScope = "user" | "workspace";
@@ -170,16 +170,17 @@ export type SandboxPlacementInfo = {
 };
 
 /**
- * 一次 run 的 runtime 放置信息：使用哪种 provider、host/容器侧的 workspace 路径。
+ * 一次 run 已解析的 runtime 规格：workspace 怎么挂进运行环境（host/容器侧路径 + 挂载点）
+ * + ownerId（容器归属/复用键）。启动前纯计算,provider 照此挂卷/起容器。
  *
  * 判别联合，discriminant 为 `runtimeType`：container（docker|opensandbox）分支带 `sandbox`
- * 对象（隔离粒度、挂载目标、引擎类型），local 分支不带。`runtimePath` 跨 local/container 都
- * 有意义（worker 在执行环境内看到的 workspace 路径），留顶层。
+ * 对象，local 分支不带。`runtimePath` 跨 local/container 都有意义（worker 在执行环境内看到的
+ * workspace 路径），留顶层。container-only 逻辑可直接以 `SandboxRuntimeSpec` 为入参。
  *
- * container-only 的函数/方法可直接以 `SandboxRuntimePlacement` 为入参——类型上 `sandbox` 必填，
- * 无需运行时守卫；`if (placement.runtimeType === "docker")`（或 `!== "local"`）后 TS 也会自动 narrow。
+ * ownerId：user 隔离→userId，workspace 隔离/local→workspaceId。一个 ownerId 对应一个可复用
+ * 容器（同 owner 多 run 共用），承担容器命名/队列分区等，须早于 runtimeInstanceId 稳定。
  */
-export type LocalRuntimePlacement = {
+export type LocalRuntimeSpec = {
   runtimeType: "local";
   userId: string;
   workspaceId: string;
@@ -187,9 +188,10 @@ export type LocalRuntimePlacement = {
   runtimePath: string;
   /** 日志目录在执行环境内的路径(local 下即宿主机日志目录)。 */
   runtimeLogDir: string;
+  ownerId: string;
 };
 
-export type SandboxRuntimePlacement = {
+export type SandboxRuntimeSpec = {
   runtimeType: "docker" | "opensandbox";
   userId: string;
   workspaceId: string;
@@ -198,14 +200,15 @@ export type SandboxRuntimePlacement = {
   /** 日志目录在执行环境内的路径(sandbox 下为容器内挂载点)。 */
   runtimeLogDir: string;
   sandbox: SandboxPlacementInfo;
+  ownerId: string;
 };
 
-export type RuntimePlacement = LocalRuntimePlacement | SandboxRuntimePlacement;
+export type RuntimeSpec = LocalRuntimeSpec | SandboxRuntimeSpec;
 
-// ── WorkerExecutionHandle / RuntimeTarget ───────────────────────────
+// ── WorkerExecutionHandle / RuntimeSpec ───────────────────────────
 // worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
 // worker execution are split at the service boundary:
-// RuntimeService.resolveRuntimeTarget() returns RuntimeTarget, while
+// RuntimeService.resolveRuntimeSpec() returns RuntimeSpec, while
 // startWorkerExecution() starts/attaches a per-run worker session.
 //
 // 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
@@ -219,20 +222,8 @@ export interface WorkerExecutionHandle {
   conversationId: string;
 }
 
-/**
- * 一次 run 的目标运行环境：放置方案 + ownerId（容器归属者 ID）。
- *
- * ownerId 是这个持久容器归属的 owner 的 ID：
- *   - user 隔离 → userId
- *   - workspace 隔离 → workspaceId
- * 一个 ownerId 对应一个可复用的容器实例（同一 owner 的多个 run 共用一个容器）。
- * 它承担容器命名、控制队列分区、access key 索引等职责，
- * 必须在 runtimeInstanceId 生成之前就稳定可用。
- */
-export type RuntimeTarget = RuntimePlacement & { ownerId: string };
-
 export type WorkerExecutionStartInput = {
-  runtimeTarget: RuntimeTarget;
+  runtimeTarget: RuntimeSpec;
   runConfig: RunConfig;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
 };

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { execFile } from "node:child_process";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
@@ -6,11 +6,11 @@ import type {
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
+  SandboxProviderConfig,
   SandboxStartInput,
-} from "../runtime.types";
-import { ConfigService } from "../../config/config.service";
-import { buildSandboxStartInput } from "./sandbox-utils";
-import { swallow } from "../../common/swallow";
+} from "../types";
+import { buildSandboxStartInput } from "../common/sandbox-launch";
+import { swallow } from "../common/util";
 
 const execFileAsync = promisify(execFile);
 
@@ -19,21 +19,16 @@ const DOCKER_RUN_TIMEOUT_MS = 120_000;
 
 /** docker 运行形态:一次 `docker run` 建容器并经 entrypoint 起 worker;stop 保留
  *  容器(`docker stop`),destroy 删除容器(`docker rm -f`)。 */
-@Injectable()
 export class DockerRuntimeProvider implements RuntimeProvider {
   readonly type = "docker";
   private readonly logger = new Logger(DockerRuntimeProvider.name);
 
-  constructor(private readonly configService: ConfigService) {}
+  constructor(private readonly config: SandboxProviderConfig) {}
 
   async start(
     ctx: RuntimeLaunchContext
   ): Promise<{ runtimeInstanceId: string }> {
-    const input = buildSandboxStartInput(
-      ctx,
-      this.type,
-      this.configService.getRuntimeLogDir()
-    );
+    const input = buildSandboxStartInput(ctx, this.type, this.config);
     const containerId = await this.runContainer(input);
     return { runtimeInstanceId: containerId };
   }

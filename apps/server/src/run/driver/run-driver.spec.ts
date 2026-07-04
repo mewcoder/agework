@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type {
   AcquireInstanceResult,
-  RuntimeTarget,
+  RuntimeSpec,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import { RunDriver } from "./run-driver";
@@ -17,7 +17,7 @@ function makeWorkerManager() {
   };
 }
 
-function makeRuntimeTarget(runtimeType: "local" | "sandbox"): RuntimeTarget {
+function makeRuntimeSpec(runtimeType: "local" | "sandbox"): RuntimeSpec {
   return {
     runtimeType,
     ownerId: "ws-1",
@@ -34,7 +34,7 @@ function makeRuntimeTarget(runtimeType: "local" | "sandbox"): RuntimeTarget {
           },
         }
       : {}),
-  } as RuntimeTarget;
+  } as RuntimeSpec;
 }
 
 function makeInput(
@@ -45,7 +45,7 @@ function makeInput(
       runId: "run-1",
       conversationId: "conversation-1",
     } as WorkerExecutionStartInput["runConfig"],
-    runtimeTarget: makeRuntimeTarget(runtimeType),
+    runtimeTarget: makeRuntimeSpec(runtimeType),
   };
 }
 

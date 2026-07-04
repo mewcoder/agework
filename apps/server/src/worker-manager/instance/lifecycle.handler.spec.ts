@@ -4,7 +4,7 @@ import { WorkerInstanceLifecycleHandler } from "./lifecycle.handler";
 function makeResource(overrides: Record<string, unknown> = {}) {
   return {
     id: "rr-1",
-    runtimeType: "sandbox",
+    runtimeType: "docker",
     isolationScope: "workspace",
     ownerId: "ws-1",
     runtimeInstanceId: "container-1",
@@ -73,7 +73,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
 
       expect(registry.findBindingWithResource).toHaveBeenCalledWith("ws-1");
       expect(provisioner.destroy).toHaveBeenCalledWith({
-        runtimeType: "sandbox",
+        runtimeType: "docker",
         ownerId: "ws-1",
         runtimeInstanceId: "container-1",
         isolationScope: "workspace",

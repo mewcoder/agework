@@ -66,15 +66,14 @@ export type {
   UpstreamMessage,
   Unsubscribe,
   RuntimeChannel,
-  RuntimeTarget,
   WorkerExecutionHandle,
   WorkerExecutionStartInput,
   WorkerRegisterRequest,
   AcquireInstanceResult,
   IsolationScope,
-  RuntimePlacement,
-  LocalRuntimePlacement,
-  SandboxRuntimePlacement,
+  RuntimeSpec,
+  LocalRuntimeSpec,
+  SandboxRuntimeSpec,
   SandboxPlacementInfo,
 } from "./channel";
 export type {

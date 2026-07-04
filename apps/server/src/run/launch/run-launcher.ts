@@ -10,8 +10,7 @@ import type {
   AgentProviderConfig,
   RecordRunEventInput,
   RunConfig,
-  RuntimePlacement,
-  RuntimeTarget,
+  RuntimeSpec,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
@@ -180,7 +179,7 @@ export class RunLauncher {
   private getPlacement(input: {
     workspace: WorkspaceRunContext;
     userId: string;
-  }): RuntimeTarget {
+  }): RuntimeSpec {
     const { workspace, userId } = input;
     const runtimeType =
       workspace.runtimeType ?? this.configService.getDefaultRuntimeType();
@@ -197,7 +196,7 @@ export class RunLauncher {
       runtimeLogHostPath: this.readRuntimeLogHostPath(),
     };
     if (runtimeType === "local") {
-      return this.workerManager.resolveRuntimeTarget({
+      return this.workerManager.resolveRuntimeSpec({
         ...base,
         runtimeType: "local",
       });
@@ -208,7 +207,7 @@ export class RunLauncher {
     if (!this.configService.isIsolationScopeAllowed(isolationScope)) {
       throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
     }
-    return this.workerManager.resolveRuntimeTarget({
+    return this.workerManager.resolveRuntimeSpec({
       ...base,
       runtimeType,
       isolationScope,
@@ -228,7 +227,7 @@ export class RunLauncher {
 
   private makeRunConfig(params: {
     agentProviderConfig: AgentProviderConfig;
-    placement: RuntimePlacement;
+    placement: RuntimeSpec;
     workspaceId: string;
     runId: string;
     conversationId: string;
@@ -271,7 +270,7 @@ export class RunLauncher {
   }
 
   private makeLogPaths(
-    placement: RuntimePlacement,
+    placement: RuntimeSpec,
     conversationId: string
   ): RuntimeLogPaths {
     const logDir = this.configService.getRuntimeLogDir();
@@ -473,7 +472,7 @@ export class RunLauncher {
     isolationScope?: string;
     sandboxEngineType?: string;
     runConfig: RunConfig;
-    runtimeTarget: RuntimeTarget;
+    runtimeTarget: RuntimeSpec;
     stream: RunStream;
   }): Promise<WorkerExecutionHandle | null> {
     const {

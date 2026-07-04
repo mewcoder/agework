@@ -1,18 +1,12 @@
 import { Injectable, Module } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { RuntimeProvider, RuntimeType } from "@agework/runtime";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
-import {
-  OpenSandboxClient,
-  OPENSANDBOX_CLIENT,
-} from "./sandbox/opensandbox-client";
-import { LocalRuntimeProvider } from "./local/local-runtime.provider";
-import { DockerRuntimeProvider } from "./sandbox/docker-runtime.provider";
-import { OpenSandboxRuntimeProvider } from "./sandbox/opensandbox-runtime.provider";
-import { RuntimeService } from "./runtime.service";
+import { RuntimeService, RUNTIME_PROVIDERS } from "./runtime.service";
 import { RuntimeModule } from "./runtime.module";
 
 @Injectable()
@@ -35,21 +29,17 @@ describe("RuntimeModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("compiles with zero imports and resolves runtime provider tokens", async () => {
+  it("assembles the provider registry (local/docker/opensandbox) from config and resolves RuntimeService", async () => {
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 
-    expect(testingModule.get(OPENSANDBOX_CLIENT)).toBeInstanceOf(
-      OpenSandboxClient
-    );
-    expect(testingModule.get(LocalRuntimeProvider)).toBeInstanceOf(
-      LocalRuntimeProvider
-    );
-    expect(testingModule.get(DockerRuntimeProvider)).toBeInstanceOf(
-      DockerRuntimeProvider
-    );
-    expect(testingModule.get(OpenSandboxRuntimeProvider)).toBeInstanceOf(
-      OpenSandboxRuntimeProvider
-    );
+    const providers =
+      testingModule.get<Map<RuntimeType, RuntimeProvider>>(RUNTIME_PROVIDERS);
+    expect([...providers.keys()].sort()).toEqual([
+      "docker",
+      "local",
+      "opensandbox",
+    ]);
+    expect(providers.get("docker")?.type).toBe("docker");
     expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);
   });
 

@@ -1,14 +1,12 @@
 import { describe, it, expect } from "vitest";
-import {
-  resolveRuntimeTarget,
-  type ResolveRuntimeTargetInput,
-} from "./runtime-resource";
-import {
-  CONTAINER_RUNTIME_LOG_DIR,
-  CONTAINER_WORKSPACES_ROOT,
-} from "../../config/registry/defaults";
+import { resolveRuntimeSpec } from "./runtime-spec";
+import type { RuntimeSpecInput } from "./types";
 
-const BASE: ResolveRuntimeTargetInput = {
+// 与 runtime-resource.ts 内联常量对齐(容器内固定路径约定)。
+const CONTAINER_WORKSPACES_ROOT = "/home/agework/workspaces";
+const CONTAINER_RUNTIME_LOG_DIR = "/home/agework/.agework/logs/runtime";
+
+const BASE: RuntimeSpecInput = {
   userId: "user-1",
   workspaceId: "ws-1",
   workspaceRootPath: "/data/users/user-1/ws-1",
@@ -18,10 +16,10 @@ const BASE: ResolveRuntimeTargetInput = {
   isolationScope: "user",
 };
 
-const resolve = (overrides: Partial<ResolveRuntimeTargetInput> = {}) =>
-  resolveRuntimeTarget({ ...BASE, ...overrides });
+const resolve = (overrides: Partial<RuntimeSpecInput> = {}) =>
+  resolveRuntimeSpec({ ...BASE, ...overrides } as RuntimeSpecInput);
 
-describe("resolveRuntimeTarget", () => {
+describe("resolveRuntimeSpec", () => {
   describe("sandbox, user isolation", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, ownerId=userId", () => {
       const r = resolve();
