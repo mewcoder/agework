@@ -4,7 +4,7 @@ import {
   type CommandPayload,
   type RunConfig,
 } from "@agework/shared/protocol";
-import { WorkerConfigStore } from "../config/config-store";
+import { WorkerConfigStore } from "./worker-config.store";
 import { WorkerCommandQueue } from "./command-queue";
 
 /**

@@ -220,8 +220,8 @@ describe("RunRepository", () => {
       workspace: { id: "workspace-1", name: "AgeWork" },
       user: { id: "user-1", username: "mew" },
     });
-    // runtimeInstance 视图不再由 repository 提供
-    expect(detail).not.toHaveProperty("runtimeInstance");
+    // workerInstance 视图不再由 repository 提供
+    expect(detail).not.toHaveProperty("workerInstance");
     // 详情不再内嵌事件列表，事件改由 listAdminEvents 独立分页提供
     expect(detail).not.toHaveProperty("events");
   });

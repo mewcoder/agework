@@ -4,23 +4,23 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
-import { WorkerProvisioner } from "../instance/worker.provisioner";
+import { WorkerProvisioner } from "./worker.provisioner";
 import { RuntimeService } from "../../runtime/runtime.service";
 import type { RuntimeInstanceRef } from "../../runtime/runtime.types";
-import { WorkerLivenessStore } from "../liveness/worker-liveness.store";
+import { WorkerLivenessStore } from "../connection/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 
 /**
- * Runtime 资源生命周期清理:
- * - workspace 删除:解除 workspace runtime 绑定,只关闭专属于该 workspace 的资源。
- * - user 删除:关闭该用户名下的所有 user/workspace 隔离资源。
+ * Worker 实例生命周期清理:
+ * - workspace 删除:解除 workspace 的 worker 绑定,只关闭专属于该 workspace 的载体。
+ * - user 删除:关闭该用户名下的所有 user/workspace 隔离载体。
  *
  * 物理关闭统一经同模块的 WorkerProvisioner(local/sandbox 差异收在
  * WorkerProvisioner/RuntimeService 内部,这里不再区分)。
  */
 @Injectable()
-export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(RuntimeInstanceLifecycleService.name);
+export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
+  private readonly logger = new Logger(WorkerInstanceLifecycleHandler.name);
 
   constructor(
     private readonly registry: WorkerRegistryRepository,
@@ -29,7 +29,7 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
     private readonly livenessStore: WorkerLivenessStore
   ) {}
 
-  /** 关闭专属于该 workspace 的 runtime 资源(user 隔离下的共享资源不受影响)。 */
+  /** 关闭专属于该 workspace 的 worker 载体(user 隔离下的共享载体不受影响)。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
     const binding = await this.registry.findBindingWithResource(workspaceId);
     if (binding?.workerInstance.status === "running") {
@@ -44,7 +44,7 @@ export class RuntimeInstanceLifecycleService implements OnApplicationBootstrap {
     await this.registry.deleteWorkspaceBinding(workspaceId);
   }
 
-  /** 关闭该用户名下所有 runtime 资源(user 级共享资源 + 该用户所有 workspace 级资源)。
+  /** 关闭该用户名下所有 worker 载体(user 级共享载体 + 该用户所有 workspace 级载体)。
    *  user 隔离下 ownerId = userId;workspace 隔离下 ownerId = workspaceId(也归该 user),
    *  通过 ownerId IN (userId, 该 user 的 workspace ids) 匹配。 */
   async shutdownForUser(userId: string): Promise<void> {

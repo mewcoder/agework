@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RunConfig } from "@agework/shared/protocol";
-import { WorkerCommandDispatcher } from "./command-dispatcher.service";
+import { WorkerCommandDispatcher } from "./command-dispatcher";
 
 function makeRunConfig(): RunConfig {
   return {

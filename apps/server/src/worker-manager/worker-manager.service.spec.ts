@@ -1,8 +1,8 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
-import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
-import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
+import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
+import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
+import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-manager.types";
 import { WorkerManagerService } from "./worker-manager.service";
 import type { WorkerRegistryRepository } from "./registry/worker-registry.repository";
@@ -228,9 +228,9 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
     expect(result).toEqual({ id: "x" });
   });
 
-  it("getRuntimeStats counts running runtime resources", async () => {
+  it("getWorkerStats counts running runtime resources", async () => {
     (repository.countRunning as any).mockResolvedValue(3);
-    expect(await service.getRuntimeStats()).toEqual({ activeRuntimes: 3 });
+    expect(await service.getWorkerStats()).toEqual({ activeWorkers: 3 });
   });
 });
 
@@ -257,7 +257,7 @@ describe("WorkerManagerService runtime policy", () => {
   });
 });
 
-describe("WorkerManagerService.stopRuntimeInstance", () => {
+describe("WorkerManagerService.stopWorkerInstance", () => {
   function makeService() {
     const registry = {
       findById: vi.fn(),
@@ -288,7 +288,7 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       status: "running",
     });
 
-    await expect(service.stopRuntimeInstance("rr-1")).resolves.toEqual({
+    await expect(service.stopWorkerInstance("rr-1")).resolves.toEqual({
       ok: true,
     });
 
@@ -315,7 +315,7 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
       status: "running",
     });
 
-    await expect(service.stopRuntimeInstance("rr-2")).resolves.toEqual({
+    await expect(service.stopWorkerInstance("rr-2")).resolves.toEqual({
       ok: true,
     });
 
@@ -335,7 +335,7 @@ describe("WorkerManagerService.stopRuntimeInstance", () => {
     const { service, registry, provisioner } = makeService();
     registry.findById.mockResolvedValue({ status: "stopped" });
 
-    await expect(service.stopRuntimeInstance("rr-3")).rejects.toThrow(
+    await expect(service.stopWorkerInstance("rr-3")).rejects.toThrow(
       "not found or not running"
     );
     expect(registry.markStoppedById).not.toHaveBeenCalled();

@@ -1,8 +1,8 @@
 import type { Prisma } from "../../../generated/prisma/client.js";
 
-type RuntimeInstanceMetadata = Record<string, unknown>;
+type WorkerInstanceMetadata = Record<string, unknown>;
 
-export type WorkerInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
+export type WorkerInstanceDiagnosticMetadata = WorkerInstanceMetadata & {
   ownerId: string;
   workspaceId?: string;
   statusReason: string;
@@ -14,7 +14,7 @@ export type WorkerInstanceDiagnosticMetadata = RuntimeInstanceMetadata & {
 
 export function isMetadataRecord(
   metadata: unknown
-): metadata is RuntimeInstanceMetadata {
+): metadata is WorkerInstanceMetadata {
   return (
     typeof metadata === "object" &&
     metadata !== null &&

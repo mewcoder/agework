@@ -194,18 +194,18 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
           <DetailSection title="执行环境">
             <DetailGrid>
               <DetailItem label="类型" value={run.runtimeType} />
-              {run.runtimeInstance && (
+              {run.workerInstance && (
                 <>
                   <DetailItem
                     label="Resource ID"
-                    value={run.runtimeInstance.id}
+                    value={run.workerInstance.id}
                     mono
                   />
                   <DetailItem
                     label="隔离粒度"
                     value={
                       <Badge variant="outline">
-                        {run.runtimeInstance.isolationScope}
+                        {run.workerInstance.isolationScope}
                       </Badge>
                     }
                   />
@@ -213,25 +213,25 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     label="资源状态"
                     value={
                       <Badge
-                        variant={statusVariant(run.runtimeInstance.status)}
-                        className={runStatusBadgeClassName(run.runtimeInstance.status)}
+                        variant={statusVariant(run.workerInstance.status)}
+                        className={runStatusBadgeClassName(run.workerInstance.status)}
                       >
-                        {run.runtimeInstance.status}
+                        {run.workerInstance.status}
                       </Badge>
                     }
                   />
                   <DetailItem
                     label="Owner"
-                    value={run.runtimeInstance.ownerId}
+                    value={run.workerInstance.ownerId}
                     mono
                   />
                   <DetailItem
                     label="绑定工作空间"
-                    value={String(run.runtimeInstance.workspaceRuntimes.length)}
+                    value={String(run.workerInstance.workspaceBindings.length)}
                   />
                   <DetailItem
                     label="过期时间"
-                    value={formatDateTime(run.runtimeInstance.expiresAt)}
+                    value={formatDateTime(run.workerInstance.expiresAt)}
                   />
                 </>
               )}

@@ -37,7 +37,7 @@ describe("RunService", () => {
       launch: vi.fn().mockResolvedValue(undefined),
     };
     mockWorkerManager = {
-      getRuntimeInstanceForAdmin: vi.fn().mockResolvedValue(null),
+      getWorkerInstanceForAdmin: vi.fn().mockResolvedValue(null),
     };
     mockRunRecovery = {
       failInterruptedRuns: vi.fn().mockResolvedValue(undefined),

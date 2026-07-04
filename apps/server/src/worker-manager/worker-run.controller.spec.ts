@@ -9,7 +9,7 @@ import {
 import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { WorkerRunController } from "./worker-run.controller";
 import { WorkerManagerService } from "./worker-manager.service";
-import { WorkerTokenGuard } from "./handshake/worker-token.guard";
+import { WorkerTokenGuard } from "./connection/worker-token.guard";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 
 describe("WorkerRunController", () => {

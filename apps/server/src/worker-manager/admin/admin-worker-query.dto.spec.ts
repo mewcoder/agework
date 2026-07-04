@@ -2,11 +2,11 @@ import "reflect-metadata";
 import { plainToInstance } from "class-transformer";
 import { validate } from "class-validator";
 import { describe, expect, it } from "vitest";
-import { AdminRuntimeResourcesQueryDto } from "./admin-runtime-query.dto";
+import { AdminWorkerResourcesQueryDto } from "./admin-worker-query.dto";
 
-describe("AdminRuntimeResourcesQueryDto", () => {
+describe("AdminWorkerResourcesQueryDto", () => {
   it("accepts known runtime resource statuses", async () => {
-    const dto = plainToInstance(AdminRuntimeResourcesQueryDto, {
+    const dto = plainToInstance(AdminWorkerResourcesQueryDto, {
       status: " running ",
       pageNo: "1",
       pageSize: "10",
@@ -17,7 +17,7 @@ describe("AdminRuntimeResourcesQueryDto", () => {
   });
 
   it("rejects unknown runtime resource status", async () => {
-    const dto = plainToInstance(AdminRuntimeResourcesQueryDto, {
+    const dto = plainToInstance(AdminWorkerResourcesQueryDto, {
       status: "paused",
     });
 

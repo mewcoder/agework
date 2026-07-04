@@ -51,13 +51,13 @@ export class RunService implements OnApplicationBootstrap {
   /** 管理端：单个 run 详情；runtime 实例视图经 WorkerManagerService 补齐。 */
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
-    const runtimeInstance = detail.runtimeInstanceId
-      ? await this.workerManager.getRuntimeInstanceForAdmin(
+    const workerInstance = detail.runtimeInstanceId
+      ? await this.workerManager.getWorkerInstanceForAdmin(
           detail.runtimeType,
           detail.runtimeInstanceId
         )
       : null;
-    return { ...detail, runtimeInstance };
+    return { ...detail, workerInstance };
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */

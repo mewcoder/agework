@@ -193,7 +193,7 @@ export class RunRepository {
     const { conversation, ...runData } = run;
     const workspace = conversation.workspace;
 
-    // runtimeInstance 视图由 RunService 经 WorkerManagerService 补齐（runtime 领域所有）。
+    // workerInstance 视图由 RunService 经 WorkerManagerService 补齐（runtime 领域所有）。
     return {
       ...runData,
       userId: workspace.userId,

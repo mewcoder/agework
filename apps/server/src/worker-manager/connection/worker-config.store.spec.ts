@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { WorkerConfigStore } from "./config-store";
+import { WorkerConfigStore } from "./worker-config.store";
 
 describe("WorkerConfigStore", () => {
   it("registers, retrieves and unregisters a run config", () => {

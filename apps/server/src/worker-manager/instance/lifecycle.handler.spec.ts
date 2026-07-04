@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { RuntimeInstanceLifecycleService } from "./lifecycle.service";
+import { WorkerInstanceLifecycleHandler } from "./lifecycle.handler";
 
 function makeResource(overrides: Record<string, unknown> = {}) {
   return {
@@ -48,7 +48,7 @@ function makeLivenessStore(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("RuntimeInstanceLifecycleService", () => {
+describe("WorkerInstanceLifecycleHandler", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned sandbox resource through the provisioner and deletes the workspace binding", async () => {
       const registry = makeRegistry({
@@ -61,7 +61,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new RuntimeInstanceLifecycleService(
+      const service = new WorkerInstanceLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -98,7 +98,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new RuntimeInstanceLifecycleService(
+      const service = new WorkerInstanceLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -126,7 +126,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new RuntimeInstanceLifecycleService(
+      const service = new WorkerInstanceLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -170,7 +170,7 @@ describe("RuntimeInstanceLifecycleService", () => {
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new RuntimeInstanceLifecycleService(
+      const service = new WorkerInstanceLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -220,7 +220,7 @@ describe("RuntimeInstanceLifecycleService", () => {
     const provisioner = makeProvisioner({ teardown });
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new RuntimeInstanceLifecycleService(
+    const service = new WorkerInstanceLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -255,7 +255,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new RuntimeInstanceLifecycleService(
+    const service = new WorkerInstanceLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -293,7 +293,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new RuntimeInstanceLifecycleService(
+    const service = new WorkerInstanceLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -325,7 +325,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new RuntimeInstanceLifecycleService(
+    const service = new WorkerInstanceLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -367,7 +367,7 @@ describe("onApplicationBootstrap", () => {
       .mockResolvedValueOnce(undefined);
     const runtimeService = makeRuntimeService({ recoverOrphan });
     const livenessStore = makeLivenessStore();
-    const service = new RuntimeInstanceLifecycleService(
+    const service = new WorkerInstanceLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,

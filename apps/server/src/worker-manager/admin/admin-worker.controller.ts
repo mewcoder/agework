@@ -1,12 +1,12 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { WorkerManagerService } from "../worker-manager.service";
-import { RuntimeInstanceIdDto } from "./runtime-instance-id.dto";
-import { AdminRuntimeResourcesQueryDto } from "./admin-runtime-query.dto";
+import { WorkerInstanceIdDto } from "./worker-instance-id.dto";
+import { AdminWorkerResourcesQueryDto } from "./admin-worker-query.dto";
 
-@Controller("admin/runtime")
+@Controller("admin/worker")
 @Roles("admin")
-export class AdminRuntimeController {
+export class AdminWorkerController {
   constructor(private readonly workerManager: WorkerManagerService) {}
 
   @Get("policy")
@@ -15,17 +15,17 @@ export class AdminRuntimeController {
   }
 
   @Get("stats")
-  getRuntimeStats() {
-    return this.workerManager.getRuntimeStats();
+  getWorkerStats() {
+    return this.workerManager.getWorkerStats();
   }
 
   @Get("resources")
-  listResources(@Query() query: AdminRuntimeResourcesQueryDto) {
+  listResources(@Query() query: AdminWorkerResourcesQueryDto) {
     return this.workerManager.listResources(query);
   }
 
   @Post("resources/stop")
-  stopResource(@Body() body: RuntimeInstanceIdDto) {
-    return this.workerManager.stopRuntimeInstance(body.id);
+  stopResource(@Body() body: WorkerInstanceIdDto) {
+    return this.workerManager.stopWorkerInstance(body.id);
   }
 }

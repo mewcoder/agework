@@ -36,7 +36,7 @@ export type AdminRunResponse = {
 
 export type AdminRunListResponse = PaginatedListResponse<AdminRunResponse>;
 
-export type AdminRunRuntimeInstanceResponse = {
+export type AdminRunWorkerInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
@@ -46,7 +46,7 @@ export type AdminRunRuntimeInstanceResponse = {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
-  workspaceRuntimes: Array<{
+  workspaceBindings: Array<{
     id: string;
     workspaceId: string;
     createdAt: string;
@@ -70,7 +70,7 @@ export type AdminRunDetailResponse = AdminRunResponse & {
     id: string;
     username: string | null;
   };
-  runtimeInstance: AdminRunRuntimeInstanceResponse | null;
+  workerInstance: AdminRunWorkerInstanceResponse | null;
 };
 
 export type AdminRunEventResponse = {
@@ -115,9 +115,9 @@ export type AdminRunEventListQuery = {
 export type AdminRunEventListResponse =
   PaginatedListResponse<AdminRunEventResponse>;
 
-export type RuntimeInstanceIdRequest = { id: string };
+export type WorkerInstanceIdRequest = { id: string };
 
-export type RuntimeInstanceStatus =
+export type WorkerInstanceStatus =
   | "starting"
   | "running"
   | "stopped"
@@ -125,7 +125,7 @@ export type RuntimeInstanceStatus =
   | "error"
   | "stale";
 
-export type RuntimeInstanceDiagnosticsResponse = {
+export type WorkerInstanceDiagnosticsResponse = {
   ownerId?: string;
   workspaceId?: string;
   statusReason?: string;
@@ -136,21 +136,21 @@ export type RuntimeInstanceDiagnosticsResponse = {
   runtimeInstanceId?: string;
 };
 
-export type RuntimeInstanceResponse = {
+export type WorkerInstanceResponse = {
   id: string;
   runtimeType: string;
   isolationScope: string;
   ownerId: string;
   runtimeInstanceId: string;
-  status: RuntimeInstanceStatus;
+  status: WorkerInstanceStatus;
   isReusable: boolean;
   workspaceCount: number;
   expiresAt: string | null;
   metadata: unknown;
-  diagnostics: RuntimeInstanceDiagnosticsResponse;
+  diagnostics: WorkerInstanceDiagnosticsResponse;
   createdAt: string;
   updatedAt: string;
-  workspaceRuntimes?: Array<{
+  workspaceBindings?: Array<{
     id: string;
     workspaceId: string;
     createdAt: string;
@@ -158,5 +158,5 @@ export type RuntimeInstanceResponse = {
   }>;
 };
 
-export type RuntimeInstanceListResponse =
-  PaginatedListResponse<RuntimeInstanceResponse>;
+export type WorkerInstanceListResponse =
+  PaginatedListResponse<WorkerInstanceResponse>;

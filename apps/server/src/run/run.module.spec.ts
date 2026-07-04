@@ -88,7 +88,7 @@ async function createRunsTestingModule(
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())
     .overrideProvider(PrismaService)
-    // RuntimeInstanceLifecycleService.onApplicationBootstrap（worker-manager 模块内）
+    // WorkerInstanceLifecycleHandler.onApplicationBootstrap（worker-manager 模块内）
     // 在 init() 时经 WorkerRegistryRepository 做重启扫尾，这里给对应查询空实现。
     .useValue({
       workerInstance: {

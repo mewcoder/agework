@@ -18,7 +18,7 @@ import { AgentController } from "../agent/agent.controller";
 import { AdminModelProviderController } from "../model-provider/admin/admin-model-provider.controller";
 import { ModelProviderController } from "../model-provider/model-provider.controller";
 import { AdminRunController } from "../run/admin/admin-run.controller";
-import { AdminRuntimeController } from "../worker-manager/admin/admin-runtime.controller";
+import { AdminWorkerController } from "../worker-manager/admin/admin-worker.controller";
 import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../user/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-manager/command.controller";
@@ -47,7 +47,7 @@ const CONTROLLERS = [
   AdminModelProviderController,
   ModelProviderController,
   AdminRunController,
-  AdminRuntimeController,
+  AdminWorkerController,
   SystemController,
   AdminUserController,
   WorkerCommandController,
@@ -268,12 +268,12 @@ describe("external API route convention", () => {
     expectRoute(AdminRunController, "query", "get", "query");
     expectRoute(AdminRunController, "listEvents", "get", "events/list");
 
-    expect(controllerPath(AdminRuntimeController)).toBe("admin/runtime");
-    expectRoute(AdminRuntimeController, "getRuntimePolicy", "get", "policy");
-    expectRoute(AdminRuntimeController, "getRuntimeStats", "get", "stats");
-    expectRoute(AdminRuntimeController, "listResources", "get", "resources");
+    expect(controllerPath(AdminWorkerController)).toBe("admin/worker");
+    expectRoute(AdminWorkerController, "getRuntimePolicy", "get", "policy");
+    expectRoute(AdminWorkerController, "getWorkerStats", "get", "stats");
+    expectRoute(AdminWorkerController, "listResources", "get", "resources");
     expectRoute(
-      AdminRuntimeController,
+      AdminWorkerController,
       "stopResource",
       "post",
       "resources/stop"
@@ -294,7 +294,7 @@ describe("external API route convention", () => {
         "admin/config",
         "admin/model-providers",
         "admin/runs",
-        "admin/runtime",
+        "admin/worker",
         "admin/users",
         "admin/workspaces",
       ])

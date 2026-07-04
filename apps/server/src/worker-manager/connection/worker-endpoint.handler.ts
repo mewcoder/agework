@@ -10,10 +10,10 @@ import type {
 } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { safeLogJson } from "../../common/logging";
-import { WorkerCommandQueue } from "../command/command-queue";
-import { WorkerConfigStore } from "../config/config-store";
-import { parseWorkerEventPostBody } from "../upstream/worker-event.parser";
-import { WorkerUpstreamRegistry } from "../upstream/worker-upstream.registry";
+import { WorkerCommandQueue } from "./command-queue";
+import { WorkerConfigStore } from "./worker-config.store";
+import { parseWorkerEventPostBody } from "./worker-event.parser";
+import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
 
 @Injectable()
 export class WorkerEndpointHandler {

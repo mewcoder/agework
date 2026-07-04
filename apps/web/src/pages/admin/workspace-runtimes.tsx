@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { RuntimeTarget } from "@/api/runtime";
-import { useRuntimeResources, useStopRuntimeResource } from "@/hooks/runtime-hooks";
+import type { WorkerInstanceResponse } from "@/api/worker";
+import { useWorkerResources, useStopWorkerResource } from "@/hooks/worker-hooks";
 import {
   DataTable,
   DataTableActions,
@@ -46,12 +46,12 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
   const [pendingStopId, setPendingStopId] = useState<string | null>(null);
   const { pageNo, setPageNo, pageSize, goPrev, goNext } = usePagination();
 
-  const { data, isLoading } = useRuntimeResources(
+  const { data, isLoading } = useWorkerResources(
     status === "all" ? undefined : status,
     pageNo,
     pageSize,
   );
-  const stopMutation = useStopRuntimeResource();
+  const stopMutation = useStopWorkerResource();
 
   const items = data?.list ?? [];
   const total = data?.total ?? 0;
@@ -73,7 +73,7 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
     }
   }
 
-  const columns: DataTableColumnDef<RuntimeTarget>[] = [
+  const columns: DataTableColumnDef<WorkerInstanceResponse>[] = [
     {
       id: "isolationScope",
       header: "隔离级别",
@@ -105,7 +105,7 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
       id: "workspaceCount",
       header: "关联工作空间",
       cell: ({ row }) => (
-        <DataTableText>{row.original.workspaceRuntimes?.length ?? 0}</DataTableText>
+        <DataTableText>{row.original.workspaceBindings?.length ?? 0}</DataTableText>
       ),
     },
     {

@@ -15,7 +15,7 @@ import {
   WorkerOwnerParamDto,
 } from "./dto/worker-command-query.dto";
 import { RegisterWorkerDto } from "./dto/register-worker.dto";
-import { WorkerTokenGuard } from "./handshake/worker-token.guard";
+import { WorkerTokenGuard } from "./connection/worker-token.guard";
 
 /**
  * Worker command API — 仅供持久容器内的 worker 调用。

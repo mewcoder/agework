@@ -1,17 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
-import { AdminRuntimeController } from "./admin-runtime.controller";
+import { AdminWorkerController } from "./admin-worker.controller";
 
 function makeController(workerManager: Record<string, unknown> = {}) {
-  return new AdminRuntimeController({
+  return new AdminWorkerController({
     getRuntimePolicy: vi.fn(),
-    getRuntimeStats: vi.fn(),
+    getWorkerStats: vi.fn(),
     listResources: vi.fn(),
-    stopRuntimeInstance: vi.fn(),
+    stopWorkerInstance: vi.fn(),
     ...workerManager,
   } as never);
 }
 
-describe("AdminRuntimeController", () => {
+describe("AdminWorkerController", () => {
   it("delegates resource listing to WorkerManagerService", async () => {
     const listResources = vi
       .fn()
@@ -25,24 +25,24 @@ describe("AdminRuntimeController", () => {
   });
 
   it("delegates stop to WorkerManagerService by id", async () => {
-    const stopRuntimeInstance = vi.fn().mockResolvedValue({ ok: true });
-    const controller = makeController({ stopRuntimeInstance });
+    const stopWorkerInstance = vi.fn().mockResolvedValue({ ok: true });
+    const controller = makeController({ stopWorkerInstance });
 
     await expect(controller.stopResource({ id: "rr-1" })).resolves.toEqual({
       ok: true,
     });
-    expect(stopRuntimeInstance).toHaveBeenCalledWith("rr-1");
+    expect(stopWorkerInstance).toHaveBeenCalledWith("rr-1");
   });
 
   it("delegates policy and stats to WorkerManagerService", async () => {
     const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "local" });
-    const getRuntimeStats = vi.fn().mockResolvedValue({ activeRuntimes: 0 });
-    const controller = makeController({ getRuntimePolicy, getRuntimeStats });
+    const getWorkerStats = vi.fn().mockResolvedValue({ activeWorkers: 0 });
+    const controller = makeController({ getRuntimePolicy, getWorkerStats });
 
     controller.getRuntimePolicy();
-    await controller.getRuntimeStats();
+    await controller.getWorkerStats();
 
     expect(getRuntimePolicy).toHaveBeenCalled();
-    expect(getRuntimeStats).toHaveBeenCalled();
+    expect(getWorkerStats).toHaveBeenCalled();
   });
 });

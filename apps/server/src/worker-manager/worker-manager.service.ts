@@ -12,26 +12,23 @@ import type {
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import type { AdminRunRuntimeInstanceResponse } from "@agework/shared/api";
+import type { AdminRunWorkerInstanceResponse } from "@agework/shared/api";
 import type {
   ResolveRuntimeTargetInput,
   RuntimeInstanceRef,
 } from "../runtime/runtime.types";
-import { WorkerCommandDispatcher } from "./command/command-dispatcher.service";
-import { WorkerUpstreamRegistry } from "./upstream/worker-upstream.registry";
-import { WorkerEndpointHandler } from "./endpoint/worker-endpoint.handler";
+import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
+import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
+import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-manager.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
-import {
-  toAdminRuntimeInstanceResponse,
-  toRuntimeInstanceResponse,
-} from "./registry/worker-instance-view";
+import { workerInstanceDiagnostics } from "./registry/worker-registry-metadata";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerProvisioner } from "./instance/worker.provisioner";
-import { WorkerHandshakeStore } from "./handshake/worker-handshake.store";
+import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
-import { WorkerLivenessStore } from "./liveness/worker-liveness.store";
+import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { safeLogJson } from "../common/logging";
 import { swallow } from "../common/swallow";
 
@@ -160,7 +157,7 @@ export class WorkerManagerService {
   // 需要认识 sandbox/local 的区别) ──
 
   /**
-   * 为一次 run 取得(创建/复用/attach)runtime 实例,交给 provisioner 统一编排
+   * 为一次 run 取得(创建/复用/attach)worker 载体,交给 provisioner 统一编排
    * (runtimeType 分流收在 provisioner/RuntimeService 内部)。调用 provisioner
    * 之前先登记 runId → ownerId,不等待 acquire 结果——早登记的坏处最多是索引里
    * 多留了几毫秒一个"还没成功"的条目,releaseInstanceForRun/cleanupRun 迟早会
@@ -174,7 +171,7 @@ export class WorkerManagerService {
   }
 
   /**
-   * 释放一次 run 对 runtime 实例的引用。回收(引用计数/idle/settle)已经砍掉,
+   * 释放一次 run 对 worker 载体的引用。回收(引用计数/idle/settle)已经砍掉,
    * 这里只清 owner→runId 的 fence 索引,不再触发任何实例侧动作。
    */
   releaseInstanceForRun(runId: string): void {
@@ -182,7 +179,7 @@ export class WorkerManagerService {
   }
 
   /**
-   * 终止并清理指定 owner 的 runtime 实例:从 registry 取出该 owner 当前活跃行
+   * 终止并清理指定 owner 的 worker 载体:从 registry 取出该 owner 当前活跃行
    * (权威来源),按行内容构造 ref 交给 provisioner.teardown。找不到活跃行说明
    * 已经被别的路径清理过,no-op。
    */
@@ -263,8 +260,8 @@ export class WorkerManagerService {
   }
 
   /** 管理端概览用：当前 running 状态的 runtime 资源数量。 */
-  async getRuntimeStats() {
-    return { activeRuntimes: await this.registry.countRunning() };
+  async getWorkerStats() {
+    return { activeWorkers: await this.registry.countRunning() };
   }
 
   /** 管理端分页列出 runtime 资源，附带诊断信息。 */
@@ -280,7 +277,7 @@ export class WorkerManagerService {
       skip,
     });
     return {
-      list: items.map(toRuntimeInstanceResponse),
+      list: items.map(toWorkerInstanceResponse),
       total,
       pageNo,
       pageSize,
@@ -291,19 +288,19 @@ export class WorkerManagerService {
    * 管理端 run 详情用:按 run 持久化的 runtime handle 取运行实例视图。
    * runtime 资源归属本领域,run 层经此方法获取,不直接查 workerInstance 表。
    */
-  async getRuntimeInstanceForAdmin(
+  async getWorkerInstanceForAdmin(
     runtimeType: string,
     runtimeInstanceId: string
-  ): Promise<AdminRunRuntimeInstanceResponse | null> {
+  ): Promise<AdminRunWorkerInstanceResponse | null> {
     const record = await this.registry.findRunInstanceView(
       runtimeType,
       runtimeInstanceId
     );
-    return record ? toAdminRuntimeInstanceResponse(record) : null;
+    return record ? toAdminWorkerInstanceResponse(record) : null;
   }
 
   /** 管理端手动停止一个 running 状态的 runtime 资源。 */
-  async stopRuntimeInstance(id: string) {
+  async stopWorkerInstance(id: string) {
     const resource = await this.registry.findById(id);
     if (!resource || resource.status !== "running") {
       throw new NotFoundException(
@@ -320,4 +317,87 @@ export class WorkerManagerService {
     await this.registry.markStoppedById(resource, "manual_stop");
     return { ok: true };
   }
+}
+
+// ── admin 响应组装(纯函数)。行形状由 WorkerRegistryRepository 的查询 select
+//    决定,这里只消费。单一使用、无独立测试,按响应形状就近内联的约定放在门面同文件。──
+
+type WorkspaceWorkerBindingRow = {
+  id: string;
+  workspaceId: string;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+};
+
+type WorkerInstanceRow = {
+  id: string;
+  runtimeType: string;
+  isolationScope: string;
+  ownerId: string;
+  runtimeInstanceId: string;
+  status: string;
+  expiresAt: Date | string | null;
+  metadata: unknown;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  workspaceWorkerBindings?: WorkspaceWorkerBindingRow[];
+};
+
+/** 管理端 runtime 资源列表行:附 isReusable / workspaceCount / diagnostics 汇总。 */
+function toWorkerInstanceResponse(resource: WorkerInstanceRow) {
+  const diagnostics = workerInstanceDiagnostics(resource.metadata);
+  const workspaceBindings = resource.workspaceWorkerBindings?.map(
+    toWorkspaceBinding
+  );
+
+  return {
+    id: resource.id,
+    runtimeType: resource.runtimeType,
+    isolationScope: resource.isolationScope,
+    ownerId: resource.ownerId,
+    runtimeInstanceId: resource.runtimeInstanceId,
+    status: resource.status,
+    isReusable: resource.status === "running",
+    workspaceCount: workspaceBindings?.length ?? 0,
+    expiresAt: resource.expiresAt ? toIsoString(resource.expiresAt) : null,
+    metadata: resource.metadata,
+    diagnostics: {
+      ...diagnostics,
+      ownerId: diagnostics.ownerId ?? resource.ownerId,
+      runtimeInstanceId:
+        diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
+    },
+    createdAt: toIsoString(resource.createdAt),
+    updatedAt: toIsoString(resource.updatedAt),
+    workspaceBindings,
+  };
+}
+
+/** 管理端 run 详情里的 runtime 实例视图(findRunInstanceView 的行,不含 metadata)。 */
+function toAdminWorkerInstanceResponse(
+  record: Omit<WorkerInstanceRow, "metadata" | "workspaceWorkerBindings"> & {
+    workspaceWorkerBindings: WorkspaceWorkerBindingRow[];
+  }
+): AdminRunWorkerInstanceResponse {
+  const { workspaceWorkerBindings, ...resource } = record;
+  return {
+    ...resource,
+    expiresAt: resource.expiresAt ? toIsoString(resource.expiresAt) : null,
+    createdAt: toIsoString(resource.createdAt),
+    updatedAt: toIsoString(resource.updatedAt),
+    workspaceBindings: workspaceWorkerBindings.map(toWorkspaceBinding),
+  };
+}
+
+function toWorkspaceBinding(binding: WorkspaceWorkerBindingRow) {
+  return {
+    id: binding.id,
+    workspaceId: binding.workspaceId,
+    createdAt: toIsoString(binding.createdAt),
+    updatedAt: toIsoString(binding.updatedAt),
+  };
+}
+
+function toIsoString(value: Date | string): string {
+  return value instanceof Date ? value.toISOString() : value;
 }

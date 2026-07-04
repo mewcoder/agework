@@ -10,8 +10,8 @@ import type {
 } from "../../runtime/runtime.types";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
-import { WorkerHandshakeStore } from "../handshake/worker-handshake.store";
-import { WorkerCommandDispatcher } from "../command/command-dispatcher.service";
+import { WorkerHandshakeStore } from "../connection/worker-handshake.store";
+import { WorkerCommandDispatcher } from "../connection/command-dispatcher";
 import { ConfigService } from "../../config/config.service";
 import { withTimeout } from "../../common/with-timeout";
 import { swallow } from "../../common/swallow";

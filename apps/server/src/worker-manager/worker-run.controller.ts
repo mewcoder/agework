@@ -5,7 +5,7 @@ import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
 import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
-import { WorkerTokenGuard } from "./handshake/worker-token.guard";
+import { WorkerTokenGuard } from "./connection/worker-token.guard";
 
 /**
  * Worker run API（run-scoped）— 仅供 worker 调用，不暴露给前端。
