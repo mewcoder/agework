@@ -6,7 +6,7 @@ import type {
   WorkerExecutionStartInput,
   CommandPayload,
 } from "@agework/shared/protocol";
-import type { RunEventPort, RunExecutor } from "./executor";
+import type { RunEventPort } from "./run-event.port";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
@@ -20,18 +20,18 @@ type WorkerRunState = {
 };
 
 /**
- * 统一 run executor:per-run 执行编排归 run 层,取得/释放 runtime 实例统一经
+ * run 的驱动器:per-run 执行编排归 run 层,取得/释放 runtime 实例统一经
  * `WorkerManagerService.resolveInstance()`/`releaseInstanceForRun()`
  * 完成——runtimeType(sandbox/local)判断被 worker-manager 内部吸收,run 层不再需要认识
- * 这个区别,也因此不再需要按 runtimeType 分别持有两个执行器类(设计文档第一节)。
+ * 这个区别,也因此不再需要按 runtimeType 分别持有两个驱动器类(设计文档第一节)。
  *
  * 就绪后直接对 worker-manager 完成 openSession / 命令下发 / cleanup,命令不绕经 runtime。
  * 就绪/失败由 resolveInstance 结果一次性回流;早取消由 run 层自身 state.cancelled 在
  * ready 分支自处理。
  */
 @Injectable()
-export class WorkerRunExecutor implements RunExecutor {
-  private readonly logger = new Logger(WorkerRunExecutor.name);
+export class RunDriver {
+  private readonly logger = new Logger(RunDriver.name);
   private readonly states = new Map<string, WorkerRunState>();
   private receiver!: RunEventPort;
 

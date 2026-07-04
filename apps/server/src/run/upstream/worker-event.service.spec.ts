@@ -9,7 +9,7 @@ import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import type { ConfigService } from "../../config/config.service";
-import type { WorkerRunExecutor } from "../execution/worker-run.executor";
+import type { RunDriver } from "../driver/run-driver";
 import { RunStream } from "../streaming/run-stream";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
@@ -40,7 +40,7 @@ describe("WorkerEventService", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
-  let mockExecutor: Partial<WorkerRunExecutor>;
+  let mockExecutor: Partial<RunDriver>;
   let runStatusService: RunStatusService;
   let seqGate: WorkerSeqStore;
 
@@ -84,7 +84,7 @@ describe("WorkerEventService", () => {
       liveRuns,
       mockRunEvents,
       runStatusService,
-      mockExecutor as WorkerRunExecutor,
+      mockExecutor as RunDriver,
       aguiEvents,
       new RunFinalizationStore(),
       seqGate

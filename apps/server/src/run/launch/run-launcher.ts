@@ -17,7 +17,7 @@ import type {
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
-import { WorkerRunExecutor } from "../execution/worker-run.executor";
+import { RunDriver } from "../driver/run-driver";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -62,7 +62,7 @@ export class RunLauncher {
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
     private readonly workerManager: WorkerManagerService,
-    private readonly executor: WorkerRunExecutor,
+    private readonly driver: RunDriver,
     private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
@@ -498,7 +498,7 @@ export class RunLauncher {
         }),
         `record runtime starting for run ${runId}`
       );
-      return this.executor.start({
+      return this.driver.start({
         runConfig,
         runtimeTarget,
         onRuntimeInstanceIdReady: (runtimeInstanceId) =>

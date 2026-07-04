@@ -1,26 +1,9 @@
-import type {
-  CommandPayload,
-  RunChannelMessage,
-  WorkerExecutionHandle,
-  WorkerExecutionStartInput,
-} from "@agework/shared/protocol";
+import type { RunChannelMessage } from "@agework/shared/protocol";
 
 /**
- * per-run 执行通道：把 RuntimeTarget + RunConfig 跑成一次 run execution。
- *
- * Runtime 只提供运行环境；真正的 worker 启动、命令下发、取消和 run 级 cleanup
- * 由 runs 层的 RunExecutor 实现。
+ * RunDriver 用来上报 run 事件的反向端口：worker 上行事件、异常、取消通知、
+ * 命令下发记录都经这个端口回流给 run 层的事件入口。
  */
-export interface RunExecutor {
-  setRunEventPort(receiver: RunEventPort): void;
-  start(input: WorkerExecutionStartInput): WorkerExecutionHandle;
-  sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void;
-  cancel(handle: WorkerExecutionHandle): void;
-  /** 强制终止单次 run 的执行会话；不得停止可复用 runtime resource。 */
-  terminateExecution?(runId: string, reason: string): void;
-  cleanup(runId: string): void;
-}
-
 export interface RunEventPort {
   /** 转发上行 event（local 模式 IPC 入口；sandbox 模式直走 worker-manager）。 */
   sendEvent(runId: string, message: RunChannelMessage<unknown>): Promise<void>;

@@ -4,7 +4,7 @@ import { RunLauncher, type StopActiveRun } from "./run-launcher";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
-import { WorkerRunExecutor } from "../execution/worker-run.executor";
+import { RunDriver } from "../driver/run-driver";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
@@ -85,7 +85,7 @@ describe("RunLauncher", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockWorkerManager: Partial<WorkerManagerService>;
-  let mockExecutor: Partial<WorkerRunExecutor>;
+  let mockExecutor: Partial<RunDriver>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
@@ -185,7 +185,7 @@ describe("RunLauncher", () => {
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockWorkerManager as WorkerManagerService,
-      mockExecutor as WorkerRunExecutor,
+      mockExecutor as RunDriver,
       mockConversations as ConversationService,
       mockRunEvents,
       mockConfigService as ConfigService

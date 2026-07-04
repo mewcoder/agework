@@ -12,7 +12,7 @@ type OwnerWaiter = {
 };
 
 /**
- * 内存 command 队列：写入侧由 WorkerRunExecutor 经 WorkerManagerService →
+ * 内存 command 队列：写入侧由 RunDriver 经 WorkerManagerService →
  * WorkerCommandDispatcher 按 ownerId 推入；读取侧由持久容器 worker 经
  * WorkerCommandController → WorkerManagerService 按 ownerId 轮询。
  * local 实例不经过此队列（直接 IPC send）。

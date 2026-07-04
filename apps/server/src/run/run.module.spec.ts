@@ -8,7 +8,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
-import { WorkerRunExecutor } from "./execution/worker-run.executor";
+import { RunDriver } from "./driver/run-driver";
 import { RunService } from "./run.service";
 import { WorkerEventService } from "./upstream/worker-event.service";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
@@ -41,14 +41,14 @@ describe("RunModule wiring", () => {
       RunModule,
     ]));
 
-    const workerRunExecutor = testingModule.get(WorkerRunExecutor);
-    expect(workerRunExecutor).toBeInstanceOf(WorkerRunExecutor);
+    const runDriver = testingModule.get(RunDriver);
+    expect(runDriver).toBeInstanceOf(RunDriver);
     expect(testingModule.get(RunService)).toBeInstanceOf(RunService);
 
     expect(testingModule.get(RunStartupService)).toBeInstanceOf(
       RunStartupService
     );
-    const setRunEventPort = vi.spyOn(workerRunExecutor, "setRunEventPort");
+    const setRunEventPort = vi.spyOn(runDriver, "setRunEventPort");
     const workerManager = testingModule.get(WorkerManagerService);
     const setUpstreamPort = vi.spyOn(workerManager, "setUpstreamPort");
     const liveRuns = testingModule.get(LiveRunRegistry);

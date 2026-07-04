@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { WorkerRunExecutor } from "./execution/worker-run.executor";
+import { RunDriver } from "./driver/run-driver";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
@@ -12,7 +12,7 @@ describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockExecutor: Partial<WorkerRunExecutor>;
+  let mockExecutor: Partial<RunDriver>;
   let mockRunEvents: RunEventService;
   let mockRunLauncher: Partial<RunLauncher>;
   let mockWorkerManager: Partial<WorkerManagerService>;
@@ -46,7 +46,7 @@ describe("RunService", () => {
     service = new RunService(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockExecutor as WorkerRunExecutor,
+      mockExecutor as RunDriver,
       mockRunEvents,
       mockRunLauncher as RunLauncher,
       mockWorkerManager as WorkerManagerService,

@@ -4,7 +4,7 @@ import type {
   RuntimeTarget,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
-import { WorkerRunExecutor } from "./worker-run.executor";
+import { RunDriver } from "./run-driver";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
 function makeWorkerManager() {
@@ -50,10 +50,10 @@ function makeInput(
 }
 
 describe.each(["local", "sandbox"] as const)(
-  "WorkerRunExecutor (%s)",
+  "RunDriver (%s)",
   (runtimeType) => {
     let workerManager: ReturnType<typeof makeWorkerManager>;
-    let executor: WorkerRunExecutor;
+    let executor: RunDriver;
     let receiver: {
       recordCommandSent: ReturnType<typeof vi.fn>;
       notifyWorkerError: ReturnType<typeof vi.fn>;
@@ -62,7 +62,7 @@ describe.each(["local", "sandbox"] as const)(
 
     beforeEach(() => {
       workerManager = makeWorkerManager();
-      executor = new WorkerRunExecutor(
+      executor = new RunDriver(
         workerManager as unknown as WorkerManagerService
       );
       receiver = {

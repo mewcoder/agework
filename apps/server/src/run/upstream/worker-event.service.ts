@@ -7,13 +7,13 @@ import type {
   WorkerExecutionHandle,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import type { RunEventPort } from "../execution/executor";
+import type { RunEventPort } from "../driver/run-event.port";
 import type { WorkerUpstreamPort } from "../../worker-manager/worker-manager.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
-import { WorkerRunExecutor } from "../execution/worker-run.executor";
+import { RunDriver } from "../driver/run-driver";
 import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { summarizeMessagePayload } from "./message-payload-summary";
@@ -38,7 +38,7 @@ export class WorkerEventService
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
-    private readonly executor: WorkerRunExecutor,
+    private readonly driver: RunDriver,
     private readonly aguiEvents: WorkerAgUiEventHandler,
     private readonly finalization: RunFinalizationStore,
     private readonly seqGate: WorkerSeqStore
@@ -70,7 +70,7 @@ export class WorkerEventService
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
       if (TERMINAL_RUN_STATUSES.includes(status) && handle) {
-        this.executor.cleanup(handle.runtimeHandle.runId);
+        this.driver.cleanup(handle.runtimeHandle.runId);
       }
     }
   }
@@ -197,7 +197,7 @@ export class WorkerEventService
     try {
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
-      this.executor.terminateExecution(runtimeHandle.runId, "run timeout");
+      this.driver.terminateExecution(runtimeHandle.runId, "run timeout");
     }
   }
 

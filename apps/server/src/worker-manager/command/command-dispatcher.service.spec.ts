@@ -35,7 +35,7 @@ describe("WorkerCommandDispatcher", () => {
     });
 
     expect(configStore.register).toHaveBeenCalledWith("run-1", makeRunConfig());
-    // 首个 user_message 由 run 侧 WorkerRunExecutor 显式下发，openSession 不再代发。
+    // 首个 user_message 由 run 侧 RunDriver 显式下发，openSession 不再代发。
     expect(commandQueue.pushByOwnerId).not.toHaveBeenCalled();
   });
 

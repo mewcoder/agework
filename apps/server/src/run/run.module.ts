@@ -12,7 +12,7 @@ import { RunStartupService } from "./startup/run-startup.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
-import { WorkerRunExecutor } from "./execution/worker-run.executor";
+import { RunDriver } from "./driver/run-driver";
 import { WorkerAgUiEventHandler } from "./upstream/worker-agui-event.handler";
 
 // controllers
@@ -28,7 +28,7 @@ import { ConversationModule } from "../conversation/conversation.module";
  * runtime 环境（placement 解析、实例取得/释放/回收 全部经 WorkerManagerService,
  * runtimeType 判断收在 worker-manager 内部,见设计文档第一节),另外向下依赖
  * run-event / conversation（直接写回会话状态），并在启动时把 worker 事件统一入口
- * 注入 run executor；WorkerUpstreamPort → worker-manager 的 WorkerRunController。
+ * 注入 run driver；WorkerUpstreamPort → worker-manager 的 WorkerRunController。
  */
 @Module({
   imports: [WorkerManagerModule, RunEventModule, ConversationModule],
@@ -43,7 +43,7 @@ import { ConversationModule } from "../conversation/conversation.module";
     RunFinalizationStore,
     RunService,
     RunLauncher,
-    WorkerRunExecutor,
+    RunDriver,
     WorkerAgUiEventHandler,
     RunStartupService,
     RunWorkspaceListener,
