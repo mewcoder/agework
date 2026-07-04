@@ -25,7 +25,6 @@ function parseArgs(args) {
     apiPort: undefined,
     runtimeTypes: undefined,
     isolationScopes: undefined,
-    sandboxEngine: undefined,
     ctxPath: undefined,
     isProd: false,
     isDev: false,
@@ -125,21 +124,6 @@ function parseArgs(args) {
       continue;
     }
 
-    if (arg === "--sandbox-engine") {
-      options.sandboxEngine = normalizeSandboxEngine(
-        readOptionValue(args, index, arg)
-      );
-      index += 1;
-      continue;
-    }
-
-    if (arg.startsWith("--sandbox-engine=")) {
-      options.sandboxEngine = normalizeSandboxEngine(
-        arg.slice("--sandbox-engine=".length)
-      );
-      continue;
-    }
-
     if (arg === "--ctx") {
       options.ctxPath = normalizeCtxPath(readOptionValue(args, index, arg));
       index += 1;
@@ -200,11 +184,14 @@ function normalizeRuntimeTypes(rawValue) {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 
+  const allowed = ["local", "docker", "opensandbox"];
   if (
     values.length === 0 ||
-    values.some((value) => value !== "local" && value !== "sandbox")
+    values.some((value) => !allowed.includes(value))
   ) {
-    throw new Error("--runtime expects \"local\", \"sandbox\" or \"local,sandbox\"");
+    throw new Error(
+      "--runtime expects comma-separated values from \"local\", \"docker\", \"opensandbox\""
+    );
   }
 
   return [...new Set(values)].join(",");
@@ -226,16 +213,6 @@ function normalizeIsolationScopes(rawValue) {
   }
 
   return [...new Set(values)].join(",");
-}
-
-function normalizeSandboxEngine(rawValue) {
-  const value = rawValue.trim().toLowerCase();
-
-  if (value !== "docker" && value !== "opensandbox") {
-    throw new Error("--sandbox-engine expects \"docker\" or \"opensandbox\"");
-  }
-
-  return value;
 }
 
 function normalizeCtxPath(rawValue) {
@@ -572,7 +549,6 @@ async function main() {
     apiPort,
     runtimeTypes,
     isolationScopes,
-    sandboxEngine,
     ctxPath,
     isProd,
     isDev,
@@ -595,9 +571,8 @@ async function main() {
     console.log("  --ctx <path>     Set backend context and frontend paths, for example /agent");
     console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/server/.env");
     console.log("  --port <port>    Set backend PORT in apps/server/.env");
-    console.log("  --runtime <local|sandbox|local,sandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env");
+    console.log("  --runtime <local|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)");
     console.log("  --isolation <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES in apps/server/.env");
-    console.log("  --sandbox-engine <docker|opensandbox>     Set AGEWORK_SANDBOX_ENGINE in apps/server/.env");
     console.log("  --no-install     Skip pnpm install");
     console.log("Default: runs pnpm install unless --no-install is set.");
     return;
@@ -632,16 +607,20 @@ async function main() {
       message: "允许的工作空间运行环境",
       options: [
         { value: "local", label: "local（只允许本机进程）" },
-        { value: "sandbox", label: "sandbox（只允许沙箱）" },
-        { value: "local,sandbox", label: "local,sandbox（创建工作空间时可选）" },
+        { value: "docker", label: "docker（本机 Docker 容器）" },
+        { value: "opensandbox", label: "opensandbox（OpenSandbox Server + worker 镜像）" },
       ],
       initialValue: "local",
     });
     if (p.isCancel(result)) process.exit(0);
     runtimeTypes = result;
   }
-  const allowsSandbox = runtimeTypes?.split(",").includes("sandbox") ?? false;
-  if (allowsSandbox && isolationScopes === undefined && interactive) {
+  const runtimeTypeList = runtimeTypes?.split(",") ?? [];
+  const allowsOpenSandbox = runtimeTypeList.includes("opensandbox");
+  // docker / opensandbox 都跑在容器里,需要 worker 镜像与隔离级别设置。
+  const allowsContainer =
+    allowsOpenSandbox || runtimeTypeList.includes("docker");
+  if (allowsContainer && isolationScopes === undefined && interactive) {
     const result = await p.select({
       message: "允许的沙箱隔离级别",
       options: [
@@ -653,18 +632,6 @@ async function main() {
     });
     if (p.isCancel(result)) process.exit(0);
     isolationScopes = result;
-  }
-  if (allowsSandbox && sandboxEngine === undefined && interactive) {
-    const result = await p.select({
-      message: "Sandbox 引擎",
-      options: [
-        { value: "docker", label: "docker（本机 Docker 容器）" },
-        { value: "opensandbox", label: "opensandbox（OpenSandbox Server + worker 镜像）" },
-      ],
-      initialValue: "docker",
-    });
-    if (p.isCancel(result)) process.exit(0);
-    sandboxEngine = result;
   }
   if (shouldInstall) runPnpm(["install"]);
   const apiWasCreated = ensureEnv(apiEnv, apiEnvExample, "apps/server/.env", {
@@ -692,12 +659,11 @@ async function main() {
   if (isolationScopes) {
     apiUpdates.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = isolationScopes;
   }
-  if (sandboxEngine) apiUpdates.AGEWORK_SANDBOX_ENGINE = sandboxEngine;
   // Docker / OpenSandbox 都依赖同一个 worker 镜像。
-  if (allowsSandbox) {
+  if (allowsContainer) {
     await ensureWorkerImage({ interactive, shouldReset, promptYesNo });
   }
-  if (allowsSandbox && sandboxEngine === "opensandbox") {
+  if (allowsOpenSandbox) {
     console.log("🚀 启动 OpenSandbox Server...");
     pullRuntimeImages();
     composeUp();

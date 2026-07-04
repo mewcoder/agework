@@ -44,10 +44,9 @@ AgeWork 配置按边界分为四类：
 
 | 变量                           | 默认值                     | 建议     | 说明                                                                                 |
 | ------------------------------ | -------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `AGEWORK_RUNTIME_ALLOWED_TYPES`        | `local`                    | 保留 ENV | 当前部署允许创建的 workspace runtime，可选 `local`、`sandbox` 或 `local,sandbox`。非法值启动失败。 |
+| `AGEWORK_RUNTIME_ALLOWED_TYPES`        | `local`                    | 保留 ENV | 当前部署允许创建的 workspace runtime，可选 `local`、`docker`、`opensandbox`（可逗号组合）。非法值启动失败。 |
 | `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES` | `user`                  | 保留 ENV | 当前部署允许创建的 sandbox 隔离级别，可选 `user`、`workspace` 或 `user,workspace`；第一项作为默认值。沙箱指定本地目录时必须使用 `workspace`。 |
-| `AGEWORK_SANDBOX_ENGINE`               | `docker`                   | 保留 ENV | 新建 sandbox 的默认引擎，可选 `docker`、`opensandbox`。                              |
-| `AGEWORK_SANDBOX_OPENSANDBOX_DOMAIN`           | `localhost:8080`           | 保留 ENV | OpenSandbox 服务地址，格式为 host:port。仅 `AGEWORK_SANDBOX_ENGINE=opensandbox` 时需要关注。 |
+| `AGEWORK_SANDBOX_OPENSANDBOX_DOMAIN`           | `localhost:8080`           | 保留 ENV | OpenSandbox 服务地址，格式为 host:port。仅 `AGEWORK_RUNTIME_ALLOWED_TYPES` 包含 `opensandbox` 时需要关注。 |
 | `AGEWORK_SANDBOX_OPENSANDBOX_PROTOCOL`         | `http`                     | 保留 ENV | 可选 `http`、`https`。                                                               |
 | `AGEWORK_PRIVATE_OPENSANDBOX_API_KEY`          | 空                         | 保留 ENV | OpenSandbox API key，属于部署密钥。                                                  |
 | `AGEWORK_SANDBOX_OPENSANDBOX_IMAGE`            | `agework/worker:latest`    | 保留 ENV | OpenSandbox 创建 sandbox 使用的镜像。                                                |
@@ -121,8 +120,7 @@ POST /api/v1/admin/config/reset    body: { key }
 | `AGEWORK_INTERNAL_RUNTIME_ACCESS_KEY`      | API 注入           | worker 调用 internal API 的访问密钥。                              |
 | `AGEWORK_INTERNAL_WORKSPACE_ID`            | API 注入           | 持久 worker 的 workspace/resource key。                            |
 | `AGEWORK_INTERNAL_RUNTIME_RESOURCE_ID`     | API 注入           | runtime resource id。                                              |
-| `AGEWORK_INTERNAL_RUNTIME_TYPE`            | API 注入           | worker 诊断上下文，取值 `local` 或 `sandbox`。                     |
-| `AGEWORK_INTERNAL_SANDBOX_ENGINE`          | API 注入           | worker 诊断上下文，取值 `docker` 或 `opensandbox`。                |
+| `AGEWORK_INTERNAL_RUNTIME_TYPE`            | API 注入           | worker 诊断上下文，取值 `local`、`docker` 或 `opensandbox`。       |
 | `AGEWORK_INTERNAL_ISOLATION_SCOPE` | API 注入           | worker 诊断上下文。                                                |
 | `AGEWORK_INTERNAL_LOG_DIR`         | API 注入           | 容器内 runtime 诊断日志目录，不是宿主机可配置项。                  |
 | `AGEWORK_INTERNAL_WORKER_MODE`            | API 注入           | `persistent` 等 worker 模式。                                      |

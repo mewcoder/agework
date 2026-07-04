@@ -108,16 +108,15 @@ pnpm app:deploy
 | `--ctx <path>` | 设置部署子路径，例如 `/agent` |
 | `--name <name>` | 设置应用名称 |
 | `--port <port>` | 设置后端端口 |
-| `--runtime <local\|sandbox\|local,sandbox>` | 设置允许创建的工作空间运行环境 |
+| `--runtime <local\|docker\|opensandbox>` | 设置允许创建的工作空间运行环境（可逗号组合） |
 | `--isolation <user\|workspace\|user,workspace>` | 设置允许创建的沙箱隔离级别 |
-| `--sandbox-engine <docker\|opensandbox>` | 设置沙箱引擎 |
 
 示例：
 
 ```bash
 pnpm init:dev --name AgeWork --port 3001
 pnpm init:prod --ctx /agent
-pnpm init:dev --runtime local,sandbox --isolation workspace --sandbox-engine opensandbox
+pnpm init:dev --runtime local,opensandbox --isolation workspace
 ```
 
 ## 5. 环境变量
@@ -140,7 +139,6 @@ pnpm init:dev --runtime local,sandbox --isolation workspace --sandbox-engine ope
 | `AGEWORK_CONTEXT` | 后端上下文路径，例如 `/agent` | 根路径 |
 | `AGEWORK_RUNTIME_ALLOWED_TYPES` | 允许的 runtime 类型 | `local` |
 | `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES` | 允许的 sandbox 隔离级别 | `user` |
-| `AGEWORK_SANDBOX_ENGINE` | Sandbox 引擎 | `docker` |
 | `AGEWORK_DATA_DIR` | AgeWork 本机数据根目录 | `~/.agework` |
 
 ### Web
@@ -157,8 +155,9 @@ pnpm init:dev --runtime local,sandbox --isolation workspace --sandbox-engine ope
 AgeWork 的工作空间运行环境由 `AGEWORK_RUNTIME_ALLOWED_TYPES` 控制：
 
 - `local`：在本机进程中运行 Agent。
-- `sandbox`：在沙箱环境中运行 Agent。
-- `local,sandbox`：创建工作空间时可选择运行环境。
+- `docker`：在本机 Docker 容器中运行 Agent。
+- `opensandbox`：在 OpenSandbox 沙箱中运行 Agent。
+- 可逗号组合（如 `local,docker`）：创建工作空间时可选择运行环境。
 
 Sandbox 隔离级别由 `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES` 控制：
 
@@ -173,7 +172,7 @@ Sandbox 隔离级别由 `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES` 控制：
 使用 OpenSandbox 引擎时，可以通过初始化命令一次完成配置与启动：
 
 ```bash
-pnpm init:dev --runtime sandbox --sandbox-engine opensandbox
+pnpm init:dev --runtime opensandbox
 ```
 
 也可以单独管理 OpenSandbox Server：
