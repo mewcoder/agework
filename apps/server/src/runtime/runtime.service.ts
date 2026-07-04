@@ -1,6 +1,7 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import type { RuntimeSpec } from "@agework/shared/protocol";
 import {
+  createRuntimeResolver,
   resolveRuntimeSpec,
   type RuntimeProvider,
   type RuntimeType,
@@ -9,22 +10,23 @@ import {
   type RuntimeSpecInput,
 } from "@agework/runtime";
 import { ConfigService } from "../config/config.service";
-
-/** DI token:注入 createRuntimeProviders(cfg) 装配出的 type → provider 映射表。 */
-export const RUNTIME_PROVIDERS = Symbol("RUNTIME_PROVIDERS");
+import { toRuntimeConfig } from "./runtime-config";
 
 /**
  * Runtime 层对上层的门面:按 runtimeType 分发给 `@agework/runtime` 装配好的 provider
  * + placement 计算 + 运行时策略。runtime provider 实现全在 `@agework/runtime` 包内,
- * server 只经工厂拿到 RuntimeProvider 接口实例,不认识具体 provider 类。
+ * server 构造时经 resolver 拿到 RuntimeProvider 接口实例,不认识具体 provider 类。
  */
 @Injectable()
 export class RuntimeService {
-  constructor(
-    private readonly configService: ConfigService,
-    @Inject(RUNTIME_PROVIDERS)
-    private readonly providers: Map<RuntimeType, RuntimeProvider>
-  ) {}
+  /** 建一次、进程内长活的 provider resolver(get/throw 收在包闭包内)。 */
+  private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
+
+  constructor(private readonly configService: ConfigService) {
+    this.resolveProvider = createRuntimeResolver(
+      toRuntimeConfig(configService)
+    );
+  }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
   resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
@@ -55,13 +57,5 @@ export class RuntimeService {
   /** owner 永久消失:删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> | void {
     return this.resolveProvider(ref.runtimeType).destroy(ref);
-  }
-
-  private resolveProvider(type: RuntimeType): RuntimeProvider {
-    const provider = this.providers.get(type);
-    if (!provider) {
-      throw new Error(`Unknown runtime provider: ${type}`);
-    }
-    return provider;
   }
 }

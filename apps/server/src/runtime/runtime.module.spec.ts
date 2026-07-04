@@ -1,12 +1,11 @@
 import { Injectable, Module } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { RuntimeProvider, RuntimeType } from "@agework/runtime";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeService, RUNTIME_PROVIDERS } from "./runtime.service";
+import { RuntimeService } from "./runtime.service";
 import { RuntimeModule } from "./runtime.module";
 
 @Injectable()
@@ -29,17 +28,11 @@ describe("RuntimeModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("assembles the provider registry (local/docker/opensandbox) from config and resolves RuntimeService", async () => {
+  it("assembles the provider resolver from config and resolves RuntimeService", async () => {
+    // RuntimeService 构造期 createRuntimeResolver(toRuntimeConfig(config)) 不抛,
+    // 即证明 provider 装配从 ConfigService 成功建成。
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 
-    const providers =
-      testingModule.get<Map<RuntimeType, RuntimeProvider>>(RUNTIME_PROVIDERS);
-    expect([...providers.keys()].sort()).toEqual([
-      "docker",
-      "local",
-      "opensandbox",
-    ]);
-    expect(providers.get("docker")?.type).toBe("docker");
     expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);
   });
 

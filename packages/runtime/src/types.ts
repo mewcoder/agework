@@ -43,7 +43,7 @@ export type LocalProviderConfig = {
   tsxCliPath: string;
 };
 
-/** createRuntimeProviders 的唯一入参。 */
+/** createRuntimeResolver 的唯一入参。 */
 export type RuntimeConfig = {
   workerImage: string;
   runtimeLogHostPath: string;

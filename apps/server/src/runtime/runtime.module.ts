@@ -1,25 +1,13 @@
 import { Module } from "@nestjs/common";
-import { createRuntimeProviders } from "@agework/runtime";
 
-import { RuntimeService, RUNTIME_PROVIDERS } from "./runtime.service";
-import { toRuntimeConfig } from "./runtime-config";
-import { ConfigService } from "../config/config.service";
+import { RuntimeService } from "./runtime.service";
 
 /**
- * Runtime 领域的接线层:从 ConfigService 拼出 RuntimeConfig,交给 `@agework/runtime`
- * 的工厂装配出 type → provider 映射表,RuntimeService 据此分发。provider 实现与契约
- * 全在包里,server 这边只剩这层薄接线 + 门面 Service。
+ * Runtime 领域的组合根:只登记门面 Service。provider 装配(ConfigService → resolver)
+ * 收在 RuntimeService 构造函数内,provider 实现与契约全在 `@agework/runtime` 包里。
  */
 @Module({
-  providers: [
-    {
-      provide: RUNTIME_PROVIDERS,
-      useFactory: (configService: ConfigService) =>
-        createRuntimeProviders(toRuntimeConfig(configService)),
-      inject: [ConfigService],
-    },
-    RuntimeService,
-  ],
+  providers: [RuntimeService],
   exports: [RuntimeService],
 })
 export class RuntimeModule {}

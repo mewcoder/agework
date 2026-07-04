@@ -1,12 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { RuntimeService } from "./runtime.service";
-import { ConfigService } from "../config/config.service";
 import type {
   RuntimeProvider,
   RuntimeType,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
 } from "@agework/runtime";
+import { ConfigService } from "../config/config.service";
+import { RuntimeService } from "./runtime.service";
+
+// provider 装配现收在 RuntimeService 构造函数内(createRuntimeResolver),这里 mock
+// 掉工厂、注入 fake resolver 以测分发;resolveRuntimeSpec 保留真实实现。
+const { fakes } = vi.hoisted(() => ({
+  fakes: new Map<string, RuntimeProvider>(),
+}));
+
+vi.mock("@agework/runtime", async (importActual) => {
+  const actual = await importActual<typeof import("@agework/runtime")>();
+  return {
+    ...actual,
+    createRuntimeResolver: () => (type: string) => {
+      const provider = fakes.get(type);
+      if (!provider) throw new Error(`Unknown runtime provider: ${type}`);
+      return provider;
+    },
+  };
+});
 
 function makeFakeProvider(type: RuntimeType): RuntimeProvider & {
   start: ReturnType<typeof vi.fn>;
@@ -26,7 +44,7 @@ describe("RuntimeService", () => {
   let fakeLocal: ReturnType<typeof makeFakeProvider>;
   let fakeDocker: ReturnType<typeof makeFakeProvider>;
   let fakeOpenSandbox: ReturnType<typeof makeFakeProvider>;
-  let service: RuntimeService;
+  let service: InstanceType<typeof RuntimeService>;
 
   beforeEach(() => {
     configService = {
@@ -37,16 +55,23 @@ describe("RuntimeService", () => {
         .mockReturnValue(["local", "docker", "opensandbox"]),
       getAllowedIsolationScopes: vi.fn().mockReturnValue(["user", "workspace"]),
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
+      // 构造期 toRuntimeConfig 会读这两个
+      getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
+      getOpenSandboxConfig: vi.fn().mockReturnValue({
+        domain: "opensandbox.test",
+        protocol: "https",
+        apiKey: "test-key",
+        useServerProxy: false,
+      }),
     };
     fakeLocal = makeFakeProvider("local");
     fakeDocker = makeFakeProvider("docker");
     fakeOpenSandbox = makeFakeProvider("opensandbox");
-    const providers = new Map<RuntimeType, RuntimeProvider>([
-      ["local", fakeLocal],
-      ["docker", fakeDocker],
-      ["opensandbox", fakeOpenSandbox],
-    ]);
-    service = new RuntimeService(configService as ConfigService, providers);
+    fakes.clear();
+    fakes.set("local", fakeLocal);
+    fakes.set("docker", fakeDocker);
+    fakes.set("opensandbox", fakeOpenSandbox);
+    service = new RuntimeService(configService as ConfigService);
   });
 
   it("resolveRuntimeSpec delegates to the pure resolver", () => {
@@ -108,26 +133,6 @@ describe("RuntimeService", () => {
       await service.destroy(ref("opensandbox"));
       expect(fakeOpenSandbox.destroy).toHaveBeenCalledOnce();
       expect(fakeDocker.destroy).not.toHaveBeenCalled();
-    });
-
-    it("throws for an unknown runtimeType", () => {
-      expect(() => service.start(ctx("unknown" as RuntimeType))).toThrow(
-        /Unknown runtime provider/
-      );
-      expect(() => service.stop(ref("unknown" as RuntimeType))).toThrow(
-        /Unknown runtime provider/
-      );
-      expect(() => service.destroy(ref("unknown" as RuntimeType))).toThrow(
-        /Unknown runtime provider/
-      );
-    });
-
-    it("the legacy 'sandbox' runtimeType is dead: routing throws, never silently hits docker/opensandbox", () => {
-      expect(() => service.start(ctx("sandbox" as RuntimeType))).toThrow(
-        /Unknown runtime provider/
-      );
-      expect(fakeDocker.start).not.toHaveBeenCalled();
-      expect(fakeOpenSandbox.start).not.toHaveBeenCalled();
     });
   });
 });
