@@ -150,8 +150,8 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
     <div className="space-y-4">
       {showHeader && (
         <div>
-          <h2 className="text-lg font-semibold">执行环境管理</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">查看和管理工作空间执行环境资源</p>
+          <h2 className="text-lg font-semibold">Worker 管理</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">查看和管理各用户 / 工作空间下常驻的 Worker</p>
         </div>
       )}
 
@@ -182,7 +182,7 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
         columns={columns}
         data={items}
         isLoading={isLoading}
-        emptyText="暂无执行环境资源"
+        emptyText="暂无运行中的 Worker"
         tableClassName="min-w-[960px]"
         getRowId={(resource) => resource.id}
       />
@@ -201,8 +201,8 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
           if (!open) stopDialog.close();
         }}
         onConfirm={confirmStop}
-        title="确认停止执行环境？"
-        description="确定要停止此执行环境资源吗？停止后需要重新启动才能使用。"
+        title="确认停止 Worker？"
+        description="确定要停止此 Worker 吗？停止后需要重新启动才能使用。"
         confirmLabel="停止"
       />
     </div>

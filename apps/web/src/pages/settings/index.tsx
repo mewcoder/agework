@@ -56,7 +56,7 @@ const ADMIN_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'users', label: '用户管理', icon: UsersIcon },
   { id: 'model-management', label: '模型服务管理', icon: Bot },
   { id: 'workspaces-overview', label: '工作空间管理', icon: Folders },
-  { id: 'workspace-runtimes', label: '执行环境管理', icon: ServerIcon },
+  { id: 'workspace-runtimes', label: 'Worker 管理', icon: ServerIcon },
   { id: 'runs', label: '运行日志', icon: Activity },
   { id: 'system-config', label: '系统配置', icon: SlidersHorizontal },
 ];
@@ -167,8 +167,8 @@ export default function SettingsPage() {
       {isAdmin && activeCategory === 'workspace-runtimes' && (
         <div className="space-y-6">
           <SettingsPageHeader
-            title="执行环境管理"
-            description="查看和管理工作空间执行环境资源"
+            title="Worker 管理"
+            description="查看和管理各用户 / 工作空间下常驻的 Worker"
           />
           <WorkspaceRuntimesPanel showHeader={false} />
         </div>

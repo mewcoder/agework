@@ -191,7 +191,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
             </DetailGrid>
           </DetailSection>
 
-          <DetailSection title="执行环境">
+          <DetailSection title="Worker">
             <DetailGrid>
               <DetailItem label="类型" value={run.runtimeType} />
               {run.workerInstance && (
