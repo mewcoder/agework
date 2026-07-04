@@ -79,7 +79,11 @@ export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boo
       header: "隔离级别",
       meta: { headerClassName: "pl-4", cellClassName: "pl-4" },
       cell: ({ row }) => (
-        <DataTableBadge variant="outline">{row.original.isolationScope}</DataTableBadge>
+        <DataTableBadge variant="outline">
+          {row.original.runtimeType === "local"
+            ? "host"
+            : row.original.isolationScope}
+        </DataTableBadge>
       ),
     },
     {
