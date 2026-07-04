@@ -17,7 +17,7 @@ worker 的归属与隔离键。user 隔离下是 userId,workspace 隔离下是 w
 _Avoid_: Tenant、account
 
 **Isolation scope**:
-决定一个 worker 被谁共享的粒度:`user`(该用户所有 workspace 共享一个 worker)或 `workspace`(每 workspace 独占一个)。
+**仅 sandbox(容器)运行时的概念**,决定容器被谁共享的粒度:`user`(该用户所有 workspace 共享一个容器)或 `workspace`(每 workspace 独占一个容器)。`local` 直接在宿主机 fork 进程、无容器,**不具隔离级别**——数据行里 local 的 `isolationScope` 是为填非空列硬塞的占位值,不代表真实隔离(展示层应识别为 `host`)。
 _Avoid_: Isolation level、裸用的 scope
 
 **Worker instance**:
