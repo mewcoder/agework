@@ -17,7 +17,7 @@
 | 1 注册骨架 | ✅ 完成 | `aabeee2f`(server:Runtime 表/配对 API/隧道端点/判死)、`c32978f2`(apps/runtime:manager 注册/心跳/重连)、`081df4f3`(shared 值内联修复) |
 | 2 Registered 跑通 | ✅ 完成 | `1377afa7`(providers 回调拆解)、`41e1dd60`(RemoteRuntime+隧道 RPC)、`68a3e93a`(manager launcher/registry) |
 | 3 前端 + 全链路接线 | ✅ 完成 | `0a06e477`(配对页)、`3b344ebd`(Workspace.runtimeId 数据层+校验)、`451bed5e`(run 路径接线+stop/destroy 路由修复)、`d9ff8da7`(workspace-dialog.tsx Registered 分支) |
-| 4 收尾 | ⬜ 未开始 | 前置:§13 产物分发 |
+| 4 收尾 | ✅ 完成 | `9418d7b1`(Managed-local 内嵌 runtime 产物,去 @agework/worker 依赖)、`a54256c8`(Managed-docker 统一到 agework/runtime 镜像)、`7a01d842`(register 握手带版本,server 只告警放行)、`3f030635`(server build 前置 runtime build,防内嵌产物过期)、本提交(docs) |
 
 **Phase 2 落地摘要**(两个前置拍板点都按推荐方案定案并已实施):
 
@@ -109,6 +109,69 @@ mock 拼出来的信心。验证完毕清空所有测试数据(workspace/model-p
 providers 44 / shared 21,合计 1184)+ eslint 全绿,eslint 剩余问题均为改动前已存在的存量基线
 (server 2 条 floating-promise 警告、web 6 个 shadcn 组件的 react-refresh 错误 + 4 条第三方库
 warning),没有引入新问题。
+
+**Phase 4 落地摘要(本轮:server 去掉 `require.resolve('@agework/worker')`,worker-manager
+数据面/物理面正式分家)**:
+
+§13 三个产物分发问题(开工前先与用户对齐,不边做边拍板)的定案与落地:
+1. **Managed-docker 镜像 tag 怎么跟 server 版本对齐?** → 维持 `:latest`,版本正确性靠
+   register 握手兜底。落地:`DEFAULT_WORKER_IMAGE` 改名 `DEFAULT_RUNTIME_IMAGE`,值
+   `agework/runtime:latest`(commit `a54256c8`)。`scripts/build-worker.mjs` 改 build
+   `apps/runtime/Dockerfile`(原 `packages/worker/Dockerfile` 退役为孤儿,见下)。
+2. **Managed-local 的 spawn 路径从哪来?** → server 发布物内嵌一份。落地(commit `9418d7b1`):
+   `apps/server/scripts/embed-runtime.mjs` 在 server build 末尾把 `apps/runtime/dist/main.js`
+   复制到 `apps/server/dist/agework-runtime/main.mjs`;`runtime-config.ts` 的 `resolveRuntimeEntry`
+   解析顺序 = `AGEWORK_RUNTIME_LOCAL_ENTRY` 覆盖 → 内嵌产物(dev/prod 都走这条) → dev 回退到
+   workspace 里已构建的 `@agework/runtime` dist。`LocalRuntimeProvider` 不再 fork `tsx`,改成
+   `node` 直跑产物 `.mjs` 并注入 `AGEWORK_WORKER_ROLE=worker`(同一产物以 worker 角色启动)。
+   server 的 `package.json` 去掉 `@agework/worker` 与 `tsx` 两个 prod 依赖,新增 `@agework/runtime`
+   作为 devDependency(给 build 顺序 + dev 回退用)。
+3. **版本偏差策略:server 对不齐时拒绝还是告警?** → 告警+放行。落地(commit `7a01d842`):
+   `@agework/shared` 新增 `AGEWORK_VERSION` 常量(源码内联,每次发版手动 bump);worker register
+   (`WorkerRegisterRequest`)与 manager 隧道 register(`RuntimeTunnelRegisterMessage`)都多带
+   一个 `version`;server 端 `WorkerManagerService.registerWorker` 与 `RuntimeTunnelHandler`
+   的 register 分支收到版本后与本地 `AGEWORK_VERSION` 比对,不一致只 `logger.warn` + 放行,
+   不阻断(主要兜底 Registered 远程 manager 单独构建后与 server 漂移)。
+
+顺带收尾 Phase 1/2 漏下的 `apps/runtime` 的 `LocalProviderConfig` 字段(commit `7a01d842` 一并):
+`manager/launcher.ts` 与 `config.ts` 的 `workerEntryPath`/`tsxCliPath` 双字段合并成单一
+`runtimeEntryPath`(`--runtime-entry` / `AGEWORK_RUNTIME_ENTRY`),不传则默认 fork manager
+自身(`process.argv[1]`)——Registered+local 场景下 manager 与 worker 共用同一 bundle,默认即
+正确,操作者不再需要手填 `--worker-entry`/`--tsx-cli`。
+
+**Dev 构建陷阱与修复(commit `3f030635`)**:发现 `pnpm --filter server build` 走的是 server
+package 自己的 npm script,**不经 turbo 的 `^build` 调度**,导致 `embed-runtime.mjs` 拷贝的是
+上一次手动 build 留下的旧 `apps/runtime/dist/main.js`(曾因此给 Managed fork 出一份**缺
+`version` 字段**的过期 worker,被真机 fork 抓到)。修法:server `build` 脚本前置
+`pnpm --filter @agework/runtime build`,保证每次 server build 都先 esbuild 出最新 runtime
+bundle(150ms)。复现验证:去掉 worker register 的 `version` 字段后 `pnpm --filter server
+build`,内嵌 `.mjs` 的 `version:AGEWORK_VERSION` 计数 2→1;还原后 1→2。此前不前置时计数保持
+2(读旧 dist)。**交接提醒**:改 worker/manager 源码后,用 `pnpm --filter server build` 或
+`pnpm build`(turbo,因 `@agework/runtime` 是 server devDep、`^build` 会带它)都行,两者现在
+都能拿到新鲜内嵌产物。
+
+**孤儿产物(本轮只标记不删,留给后续清理)**:
+- `packages/worker/Dockerfile` + `packages/worker/package.docker.json`:原独立 worker 镜像的
+  构建文件。`build-worker.mjs` 的 `WORKER_DOCKERFILE` 已改指 `apps/runtime/Dockerfile`,这两个
+  文件不再被任何活路径引用,可删;`.dockerignore` 里 `!packages/worker/dist/main.js` 这条豁免
+  也随之失效(只 `!apps/runtime/dist/main.js` 还有用)。
+- `docs/superpowers/{plans,specs}` 里多处仍写 `DEFAULT_WORKER_IMAGE`(历史设计稿),与现
+  `DEFAULT_RUNTIME_IMAGE` 不符——属历史记录,不追溯改写,以本进度表/§13 为准。
+
+**真机验证**:
+- **Managed-docker(commit 2)**:`docker build -t agework/runtime:latest -f apps/runtime/Dockerfile .`
+  成功(修了 `.dockerignore` 放行 `apps/runtime/dist/main.js`);`docker run` 注入
+  `AGEWORK_WORKER_ROLE=worker` + apiBase 指向一个真 capture HTTP server,容器以
+  `workerRole:"worker"` 启动、`POST /worker/owners/<id>/register` 带正确 `{startToken,pid}`、
+  进入 command long-poll;不注入 role 则走 `runManager`(Registered 远程 manager 路径)——
+  证明 worker 镜像 = runtime 镜像 = 同一产物,role 仅由 env 决定。
+- **Managed-local(commit 1)**:fork `apps/server/dist/agework-runtime/main.mjs`(ESM,从 server 的
+  CommonJS 进程 fork),解析外部化的 SDK 从 server `node_modules`,role dispatch 起成 worker,
+  真实 `POST register` 命中 capture server。
+- **版本字段(commit 3)**:重新 build 后 fork 同一内嵌产物,register body 现带
+  `"version":"0.0.1"`;bundle 含两处 `version: AGEWORK_VERSION`(worker-http + manager tunnel)。
+- 验证基线:`pnpm typecheck` + eslint(server 仅 2 条改动前就有的 floating-promise 警告)+ 单测
+  (server 832 / providers 44 / worker 45 / runtime 27 / shared 21)+ `pnpm build` 全绿。
 
 ---
 
@@ -494,6 +557,10 @@ Server **永不反连** Runtime;Registered runtime 永远 **dial-out**(NAT 免�
 ## 13. Open questions
 
 ### 产物分发(Phase 4 前必须回答)
+
+> **✅ 已在 Phase 4 全部答完并落地**——定案见上方"Phase 4 落地摘要";在此保留原问题作为历史。
+> 三个问题分别定案为:① 维持 `:latest`、正确性靠 register 握手兜底;② server 发布物内嵌一份
+> runtime bundle;③ 告警+放行。
 
 Phase 4 后 server 不再 `require.resolve('@agework/worker')`,Managed 模式
 下 server 起 worker 变成消费一个**外部产物**,但产物从哪来、版本怎么对齐没有答案:
