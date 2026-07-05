@@ -6,6 +6,7 @@ import {
   FolderIcon,
   Folders,
   InfoIcon,
+  MonitorIcon,
   ServerIcon,
   SettingsIcon,
   SlidersHorizontal,
@@ -30,6 +31,7 @@ import { GeneralSettings } from '@/pages/settings/general';
 import { ModelProvider } from '@/pages/settings/model-provider';
 import { ArchivedConversations } from '@/pages/settings/archived-conversation';
 import { WorkspaceSettings } from '@/pages/settings/workspace';
+import { RuntimeSettings } from '@/pages/settings/runtime';
 import { AboutSettings } from '@/pages/settings/about';
 import { isAdmin as checkIsAdmin } from '@/utils/auth';
 
@@ -38,6 +40,7 @@ type UserCategory =
   | 'general'
   | 'model'
   | 'workspaces'
+  | 'runtimes'
   | 'archived'
   | 'about';
 type AdminCategory = 'users' | 'model-management' | 'workspaces-overview' | 'runs' | 'workspace-runtimes' | 'system-config';
@@ -48,6 +51,7 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'general', label: '通用', icon: SettingsIcon },
   { id: 'model', label: '模型配置', icon: Bot },
   { id: 'workspaces', label: '工作空间', icon: FolderIcon },
+  { id: 'runtimes', label: '我的运行环境', icon: MonitorIcon },
   { id: 'archived', label: '已归档对话', icon: Archive },
   { id: 'about', label: '关于', icon: InfoIcon },
 ];
@@ -126,6 +130,7 @@ export default function SettingsPage() {
         </div>
       )}
       {activeCategory === 'workspaces' && <WorkspaceSettings />}
+      {activeCategory === 'runtimes' && <RuntimeSettings />}
       {activeCategory === 'archived' && <ArchivedConversations />}
       {activeCategory === 'about' && <AboutSettings />}
       {isAdmin && activeCategory === 'users' && (
