@@ -4,7 +4,7 @@ import type {
   RuntimeType,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-} from "@agework/runtime";
+} from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { RuntimeService } from "./runtime.service";
 
@@ -14,8 +14,8 @@ const { fakes } = vi.hoisted(() => ({
   fakes: new Map<string, RuntimeProvider>(),
 }));
 
-vi.mock("@agework/runtime", async (importActual) => {
-  const actual = await importActual<typeof import("@agework/runtime")>();
+vi.mock("@agework/providers", async (importActual) => {
+  const actual = await importActual<typeof import("@agework/providers")>();
   return {
     ...actual,
     createRuntimeResolver: () => (type: string) => {

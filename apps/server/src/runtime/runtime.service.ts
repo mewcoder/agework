@@ -8,13 +8,13 @@ import {
   type RuntimeLaunchContext,
   type RuntimeInstanceRef,
   type RuntimeSpecInput,
-} from "@agework/runtime";
+} from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./runtime-config";
 
 /**
- * Runtime 层对上层的门面:按 runtimeType 分发给 `@agework/runtime` 装配好的 provider
- * + placement 计算 + 运行时策略。runtime provider 实现全在 `@agework/runtime` 包内,
+ * Runtime 层对上层的门面:按 runtimeType 分发给 `@agework/providers` 装配好的 provider
+ * + placement 计算 + 运行时策略。runtime provider 实现全在 `@agework/providers` 包内,
  * server 构造时经 resolver 拿到 RuntimeProvider 接口实例,不认识具体 provider 类。
  */
 @Injectable()

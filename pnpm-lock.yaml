@@ -56,9 +56,9 @@ importers:
       '@agework/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
-      '@agework/runtime':
+      '@agework/providers':
         specifier: workspace:*
-        version: link:../../packages/runtime
+        version: link:../../packages/providers
       '@agework/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -496,6 +496,34 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
+  packages/providers:
+    dependencies:
+      '@agework/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@alibaba-group/opensandbox':
+        specifier: ^0.1.8
+        version: 0.1.8
+      '@nestjs/common':
+        specifier: ^11.0.1
+        version: 11.1.24(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+    devDependencies:
+      '@swc/core':
+        specifier: ^1.15.40
+        version: 1.15.40
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.4
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      unplugin-swc:
+        specifier: ^1.5.9
+        version: 1.5.9(@swc/core@1.15.40)
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
+
   packages/react-ag-ui:
     dependencies:
       '@ag-ui/client':
@@ -529,34 +557,6 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
-
-  packages/runtime:
-    dependencies:
-      '@agework/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@alibaba-group/opensandbox':
-        specifier: ^0.1.8
-        version: 0.1.8
-      '@nestjs/common':
-        specifier: ^11.0.1
-        version: 11.1.24(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
-    devDependencies:
-      '@swc/core':
-        specifier: ^1.15.40
-        version: 1.15.40
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.4
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-      unplugin-swc:
-        specifier: ^1.5.9
-        version: 1.5.9(@swc/core@1.15.40)
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
   packages/shared:
     dependencies:

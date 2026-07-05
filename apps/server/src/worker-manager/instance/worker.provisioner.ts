@@ -8,7 +8,7 @@ import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
   RuntimeType,
-} from "@agework/runtime";
+} from "@agework/providers";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerHandshakeStore } from "../connection/worker-handshake.store";

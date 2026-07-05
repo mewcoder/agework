@@ -1,4 +1,4 @@
-// ── @agework/runtime 公开面 ──────────────────────────────────────────────
+// ── @agework/providers 公开面 ──────────────────────────────────────────────
 // 只导出:装配工厂 + placement 纯函数 + runtime 类型事实 + 契约类型。
 // 具体 provider 类、OpenSandbox client、内部 helper / 契约一律不导出。
 

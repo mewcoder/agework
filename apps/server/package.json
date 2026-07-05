@@ -25,7 +25,7 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@agework/adapters": "workspace:*",
-    "@agework/runtime": "workspace:*",
+    "@agework/providers": "workspace:*",
     "@agework/shared": "workspace:*",
     "@agework/worker": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.86",

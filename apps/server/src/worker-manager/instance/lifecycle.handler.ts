@@ -6,7 +6,7 @@ import {
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerProvisioner } from "./worker.provisioner";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { isRuntimeType, type RuntimeInstanceRef } from "@agework/runtime";
+import { isRuntimeType, type RuntimeInstanceRef } from "@agework/providers";
 import { WorkerLivenessStore } from "../connection/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 

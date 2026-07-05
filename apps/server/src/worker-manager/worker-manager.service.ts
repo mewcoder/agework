@@ -17,7 +17,7 @@ import {
   isRuntimeType,
   type RuntimeSpecInput,
   type RuntimeInstanceRef,
-} from "@agework/runtime";
+} from "@agework/providers";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
 import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";

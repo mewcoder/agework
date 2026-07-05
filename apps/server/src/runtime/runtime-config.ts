@@ -1,11 +1,11 @@
-import type { RuntimeConfig } from "@agework/runtime";
+import type { RuntimeConfig } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { DEFAULT_WORKER_IMAGE } from "../config/registry/defaults";
 import { EnvKey } from "../config/registry/env-key";
 import { resolveApiBasePath } from "../common/path.util";
 
 /**
- * 把 server 的 ConfigService 拼成 `@agework/runtime` 需要的 RuntimeConfig。
+ * 把 server 的 ConfigService 拼成 `@agework/providers` 需要的 RuntimeConfig。
  * runtime 包不认识 ConfigService / process.env / @agework/worker——所有值在这里备好后注入:
  * - serverBaseUrl:worker 回连 server 的地址。默认 loopback,docker/opensandbox
  *   provider 自行把 loopback 换成 host.docker.internal;远程部署设 AGEWORK_SERVER_BASE_URL
