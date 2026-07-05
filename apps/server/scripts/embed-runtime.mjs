@@ -9,9 +9,16 @@
 //
 // 产物是 ESM,落地成 `.mjs` 让 node 无视 server 的 CommonJS package 直接当 ESM 跑。
 // 依赖 turbo `^build`:@agework/runtime 是 server 的 devDependency,先于 server 构建。
+//
+// @anthropic-ai/claude-agent-sdk / @openai/codex-sdk 是 --external,不在 bundle 里
+// (见 apps/runtime/docs/adr/0001)——它们的真实二进制通过平台专属
+// optionalDependencies 分发,只有一次真实 npm install 才能在这台机器上装出匹配的
+// 平台包,pnpm 的隔离式 node_modules 装不出来。复用 apps/runtime/package.docker.json
+// 同一份清单,在内嵌目录旁边跑一次 npm install,和 Docker 镜像构建时做的事一致。
 import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 
 const serverRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRoot = join(serverRoot, "..", "..");
@@ -34,3 +41,11 @@ for (const name of ["main", "runner"]) {
   copyFileSync(source, dest);
   console.log(`embedded agework-runtime → ${dest}`);
 }
+
+const manifestSource = join(repoRoot, "apps", "runtime", "package.docker.json");
+copyFileSync(manifestSource, join(destDir, "package.json"));
+execFileSync("npm", ["install", "--omit=dev", "--no-package-lock"], {
+  cwd: destDir,
+  stdio: "inherit",
+});
+console.log(`installed agework-runtime native deps → ${destDir}/node_modules`);
