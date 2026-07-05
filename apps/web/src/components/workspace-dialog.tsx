@@ -29,6 +29,8 @@ import type {
 } from "@agework/shared/api";
 import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
+import { useRuntimes } from "@/hooks/use-runtime";
+import type { Runtime } from "@/hooks/use-runtime";
 
 interface WorkspaceDialogProps {
   open: boolean;
@@ -43,6 +45,13 @@ const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
 const RUNTIME_TYPES = ["local", "docker", "opensandbox"] as const;
 const ISOLATION_SCOPES = ["user", "workspace"] as const;
+const PLACEMENT_MODES = ["managed", "registered"] as const;
+type PlacementMode = (typeof PLACEMENT_MODES)[number];
+
+/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选)。 */
+function eligibleRuntimes(runtimes: Runtime[]): Runtime[] {
+  return runtimes.filter((runtime) => runtime.runtimeType !== null);
+}
 
 function defaultWorkspaceName(): string {
   const now = new Date();
@@ -93,12 +102,31 @@ const workspaceDialogFormSchema = z
       .optional(),
     useGit: z.boolean(),
     useCustomPath: z.boolean(),
+    placementMode: z.enum(PLACEMENT_MODES),
     runtimeType: z.enum(RUNTIME_TYPES),
     isolationScope: z.enum(ISOLATION_SCOPES),
     gitUrl: z.string().optional(),
     rootPath: z.string().optional(),
+    runtimeId: z.string().optional(),
   })
   .superRefine((values, ctx) => {
+    if (values.placementMode === "registered") {
+      if (!values.runtimeId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["runtimeId"],
+          message: "请选择运行环境",
+        });
+      }
+      if (!values.rootPath?.trim()) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["rootPath"],
+          message: "请填写该运行环境上的绝对路径",
+        });
+      }
+      return;
+    }
     if (values.useGit && !values.gitUrl?.trim()) {
       ctx.addIssue({
         code: "custom",
@@ -185,6 +213,8 @@ function WorkspaceDialogForm({
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
   const { data: capabilities } = useWorkspaceCapabilities();
+  const { data: runtimes = [] } = useRuntimes();
+  const registeredRuntimes = eligibleRuntimes(runtimes);
   const form = useForm<WorkspaceDialogFormValues>({
     resolver: zodResolver(workspaceDialogFormSchema),
     defaultValues: {
@@ -192,10 +222,12 @@ function WorkspaceDialogForm({
       description: workspace?.description ?? "",
       useGit: false,
       useCustomPath: false,
+      placementMode: "managed",
       runtimeType: "local",
       isolationScope: "user",
       gitUrl: "",
       rootPath: "",
+      runtimeId: undefined,
     },
   });
 
@@ -219,15 +251,6 @@ function WorkspaceDialogForm({
   async function handleSubmit(values: WorkspaceDialogFormValues) {
     const name = values.name.trim();
     const description = values.description?.trim();
-    const gitUrl =
-      values.useGit ? values.gitUrl?.trim() : undefined;
-    const rootPath =
-      values.useCustomPath
-        ? normalizeFilesystemPath(values.rootPath ?? "")
-        : undefined;
-    const runtimeType = values.runtimeType;
-    const isolationScope =
-      runtimeType !== "local" ? values.isolationScope : undefined;
     if (!name) return;
     setSubmitError(null);
 
@@ -253,15 +276,23 @@ function WorkspaceDialogForm({
             setSubmitError(errorMessage(error, "保存工作空间失败")),
         },
       );
-    } else {
+      return;
+    }
+
+    if (values.placementMode === "registered") {
+      const selectedRuntime = registeredRuntimes.find(
+        (runtime) => runtime.id === values.runtimeId,
+      );
       createWorkspace.mutate(
         {
           name,
           description: description || undefined,
-          gitUrl,
-          rootPath,
-          runtimeType,
-          isolationScope,
+          rootPath: normalizeFilesystemPath(values.rootPath ?? ""),
+          runtimeId: values.runtimeId,
+          isolationScope:
+            selectedRuntime?.runtimeType !== "local"
+              ? values.isolationScope
+              : undefined,
         },
         {
           onSuccess: (created) => {
@@ -272,7 +303,34 @@ function WorkspaceDialogForm({
             setSubmitError(errorMessage(error, "创建工作空间失败")),
         },
       );
+      return;
     }
+
+    const gitUrl = values.useGit ? values.gitUrl?.trim() : undefined;
+    const rootPath = values.useCustomPath
+      ? normalizeFilesystemPath(values.rootPath ?? "")
+      : undefined;
+    const runtimeType = values.runtimeType;
+    const isolationScope =
+      runtimeType !== "local" ? values.isolationScope : undefined;
+    createWorkspace.mutate(
+      {
+        name,
+        description: description || undefined,
+        gitUrl,
+        rootPath,
+        runtimeType,
+        isolationScope,
+      },
+      {
+        onSuccess: (created) => {
+          onOpenChange(false);
+          onCreated?.(created);
+        },
+        onError: (error) =>
+          setSubmitError(errorMessage(error, "创建工作空间失败")),
+      },
+    );
   }
 
   async function handleSelectDirectory(onChange: (path: string) => void) {
@@ -317,9 +375,32 @@ function WorkspaceDialogForm({
   const nameValue = form.watch("name") ?? "";
   const useGit = form.watch("useGit");
   const useCustomPath = form.watch("useCustomPath");
+  const placementMode = form.watch("placementMode");
   const runtimeType = form.watch("runtimeType");
   const isolationScope = form.watch("isolationScope");
   const rootPathValue = form.watch("rootPath") ?? "";
+  const runtimeId = form.watch("runtimeId");
+  const showPlacementToggle = !isEdit && registeredRuntimes.length > 0;
+  const selectedRuntime = registeredRuntimes.find((r) => r.id === runtimeId);
+  const selectedRuntimeIsolationScopes =
+    selectedRuntime?.capabilities?.isolationScopes ?? [];
+  const canSubmitRegistered =
+    !!runtimeId &&
+    !!rootPathValue.trim() &&
+    (selectedRuntime?.runtimeType === "local" ||
+      selectedRuntimeIsolationScopes.includes(isolationScope));
+
+  useEffect(() => {
+    if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "local") {
+      return;
+    }
+    const allowedScopes = selectedRuntime.capabilities?.isolationScopes ?? [];
+    if (!allowedScopes.includes(isolationScope)) {
+      const fallback = allowedScopes[0];
+      if (fallback) form.setValue("isolationScope", fallback as never);
+    }
+  }, [isEdit, form, selectedRuntime, isolationScope]);
+
   const allowedRuntimeTypes =
     capabilities?.allowedRuntimeTypes ?? [capabilities?.runtimeType ?? "local"];
   const allowedIsolationScopes =
@@ -400,6 +481,36 @@ function WorkspaceDialogForm({
             )}
           />
 
+          {showPlacementToggle && (
+            <Controller
+              name="placementMode"
+              control={form.control}
+              render={({ field }) => (
+                <Field>
+                  <FieldLabel>运行位置</FieldLabel>
+                  <ToggleGroup
+                    variant="segment"
+                    spacing={0}
+                    value={field.value ? [field.value] : []}
+                    onValueChange={(value) => {
+                      const v = value[0];
+                      if (!v || !isPlacementMode(v)) return;
+                      field.onChange(v);
+                    }}
+                    className="grid w-full grid-cols-2"
+                  >
+                    <ToggleGroupItem value="managed" className="w-full">
+                      平台托管
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="registered" className="w-full">
+                      我的运行环境
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </Field>
+              )}
+            />
+          )}
+
           {isEdit ? (
             workspace.gitUrl && (
               <Field data-disabled>
@@ -412,6 +523,118 @@ function WorkspaceDialogForm({
                 />
               </Field>
             )
+          ) : placementMode === "registered" ? (
+            <>
+              <Controller
+                name="runtimeId"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel>选择机器</FieldLabel>
+                    <ToggleGroup
+                      variant="segment"
+                      spacing={0}
+                      value={field.value ? [field.value] : []}
+                      onValueChange={(value) => {
+                        const v = value[0];
+                        if (!v) return;
+                        field.onChange(v);
+                      }}
+                      className="grid w-full grid-cols-1"
+                    >
+                      {registeredRuntimes.map((runtime) => (
+                        <ToggleGroupItem
+                          key={runtime.id}
+                          value={runtime.id}
+                          className="w-full justify-between"
+                        >
+                          <span>{runtime.name}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {runtimeTypeLabel(
+                              runtime.runtimeType as WorkspaceRuntimeType
+                            )}
+                            {" · "}
+                            {runtime.status === "online" ? "在线" : "离线"}
+                          </span>
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+
+              {selectedRuntime && selectedRuntime.runtimeType !== "local" && (
+                <Controller
+                  name="isolationScope"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel>沙箱隔离级别</FieldLabel>
+                      <ToggleGroup
+                        variant="segment"
+                        spacing={0}
+                        value={field.value ? [field.value] : []}
+                        onValueChange={(value) => {
+                          const v = value[0];
+                          if (!v || !isIsolationScope(v)) return;
+                          field.onChange(v);
+                        }}
+                        className="grid w-full grid-cols-2"
+                      >
+                        {selectedRuntimeIsolationScopes.map((scope) => (
+                          <ToggleGroupItem
+                            key={scope}
+                            value={scope}
+                            className="w-full"
+                          >
+                            {scope === "user" ? "用户" : "工作空间"}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                      {fieldState.invalid && (
+                        <FieldError errors={[fieldState.error]} />
+                      )}
+                    </Field>
+                  )}
+                />
+              )}
+
+              <Controller
+                name="rootPath"
+                control={form.control}
+                render={({ field, fieldState }) => (
+                  <Field data-invalid={fieldState.invalid}>
+                    <FieldLabel htmlFor="workspace-remote-root-path">
+                      目录
+                    </FieldLabel>
+                    <Input
+                      {...field}
+                      id="workspace-remote-root-path"
+                      aria-invalid={fieldState.invalid}
+                      placeholder="该运行环境上的绝对路径"
+                      autoComplete="off"
+                      onBlur={() => {
+                        const normalized = normalizeFilesystemPath(
+                          field.value ?? ""
+                        );
+                        if (normalized !== field.value) {
+                          field.onChange(normalized);
+                        }
+                      }}
+                    />
+                    <FieldDescription>
+                      暂不支持远程浏览目录,请手动填写该运行环境上已存在的绝对路径
+                    </FieldDescription>
+                    {fieldState.invalid && (
+                      <FieldError errors={[fieldState.error]} />
+                    )}
+                  </Field>
+                )}
+              />
+            </>
           ) : (
             <>
               {canSelectRuntimeType && (
@@ -679,11 +902,13 @@ function WorkspaceDialogForm({
           form={formId}
           disabled={
             !nameValue.trim() ||
-            !canSubmitRuntimeType ||
-            !canSubmitIsolationScope ||
-            (useCustomPath &&
-              (!isLocalDirectorySelectionValid || !rootPathValue.trim())) ||
-            isPending
+            isPending ||
+            (placementMode === "registered"
+              ? !canSubmitRegistered
+              : !canSubmitRuntimeType ||
+                !canSubmitIsolationScope ||
+                (useCustomPath &&
+                  (!isLocalDirectorySelectionValid || !rootPathValue.trim())))
           }
         >
           {isPending
@@ -699,6 +924,10 @@ function WorkspaceDialogForm({
 
 function isWorkspaceRuntimeType(value: string): value is WorkspaceRuntimeType {
   return RUNTIME_TYPES.includes(value as WorkspaceRuntimeType);
+}
+
+function isPlacementMode(value: string): value is PlacementMode {
+  return PLACEMENT_MODES.includes(value as PlacementMode);
 }
 
 function runtimeTypeLabel(type: WorkspaceRuntimeType) {
