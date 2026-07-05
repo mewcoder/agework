@@ -8,6 +8,32 @@
 > ② 包名 **`packages/providers`**(旧稿 `packages/runtime-provider` 作废)。
 > 命名基线:`worker-manager` / `RuntimeProvider` / `isolationScope`。
 
+## 当前进度(交接看这里)
+
+| Phase | 状态 | commit |
+|---|---|---|
+| 0a 机械搬移 | ✅ 完成 | `5ac4645e`(providers 改名)、`80eace0f`(worker 搬 packages/) |
+| 0b 依赖倒置 | ✅ 完成 | `84984b0d`(Runtime 接口 + LocalRuntime + 4 seam 走 runtimeFor(null)) |
+| 1 注册骨架 | ✅ 完成 | `aabeee2f`(server:Runtime 表/配对 API/隧道端点/判死)、`c32978f2`(apps/runtime:manager 注册/心跳/重连)、`081df4f3`(shared 值内联修复) |
+| 2 Registered 跑通 | ⬜ 未开始 | **动工前先拍板下面两个设计点** |
+| 3 前端 | ⬜ 未开始 | |
+| 4 收尾 | ⬜ 未开始 | 前置:§13 产物分发 |
+
+**Phase 2 前置拍板点**(§11 Phase 2 开工前必须决定):
+
+1. **`RuntimeLaunchContext` 含两个不可序列化的函数回调**(`packages/providers/src/types.ts:101/103`),
+   RemoteRuntime 无法把它们 JSON 化上隧道。推荐方案:`isExpectedRuntimeInstance` 改成预计算数据字段
+   `expectedRuntimeInstanceId: string | null`(参数喂入,server 从 WorkerRegistry 行事先算好);
+   `onWorkerExit` 从共享 ctx 挪出,变成 local provider `start` 的本地专属第二参数(远程 worker
+   死活由 server 心跳 fence 兜底,不过 RPC)。
+2. **`Workspace.runtimeId` 接线**:加列 + 建 workspace 流程带 runtime 选择 + provisioner 把
+   `runtimeFor(null)` 换成 `runtimeFor(workspace.runtimeId)`,牵扯 workspace 模块与前端。
+
+**交接注意**:shared 包源码直连消费,`protocol/index.ts` 等入口**跨文件 re-export 运行时值会
+ERR_MODULE_NOT_FOUND**,值必须内联在入口文件(见 `common/index.ts` 的 generateId 注释;
+类型导出不受限)。验证基线:`pnpm typecheck` + eslint + 单测 + `pnpm build` 全绿,改动执行链路时
+建议真机起 dev server 冒烟(Phase 1 靠这个抓到了上述坑)。
+
 ---
 
 ## 0. 目标
