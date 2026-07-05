@@ -3,10 +3,10 @@ import { execFile } from "node:child_process";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import type {
+  RuntimeConfig,
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-  SandboxProviderConfig,
   SandboxStartInput,
 } from "../types";
 import { buildSandboxStartInput } from "../common/sandbox-launch";
@@ -23,7 +23,7 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   readonly type = "docker";
   private readonly logger = new Logger(DockerRuntimeProvider.name);
 
-  constructor(private readonly config: SandboxProviderConfig) {}
+  constructor(private readonly config: RuntimeConfig) {}
 
   async start(
     ctx: RuntimeLaunchContext

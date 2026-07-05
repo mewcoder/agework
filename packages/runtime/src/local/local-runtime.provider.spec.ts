@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { LocalRuntimeProvider } from "./local-runtime.provider";
-import type { LocalProviderConfig, RuntimeInstanceRef } from "../types";
+import type { RuntimeConfig, RuntimeInstanceRef } from "../types";
 
 const forkMock = vi.hoisted(() => {
   const children: Array<{
@@ -19,10 +19,20 @@ const forkMock = vi.hoisted(() => {
 
 vi.mock("node:child_process", () => ({ fork: forkMock.fork }));
 
-const CONFIG: LocalProviderConfig = {
-  apiBaseUrl: "http://127.0.0.1:3000/api/v1",
-  workerEntryPath: "/pkg/worker/main.ts",
-  tsxCliPath: "/pkg/tsx/cli",
+const CONFIG: RuntimeConfig = {
+  workerImage: "agework/worker:latest",
+  runtimeLogHostPath: "/tmp/agework-logs/runtime",
+  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  local: {
+    workerEntryPath: "/pkg/worker/main.ts",
+    tsxCliPath: "/pkg/tsx/cli",
+  },
+  openSandbox: {
+    domain: "opensandbox.test",
+    protocol: "https",
+    apiKey: "test-key",
+    useServerProxy: false,
+  },
 };
 
 const makeProvider = () => new LocalRuntimeProvider(CONFIG);

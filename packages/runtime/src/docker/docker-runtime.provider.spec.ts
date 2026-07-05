@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { execFile } from "node:child_process";
 import { DockerRuntimeProvider } from "./docker-runtime.provider";
 import type {
+  RuntimeConfig,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-  SandboxProviderConfig,
 } from "../types";
 
 vi.mock("node:child_process", () => ({
@@ -16,10 +16,20 @@ const mockExecFile = vi.mocked(execFile);
 const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 
-const CONFIG: SandboxProviderConfig = {
+const CONFIG: RuntimeConfig = {
   workerImage: "agework/worker:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
-  apiBaseUrl: "http://host.docker.internal:3000/api/v1",
+  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  local: {
+    workerEntryPath: "/tmp/worker/index.js",
+    tsxCliPath: "/tmp/tsx/cli.mjs",
+  },
+  openSandbox: {
+    domain: "opensandbox.test",
+    protocol: "https",
+    apiKey: "test-key",
+    useServerProxy: false,
+  },
 };
 
 const makeProvider = () => new DockerRuntimeProvider(CONFIG);
@@ -120,6 +130,23 @@ describe("DockerRuntimeProvider", () => {
       expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
       expect(runArgs).toContain(
         "AGEWORK_WORKER_API_BASE=http://host.docker.internal:3000/api/v1"
+      );
+    });
+
+    it("leaves a non-loopback serverBaseUrl (remote override) unchanged", async () => {
+      mockExecFile.mockImplementation(((...args: any[]) => {
+        args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
+      }) as any);
+
+      const provider = new DockerRuntimeProvider({
+        ...CONFIG,
+        serverBaseUrl: "https://api.example.com/api/v1",
+      });
+      await provider.start(makeCtx());
+
+      const runArgs = runArgsOf();
+      expect(runArgs).toContain(
+        "AGEWORK_WORKER_API_BASE=https://api.example.com/api/v1"
       );
     });
 

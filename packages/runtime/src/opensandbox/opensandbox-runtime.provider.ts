@@ -1,17 +1,18 @@
 import { Logger } from "@nestjs/common";
 import { isAbsolute } from "node:path";
 import type {
+  RuntimeConfig,
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-  SandboxProviderConfig,
   SandboxStartInput,
 } from "../types";
 import { buildSandboxStartInput } from "../common/sandbox-launch";
 import { swallow } from "../common/util";
-import type {
-  OpenSandboxClientLike,
-  OpenSandboxSandboxLike,
+import {
+  OpenSandboxClient,
+  type OpenSandboxClientLike,
+  type OpenSandboxSandboxLike,
 } from "./opensandbox-client";
 
 /** opensandbox 运行形态:createSandbox 建沙箱 + runCommand 起 worker;stop 暂停
@@ -20,11 +21,15 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   readonly type = "opensandbox";
   private readonly logger = new Logger(OpenSandboxRuntimeProvider.name);
   private readonly sandboxes = new Map<string, OpenSandboxSandboxLike>();
+  private readonly client: OpenSandboxClientLike;
 
+  /** client 默认由 config.openSandbox 内部构造;单测传入替身覆盖。 */
   constructor(
-    private readonly config: SandboxProviderConfig,
-    private readonly client: OpenSandboxClientLike
-  ) {}
+    private readonly config: RuntimeConfig,
+    client?: OpenSandboxClientLike
+  ) {
+    this.client = client ?? new OpenSandboxClient(config.openSandbox);
+  }
 
   async start(
     ctx: RuntimeLaunchContext

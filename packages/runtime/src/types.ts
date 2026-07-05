@@ -20,13 +20,6 @@ export function isRuntimeType(value: string): value is RuntimeType {
 
 // ── 包对外 config:server 用 ConfigService 拼好后由工厂喂入,包不认识 ConfigService ──
 
-/** docker / opensandbox 共享的容器侧 config。 */
-export type SandboxProviderConfig = {
-  workerImage: string;
-  runtimeLogHostPath: string;
-  apiBaseUrl: string;
-};
-
 /** OpenSandbox SDK 连接参数。 */
 export type OpenSandboxConnectionConfig = {
   domain: string;
@@ -38,7 +31,6 @@ export type OpenSandboxConnectionConfig = {
 /** local provider 的 config:worker 入口路径由 server require.resolve 后传入,
  *  包因此不依赖 @agework/worker。 */
 export type LocalProviderConfig = {
-  apiBaseUrl: string;
   workerEntryPath: string;
   tsxCliPath: string;
 };
@@ -47,8 +39,10 @@ export type LocalProviderConfig = {
 export type RuntimeConfig = {
   workerImage: string;
   runtimeLogHostPath: string;
-  /** 容器 worker 访问宿主 API 的 base(host.docker.internal:<port>/...)。docker + opensandbox 共用。 */
-  containerApiBaseUrl: string;
+  /** worker 回连 server 的地址。默认 127.0.0.1:<port><path>;docker / opensandbox
+   *  provider 会把 127.0.0.1/localhost 换成 host.docker.internal。远程部署经
+   *  AGEWORK_SERVER_BASE_URL 覆盖成真实可达地址,不触发替换。 */
+  serverBaseUrl: string;
   local: LocalProviderConfig;
   openSandbox: OpenSandboxConnectionConfig;
 };

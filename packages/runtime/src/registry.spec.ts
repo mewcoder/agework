@@ -5,9 +5,8 @@ import type { RuntimeConfig, RuntimeType } from "./types";
 const CONFIG: RuntimeConfig = {
   workerImage: "agework-worker:test",
   runtimeLogHostPath: "/tmp/agework-runtime-logs",
-  containerApiBaseUrl: "http://host.docker.internal:3000/api/v1",
+  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
   local: {
-    apiBaseUrl: "http://127.0.0.1:3000/api/v1",
     workerEntryPath: "/tmp/worker/index.js",
     tsxCliPath: "/tmp/tsx/cli.mjs",
   },

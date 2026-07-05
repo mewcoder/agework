@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { OpenSandboxRuntimeProvider } from "./opensandbox-runtime.provider";
 import type {
+  RuntimeConfig,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
-  SandboxProviderConfig,
 } from "../types";
 import type {
   OpenSandboxClientLike,
@@ -13,10 +13,20 @@ import type {
 const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 
-const CONFIG: SandboxProviderConfig = {
+const CONFIG: RuntimeConfig = {
   workerImage: "agework/worker:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
-  apiBaseUrl: "http://host.docker.internal:3000/api/v1",
+  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  local: {
+    workerEntryPath: "/tmp/worker/index.js",
+    tsxCliPath: "/tmp/tsx/cli.mjs",
+  },
+  openSandbox: {
+    domain: "opensandbox.test",
+    protocol: "https",
+    apiKey: "test-key",
+    useServerProxy: false,
+  },
 };
 
 function makeSandboxMock(id: string): OpenSandboxSandboxLike {

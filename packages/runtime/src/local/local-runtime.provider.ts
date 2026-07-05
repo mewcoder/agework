@@ -3,7 +3,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { safeLogJson } from "../common/util";
 import type {
-  LocalProviderConfig,
+  RuntimeConfig,
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
@@ -23,16 +23,17 @@ export class LocalRuntimeProvider implements RuntimeProvider {
   private readonly logger = new Logger(LocalRuntimeProvider.name);
   private readonly channels = new Map<string, ChildProcess>();
 
-  constructor(private readonly config: LocalProviderConfig) {}
+  constructor(private readonly config: RuntimeConfig) {}
 
   /** fork 一个本地 worker 子进程,接管进程句柄供 stop/exit 用,返回逻辑实例标识。 */
   start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
     const startToken = randomUUID();
-    const child = fork(this.config.tsxCliPath, [this.config.workerEntryPath], {
+    const { tsxCliPath, workerEntryPath } = this.config.local;
+    const child = fork(tsxCliPath, [workerEntryPath], {
       env: {
         ...process.env,
         ...ctx.workerEnv,
-        AGEWORK_WORKER_API_BASE: this.config.apiBaseUrl,
+        AGEWORK_WORKER_API_BASE: this.config.serverBaseUrl,
         AGEWORK_WORKER_RUN_START_TOKEN: startToken,
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
