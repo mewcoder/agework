@@ -25,4 +25,8 @@ export class CreateWorkspaceDto implements CreateWorkspaceRequest {
   @IsOptional()
   @IsIn(["user", "workspace"])
   isolationScope?: "user" | "workspace";
+
+  @IsOptional()
+  @IsString()
+  runtimeId?: string;
 }

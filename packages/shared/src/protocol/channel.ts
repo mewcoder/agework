@@ -225,6 +225,10 @@ export type WorkerExecutionStartInput = {
   runtimeTarget: RuntimeSpec;
   runConfig: RunConfig;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
+  /** 目标 Registered Runtime id;null/undefined = Managed(本机 in-process)。
+   *  不进 RuntimeSpec——那是纯 DB 无关的 placement 计算类型,这个字段来自
+   *  workspace.runtimeId,是"起在哪台机器上"而非"怎么挂载/隔离"。 */
+  targetRuntimeId?: string | null;
 };
 
 /**

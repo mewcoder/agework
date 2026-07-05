@@ -70,23 +70,28 @@ model WorkspaceDirectory {
 }
 
 model Workspace {
-  id             String                  @id
-  name           String
-  gitUrl         String?
-  description    String?
-  runtimeType    String?
-  isolationScope String?
-  userId         String
-  user           User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
-  createdAt      DateTime                @default(now())
-  updatedAt      DateTime                @updatedAt
-  deletedAt      DateTime?
-  directory      WorkspaceDirectory?
-  conversations  Conversation[]
-  runtime        WorkspaceWorkerBinding?
+  id                String                  @id
+  name              String
+  gitUrl            String?
+  description       String?
+  runtimeType       String?
+  isolationScope    String?
+  // 绑定的 Registered Runtime(远程机器);null = Managed(本机 in-process)。
+  // 创建时写入，不可改（要换 = 删了重建）。Runtime 被删时置空，工作空间回落到 Managed 语义。
+  runtimeId         String?
+  registeredRuntime Runtime?                @relation(fields: [runtimeId], references: [id], onDelete: SetNull)
+  userId            String
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  deletedAt         DateTime?
+  directory         WorkspaceDirectory?
+  conversations     Conversation[]
+  runtime           WorkspaceWorkerBinding?
 
   @@index([userId])
   @@index([userId, deletedAt, createdAt])
+  @@index([runtimeId])
 }
 
 model Conversation {
@@ -274,6 +279,7 @@ model Runtime {
   capabilities    Json?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
+  workspaces      Workspace[]
 
   @@unique([ownerId, name])
 }

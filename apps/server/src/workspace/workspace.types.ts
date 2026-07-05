@@ -9,4 +9,6 @@ export type WorkspaceRunContext = {
   runtimeType?: string;
   isolationScope?: string | null;
   username: string;
+  /** 绑定的 Registered Runtime id;null/undefined = Managed(本机 in-process)。 */
+  runtimeId?: string | null;
 };

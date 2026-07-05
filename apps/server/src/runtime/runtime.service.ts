@@ -85,6 +85,14 @@ export class RuntimeService {
     return { list: rows.map(toRuntimeResponse) };
   }
 
+  /**
+   * 查询 Registered Runtime 是否存在且属于该用户;返回 null 表示不存在或非属主。
+   * 供上层入口(如创建 workspace 时校验目标 runtime)做归属校验,由调用方决定如何处理 null。
+   */
+  getOwned(ownerId: string, id: string): Promise<RuntimeRow | null> {
+    return this.repository.findOwned(ownerId, id);
+  }
+
   /** 删除 Runtime(撤 token):踢掉在线隧道连接,manager 收 4410 退出、不再重连。 */
   async delete(ownerId: string, id: string): Promise<void> {
     const deleted = await this.repository.deleteByOwner(ownerId, id);

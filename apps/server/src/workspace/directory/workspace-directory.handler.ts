@@ -20,13 +20,17 @@ import { WorkspaceRuntimePolicy } from "../runtime/workspace-runtime.policy";
 const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 export const MANAGED_DIRECTORY_SOURCE = "managed";
 export const EXTERNAL_DIRECTORY_SOURCE = "external";
+/** Registered Runtime 上的目录:路径在远程机器,server 摸不到——不校验存在性、
+ *  不 mkdir、不 git clone,原样信任写入;删除时也不 rmSync(见 §5 RuntimeFileOps 暂不实现)。 */
+export const REMOTE_DIRECTORY_SOURCE = "remote";
 
 export type WorkspaceDirectoryCreatePlan = {
   rootPath: string;
   ownsDirectory: boolean;
   directorySource:
     | typeof MANAGED_DIRECTORY_SOURCE
-    | typeof EXTERNAL_DIRECTORY_SOURCE;
+    | typeof EXTERNAL_DIRECTORY_SOURCE
+    | typeof REMOTE_DIRECTORY_SOURCE;
 };
 
 function gitClone(gitUrl: string, rootPath: string): Promise<void> {
@@ -84,7 +88,12 @@ export class WorkspaceDirectoryHandler {
     requestedRootPath?: string;
     runtimeType: RuntimeType;
     isolationScope: IsolationScope | null;
+    /** 目标 Registered Runtime id;非空时整个方法走远程分支,不碰本机文件系统。 */
+    targetRuntimeId?: string | null;
   }): Promise<WorkspaceDirectoryCreatePlan> {
+    if (input.targetRuntimeId) {
+      return this.resolveRemotePlan(input);
+    }
     const plan = await this.resolveCreatePlan(input);
     try {
       if (plan.ownsDirectory && input.gitUrl) {
@@ -113,6 +122,29 @@ export class WorkspaceDirectoryHandler {
   ) {
     if (!plan.ownsDirectory) return;
     rmSync(plan.rootPath, { recursive: true, force: true });
+  }
+
+  /** Registered Runtime 分支:路径在远程机器,原样信任,不做任何本机文件系统操作。 */
+  private resolveRemotePlan(input: {
+    gitUrl?: string;
+    requestedRootPath?: string;
+  }): WorkspaceDirectoryCreatePlan {
+    const trimmedRootPath = input.requestedRootPath?.trim();
+    if (!trimmedRootPath) {
+      throw new BadRequestException("选择运行环境时必须填写绝对路径");
+    }
+    if (!isAbsolute(trimmedRootPath)) {
+      throw new BadRequestException("目录路径必须是绝对路径");
+    }
+    if (input.gitUrl) {
+      throw new BadRequestException("远程运行环境不支持 Git 克隆");
+    }
+    this.logger.log(`Trusting remote workspace directory: ${trimmedRootPath}`);
+    return {
+      rootPath: trimmedRootPath,
+      ownsDirectory: false,
+      directorySource: REMOTE_DIRECTORY_SOURCE,
+    };
   }
 
   private async resolveCreatePlan(input: {

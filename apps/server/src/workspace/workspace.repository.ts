@@ -29,6 +29,8 @@ export type WorkspaceCreateInput = {
   isolationScope: string | null;
   rootPath: string;
   directorySource: string;
+  /** 绑定的 Registered Runtime id;null/undefined = Managed。 */
+  runtimeId?: string | null;
 };
 
 export type WorkspacePatch = {
@@ -89,6 +91,7 @@ export class WorkspaceRepository {
           userId: input.userId,
           runtimeType: input.runtimeType,
           isolationScope: input.isolationScope,
+          runtimeId: input.runtimeId ?? null,
         },
       });
       const directory = await tx.workspaceDirectory.create({

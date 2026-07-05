@@ -92,9 +92,17 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function makeRuntimeService(overrides: Record<string, unknown> = {}) {
+  return {
+    getOwned: vi.fn().mockResolvedValue(null),
+    ...overrides,
+  };
+}
+
 function makeService(
   repo: ReturnType<typeof makeRepo>,
-  config: ReturnType<typeof makeConfig>
+  config: ReturnType<typeof makeConfig>,
+  runtimeService: ReturnType<typeof makeRuntimeService> = makeRuntimeService()
 ) {
   const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
   const directoryHandler = new WorkspaceDirectoryHandler(
@@ -107,7 +115,8 @@ function makeService(
     makeConversationService(),
     { emit: vi.fn() } as never,
     runtimePolicy,
-    directoryHandler
+    directoryHandler,
+    runtimeService as never
   );
 }
 
@@ -319,6 +328,201 @@ describe("WorkspaceService", () => {
     ).rejects.toThrow("当前部署不支持该工作空间运行环境");
   });
 
+  describe("registered runtime placement", () => {
+    function makeRegisteredRuntimeRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: "rt-1",
+        name: "mac-studio",
+        kind: "registered",
+        runtimeType: "docker",
+        ownerId: "admin-1",
+        status: "online",
+        lastHeartbeatAt: new Date(),
+        createdAt: new Date(),
+        capabilities: { isolationScopes: ["user", "workspace"] },
+        ...overrides,
+      };
+    }
+
+    it("derives runtimeType from the target Runtime and stores runtimeId, bypassing fs ops", async () => {
+      const repo = makeRepo();
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(makeRegisteredRuntimeRow()),
+      });
+      const service = makeService(repo, makeConfig(), runtimeService);
+
+      const workspace = await service.create({
+        userId: "admin-1",
+        name: "Remote workspace",
+        rootPath: "/remote/project",
+        runtimeId: "rt-1",
+        isolationScope: "workspace",
+      });
+
+      expect(runtimeService.getOwned).toHaveBeenCalledWith("admin-1", "rt-1");
+      expect(mkdirSync).not.toHaveBeenCalled();
+      expect(repo.createWithDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runtimeType: "docker",
+          isolationScope: "workspace",
+          rootPath: "/remote/project",
+          directorySource: "remote",
+          runtimeId: "rt-1",
+        })
+      );
+      expect(workspace.directorySource).toBe("remote");
+    });
+
+    it("defaults isolationScope to the runtime's first advertised scope when unspecified", async () => {
+      const repo = makeRepo();
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(makeRegisteredRuntimeRow()),
+      });
+      const service = makeService(repo, makeConfig(), runtimeService);
+
+      await service.create({
+        userId: "admin-1",
+        name: "Remote workspace",
+        rootPath: "/remote/project",
+        runtimeId: "rt-1",
+      });
+
+      expect(repo.createWithDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({ isolationScope: "user" })
+      );
+    });
+
+    it("treats a registered local runtime like local: no isolationScope, no fs validation", async () => {
+      const repo = makeRepo();
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(
+          makeRegisteredRuntimeRow({ runtimeType: "local", capabilities: null })
+        ),
+      });
+      const service = makeService(repo, makeConfig(), runtimeService);
+
+      const workspace = await service.create({
+        userId: "admin-1",
+        name: "Remote local ws",
+        rootPath: "/remote/home/project",
+        runtimeId: "rt-1",
+      });
+
+      expect(repo.createWithDirectory).toHaveBeenCalledWith(
+        expect.objectContaining({ runtimeType: "local", isolationScope: null })
+      );
+      expect(workspace.isolationScope).toBeNull();
+    });
+
+    it("rejects isolationScope on a registered local runtime", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(
+          makeRegisteredRuntimeRow({ runtimeType: "local" })
+        ),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          rootPath: "/remote/project",
+          runtimeId: "rt-1",
+          isolationScope: "workspace",
+        })
+      ).rejects.toThrow("本地运行环境不能设置 isolationScope");
+    });
+
+    it("404s when the runtimeId does not belong to the caller", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(null),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          rootPath: "/remote/project",
+          runtimeId: "rt-x",
+        })
+      ).rejects.toThrow("Runtime rt-x not found");
+    });
+
+    it("rejects a runtime that has never completed registration", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(
+          makeRegisteredRuntimeRow({ runtimeType: null })
+        ),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          rootPath: "/remote/project",
+          runtimeId: "rt-1",
+        })
+      ).rejects.toThrow("该运行环境还未完成配对");
+    });
+
+    it("rejects an isolationScope the target runtime does not advertise", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(
+          makeRegisteredRuntimeRow({
+            capabilities: { isolationScopes: ["user"] },
+          })
+        ),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          rootPath: "/remote/project",
+          runtimeId: "rt-1",
+          isolationScope: "workspace",
+        })
+      ).rejects.toThrow("该运行环境不支持隔离级别: workspace");
+    });
+
+    it("requires an absolute rootPath — no auto-generated path for a registered runtime", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(makeRegisteredRuntimeRow()),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          runtimeId: "rt-1",
+          isolationScope: "workspace",
+        })
+      ).rejects.toThrow("选择运行环境时必须填写绝对路径");
+    });
+
+    it("rejects Git clone for a registered runtime", async () => {
+      const runtimeService = makeRuntimeService({
+        getOwned: vi.fn().mockResolvedValue(makeRegisteredRuntimeRow()),
+      });
+      const service = makeService(makeRepo(), makeConfig(), runtimeService);
+
+      await expect(
+        service.create({
+          userId: "admin-1",
+          name: "Remote workspace",
+          rootPath: "/remote/project",
+          gitUrl: "https://github.com/example/repo.git",
+          runtimeId: "rt-1",
+          isolationScope: "workspace",
+        })
+      ).rejects.toThrow("远程运行环境不支持 Git 克隆");
+    });
+  });
+
   it("returns the stored sandbox isolation scope even when current deployment disallows it", async () => {
     const repo = makeRepo({
       listByOwner: vi.fn().mockResolvedValue([
@@ -374,7 +578,8 @@ describe("WorkspaceService", () => {
           repo as never,
           config as never,
           runtimePolicy
-        )
+        ),
+        makeRuntimeService() as never
       );
 
       await service.delete(userId, workspaceId);
@@ -415,7 +620,26 @@ describe("WorkspaceService", () => {
         runtimeType: "docker",
         isolationScope: "workspace",
         username: "mew",
+        runtimeId: undefined,
       });
+    });
+
+    it("carries the bound runtimeId through for Registered runtime workspaces", async () => {
+      const repo = makeRepo({
+        findRunView: vi.fn().mockResolvedValue({
+          id: "ws-1",
+          runtimeType: "docker",
+          isolationScope: "workspace",
+          runtimeId: "rt-1",
+          directory: { rootPath: "/remote/ws" },
+          user: { username: "mew" },
+        }),
+      });
+      const service = makeService(repo, makeConfig());
+
+      const view = await service.getRunContext("ws-1");
+
+      expect(view.runtimeId).toBe("rt-1");
     });
 
     it("404s when the workspace does not exist", async () => {

@@ -64,6 +64,14 @@ export class RuntimeRepository {
     });
   }
 
+  /** 按属主查询单条;不属于该 owner 或不存在时返回 null(供上层收敛为 404)。 */
+  findOwned(ownerId: string, id: string): Promise<RuntimeRow | null> {
+    return this.prisma.runtime.findFirst({
+      where: { id, ownerId },
+      select: this.rowSelect,
+    });
+  }
+
   /** 按 owner 范围删除,返回是否真的删掉(false = 不存在或不属于该 owner)。 */
   async deleteByOwner(ownerId: string, id: string): Promise<boolean> {
     const { count } = await this.prisma.runtime.deleteMany({

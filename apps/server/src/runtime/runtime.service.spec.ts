@@ -30,6 +30,7 @@ describe("RuntimeService", () => {
     create: ReturnType<typeof vi.fn>;
     listByOwner: ReturnType<typeof vi.fn>;
     deleteByOwner: ReturnType<typeof vi.fn>;
+    findOwned: ReturnType<typeof vi.fn>;
   };
   let tunnelHandler: { closeConnection: ReturnType<typeof vi.fn> };
   let service: RuntimeService;
@@ -54,6 +55,7 @@ describe("RuntimeService", () => {
       create: vi.fn().mockResolvedValue(makeRow()),
       listByOwner: vi.fn().mockResolvedValue([makeRow()]),
       deleteByOwner: vi.fn().mockResolvedValue(true),
+      findOwned: vi.fn().mockResolvedValue(makeRow()),
     };
     tunnelHandler = { closeConnection: vi.fn() };
     service = new RuntimeService(
@@ -143,5 +145,17 @@ describe("RuntimeService", () => {
       "runtime not found"
     );
     expect(tunnelHandler.closeConnection).not.toHaveBeenCalled();
+  });
+
+  it("getOwned delegates to repository.findOwned and returns the row", async () => {
+    const result = await service.getOwned("u-1", "rt-1");
+    expect(repository.findOwned).toHaveBeenCalledWith("u-1", "rt-1");
+    expect(result).toEqual(makeRow());
+  });
+
+  it("getOwned returns null when the row is missing or owned by someone else", async () => {
+    repository.findOwned.mockResolvedValueOnce(null);
+    const result = await service.getOwned("u-1", "rt-x");
+    expect(result).toBeNull();
   });
 });

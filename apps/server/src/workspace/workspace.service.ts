@@ -16,9 +16,12 @@ import {
 import {
   EXTERNAL_DIRECTORY_SOURCE,
   MANAGED_DIRECTORY_SOURCE,
+  REMOTE_DIRECTORY_SOURCE,
   WorkspaceDirectoryHandler,
 } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
+import { RuntimeService } from "../runtime/runtime.service";
+import type { RuntimeType, IsolationScope } from "../config/config.service";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -31,6 +34,9 @@ type CreateWorkspaceInput = {
   rootPath?: string;
   runtimeType?: string;
   isolationScope?: string;
+  /** 绑定到某个已配对的 Registered Runtime;传入时 runtimeType/isolationScope
+   *  改由该 Runtime 自己决定,忽略 input 里另外传的 runtimeType。 */
+  runtimeId?: string;
 };
 
 @Injectable()
@@ -40,7 +46,8 @@ export class WorkspaceService {
     private readonly conversations: ConversationService,
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
-    private readonly directoryHandler: WorkspaceDirectoryHandler
+    private readonly directoryHandler: WorkspaceDirectoryHandler,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /**
@@ -96,6 +103,7 @@ export class WorkspaceService {
       runtimeType: workspace.runtimeType ?? undefined,
       isolationScope: workspace.isolationScope,
       username: workspace.user.username,
+      runtimeId: workspace.runtimeId,
     };
   }
 
@@ -126,16 +134,26 @@ export class WorkspaceService {
       rootPath: requestedRootPath,
       runtimeType: requestedRuntimeType,
       isolationScope: requestedIsolationScope,
+      runtimeId: requestedRuntimeId,
     } = input;
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
-    const { runtimeType, isolationScope } =
-      this.runtimePolicy.resolveCreateRuntime({
-        runtimeType: requestedRuntimeType,
-        isolationScope: requestedIsolationScope,
-        hasCustomRootPath: Boolean(requestedRootPath?.trim()),
-      });
+    const { runtimeType, isolationScope, targetRuntimeId } =
+      requestedRuntimeId
+        ? await this.resolveRegisteredPlacement(
+            userId,
+            requestedRuntimeId,
+            requestedIsolationScope
+          )
+        : {
+            ...this.runtimePolicy.resolveCreateRuntime({
+              runtimeType: requestedRuntimeType,
+              isolationScope: requestedIsolationScope,
+              hasCustomRootPath: Boolean(requestedRootPath?.trim()),
+            }),
+            targetRuntimeId: null as string | null,
+          };
     const id = generateId();
     const directory = await this.directoryHandler.prepareCreate({
       userId,
@@ -144,6 +162,7 @@ export class WorkspaceService {
       isolationScope,
       gitUrl: workspaceGitUrl,
       requestedRootPath,
+      targetRuntimeId,
     });
 
     try {
@@ -157,12 +176,62 @@ export class WorkspaceService {
         isolationScope,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
+        runtimeId: targetRuntimeId,
       });
       return this.toWorkspaceDto(workspace);
     } catch (err) {
       this.directoryHandler.cleanupCreated(directory);
       throw err;
     }
+  }
+
+  /**
+   * Registered runtime 分支的 placement 解析:runtimeType 由该 Runtime 自己注册的
+   * 类型决定(选 Runtime 即定运行方式,不接受前端另传 runtimeType);isolationScope
+   * 按该 Runtime 上报的能力矩阵校验/收窄,而非部署级 ConfigService 允许列表
+   * (那是 Managed 专属的策略,与某一台具体机器的能力无关)。
+   */
+  private async resolveRegisteredPlacement(
+    userId: string,
+    runtimeId: string,
+    requestedIsolationScope?: string
+  ): Promise<{
+    runtimeType: RuntimeType;
+    isolationScope: IsolationScope | null;
+    targetRuntimeId: string;
+  }> {
+    const registeredRuntime = await this.runtimeService.getOwned(
+      userId,
+      runtimeId
+    );
+    if (!registeredRuntime) {
+      throw new NotFoundException(`Runtime ${runtimeId} not found`);
+    }
+    if (!registeredRuntime.runtimeType) {
+      throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
+    }
+    const runtimeType = registeredRuntime.runtimeType as RuntimeType;
+    if (runtimeType === "local") {
+      if (requestedIsolationScope) {
+        throw new BadRequestException("本地运行环境不能设置 isolationScope");
+      }
+      return { runtimeType, isolationScope: null, targetRuntimeId: runtimeId };
+    }
+    const capabilities = registeredRuntime.capabilities as {
+      isolationScopes?: string[];
+    } | null;
+    const allowedScopes = capabilities?.isolationScopes ?? [];
+    const isolationScope = requestedIsolationScope?.trim() || allowedScopes[0];
+    if (!isolationScope || !allowedScopes.includes(isolationScope)) {
+      throw new BadRequestException(
+        `该运行环境不支持隔离级别: ${isolationScope ?? "未指定"}`
+      );
+    }
+    return {
+      runtimeType,
+      isolationScope: isolationScope as IsolationScope,
+      targetRuntimeId: runtimeId,
+    };
   }
 
   /**
@@ -278,7 +347,7 @@ export class WorkspaceService {
 }
 
 function normalizeDirectorySource(source: string | null | undefined) {
-  return source === EXTERNAL_DIRECTORY_SOURCE
-    ? EXTERNAL_DIRECTORY_SOURCE
-    : MANAGED_DIRECTORY_SOURCE;
+  if (source === EXTERNAL_DIRECTORY_SOURCE) return EXTERNAL_DIRECTORY_SOURCE;
+  if (source === REMOTE_DIRECTORY_SOURCE) return REMOTE_DIRECTORY_SOURCE;
+  return MANAGED_DIRECTORY_SOURCE;
 }
