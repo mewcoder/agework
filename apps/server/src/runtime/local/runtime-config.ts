@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { RuntimeConfig } from "@agework/providers";
 import { ConfigService } from "../../config/config.service";
-import { DEFAULT_WORKER_IMAGE } from "../../config/registry/defaults";
+import { DEFAULT_RUNTIME_IMAGE } from "../../config/registry/defaults";
 import { EnvKey } from "../../config/registry/env-key";
 import { resolveApiBasePath } from "../../common/path.util";
 
@@ -44,7 +44,7 @@ export function toRuntimeConfig(configService: ConfigService): RuntimeConfig {
   const openSandbox = configService.getOpenSandboxConfig();
 
   return {
-    workerImage: DEFAULT_WORKER_IMAGE,
+    workerImage: DEFAULT_RUNTIME_IMAGE,
     runtimeLogHostPath: configService.getRuntimeLogDir(),
     serverBaseUrl:
       serverBaseUrlOverride || `http://127.0.0.1:${port}${apiBasePath}`,

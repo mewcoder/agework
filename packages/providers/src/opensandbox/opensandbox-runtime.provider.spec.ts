@@ -14,7 +14,7 @@ const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 
 const CONFIG: RuntimeConfig = {
-  workerImage: "agework/worker:latest",
+  workerImage: "agework/runtime:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
   local: {
@@ -111,7 +111,7 @@ describe("OpenSandboxRuntimeProvider", () => {
       expect(result.runtimeInstanceId).toMatch(/^sandbox-/);
       expect(client.createSandbox).toHaveBeenCalledWith(
         expect.objectContaining({
-          image: "agework/worker:latest",
+          image: "agework/runtime:latest",
           workspaceHostPath: "/tmp/workspace",
           workspaceMountPath: "/workspace",
           runtimeLogHostPath: RUNTIME_LOG_HOST,

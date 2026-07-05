@@ -6,7 +6,7 @@ import { buildWorkerImage, WORKER_IMAGE_TAG } from "./build-worker.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const WORKER_SOURCE_PATHS = ["packages/worker", "packages/shared", "packages/adapters"];
+const WORKER_SOURCE_PATHS = ["apps/runtime", "packages/worker", "packages/shared", "packages/adapters"];
 const COMPOSE_FILE = "infra/opensandbox/docker-compose.yml";
 const CONFIG_TOML = "infra/opensandbox/config.toml";
 const HEALTH_URL = "http://127.0.0.1:8080/health";
@@ -23,27 +23,27 @@ async function ensureWorkerImage({ interactive, shouldReset, promptYesNo }) {
   const imageExists = checkWorkerImageExists();
 
   if (!imageExists) {
-    console.log("🛠️  agework/worker 镜像不存在，开始构建...");
+    console.log("🛠️  agework/runtime 镜像不存在，开始构建...");
     buildWorkerImage();
     return;
   }
 
   if (interactive) {
     const shouldRebuild = await promptYesNo(
-      "agework/worker 镜像已存在，是否重新构建？",
+      "agework/runtime 镜像已存在，是否重新构建？",
       false
     );
     if (shouldRebuild) {
-      console.log("🛠️  重新构建 agework/worker 镜像...");
+      console.log("🛠️  重新构建 agework/runtime 镜像...");
       buildWorkerImage();
     } else {
-      console.log("✅ 使用现有 agework/worker 镜像");
+      console.log("✅ 使用现有 agework/runtime 镜像");
     }
   } else if (shouldReset) {
-    console.log("🛠️  --reset 模式，重新构建 agework/worker 镜像...");
+    console.log("🛠️  --reset 模式，重新构建 agework/runtime 镜像...");
     buildWorkerImage();
   } else {
-    console.log("✅ agework/worker 镜像已存在，跳过构建");
+    console.log("✅ agework/runtime 镜像已存在，跳过构建");
   }
 }
 
@@ -187,7 +187,7 @@ async function cmdUp() {
   await waitForHealth();
   if (isWorkerImageStale()) {
     console.log(
-      "⚠️  packages/worker 源码比 agework/worker:latest 镜像新，建议执行 pnpm opensandbox:rebuild"
+      "⚠️  runtime/worker 源码比 agework/runtime:latest 镜像新，建议执行 pnpm opensandbox:rebuild"
     );
   }
 }

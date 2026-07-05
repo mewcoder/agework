@@ -16,7 +16,10 @@ export const DEV_JWT_SECRET = "agework-dev-secret";
 
 export const DEFAULT_ALLOWED_RUNTIME_TYPES = ["local"] as const;
 export const DEFAULT_ALLOWED_ISOLATION_SCOPES = ["user"] as const;
-export const DEFAULT_WORKER_IMAGE = "agework/worker:latest";
+/** Managed 的 docker/opensandbox 载体镜像:统一为 agework-runtime 产物镜像
+ *  (worker 内置其中,以 AGEWORK_WORKER_ROLE=worker 角色启动),与 Registered
+ *  远程 manager 用的是同一个产物/镜像。:latest 的版本正确性靠 register 握手兜底。 */
+export const DEFAULT_RUNTIME_IMAGE = "agework/runtime:latest";
 export const DEFAULT_IDLE_TIMEOUT_SECONDS = 1800;
 export const DEFAULT_RUN_TIMEOUT_SECONDS = 1800;
 export const DEFAULT_LAUNCH_TIMEOUT_SECONDS = 120;
@@ -26,7 +29,7 @@ export const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 
 export const DEFAULT_OPENSANDBOX_DOMAIN = "localhost:8080";
 export const DEFAULT_OPENSANDBOX_PROTOCOL = "http";
-export const DEFAULT_OPENSANDBOX_IMAGE = DEFAULT_WORKER_IMAGE;
+export const DEFAULT_OPENSANDBOX_IMAGE = DEFAULT_RUNTIME_IMAGE;
 export const DEFAULT_OPENSANDBOX_TIMEOUT_SECONDS = 3600;
 export const DEFAULT_OPENSANDBOX_USE_SERVER_PROXY = false;
 

@@ -20,7 +20,7 @@ const forkMock = vi.hoisted(() => {
 vi.mock("node:child_process", () => ({ fork: forkMock.fork }));
 
 const CONFIG: RuntimeConfig = {
-  workerImage: "agework/worker:latest",
+  workerImage: "agework/runtime:latest",
   runtimeLogHostPath: "/tmp/agework-logs/runtime",
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
   local: {

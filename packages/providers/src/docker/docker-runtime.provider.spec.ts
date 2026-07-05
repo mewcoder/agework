@@ -17,7 +17,7 @@ const RUNTIME_LOG_HOST = "/tmp/agework-logs/runtime";
 const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 
 const CONFIG: RuntimeConfig = {
-  workerImage: "agework/worker:latest",
+  workerImage: "agework/runtime:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
   local: {
@@ -102,7 +102,7 @@ describe("DockerRuntimeProvider", () => {
       expect(runArgs[nameIdx + 1]).toBe("agework-worker-ws-1");
       expect(runArgs).toContain("com.docker.compose.project=agework");
       expect(runArgs).toContain("host.docker.internal:host-gateway");
-      expect(runArgs).toContain("agework/worker:latest");
+      expect(runArgs).toContain("agework/runtime:latest");
     });
 
     it("adds --label args from the fixed ownership metadata", async () => {

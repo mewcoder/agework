@@ -2,6 +2,8 @@ node_modules
 **/node_modules
 dist
 **/dist
+!apps/runtime/dist
+!apps/runtime/dist/main.js
 !packages/worker/dist
 !packages/worker/dist/main.js
 .turbo
