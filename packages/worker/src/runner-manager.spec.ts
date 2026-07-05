@@ -1,5 +1,6 @@
+import { dirname, extname, join } from "node:path";
 import { EventEmitter } from "node:events";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   CommandPayload,
   RunConfig,
@@ -75,6 +76,48 @@ describe("RunnerManager", () => {
   beforeEach(() => {
     forkMock.mockReset();
     forkMock.mockImplementation(() => new MockChildProcess());
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("forks the runner as a sibling file of the worker entry, not the worker entry itself", async () => {
+    const client = makeClient();
+    const manager = makeManager(client);
+
+    await manager.handle(userMessage);
+
+    const [runnerEntryPath] = forkMock.mock.calls[0] as [string, ...unknown[]];
+    const workerEntryPath = process.argv[1];
+    expect(workerEntryPath).toBeDefined();
+    expect(runnerEntryPath).not.toBe(workerEntryPath);
+    expect(dirname(runnerEntryPath)).toBe(dirname(workerEntryPath as string));
+    expect(runnerEntryPath).toBe(
+      join(dirname(workerEntryPath as string), `runner${extname(workerEntryPath as string)}`)
+    );
+  });
+
+  it("does not leak the worker's own server credentials into the runner env", async () => {
+    vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://internal-server:3000");
+    vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "super-secret-token");
+    vi.stubEnv("AGEWORK_PRIVATE_DATABASE_URL", "postgres://should-never-leak");
+    vi.stubEnv("AGEWORK_WORKER_LOG_LEVEL", "debug");
+
+    const client = makeClient();
+    const manager = makeManager(client);
+
+    await manager.handle(userMessage);
+
+    const [, , options] = forkMock.mock.calls[0] as [
+      string,
+      unknown,
+      { env: NodeJS.ProcessEnv },
+    ];
+    expect(options.env).not.toHaveProperty("AGEWORK_WORKER_API_BASE");
+    expect(options.env).not.toHaveProperty("AGEWORK_WORKER_START_TOKEN");
+    expect(options.env).not.toHaveProperty("AGEWORK_PRIVATE_DATABASE_URL");
+    expect(options.env.AGEWORK_WORKER_LOG_LEVEL).toBe("debug");
   });
 
   it("starts one runner process for a user_message command", async () => {

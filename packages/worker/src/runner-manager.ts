@@ -1,4 +1,5 @@
 import { fork, type ChildProcess } from "node:child_process";
+import { dirname, extname, join } from "node:path";
 import {
   nextCommandMessage,
   type CommandPayload,
@@ -223,20 +224,13 @@ export class RunnerManager {
   }
 
   private startRunner(config: RunConfig): RunnerProcess {
-    const modulePath = process.argv[1];
-    if (!modulePath) {
+    const workerEntryPath = process.argv[1];
+    if (!workerEntryPath) {
       throw new Error("Cannot start runner: current worker entry path is unknown");
     }
 
-    const child = fork(modulePath, process.argv.slice(2), {
-      env: {
-        ...process.env,
-        AGEWORK_WORKER_ROLE: "runner",
-        AGEWORK_WORKER_RUN_ID: config.runId,
-        ...(config.workerLogFilePath
-          ? { AGEWORK_WORKER_LOG_FILE: config.workerLogFilePath }
-          : {}),
-      },
+    const child = fork(resolveRunnerEntryPath(workerEntryPath), [], {
+      env: buildRunnerEnv(config),
       stdio: ["ignore", "pipe", "pipe", "ipc"],
       execArgv: process.execArgv,
     });
@@ -476,4 +470,40 @@ function isTerminalStatus(msg: UpstreamMessage): boolean {
   if (msg.type !== "run.status") return false;
   const status = (msg.payload as RunStatusPayload).status;
   return status === "finished" || status === "error" || status === "cancelled";
+}
+
+/** runner 是 worker 入口的兄弟产物(dist/main.js → dist/runner.js),不是同一个文件。 */
+function resolveRunnerEntryPath(workerEntryPath: string): string {
+  return join(dirname(workerEntryPath), `runner${extname(workerEntryPath)}`);
+}
+
+// runner 全程只经 IPC 跟 worker 通信、从不直连 server,不需要 worker 自己的
+// AGEWORK_WORKER_API_BASE / AGEWORK_WORKER_START_TOKEN 等认证信息,也不该继承
+// server/worker 进程的其余环境变量——见 packages/worker/docs/adr/0001。
+const RUNNER_ENV_PASSTHROUGH_KEYS = [
+  "PATH",
+  "HOME",
+  "NODE_ENV",
+  "AGEWORK_WORKER_LOG_LEVEL",
+  "AGEWORK_WORKER_LOG_MAX_FILE_MB",
+  "AGEWORK_WORKER_RUNTIME_TYPE",
+  "AGEWORK_WORKER_ISOLATION_SCOPE",
+  "AGEWORK_WORKER_OWNER_ID",
+  "AGEWORK_WORKER_RUNTIME_RESOURCE_NAME",
+  "AGEWORK_CLAUDE_CLI_PATH",
+  "AGEWORK_CODEX_CLI_PATH",
+] as const;
+
+function buildRunnerEnv(config: RunConfig): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of RUNNER_ENV_PASSTHROUGH_KEYS) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  env.AGEWORK_WORKER_ROLE = "runner";
+  env.AGEWORK_WORKER_RUN_ID = config.runId;
+  if (config.workerLogFilePath) {
+    env.AGEWORK_WORKER_LOG_FILE = config.workerLogFilePath;
+  }
+  return env;
 }

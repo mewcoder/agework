@@ -2,25 +2,22 @@
   "name": "@agework/worker",
   "version": "0.0.1",
   "private": true,
-  "main": "./src/main.ts",
+  "main": "./src/worker.ts",
   "exports": {
-    ".": "./src/main.ts"
+    ".": "./src/worker.ts"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/main.js --banner:js=\"var __createRequire = (await import('module')).createRequire; var require = __createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
     "@agework/adapters": "workspace:*",
     "@agework/shared": "workspace:*",
-    "rxjs": "7.8.1",
-    "tsx": "^4.19.0"
+    "rxjs": "7.8.1"
   },
   "devDependencies": {
     "@swc/core": "^1.15.40",
     "@types/node": "^24.0.0",
-    "esbuild": "^0.28.0",
     "typescript": "^5.7.3",
     "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.8"

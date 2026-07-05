@@ -7,7 +7,7 @@
     ".": "./src/main.ts"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/main.js --banner:js=\"var __createRequire = (await import('module')).createRequire; var require = __createRequire(import.meta.url);\"",
+    "build": "esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --banner:js=\"var __createRequire = (await import('module')).createRequire; var require = __createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
