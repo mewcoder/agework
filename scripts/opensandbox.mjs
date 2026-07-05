@@ -6,7 +6,7 @@ import { buildWorkerImage, WORKER_IMAGE_TAG } from "./build-worker.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const WORKER_SOURCE_PATHS = ["apps/worker", "packages/shared", "packages/adapters"];
+const WORKER_SOURCE_PATHS = ["packages/worker", "packages/shared", "packages/adapters"];
 const COMPOSE_FILE = "infra/opensandbox/docker-compose.yml";
 const CONFIG_TOML = "infra/opensandbox/config.toml";
 const HEALTH_URL = "http://127.0.0.1:8080/health";
@@ -187,7 +187,7 @@ async function cmdUp() {
   await waitForHealth();
   if (isWorkerImageStale()) {
     console.log(
-      "⚠️  apps/worker 源码比 agework/worker:latest 镜像新，建议执行 pnpm opensandbox:rebuild"
+      "⚠️  packages/worker 源码比 agework/worker:latest 镜像新，建议执行 pnpm opensandbox:rebuild"
     );
   }
 }

@@ -6,7 +6,7 @@
 
 - `apps/web`：前端应用，React 19 + Vite + Tailwind CSS v4。
 - `apps/server`：后端服务，NestJS 11 + Prisma。
-- `apps/worker`：Agent worker。
+- `packages/worker`：Agent worker。
 - `apps/desktop`：Electron 桌面壳；不在 workspace 内，使用根目录 `desktop:*` 脚本。
 - `packages/shared`：前后端共享类型、API 类型、协议类型。
 - `packages/adapters`：Claude、Codex 等 agent adapter。

@@ -64,7 +64,7 @@ importers:
         version: link:../../packages/shared
       '@agework/worker':
         specifier: workspace:*
-        version: link:../worker
+        version: link:../../packages/worker
       '@ai-sdk/anthropic':
         specifier: ^3.0.86
         version: 3.0.86(zod@4.4.3)
@@ -410,40 +410,6 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
-  apps/worker:
-    dependencies:
-      '@agework/adapters':
-        specifier: workspace:*
-        version: link:../../packages/adapters
-      '@agework/shared':
-        specifier: workspace:*
-        version: link:../../packages/shared
-      rxjs:
-        specifier: 7.8.1
-        version: 7.8.1
-      tsx:
-        specifier: ^4.19.0
-        version: 4.22.4
-    devDependencies:
-      '@swc/core':
-        specifier: ^1.15.40
-        version: 1.15.40
-      '@types/node':
-        specifier: ^24.0.0
-        version: 24.12.4
-      esbuild:
-        specifier: ^0.28.0
-        version: 0.28.0
-      typescript:
-        specifier: ^5.7.3
-        version: 5.9.3
-      unplugin-swc:
-        specifier: ^1.5.9
-        version: 1.5.9(@swc/core@1.15.40)
-      vitest:
-        specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
-
   e2e:
     devDependencies:
       '@playwright/test':
@@ -573,6 +539,40 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
+
+  packages/worker:
+    dependencies:
+      '@agework/adapters':
+        specifier: workspace:*
+        version: link:../adapters
+      '@agework/shared':
+        specifier: workspace:*
+        version: link:../shared
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
+      tsx:
+        specifier: ^4.19.0
+        version: 4.22.4
+    devDependencies:
+      '@swc/core':
+        specifier: ^1.15.40
+        version: 1.15.40
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.12.4
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      unplugin-swc:
+        specifier: ^1.5.9
+        version: 1.5.9(@swc/core@1.15.40)
       vitest:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.0.14(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))

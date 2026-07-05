@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const WORKER_IMAGE_TAG = "agework/worker:latest";
-export const WORKER_DOCKERFILE = "apps/worker/Dockerfile";
+export const WORKER_DOCKERFILE = "packages/worker/Dockerfile";
 
 export function buildWorkerBundle() {
   console.log("pnpm --filter @agework/worker build");

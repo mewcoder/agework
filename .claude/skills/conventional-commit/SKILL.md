@@ -42,7 +42,7 @@ Determine scope from changed file paths:
 
 - `apps/server/` → `server`
 - `apps/web/` → `web`
-- `apps/worker/` → `worker`
+- `packages/worker/` → `worker`
 - `packages/shared/` → `shared`
 - `packages/protocol/` → `protocol`
 - `infra/` → `infra`

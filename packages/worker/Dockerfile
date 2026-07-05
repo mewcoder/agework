@@ -1,9 +1,9 @@
 # Build context must be the monorepo root:
 #   pnpm --filter @agework/worker build
-#   docker build -t agework/worker:latest -f apps/worker/Dockerfile .
+#   docker build -t agework/worker:latest -f packages/worker/Dockerfile .
 # (worker bundles workspace packages @agework/shared and @agework/adapters into
 # dist/main.js via esbuild; this must be built locally before `docker build`,
-# the image only copies the pre-built apps/worker/dist/main.js.)
+# the image only copies the pre-built packages/worker/dist/main.js.)
 
 FROM node:22
 
@@ -20,9 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY apps/worker/package.docker.json ./package.json
+COPY packages/worker/package.docker.json ./package.json
 RUN npm install --omit=dev --no-package-lock
-COPY apps/worker/dist/main.js ./dist/main.js
+COPY packages/worker/dist/main.js ./dist/main.js
 
 # Claude CLI 拒绝在 root/sudo 下使用 bypassPermissions，
 # 所以把 node 官方镜像内置的 UID 1000 用户重命名为 agework 后运行 worker。
