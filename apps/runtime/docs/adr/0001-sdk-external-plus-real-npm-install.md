@@ -19,17 +19,27 @@ Docker 镜像从来没有这个问题,因为它压根不依赖 bundle 里 `impor
 安装出的平台二进制包和主包是平级兄弟,从 `dist/main.js` 往上一层就能找到。这条路径被验证过是
 可靠的。
 
-决定:改回 `--external`,不再 inline 这两个 SDK;`apps/server/scripts/embed-runtime.mjs` 复制
-`main.mjs`/`runner.mjs` 之后,额外复用 `apps/runtime/package.docker.json` 这份清单,在内嵌目录
-里跑一次真实 `npm install --omit=dev`——和 Docker 镜像构建时做的事完全一致,只是发生在 server
-构建这台机器上(Managed-local 本来就要求 server/worker 同机,构建机器与运行机器一致)。
+决定:改回 `--external`,不再 inline 这两个 SDK。二进制的真实安装由 **apps/runtime 自己
+拥有和管理**——`apps/runtime` 的 build 脚本在 esbuild 之后跑 `scripts/install-sdk-deps.mjs`,
+复用 `package.docker.json` 清单做一次真实 `npm install`,产出自成一体的
+`apps/runtime/dist/node_modules`(含平台二进制,~460MB)。这份 dist 因此不只是 dev 回退用的
+产物,而是"平台二进制唯一真实安装点"。
+
+`apps/server/scripts/embed-runtime.mjs` 不再自己管理依赖、不重复装:只把
+`apps/server/dist/agework-runtime/node_modules` **符链接**到 `apps/runtime/dist/node_modules`
+(Managed-local 本来就要求 server/worker 同机部署,repo 目录结构随之同在)。Node 解析符链接
+透明,效果等同真装一份,但零重复磁盘占用、也不需要额外去猜平台二进制的具体文件路径。
+
+Docker 镜像不适用这个"符链接复用"模式——它跑在容器里,平台(通常是 Linux)与构建这台机器
+(常是 macOS)不同,`apps/runtime/dist/node_modules` 里装的是构建机器自己的平台二进制,没法直接
+搬进容器用。Docker 镜像继续维持自己单独 `npm install`(`package.docker.json` + Dockerfile 里已有
+的那步),这是全平台通用、真正必要的重复,不是这次要消灭的对象。
 
 ## Consequences
 
 - `dist/main.js`/`dist/runner.js` 体积从 inline 时的 5.3MB/3.6MB 降到 4.3MB/2.5MB。
-- server 构建多一步真实 `npm install`(~15s),`apps/server/dist/agework-runtime/` 下多一个
-  `node_modules`。
-- 独立跑 `apps/runtime/dist/main.js`(不经 Docker、不经 server embed 这两条已经处理过的路径)
-  仍然解析不到这两个 SDK——这条路径本来就是已知缺口(`docs/todo/runtime-worker-module-refactor.md`
-  里的 "Registered+local" 缺口),没有被这次修复覆盖,后续需要时应该复用同一个模式
-  (`package.docker.json` + 真实 npm install)。
+- `apps/runtime` 的 build 多一步真实 `npm install`(~15s,首次约 460MB 磁盘);
+  `apps/server` 的 build 不再自己装依赖,只建一个符链接,server 侧零额外磁盘占用。
+- 独立跑 `apps/runtime/dist/main.js`(不经 Docker、不经 server embed)本身就有完整的
+  `dist/node_modules`,可以直接工作——这条路径(dev 回退、未来 Registered+local)现在也被
+  这次修复覆盖了,不再是缺口。

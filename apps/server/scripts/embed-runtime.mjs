@@ -11,14 +11,20 @@
 // 依赖 turbo `^build`:@agework/runtime 是 server 的 devDependency,先于 server 构建。
 //
 // @anthropic-ai/claude-agent-sdk / @openai/codex-sdk 是 --external,不在 bundle 里
-// (见 apps/runtime/docs/adr/0001)——它们的真实二进制通过平台专属
-// optionalDependencies 分发,只有一次真实 npm install 才能在这台机器上装出匹配的
-// 平台包,pnpm 的隔离式 node_modules 装不出来。复用 apps/runtime/package.docker.json
-// 同一份清单,在内嵌目录旁边跑一次 npm install,和 Docker 镜像构建时做的事一致。
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+// (见 apps/runtime/docs/adr/0001)——它们的真实二进制(每个平台几百 MB)通过
+// apps/runtime 自己的 build(scripts/install-sdk-deps.mjs)装好、由 apps/runtime
+// 管理和拥有;这里只符链接过去引用,不重复装一份、也不接管管理权
+// (Managed-local 本来就要求 server/worker 同机部署,repo 目录结构随之同在)。
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  rmSync,
+  symlinkSync,
+} from "node:fs";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 
 const serverRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const repoRoot = join(serverRoot, "..", "..");
@@ -42,10 +48,16 @@ for (const name of ["main", "runner"]) {
   console.log(`embedded agework-runtime → ${dest}`);
 }
 
-const manifestSource = join(repoRoot, "apps", "runtime", "package.docker.json");
-copyFileSync(manifestSource, join(destDir, "package.json"));
-execFileSync("npm", ["install", "--omit=dev", "--no-package-lock"], {
-  cwd: destDir,
-  stdio: "inherit",
-});
-console.log(`installed agework-runtime native deps → ${destDir}/node_modules`);
+const nodeModulesSource = join(runtimeDist, "node_modules");
+if (!existsSync(nodeModulesSource)) {
+  throw new Error(
+    `${nodeModulesSource} not found. apps/runtime's own build should have run ` +
+      `scripts/install-sdk-deps.mjs and produced it; turbo ^build normally handles this.`
+  );
+}
+const nodeModulesLink = join(destDir, "node_modules");
+if (lstatSync(nodeModulesLink, { throwIfNoEntry: false })) {
+  rmSync(nodeModulesLink, { recursive: true, force: true });
+}
+symlinkSync(relative(destDir, nodeModulesSource), nodeModulesLink, "dir");
+console.log(`linked agework-runtime native deps → ${nodeModulesLink} -> ${nodeModulesSource}`);
