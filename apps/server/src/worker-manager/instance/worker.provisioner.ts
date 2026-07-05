@@ -100,6 +100,14 @@ export class WorkerProvisioner {
         };
       }
 
+      const binding = await this.registry.findBindingWithResource(
+        runConfig.workspaceId
+      );
+      const expectedRuntimeInstanceId =
+        binding && binding.workerInstance.runtimeType === runtimeType
+          ? binding.workerInstance.runtimeInstanceId
+          : null;
+
       const ctx: RuntimeLaunchContext = {
         runtimeType,
         ownerId,
@@ -112,31 +120,23 @@ export class WorkerProvisioner {
           runtimeType,
           isolationScope
         ),
-        isExpectedRuntimeInstance: (id) =>
-          this.registry.isRuntimeInstanceBoundToWorkspace(
-            runtimeType,
-            runConfig.workspaceId,
-            id
-          ),
-        onWorkerExit: () => {
-          this.owners.delete(ownerId);
-          void Promise.resolve(
-            this.registry.markStoppedByOwner(
-              runtimeType,
-              isolationScope,
-              ownerId
-            )
-          ).catch(
-            swallow(this.logger, `mark stopped on exit for owner ${ownerId}`)
-          );
-        },
+        expectedRuntimeInstanceId,
+      };
+
+      const onWorkerExit = () => {
+        this.owners.delete(ownerId);
+        void Promise.resolve(
+          this.registry.markStoppedByOwner(runtimeType, isolationScope, ownerId)
+        ).catch(
+          swallow(this.logger, `mark stopped on exit for owner ${ownerId}`)
+        );
       };
 
       const { runtimeInstanceId } = await withTimeout(
         (async () => {
           const launched = await this.runtimeService
             .runtimeFor(null)
-            .start(ctx);
+            .start(ctx, onWorkerExit);
           await this.handshakeStore.waitForRegister(ownerId, startToken);
           return launched;
         })(),

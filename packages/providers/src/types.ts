@@ -66,7 +66,8 @@ export type SandboxStartInput = {
   metadata: Record<string, string>;
   runtimeLogHostPath?: string;
   runtimeLogMountPath?: string;
-  isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
+  /** 见 RuntimeLaunchContext.expectedRuntimeInstanceId 的三态语义。 */
+  expectedRuntimeInstanceId?: string | null;
 };
 
 // ── Placement 解析契约 ──
@@ -89,7 +90,10 @@ export type RuntimeSpecInput = {
 // ── RuntimeProvider 契约 ──
 
 /** provisioner 交给 provider 的一次启动上下文。workerEnv 是共享的 worker 协议
- *  env(AGEWORK_WORKER_* + startToken),provider 内部再合并自己的 infra env。 */
+ *  env(AGEWORK_WORKER_* + startToken),provider 内部再合并自己的 infra env。
+ *  跨进程/跨机器可序列化(RemoteRuntime 经隧道 RPC 原样转发给远程 manager),
+ *  因此不含任何函数字段——调用方本地专属的钩子经 RuntimeProvider.start() 的
+ *  第二参数传,不进 ctx。 */
 export type RuntimeLaunchContext = {
   runtimeType: RuntimeType;
   ownerId: string;
@@ -97,10 +101,11 @@ export type RuntimeLaunchContext = {
   runId: string;
   placement: RuntimeSpec;
   workerEnv: Record<string, string>;
-  /** DB-backed ownership check for sandbox docker name-conflict recovery。 */
-  isExpectedRuntimeInstance?: (runtimeInstanceId: string) => Promise<boolean>;
-  /** local provider 的子进程 exit 回调。 */
-  onWorkerExit?: () => void;
+  /** 当前 workspace 绑定的 runtimeInstanceId(docker 容器名冲突恢复用),三态:
+   *  `undefined` = 调用方未接入此特性,不做冲突恢复直接抛出原始错误;
+   *  `null` = 调用方已接入但当前无绑定,冲突容器一定不是预期的,清理重建;
+   *  `<id>` = 调用方已接入且有绑定,与冲突容器精确比较,相同则保留、不同则清理重建。 */
+  expectedRuntimeInstanceId?: string | null;
 };
 
 /** 停止/销毁一个实例所需的最小信息,由调用方从 WorkerRegistry DB 行派生。 */
@@ -113,13 +118,18 @@ export type RuntimeInstanceRef = {
 
 /**
  * 某一 runtimeType 的运行形态:自声明类型 + 三段生命周期。
- * - start:建环境 + 起 worker（容器 create/start 合一，local 是 fork）。
+ * - start:建环境 + 起 worker（容器 create/start 合一，local 是 fork）。onExit 是
+ *   调用方本地专属的子进程退出钩子,只有 local provider 真正接线(容器形态没有
+ *   本地子进程可监听);跨隧道的 RemoteRuntime 不传、providers 也不转发它。
  * - stop:owner 仍在,停 worker 但保留载体（容器 stop/pause，local 杀进程）。
  * - destroy:owner 永久消失,删除载体（容器 rm/delete，local 杀进程）。
  */
 export interface RuntimeProvider {
   readonly type: RuntimeType;
-  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }>;
+  start(
+    ctx: RuntimeLaunchContext,
+    onExit?: () => void
+  ): Promise<{ runtimeInstanceId: string }>;
   stop(ref: RuntimeInstanceRef): Promise<void> | void;
   destroy(ref: RuntimeInstanceRef): Promise<void> | void;
 }

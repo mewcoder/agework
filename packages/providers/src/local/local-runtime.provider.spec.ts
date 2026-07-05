@@ -169,35 +169,43 @@ describe("LocalRuntimeProvider", () => {
   });
 
   describe("exit handling", () => {
-    it("calls ctx.onWorkerExit and removes the channel when the process exits", async () => {
+    it("calls the onExit hook and removes the channel when the process exits", async () => {
       const provider = makeProvider();
-      const onWorkerExit = vi.fn();
-      await provider.start(makeCtx({ onWorkerExit }));
+      const onExit = vi.fn();
+      await provider.start(makeCtx(), onExit);
       const child = forkMock.children[0];
 
       exitHandlerOf(child)();
 
-      expect(onWorkerExit).toHaveBeenCalledOnce();
+      expect(onExit).toHaveBeenCalledOnce();
       provider.stop(makeRef());
       expect(child.kill).not.toHaveBeenCalled();
     });
 
     it("ignores a stale/superseded channel's late exit", async () => {
       const provider = makeProvider();
-      const onWorkerExit = vi.fn();
+      const onExit = vi.fn();
 
-      await provider.start(makeCtx({ onWorkerExit }));
+      await provider.start(makeCtx(), onExit);
       const stale = forkMock.children[0];
       const staleExit = exitHandlerOf(stale);
 
-      await provider.start(makeCtx({ onWorkerExit }));
+      await provider.start(makeCtx(), onExit);
       const current = forkMock.children[1];
 
       staleExit();
 
-      expect(onWorkerExit).not.toHaveBeenCalled();
+      expect(onExit).not.toHaveBeenCalled();
       provider.stop(makeRef());
       expect(current.kill).toHaveBeenCalledWith("SIGTERM");
+    });
+
+    it("start works without an onExit hook", async () => {
+      const provider = makeProvider();
+      await provider.start(makeCtx());
+      const child = forkMock.children[0];
+
+      expect(() => exitHandlerOf(child)()).not.toThrow();
     });
   });
 

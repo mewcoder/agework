@@ -25,8 +25,12 @@ export class LocalRuntimeProvider implements RuntimeProvider {
 
   constructor(private readonly config: RuntimeConfig) {}
 
-  /** fork 一个本地 worker 子进程,接管进程句柄供 stop/exit 用,返回逻辑实例标识。 */
-  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
+  /** fork 一个本地 worker 子进程,接管进程句柄供 stop/exit 用,返回逻辑实例标识。
+   *  onExit 是调用方本地专属的退出钩子(不进 ctx,见 RuntimeProvider.start 文档)。 */
+  start(
+    ctx: RuntimeLaunchContext,
+    onExit?: () => void
+  ): Promise<{ runtimeInstanceId: string }> {
     const startToken = randomUUID();
     const { tsxCliPath, workerEntryPath } = this.config.local;
     const child = fork(tsxCliPath, [workerEntryPath], {
@@ -47,7 +51,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     child.on("exit", () => {
       if (this.channels.get(ctx.ownerId) !== child) return; // stale process, superseded
       this.channels.delete(ctx.ownerId);
-      ctx.onWorkerExit?.();
+      onExit?.();
     });
     return Promise.resolve({ runtimeInstanceId });
   }

@@ -95,7 +95,7 @@ export class DockerRuntimeProvider implements RuntimeProvider {
       }));
     } catch (err) {
       const conflictingContainerId = parseDockerNameConflictContainerId(err);
-      if (!conflictingContainerId || !input.isExpectedRuntimeInstance) {
+      if (!conflictingContainerId || input.expectedRuntimeInstanceId === undefined) {
         throw err;
       }
 
@@ -106,18 +106,8 @@ export class DockerRuntimeProvider implements RuntimeProvider {
         throw err;
       }
 
-      let isExpectedRuntimeInstance: boolean;
-      try {
-        isExpectedRuntimeInstance =
-          await input.isExpectedRuntimeInstance(runtimeInstanceId);
-      } catch (lookupErr) {
-        this.logger.warn(
-          `workspace runtime binding lookup failed for ${runtimeInstanceId.slice(0, 12)}: ${String(lookupErr)}`
-        );
-        throw err;
-      }
-
-      if (isExpectedRuntimeInstance) {
+      if (runtimeInstanceId === input.expectedRuntimeInstanceId) {
+        // 是当前 workspace 预期绑定的那个容器,理论上不该撞名,保守不清理
         throw err;
       }
 

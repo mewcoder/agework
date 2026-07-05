@@ -26,8 +26,11 @@ export class LocalRuntime implements Runtime {
     );
   }
 
-  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
-    return this.resolveProvider(ctx.runtimeType).start(ctx);
+  start(
+    ctx: RuntimeLaunchContext,
+    onExit?: () => void
+  ): Promise<{ runtimeInstanceId: string }> {
+    return this.resolveProvider(ctx.runtimeType).start(ctx, onExit);
   }
 
   stop(ref: RuntimeInstanceRef): Promise<void> | void {

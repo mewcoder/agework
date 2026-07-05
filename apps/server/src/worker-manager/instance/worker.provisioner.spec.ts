@@ -13,7 +13,7 @@ function deps() {
       upsertRunning: vi.fn().mockResolvedValue(undefined),
       markErrorByOwner: vi.fn().mockResolvedValue(undefined),
       markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
-      isRuntimeInstanceBoundToWorkspace: vi.fn().mockResolvedValue(true),
+      findBindingWithResource: vi.fn().mockResolvedValue(null),
     },
     handshake: {
       waitForRegister: vi.fn().mockResolvedValue({ pid: 1, registeredAt: "t" }),
@@ -93,28 +93,42 @@ describe("WorkerProvisioner", () => {
     );
   });
 
-  it("threads a ctx.isExpectedRuntimeInstance that delegates to registry.isRuntimeInstanceBoundToWorkspace", async () => {
+  it("sets ctx.expectedRuntimeInstanceId to null when the workspace has no binding", async () => {
     const d = deps();
     await make(d).acquireInstanceForRun(input());
     const ctx = d.runtime.start.mock.calls[0][0];
-    expect(typeof ctx.isExpectedRuntimeInstance).toBe("function");
-
-    await ctx.isExpectedRuntimeInstance("runtime-instance-1");
-    expect(d.registry.isRuntimeInstanceBoundToWorkspace).toHaveBeenCalledWith(
-      "local",
-      "ws-1",
-      "runtime-instance-1"
-    );
+    expect(d.registry.findBindingWithResource).toHaveBeenCalledWith("ws-1");
+    expect(ctx.expectedRuntimeInstanceId).toBeNull();
   });
 
-  it("threads a ctx.onWorkerExit that clears the owner map and marks the registry row stopped", async () => {
+  it("sets ctx.expectedRuntimeInstanceId to the bound instance id when runtimeType matches", async () => {
+    const d = deps();
+    d.registry.findBindingWithResource.mockResolvedValueOnce({
+      workerInstance: { runtimeType: "local", runtimeInstanceId: "bound-1" },
+    });
+    await make(d).acquireInstanceForRun(input());
+    const ctx = d.runtime.start.mock.calls[0][0];
+    expect(ctx.expectedRuntimeInstanceId).toBe("bound-1");
+  });
+
+  it("treats a binding for a different runtimeType as no binding (expectedRuntimeInstanceId=null)", async () => {
+    const d = deps();
+    d.registry.findBindingWithResource.mockResolvedValueOnce({
+      workerInstance: { runtimeType: "docker", runtimeInstanceId: "bound-1" },
+    });
+    await make(d).acquireInstanceForRun(input());
+    const ctx = d.runtime.start.mock.calls[0][0];
+    expect(ctx.expectedRuntimeInstanceId).toBeNull();
+  });
+
+  it("threads an onExit hook (2nd start arg) that clears the owner map and marks the registry row stopped", async () => {
     const d = deps();
     const p = make(d);
     await p.acquireInstanceForRun(input());
-    const ctx = d.runtime.start.mock.calls[0][0];
-    expect(typeof ctx.onWorkerExit).toBe("function");
+    const onExit = d.runtime.start.mock.calls[0][1];
+    expect(typeof onExit).toBe("function");
 
-    ctx.onWorkerExit();
+    onExit();
     expect(d.registry.markStoppedByOwner).toHaveBeenCalledWith(
       "local",
       "workspace",

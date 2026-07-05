@@ -92,6 +92,12 @@ describe("LocalRuntime", () => {
     expect(fakeOpenSandbox.start).not.toHaveBeenCalled();
   });
 
+  it("forwards the onExit hook through to the provider", async () => {
+    const onExit = vi.fn();
+    await runtime.start(ctx("local"), onExit);
+    expect(fakeLocal.start).toHaveBeenCalledWith(ctx("local"), onExit);
+  });
+
   it("stop dispatches to the provider matching runtimeType", async () => {
     await runtime.stop(ref("docker"));
     expect(fakeDocker.stop).toHaveBeenCalledOnce();

@@ -64,6 +64,6 @@ export function buildSandboxStartInput(
     },
     runtimeLogHostPath: cfg.runtimeLogHostPath,
     runtimeLogMountPath: runtimeLogDir,
-    isExpectedRuntimeInstance: ctx.isExpectedRuntimeInstance,
+    expectedRuntimeInstanceId: ctx.expectedRuntimeInstanceId,
   };
 }
