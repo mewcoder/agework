@@ -15,24 +15,47 @@
 | 0a 机械搬移 | ✅ 完成 | `5ac4645e`(providers 改名)、`80eace0f`(worker 搬 packages/) |
 | 0b 依赖倒置 | ✅ 完成 | `84984b0d`(Runtime 接口 + LocalRuntime + 4 seam 走 runtimeFor(null)) |
 | 1 注册骨架 | ✅ 完成 | `aabeee2f`(server:Runtime 表/配对 API/隧道端点/判死)、`c32978f2`(apps/runtime:manager 注册/心跳/重连)、`081df4f3`(shared 值内联修复) |
-| 2 Registered 跑通 | ⬜ 未开始 | **动工前先拍板下面两个设计点** |
+| 2 Registered 跑通 | ✅ 完成 | `1377afa7`(providers 回调拆解)、`41e1dd60`(RemoteRuntime+隧道 RPC)、`68a3e93a`(manager launcher/registry) |
 | 3 前端 | ⬜ 未开始 | |
 | 4 收尾 | ⬜ 未开始 | 前置:§13 产物分发 |
 
-**Phase 2 前置拍板点**(§11 Phase 2 开工前必须决定):
+**Phase 2 落地摘要**(两个前置拍板点都按推荐方案定案并已实施):
 
-1. **`RuntimeLaunchContext` 含两个不可序列化的函数回调**(`packages/providers/src/types.ts:101/103`),
-   RemoteRuntime 无法把它们 JSON 化上隧道。推荐方案:`isExpectedRuntimeInstance` 改成预计算数据字段
-   `expectedRuntimeInstanceId: string | null`(参数喂入,server 从 WorkerRegistry 行事先算好);
-   `onWorkerExit` 从共享 ctx 挪出,变成 local provider `start` 的本地专属第二参数(远程 worker
-   死活由 server 心跳 fence 兜底,不过 RPC)。
-2. **`Workspace.runtimeId` 接线**:加列 + 建 workspace 流程带 runtime 选择 + provisioner 把
-   `runtimeFor(null)` 换成 `runtimeFor(workspace.runtimeId)`,牵扯 workspace 模块与前端。
+1. **回调拆解**:`isExpectedRuntimeInstance` → `expectedRuntimeInstanceId: string | null` 数据字段
+   (provisioner 用 `registry.findBindingWithResource()` 预先查好);`onWorkerExit` 从 ctx 移出,
+   变成 `RuntimeProvider.start()`/`Runtime.start()` 的可选第二参数(仅 LocalRuntime(Provider)
+   真正接线,RemoteRuntime 不传)。`RuntimeLaunchContext` 现在完全可序列化。
+2. **`Workspace.runtimeId` 接线维持不碰**(按确认方案):Phase 2 只证明 RemoteRuntime 本身工作
+   正确,`WorkerProvisioner` 仍写死 `runtimeFor(null)`;真正接上 `workspace.runtimeId` 留给 Phase 3
+   (需要前端选 Runtime 的 UI 才有意义)。
+3. **隧道协议**:launch/stop/destroy 复用现有 JSON-RPC 2.0 信封(`packages/shared/protocol/rpc.ts`
+   的 `RpcRequest`/`RpcResponse`),没有新造包装;`RuntimeLaunchRpcParams` 不含 `runtimeType`——
+   manager 实例专一,已知自己固定的类型,不用传。
+4. **manager 配置面新增**:`--worker-image`(docker/opensandbox 必填)、`--log-dir`、
+   `--worker-entry`/`--tsx-cli`(local 必填,显式指定不猜测)。
+5. **已知缺口,未解决(留给未来需要 Registered+local 时再处理)**:local 模式下 manager 把自己
+   bundle 成单文件 dist/main.js 后,没有独立的 `@agework/worker` 模块可 `require.resolve`,
+   `--worker-entry`/`--tsx-cli` 必须由操作者显式指定 fork 目标(没有做“fork 自己”的自动推导——
+   dev 用 tsx、prod 是纯 JS,两种场景的正确 fork 方式不同,自动猜测风险大于收益)。Registered
+   的旗舰场景是 docker,这个缺口不阻塞它。
+6. **端到端验证**(一次性脚本,不进常规单测套件——起真实子进程/真实网络,不适合塞进每次
+   `pnpm test` 都跑的快速单测):真实 `apps/runtime` manager 子进程(tsx 直跑源码,`--runtime local`)
+   出站连上一个真实 `RuntimeTunnelHandler`,注册成功后,server 侧直接构造 `RemoteRuntime` 调
+   `start/stop/destroy`——全链路走真隧道 RPC,manager 的 `Launcher` 真调 `packages/providers` 的
+   `LocalRuntimeProvider` 真 fork 了一个子进程(用一次性 worker 替身脚本,不依赖 docker/claude-sdk),
+   `runtimeInstanceId` 以 `pid:token` 格式经隧道正确传回并 resolve;`destroy()` 真的杀掉了那个
+   子进程(验证后无残留进程)。
 
 **交接注意**:shared 包源码直连消费,`protocol/index.ts` 等入口**跨文件 re-export 运行时值会
 ERR_MODULE_NOT_FOUND**,值必须内联在入口文件(见 `common/index.ts` 的 generateId 注释;
 类型导出不受限)。验证基线:`pnpm typecheck` + eslint + 单测 + `pnpm build` 全绿,改动执行链路时
-建议真机起 dev server 冒烟(Phase 1 靠这个抓到了上述坑)。
+建议真机起 dev server 冒烟(Phase 1/Phase 2 都靠这个抓到了坑——Phase 1 的 ERR_MODULE_NOT_FOUND、
+Phase 2 的 `@agework/providers` 依赖漏加)。
+
+**下一步 Phase 3(前端)**:workspace 创建器加"运行位置"选择(选 Registered Runtime 才需要接
+`Workspace.runtimeId`)、"我的运行环境"配对页(调用已就绪的 `/api/v1/runtimes` list/create/delete)、
+运行时在线状态标签。前端接上 runtimeId 后,记得把 `worker.provisioner.ts` 里硬编码的
+`runtimeFor(null)` 换成读 `workspace.runtimeId`。
 
 ---
 
