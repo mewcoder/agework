@@ -603,17 +603,18 @@ async function main() {
     }
   }
   if (runtimeTypes === undefined && interactive) {
-    const result = await p.select({
-      message: "允许的工作空间运行环境",
+    const result = await p.multiselect({
+      message: "允许的工作空间运行环境（可多选）",
       options: [
         { value: "local", label: "local（只允许本机进程）" },
         { value: "docker", label: "docker（本机 Docker 容器）" },
         { value: "opensandbox", label: "opensandbox（OpenSandbox Server + worker 镜像）" },
       ],
-      initialValue: "local",
+      initialValues: ["local"],
+      required: true,
     });
     if (p.isCancel(result)) process.exit(0);
-    runtimeTypes = result;
+    runtimeTypes = [...new Set(result)].join(",");
   }
   const runtimeTypeList = runtimeTypes?.split(",") ?? [];
   const allowsOpenSandbox = runtimeTypeList.includes("opensandbox");
@@ -621,17 +622,17 @@ async function main() {
   const allowsContainer =
     allowsOpenSandbox || runtimeTypeList.includes("docker");
   if (allowsContainer && isolationScopes === undefined && interactive) {
-    const result = await p.select({
-      message: "允许的沙箱隔离级别",
+    const result = await p.multiselect({
+      message: "允许的沙箱隔离级别（可多选）",
       options: [
         { value: "user", label: "user（同一用户共享一个沙箱资源）" },
         { value: "workspace", label: "workspace（每个工作空间独立沙箱资源）" },
-        { value: "user,workspace", label: "user,workspace（创建工作空间时可选）" },
       ],
-      initialValue: "user",
+      initialValues: ["user"],
+      required: true,
     });
     if (p.isCancel(result)) process.exit(0);
-    isolationScopes = result;
+    isolationScopes = [...new Set(result)].join(",");
   }
   if (shouldInstall) runPnpm(["install"]);
   const apiWasCreated = ensureEnv(apiEnv, apiEnvExample, "apps/server/.env", {
