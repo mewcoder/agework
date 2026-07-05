@@ -67,6 +67,7 @@ export class WorkerProvisioner {
     const ownerId = runtimeTarget.ownerId;
     const { runtimeType, isolationScope } = this.identity(input);
     const startToken = randomUUID();
+    const targetRuntimeId = input.targetRuntimeId ?? null;
 
     try {
       const insert = await this.registry.insertStarting(
@@ -78,7 +79,8 @@ export class WorkerProvisioner {
         },
         randomUUID(),
         "http",
-        startToken
+        startToken,
+        targetRuntimeId
       );
       if (!insert.ok) {
         if (insert.existing.status === "running") {
@@ -135,7 +137,7 @@ export class WorkerProvisioner {
       const { runtimeInstanceId } = await withTimeout(
         (async () => {
           const launched = await this.runtimeService
-            .runtimeFor(null)
+            .runtimeFor(targetRuntimeId)
             .start(ctx, onWorkerExit);
           await this.handshakeStore.waitForRegister(ownerId, startToken);
           return launched;
@@ -191,14 +193,14 @@ export class WorkerProvisioner {
   /** owner 仍在(fence 判死 / admin 手动停):停 worker,保留载体。 */
   stop(ref: RuntimeInstanceRef): Promise<void> {
     return this.finalize(ref, (r) =>
-      this.runtimeService.runtimeFor(null).stop(r)
+      this.runtimeService.runtimeFor(r.targetRuntimeId ?? null).stop(r)
     );
   }
 
   /** owner 永久消失(删 workspace / user):删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> {
     return this.finalize(ref, (r) =>
-      this.runtimeService.runtimeFor(null).destroy(r)
+      this.runtimeService.runtimeFor(r.targetRuntimeId ?? null).destroy(r)
     );
   }
 

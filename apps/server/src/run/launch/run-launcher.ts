@@ -13,6 +13,7 @@ import type {
   RuntimeSpec,
   WorkerExecutionHandle,
 } from "@agework/shared/protocol";
+import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
@@ -86,6 +87,7 @@ export class RunLauncher {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
+    const targetRuntimeId = workspace.runtimeId ?? null;
     const runtimeTarget = this.getPlacement({ workspace, userId });
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
@@ -149,6 +151,7 @@ export class RunLauncher {
       isolationScope: sandbox?.isolationScope,
       runConfig,
       runtimeTarget,
+      targetRuntimeId,
       stream,
     });
     if (!runtimeHandle) return;
@@ -174,17 +177,37 @@ export class RunLauncher {
     });
   }
 
-  /** 解析 placement:部署默认值在这里一次性补齐并校验,传给 runtime 的是已解析入参。 */
+  /**
+   * 解析 placement:部署默认值在这里一次性补齐并校验,传给 runtime 的是已解析入参。
+   * Registered runtime 的 workspace(workspace.runtimeId 非空)跳过部署级
+   * allow-list 校验——那是 Managed 专属策略,与一台具体远程机器的能力无关;
+   * 这个 workspace 的 runtimeType/isolationScope 已在创建时对着该 Runtime
+   * 自己的注册类型/能力矩阵校验过(见 WorkspaceService.resolveRegisteredPlacement),
+   * 这里不用再查一遍部署允许列表。
+   */
   private getPlacement(input: {
     workspace: WorkspaceRunContext;
     userId: string;
   }): RuntimeSpec {
     const { workspace, userId } = input;
-    const runtimeType =
+    const isRegistered = Boolean(workspace.runtimeId);
+    const requestedRuntimeType =
       workspace.runtimeType ?? this.configService.getDefaultRuntimeType();
-    if (!this.configService.isRuntimeTypeAllowed(runtimeType)) {
+    if (
+      !isRegistered &&
+      !this.configService.isRuntimeTypeAllowed(requestedRuntimeType)
+    ) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
+    // Registered 分支不查部署 allow-list,但 runtimeType 仍必须是三种已知值之一——
+    // 已在 workspace 创建时校验过(WorkspaceService.resolveRegisteredPlacement),
+    // 这里只是把 string 收窄回字面量联合类型,不是重新做策略判断。
+    if (!isRuntimeType(requestedRuntimeType)) {
+      throw new BadRequestException(
+        `工作空间的运行环境类型无效: ${requestedRuntimeType}`
+      );
+    }
+    const runtimeType = requestedRuntimeType;
     const base = {
       userId,
       workspaceId: workspace.workspaceId,
@@ -201,15 +224,26 @@ export class RunLauncher {
       });
     }
 
-    const isolationScope =
+    const requestedIsolationScope =
       workspace.isolationScope ?? this.configService.getDefaultIsolationScope();
-    if (!this.configService.isIsolationScopeAllowed(isolationScope)) {
+    if (
+      !isRegistered &&
+      !this.configService.isIsolationScopeAllowed(requestedIsolationScope)
+    ) {
       throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
+    }
+    if (
+      requestedIsolationScope !== "user" &&
+      requestedIsolationScope !== "workspace"
+    ) {
+      throw new BadRequestException(
+        `工作空间的隔离级别无效: ${requestedIsolationScope}`
+      );
     }
     return this.workerManager.resolveRuntimeSpec({
       ...base,
       runtimeType,
-      isolationScope,
+      isolationScope: requestedIsolationScope,
     });
   }
 
@@ -471,6 +505,7 @@ export class RunLauncher {
     isolationScope?: string;
     runConfig: RunConfig;
     runtimeTarget: RuntimeSpec;
+    targetRuntimeId: string | null;
     stream: RunStream;
   }): Promise<WorkerExecutionHandle | null> {
     const {
@@ -480,6 +515,7 @@ export class RunLauncher {
       isolationScope,
       runConfig,
       runtimeTarget,
+      targetRuntimeId,
       stream,
     } = input;
 
@@ -496,6 +532,7 @@ export class RunLauncher {
       return this.driver.start({
         runConfig,
         runtimeTarget,
+        targetRuntimeId,
         onRuntimeInstanceIdReady: (runtimeInstanceId) =>
           void this.persistRuntimeHandle(runId, runtimeType, runtimeInstanceId),
       });

@@ -75,8 +75,14 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     await this.registry.markAllStartingAsError();
 
-    const staleLocalRows =
-      await this.registry.findRunningByRuntimeType("local");
+    // "local" runtimeType 不等于 Managed——Registered manager 也能配成
+    // --runtime local(裸远程机器)。这条扫尾专治"server 重启,fork 出的子进程
+    // 父子关系断了"这一种孤儿,只对 Managed(runtimeId 为空)成立:Registered
+    // worker 的父进程是远程 manager,server 重启跟它无关,不是孤儿,不该动它——
+    // 它的存活由心跳 fence 另行判定。
+    const staleLocalRows = (
+      await this.registry.findRunningByRuntimeType("local")
+    ).filter((row) => !row.runtimeId);
     for (const row of staleLocalRows) {
       try {
         await this.runtimeService.runtimeFor(null).destroy({
@@ -109,6 +115,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
     isolationScope: string;
     ownerId: string;
     runtimeInstanceId: string;
+    runtimeId?: string | null;
   }): Promise<void> {
     if (!isRuntimeType(resource.runtimeType)) {
       this.logger.warn(
@@ -122,6 +129,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
         ownerId: resource.ownerId,
         runtimeInstanceId: resource.runtimeInstanceId,
         isolationScope: resource.isolationScope,
+        targetRuntimeId: resource.runtimeId,
       };
       await this.provisioner.destroy(ref);
       await this.registry.markStoppedById(resource, "owner_released");

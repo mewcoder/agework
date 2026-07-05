@@ -228,6 +228,10 @@ model WorkerInstance {
   status                  String                   @default("running")
   expiresAt               DateTime?
   metadata                Json
+  /// 载体所在的 Registered Runtime id;null = Managed(本机 in-process)。松散引用
+  /// (同 ownerId,不建 FK——ownerId 视隔离档可以是 userId 或 workspaceId,本列
+  /// 同理不强绑 Runtime 生命周期),供 stop/destroy 时正确路由到 LocalRuntime/RemoteRuntime。
+  runtimeId               String?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   workspaceWorkerBindings WorkspaceWorkerBinding[]

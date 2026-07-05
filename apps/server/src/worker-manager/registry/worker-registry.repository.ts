@@ -126,7 +126,8 @@ export class WorkerRegistryRepository {
     input: UpsertRunningInput,
     runtimeInstanceId: string,
     transport: string,
-    startToken: string
+    startToken: string,
+    targetRuntimeId?: string | null
   ): Promise<InsertStartingResult> {
     const where = ownerWhere(
       input.runtimeType,
@@ -146,6 +147,7 @@ export class WorkerRegistryRepository {
           startToken,
           status: "starting",
           activeOwnerKey: input.ownerId,
+          runtimeId: targetRuntimeId ?? null,
           metadata: workerInstanceMetadataJson(
             statusInstanceMetadata({
               runtimeType: input.runtimeType,
@@ -396,6 +398,7 @@ export class WorkerRegistryRepository {
         runtimeInstanceId: true,
         isolationScope: true,
         ownerId: true,
+        runtimeId: true,
       },
     });
   }

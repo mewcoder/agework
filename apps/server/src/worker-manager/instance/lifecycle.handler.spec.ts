@@ -290,6 +290,55 @@ describe("onApplicationBootstrap", () => {
     );
   });
 
+  it("skips Registered-local rows (runtimeId set) — their parent is the remote manager, not this API process", async () => {
+    const registry = makeRegistry({
+      findRunningByRuntimeType: vi.fn().mockResolvedValue([
+        {
+          id: "rr-managed",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-1",
+          runtimeInstanceId: "4242:token",
+          runtimeId: null,
+        },
+        {
+          id: "rr-registered",
+          runtimeType: "local",
+          isolationScope: "workspace",
+          ownerId: "ws-2",
+          runtimeInstanceId: "9999:token",
+          runtimeId: "rt-1",
+        },
+      ]),
+    });
+    const provisioner = makeProvisioner();
+    const runtimeService = makeRuntimeService();
+    const livenessStore = makeLivenessStore();
+    const service = new WorkerInstanceLifecycleHandler(
+      registry as never,
+      provisioner as never,
+      runtimeService as never,
+      livenessStore as never
+    );
+
+    await service.onApplicationBootstrap();
+
+    expect(runtimeService.destroy).toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: "ws-1" })
+    );
+    expect(runtimeService.destroy).not.toHaveBeenCalledWith(
+      expect.objectContaining({ ownerId: "ws-2" })
+    );
+    expect(registry.markStoppedById).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-managed" }),
+      "interrupted_by_restart"
+    );
+    expect(registry.markStoppedById).not.toHaveBeenCalledWith(
+      expect.objectContaining({ id: "rr-registered" }),
+      expect.anything()
+    );
+  });
+
   it("does not physically clean up running sandbox rows (containers survive an API restart)", async () => {
     const registry = makeRegistry();
     const provisioner = makeProvisioner();

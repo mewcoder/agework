@@ -396,7 +396,10 @@ describe("WorkspaceService", () => {
       const repo = makeRepo();
       const runtimeService = makeRuntimeService({
         getOwned: vi.fn().mockResolvedValue(
-          makeRegisteredRuntimeRow({ runtimeType: "local", capabilities: null })
+          makeRegisteredRuntimeRow({
+            runtimeType: "local",
+            capabilities: null,
+          })
         ),
       });
       const service = makeService(repo, makeConfig(), runtimeService);
@@ -416,9 +419,11 @@ describe("WorkspaceService", () => {
 
     it("rejects isolationScope on a registered local runtime", async () => {
       const runtimeService = makeRuntimeService({
-        getOwned: vi.fn().mockResolvedValue(
-          makeRegisteredRuntimeRow({ runtimeType: "local" })
-        ),
+        getOwned: vi
+          .fn()
+          .mockResolvedValue(
+            makeRegisteredRuntimeRow({ runtimeType: "local" })
+          ),
       });
       const service = makeService(makeRepo(), makeConfig(), runtimeService);
 
@@ -451,9 +456,9 @@ describe("WorkspaceService", () => {
 
     it("rejects a runtime that has never completed registration", async () => {
       const runtimeService = makeRuntimeService({
-        getOwned: vi.fn().mockResolvedValue(
-          makeRegisteredRuntimeRow({ runtimeType: null })
-        ),
+        getOwned: vi
+          .fn()
+          .mockResolvedValue(makeRegisteredRuntimeRow({ runtimeType: null })),
       });
       const service = makeService(makeRepo(), makeConfig(), runtimeService);
 

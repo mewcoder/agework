@@ -395,13 +395,14 @@ describe("WorkerRegistryRepository", () => {
   });
 
   describe("findActiveByOwnerId", () => {
-    it("returns the startToken, runtimeType, runtimeInstanceId, isolationScope and ownerId when the owner has a starting row", async () => {
+    it("returns the startToken, runtimeType, runtimeInstanceId, isolationScope, ownerId and runtimeId when the owner has a starting row", async () => {
       prisma.workerInstance.findUnique.mockResolvedValue({
         startToken: "token-starting",
         runtimeType: "sandbox",
         runtimeInstanceId: "inst-1",
         isolationScope: "workspace",
         ownerId: "owner-1",
+        runtimeId: null,
       });
 
       const result = await repository.findActiveByOwnerId("owner-1");
@@ -414,6 +415,7 @@ describe("WorkerRegistryRepository", () => {
           runtimeInstanceId: true,
           isolationScope: true,
           ownerId: true,
+          runtimeId: true,
         },
       });
       expect(result).toEqual({
@@ -422,6 +424,7 @@ describe("WorkerRegistryRepository", () => {
         runtimeInstanceId: "inst-1",
         isolationScope: "workspace",
         ownerId: "owner-1",
+        runtimeId: null,
       });
     });
 

@@ -193,6 +193,7 @@ export class WorkerManagerService {
       ownerId: row.ownerId,
       runtimeInstanceId: row.runtimeInstanceId,
       isolationScope: row.isolationScope,
+      targetRuntimeId: row.runtimeId,
     };
     await this.provisioner.stop(ref);
   }
@@ -319,6 +320,7 @@ export class WorkerManagerService {
       ownerId: resource.ownerId,
       runtimeInstanceId: resource.runtimeInstanceId,
       isolationScope: resource.isolationScope,
+      targetRuntimeId: resource.runtimeId,
     };
     await this.provisioner.stop(ref);
     await this.registry.markStoppedById(resource, "manual_stop");

@@ -139,21 +139,20 @@ export class WorkspaceService {
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
-    const { runtimeType, isolationScope, targetRuntimeId } =
-      requestedRuntimeId
-        ? await this.resolveRegisteredPlacement(
-            userId,
-            requestedRuntimeId,
-            requestedIsolationScope
-          )
-        : {
-            ...this.runtimePolicy.resolveCreateRuntime({
-              runtimeType: requestedRuntimeType,
-              isolationScope: requestedIsolationScope,
-              hasCustomRootPath: Boolean(requestedRootPath?.trim()),
-            }),
-            targetRuntimeId: null as string | null,
-          };
+    const { runtimeType, isolationScope, targetRuntimeId } = requestedRuntimeId
+      ? await this.resolveRegisteredPlacement(
+          userId,
+          requestedRuntimeId,
+          requestedIsolationScope
+        )
+      : {
+          ...this.runtimePolicy.resolveCreateRuntime({
+            runtimeType: requestedRuntimeType,
+            isolationScope: requestedIsolationScope,
+            hasCustomRootPath: Boolean(requestedRootPath?.trim()),
+          }),
+          targetRuntimeId: null as string | null,
+        };
     const id = generateId();
     const directory = await this.directoryHandler.prepareCreate({
       userId,
