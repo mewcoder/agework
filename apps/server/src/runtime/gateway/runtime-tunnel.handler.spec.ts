@@ -136,4 +136,116 @@ describe("RuntimeTunnelHandler", () => {
     const [err] = (await once(ws, "error")) as [Error];
     expect(err).toBeInstanceOf(Error);
   });
+
+  describe("sendRequest", () => {
+    it("rejects immediately when the target runtime is not connected", async () => {
+      await expect(
+        handler.sendRequest(
+          "rt-1",
+          {
+            jsonrpc: "2.0",
+            id: "req-1",
+            method: "runtime.launch",
+            params: {} as never,
+          },
+          1000
+        )
+      ).rejects.toThrow("runtime rt-1 is not connected");
+    });
+
+    it("sends the request over the wire and resolves with the manager's result", async () => {
+      const ws = connect();
+      await once(ws, "open");
+      ws.on("message", (data: unknown) => {
+        const message = JSON.parse(String(data)) as {
+          id: string;
+          method: string;
+        };
+        ws.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: message.id,
+            result: { runtimeInstanceId: "container-1" },
+          })
+        );
+      });
+
+      const result = await handler.sendRequest(
+        "rt-1",
+        {
+          jsonrpc: "2.0",
+          id: "req-1",
+          method: "runtime.launch",
+          params: {} as never,
+        },
+        1000
+      );
+      expect(result).toEqual({ runtimeInstanceId: "container-1" });
+    });
+
+    it("rejects with the manager's error message on an RPC error response", async () => {
+      const ws = connect();
+      await once(ws, "open");
+      ws.on("message", (data: unknown) => {
+        const message = JSON.parse(String(data)) as { id: string };
+        ws.send(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: message.id,
+            error: { code: -32000, message: "docker not available" },
+          })
+        );
+      });
+
+      await expect(
+        handler.sendRequest(
+          "rt-1",
+          {
+            jsonrpc: "2.0",
+            id: "req-1",
+            method: "runtime.launch",
+            params: {} as never,
+          },
+          1000
+        )
+      ).rejects.toThrow("docker not available");
+    });
+
+    it("rejects on timeout when the manager never replies", async () => {
+      const ws = connect();
+      await once(ws, "open");
+
+      await expect(
+        handler.sendRequest(
+          "rt-1",
+          {
+            jsonrpc: "2.0",
+            id: "req-1",
+            method: "runtime.stop",
+            params: {} as never,
+          },
+          20
+        )
+      ).rejects.toThrow(/did not respond/);
+    });
+
+    it("rejects a still-pending request when the connection drops", async () => {
+      const ws = connect();
+      await once(ws, "open");
+
+      const pending = handler.sendRequest(
+        "rt-1",
+        {
+          jsonrpc: "2.0",
+          id: "req-1",
+          method: "runtime.destroy",
+          params: {} as never,
+        },
+        5000
+      );
+      ws.terminate();
+
+      await expect(pending).rejects.toThrow(/connection closed/);
+    });
+  });
 });

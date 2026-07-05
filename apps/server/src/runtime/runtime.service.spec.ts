@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
+import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { RuntimeService } from "./runtime.service";
@@ -42,6 +43,7 @@ describe("RuntimeService", () => {
         .mockReturnValue(["local", "docker", "opensandbox"]),
       getAllowedIsolationScopes: vi.fn().mockReturnValue(["user", "workspace"]),
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
+      getLaunchTimeoutSeconds: vi.fn().mockReturnValue(20),
     };
     localRuntime = {
       start: vi.fn(),
@@ -66,10 +68,9 @@ describe("RuntimeService", () => {
     expect(service.runtimeFor(null)).toBe(localRuntime);
   });
 
-  it("runtimeFor rejects registered runtime ids until Phase 2", () => {
-    expect(() => service.runtimeFor("rt-1")).toThrow(
-      "Registered runtime not supported yet: rt-1"
-    );
+  it("runtimeFor(runtimeId) resolves a RemoteRuntime bound to that id", () => {
+    const remote = service.runtimeFor("rt-1");
+    expect(remote).toBeInstanceOf(RemoteRuntime);
   });
 
   it("resolveRuntimeSpec delegates to the pure resolver", () => {

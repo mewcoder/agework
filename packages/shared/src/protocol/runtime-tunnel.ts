@@ -1,3 +1,6 @@
+import type { RpcRequest, RpcResponse } from "./rpc";
+import type { RuntimeSpec } from "./channel";
+
 /**
  * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。
  * 出站 WS 连接,runtime 配对 token 鉴权(HTTP upgrade 时经 Authorization header 携带);
@@ -34,6 +37,43 @@ export interface RuntimeTunnelRegisteredMessage {
 }
 
 export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
+
+// ── launch / stop / destroy(server → manager,JSON-RPC 2.0,复用 ./rpc 的信封)──
+//
+// 同一条隧道连接上叠加的第二类消息:register/heartbeat(上面)是简单通知,
+// launch/stop/destroy 是有去有回的请求/响应,借用 worker 命令通道已经在用的
+// RpcRequest/RpcResponse 信封(见 ./rpc),不新造一套包装。
+
+/** server → manager 的一次 launch 请求参数。是 packages/providers 的
+ *  RuntimeLaunchContext 去掉 runtimeType(manager 实例专一,已知自己固定的类型,
+ *  不需要传)后的可序列化子集——两者字段含义必须保持同步。 */
+export type RuntimeLaunchRpcParams = {
+  ownerId: string;
+  workspaceId: string;
+  runId: string;
+  placement: RuntimeSpec;
+  workerEnv: Record<string, string>;
+  expectedRuntimeInstanceId: string | null;
+};
+
+/** server → manager 的 stop/destroy 共用参数,对应 packages/providers 的
+ *  RuntimeInstanceRef 去掉 runtimeType(同上,manager 已知自己的类型)。 */
+export type RuntimeInstanceRefRpcParams = {
+  ownerId: string;
+  runtimeInstanceId: string;
+  isolationScope: string;
+};
+
+export type RuntimeTunnelRpcRequest =
+  | RpcRequest<"runtime.launch", RuntimeLaunchRpcParams>
+  | RpcRequest<"runtime.stop", RuntimeInstanceRefRpcParams>
+  | RpcRequest<"runtime.destroy", RuntimeInstanceRefRpcParams>;
+
+export type RuntimeLaunchRpcResult = { runtimeInstanceId: string };
+
+export type RuntimeTunnelRpcResponse =
+  | RpcResponse<RuntimeLaunchRpcResult>
+  | RpcResponse<null>;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,
 // 内联在 protocol/index.ts(shared 源码直连消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。

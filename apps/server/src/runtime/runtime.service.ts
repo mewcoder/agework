@@ -12,6 +12,7 @@ import type {
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
+import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import type { Runtime } from "./runtime.types";
@@ -32,14 +33,19 @@ export class RuntimeService {
 
   /**
    * 解析目标 `Runtime` 实现(server 起/停/毁 worker 的唯一入口)。
-   * `runtimeId=null` = Managed(本机 in-process,现状唯一路径);
-   * 非 null 的 Registered runtime(`RemoteRuntime`)Phase 2 接入。
+   * `runtimeId=null` = Managed(本机 in-process);非 null = Registered,经隧道
+   * 转 RPC 给对应 manager。RemoteRuntime 每次都新建,不持有连接本身(连接归
+   * RuntimeTunnelHandler 管),构造零开销。
    */
   runtimeFor(runtimeId: string | null): Runtime {
-    if (runtimeId !== null) {
-      throw new Error(`Registered runtime not supported yet: ${runtimeId}`);
+    if (runtimeId === null) {
+      return this.localRuntime;
     }
-    return this.localRuntime;
+    return new RemoteRuntime(
+      runtimeId,
+      this.tunnelHandler,
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
