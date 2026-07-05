@@ -99,9 +99,6 @@ importers:
       '@agework/shared':
         specifier: workspace:*
         version: link:../../packages/shared
-      '@agework/worker':
-        specifier: workspace:*
-        version: link:../../packages/worker
       '@ai-sdk/anthropic':
         specifier: ^3.0.86
         version: 3.0.86(zod@4.4.3)
@@ -180,13 +177,13 @@ importers:
       rxjs:
         specifier: 7.8.1
         version: 7.8.1
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
       ws:
         specifier: ^8.21.0
         version: 8.21.0
     devDependencies:
+      '@agework/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@eslint/eslintrc':
         specifier: ^3.2.0
         version: 3.3.5

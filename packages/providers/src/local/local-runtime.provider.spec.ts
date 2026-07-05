@@ -24,8 +24,7 @@ const CONFIG: RuntimeConfig = {
   runtimeLogHostPath: "/tmp/agework-logs/runtime",
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
   local: {
-    workerEntryPath: "/pkg/worker/main.ts",
-    tsxCliPath: "/pkg/tsx/cli",
+    runtimeEntryPath: "/pkg/agework-runtime/main.mjs",
   },
   openSandbox: {
     domain: "opensandbox.test",
@@ -80,10 +79,11 @@ describe("LocalRuntimeProvider", () => {
       );
 
       expect(forkMock.fork).toHaveBeenCalledWith(
-        "/pkg/tsx/cli",
-        ["/pkg/worker/main.ts"],
+        "/pkg/agework-runtime/main.mjs",
+        [],
         expect.objectContaining({
           env: expect.objectContaining({
+            AGEWORK_WORKER_ROLE: "worker",
             AGEWORK_WORKER_API_BASE: "http://127.0.0.1:3000/api/v1",
             AGEWORK_WORKER_START_TOKEN: "provisioner-tok",
             AGEWORK_WORKER_RUN_START_TOKEN: expect.any(String),

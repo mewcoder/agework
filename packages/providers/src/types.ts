@@ -28,11 +28,11 @@ export type OpenSandboxConnectionConfig = {
   useServerProxy: boolean;
 };
 
-/** local provider 的 config:worker 入口路径由 server require.resolve 后传入,
- *  包因此不依赖 @agework/worker。 */
+/** local provider 的 config:agework-runtime 产物入口(纯 JS bundle,ESM)的绝对路径,
+ *  由 server 备好后传入。provider 用 `node` fork 它并注入 AGEWORK_WORKER_ROLE=worker,
+ *  因此包既不依赖 @agework/worker 也不依赖 tsx。 */
 export type LocalProviderConfig = {
-  workerEntryPath: string;
-  tsxCliPath: string;
+  runtimeEntryPath: string;
 };
 
 /** createRuntimeResolver 的唯一入参。 */

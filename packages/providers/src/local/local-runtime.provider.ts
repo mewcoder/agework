@@ -15,8 +15,9 @@ import type {
  * `stop` 与 `destroy` 都是杀进程——`stop` 杀内存中跟踪的 channel,`destroy`
  * 在无内存态时(如 server 重启后清孤儿)按 `runtimeInstanceId` 里的 pid 杀。
  *
- * worker 入口路径与 tsx CLI 路径由 server 解析后经 config 传入,包因此不依赖
- * `@agework/worker`。
+ * fork 的目标是 agework-runtime 产物 bundle(纯 JS,ESM),用 `node` 直跑并注入
+ * `AGEWORK_WORKER_ROLE=worker` 让同一产物以 worker 角色启动。入口路径由 server
+ * 经 config 传入,包因此既不依赖 `@agework/worker` 也不依赖 tsx。
  */
 export class LocalRuntimeProvider implements RuntimeProvider {
   readonly type = "local";
@@ -32,11 +33,11 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     onExit?: () => void
   ): Promise<{ runtimeInstanceId: string }> {
     const startToken = randomUUID();
-    const { tsxCliPath, workerEntryPath } = this.config.local;
-    const child = fork(tsxCliPath, [workerEntryPath], {
+    const child = fork(this.config.local.runtimeEntryPath, [], {
       env: {
         ...process.env,
         ...ctx.workerEnv,
+        AGEWORK_WORKER_ROLE: "worker",
         AGEWORK_WORKER_API_BASE: this.config.serverBaseUrl,
         AGEWORK_WORKER_RUN_START_TOKEN: startToken,
       },
