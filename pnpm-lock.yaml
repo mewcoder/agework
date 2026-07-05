@@ -47,6 +47,9 @@ importers:
 
   apps/runtime:
     dependencies:
+      '@agework/providers':
+        specifier: workspace:*
+        version: link:../../packages/providers
       '@agework/shared':
         specifier: workspace:*
         version: link:../../packages/shared

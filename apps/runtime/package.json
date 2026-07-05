@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@agework/providers": "workspace:*",
     "@agework/shared": "workspace:*",
     "@agework/worker": "workspace:*",
     "ws": "^8.21.0"

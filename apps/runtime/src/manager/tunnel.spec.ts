@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { once } from "node:events";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import { RUNTIME_TUNNEL_CLOSE_GONE } from "@agework/shared/protocol";
-import { TunnelClient } from "./tunnel.js";
+import { TunnelClient, type LaunchDispatcher } from "./tunnel.js";
 import type { ManagerConfig } from "../config.js";
 
 type ServerConnection = {
@@ -53,14 +53,32 @@ describe("TunnelClient", () => {
     wss.close();
   });
 
-  function makeClient(onGone = vi.fn()) {
+  function makeDispatcher(): LaunchDispatcher {
+    return {
+      launch: vi.fn().mockResolvedValue({ runtimeInstanceId: "container-1" }),
+      stop: vi.fn().mockResolvedValue(undefined),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
+  }
+
+  function makeClient(
+    onGone = vi.fn(),
+    dispatcher: LaunchDispatcher = makeDispatcher()
+  ) {
     const config: ManagerConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
       runtimeType: "docker",
+      runtimeLogHostPath: "/logs",
+      workerImage: "agework/runtime:latest",
     };
-    client = new TunnelClient({ config, onGone, reconnectBaseDelayMs: 20 });
-    return { client, onGone };
+    client = new TunnelClient({
+      config,
+      dispatcher,
+      onGone,
+      reconnectBaseDelayMs: 20,
+    });
+    return { client, onGone, dispatcher };
   }
 
   it("connects with the pairing token, registers, then heartbeats at the given interval", async () => {
@@ -120,5 +138,82 @@ describe("TunnelClient", () => {
     client!.stop();
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(connections).toHaveLength(1);
+  });
+
+  describe("launch/stop/destroy RPC", () => {
+    async function connectAndDrainRegister() {
+      client!.start();
+      await vi.waitFor(() => expect(connections).toHaveLength(1));
+      await connections[0].nextMessage(); // drain the register message
+      return connections[0];
+    }
+
+    it("dispatches a runtime.launch request to the dispatcher and replies with its result", async () => {
+      const { dispatcher } = makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-1",
+          method: "runtime.launch",
+          params: { ownerId: "owner-1" },
+        })
+      );
+
+      await expect(conn.nextMessage()).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: "req-1",
+        result: { runtimeInstanceId: "container-1" },
+      });
+      expect(dispatcher.launch).toHaveBeenCalledWith({ ownerId: "owner-1" });
+    });
+
+    it("dispatches runtime.stop/runtime.destroy and replies with a null result", async () => {
+      const { dispatcher } = makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-2",
+          method: "runtime.stop",
+          params: { ownerId: "owner-1", runtimeInstanceId: "c1" },
+        })
+      );
+
+      await expect(conn.nextMessage()).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: "req-2",
+        result: null,
+      });
+      expect(dispatcher.stop).toHaveBeenCalledWith({
+        ownerId: "owner-1",
+        runtimeInstanceId: "c1",
+      });
+    });
+
+    it("replies with an RPC error when the dispatcher rejects", async () => {
+      const dispatcher = makeDispatcher();
+      (dispatcher.launch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+        new Error("docker daemon unreachable")
+      );
+      makeClient(vi.fn(), dispatcher);
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-3",
+          method: "runtime.launch",
+          params: {},
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        error: { message: string };
+      };
+      expect(response.error.message).toBe("docker daemon unreachable");
+    });
   });
 });

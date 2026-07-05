@@ -1,6 +1,8 @@
 export const RUNTIME_TYPES = ["local", "docker", "opensandbox"] as const;
 export type RuntimeType = (typeof RUNTIME_TYPES)[number];
 
+const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
+
 export interface ManagerConfig {
   /** server 基地址(含 API base path,如 http://host:3000/api/v1),与 worker 的 AGEWORK_SERVER_BASE_URL 同语义。 */
   serverBaseUrl: string;
@@ -8,11 +10,21 @@ export interface ManagerConfig {
   token: string;
   /** 本实例定死的一种运行方式(实例专一,不做全能节点)。 */
   runtimeType: RuntimeType;
+  /** 载体日志目录(容器内/宿主机路径,按 runtimeType 语义同 packages/providers)。 */
+  runtimeLogHostPath: string;
+  /** docker/opensandbox 起 worker 载体用的镜像 tag;local 不用。 */
+  workerImage?: string;
+  /** local 专用:起 worker 子进程的入口路径 + tsx CLI 路径。见 packages/providers
+   *  的 LocalProviderConfig——Registered+local 场景下,manager 打包成单文件后没有
+   *  独立的 @agework/worker 模块可 require.resolve,需要显式指定,不猜测。 */
+  workerEntryPath?: string;
+  tsxCliPath?: string;
 }
 
 /**
  * manager 启动配置:CLI 参数优先,env 兜底。
- * `agework-runtime --server <url> --token <配对码> --runtime <type>`
+ * `agework-runtime --server <url> --token <配对码> --runtime <type>
+ *   [--worker-image <tag>] [--log-dir <path>] [--worker-entry <path>] [--tsx-cli <path>]`
  */
 export function resolveManagerConfig(
   argv: string[],
@@ -22,6 +34,11 @@ export function resolveManagerConfig(
   const serverBaseUrl = args.get("server") ?? env.AGEWORK_SERVER_BASE_URL;
   const token = args.get("token") ?? env.AGEWORK_RUNTIME_TOKEN;
   const runtimeType = args.get("runtime") ?? env.AGEWORK_RUNTIME_TYPE;
+  const runtimeLogHostPath =
+    args.get("log-dir") ?? env.AGEWORK_RUNTIME_LOG_DIR ?? DEFAULT_LOG_DIR;
+  const workerImage = args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
+  const workerEntryPath = args.get("worker-entry") ?? env.AGEWORK_RUNTIME_WORKER_ENTRY;
+  const tsxCliPath = args.get("tsx-cli") ?? env.AGEWORK_RUNTIME_TSX_CLI;
 
   if (!serverBaseUrl) {
     throw new Error("missing server url: pass --server or AGEWORK_SERVER_BASE_URL");
@@ -34,10 +51,25 @@ export function resolveManagerConfig(
       `missing or invalid runtime type: pass --runtime <${RUNTIME_TYPES.join("|")}> or AGEWORK_RUNTIME_TYPE`
     );
   }
+  if (runtimeType !== "local" && !workerImage) {
+    throw new Error(
+      `missing worker image for --runtime ${runtimeType}: pass --worker-image or AGEWORK_RUNTIME_WORKER_IMAGE`
+    );
+  }
+  if (runtimeType === "local" && (!workerEntryPath || !tsxCliPath)) {
+    throw new Error(
+      "missing local worker entry: pass --worker-entry and --tsx-cli (or AGEWORK_RUNTIME_WORKER_ENTRY / AGEWORK_RUNTIME_TSX_CLI) for --runtime local"
+    );
+  }
+
   return {
     serverBaseUrl: serverBaseUrl.replace(/\/+$/, ""),
     token,
     runtimeType,
+    runtimeLogHostPath,
+    ...(workerImage ? { workerImage } : {}),
+    ...(workerEntryPath ? { workerEntryPath } : {}),
+    ...(tsxCliPath ? { tsxCliPath } : {}),
   };
 }
 

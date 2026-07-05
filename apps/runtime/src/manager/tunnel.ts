@@ -3,12 +3,30 @@ import {
   RUNTIME_TUNNEL_CLOSE_GONE,
   type RuntimeTunnelRegisterMessage,
   type RuntimeTunnelServerMessage,
+  type RuntimeTunnelRpcRequest,
 } from "@agework/shared/protocol";
+import {
+  isRpcRequest,
+  rpcError,
+  rpcSuccess,
+} from "@agework/shared/protocol/rpc";
 import {
   resolveManagerConfig,
   type ManagerConfig,
   type RuntimeType,
 } from "../config.js";
+import { Launcher } from "./launcher.js";
+import { LiveCarrierStore } from "./registry.js";
+
+/** launcher.ts 暴露的最小契约——tunnel 只依赖这三个方法,不认识 Launcher 内部
+ *  怎么装配 providers,方便测试时喂一个假 dispatcher。 */
+export interface LaunchDispatcher {
+  launch(
+    params: RuntimeTunnelRpcRequest["params"]
+  ): Promise<{ runtimeInstanceId: string }>;
+  stop(params: RuntimeTunnelRpcRequest["params"]): Promise<void>;
+  destroy(params: RuntimeTunnelRpcRequest["params"]): Promise<void>;
+}
 
 /** 每种运行方式支持的隔离档(注册时上报的能力矩阵)。local 无容器,只有 host 档。 */
 const ISOLATION_SCOPES: Record<RuntimeType, string[]> = {
@@ -25,6 +43,8 @@ function log(message: string, level: "info" | "error" = "info"): void {
 
 export interface TunnelClientOptions {
   config: ManagerConfig;
+  /** 收到的 launch/stop/destroy RPC 转给它执行;它已知自己固定的 runtimeType。 */
+  dispatcher: LaunchDispatcher;
   /** runtime 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
   onGone: () => void;
   /** 重连退避起始值,仅测试用;默认 1s,翻倍封顶 30s。 */
@@ -32,8 +52,9 @@ export interface TunnelClientOptions {
 }
 
 /**
- * 控制隧道客户端:出站 WS 连 server,注册/上报能力/心跳/断线重连,一条连接一个状态机。
- * Phase 2 在同一连接上叠加 launch/stop RPC 的接收。
+ * 控制隧道客户端:出站 WS 连 server,注册/上报能力/心跳/断线重连,一条连接一个状态机;
+ * 同一条连接上还接收 server 下发的 launch/stop/destroy JSON-RPC 请求,转给
+ * dispatcher(= Launcher)执行,回一个 RpcResponse。
  */
 export class TunnelClient {
   private ws?: WebSocket;
@@ -91,21 +112,58 @@ export class TunnelClient {
   }
 
   private onMessage(ws: WebSocket, data: RawData): void {
-    let message: RuntimeTunnelServerMessage;
+    let parsed: unknown;
     try {
-      message = JSON.parse(
+      parsed = JSON.parse(
         Buffer.isBuffer(data) ? data.toString("utf8") : String(data)
-      ) as RuntimeTunnelServerMessage;
+      );
     } catch {
       log("malformed tunnel message from server", "error");
       return;
     }
+
+    if (isRpcRequest(parsed)) {
+      this.onRpcRequest(ws, parsed as RuntimeTunnelRpcRequest);
+      return;
+    }
+
+    const message = parsed as RuntimeTunnelServerMessage;
     if (message.type === "registered") {
       log(
         `registered as runtime ${message.runtimeId} (${this.options.config.runtimeType})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
       this.scheduleHeartbeat(ws, message.heartbeatIntervalSeconds);
+    }
+  }
+
+  private onRpcRequest(ws: WebSocket, request: RuntimeTunnelRpcRequest): void {
+    const handled = this.dispatch(request).then(
+      (result) => rpcSuccess(request.id, result ?? null),
+      (err: unknown) =>
+        rpcError(request.id, {
+          code: -32000,
+          message: err instanceof Error ? err.message : String(err),
+        })
+    );
+    void handled.then((response) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(response));
+      }
+    });
+  }
+
+  private dispatch(
+    request: RuntimeTunnelRpcRequest
+  ): Promise<{ runtimeInstanceId: string } | void> {
+    const dispatcher = this.options.dispatcher;
+    switch (request.method) {
+      case "runtime.launch":
+        return dispatcher.launch(request.params);
+      case "runtime.stop":
+        return dispatcher.stop(request.params);
+      case "runtime.destroy":
+        return dispatcher.destroy(request.params);
     }
   }
 
@@ -155,11 +213,13 @@ export class TunnelClient {
   }
 }
 
-/** manager 常驻入口:解析配置、起隧道、挂信号处理。 */
+/** manager 常驻入口:解析配置、装配 launcher、起隧道、挂信号处理。 */
 export async function runManager(): Promise<void> {
   const config = resolveManagerConfig(process.argv.slice(2), process.env);
+  const dispatcher = new Launcher(config, new LiveCarrierStore());
   const client = new TunnelClient({
     config,
+    dispatcher,
     onGone: () => process.exit(0),
   });
   const shutdown = () => {
