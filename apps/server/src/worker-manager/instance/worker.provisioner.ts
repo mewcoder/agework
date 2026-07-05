@@ -134,7 +134,9 @@ export class WorkerProvisioner {
 
       const { runtimeInstanceId } = await withTimeout(
         (async () => {
-          const launched = await this.runtimeService.start(ctx);
+          const launched = await this.runtimeService
+            .runtimeFor(null)
+            .start(ctx);
           await this.handshakeStore.waitForRegister(ownerId, startToken);
           return launched;
         })(),
@@ -188,12 +190,16 @@ export class WorkerProvisioner {
 
   /** owner 仍在(fence 判死 / admin 手动停):停 worker,保留载体。 */
   stop(ref: RuntimeInstanceRef): Promise<void> {
-    return this.finalize(ref, (r) => this.runtimeService.stop(r));
+    return this.finalize(ref, (r) =>
+      this.runtimeService.runtimeFor(null).stop(r)
+    );
   }
 
   /** owner 永久消失(删 workspace / user):删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> {
-    return this.finalize(ref, (r) => this.runtimeService.destroy(r));
+    return this.finalize(ref, (r) =>
+      this.runtimeService.runtimeFor(null).destroy(r)
+    );
   }
 
   /** 收尾公共编排:清内存态 + command dispatcher + provider 物理动作 + registry

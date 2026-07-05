@@ -1,8 +1,8 @@
 import type { RuntimeConfig } from "@agework/providers";
-import { ConfigService } from "../config/config.service";
-import { DEFAULT_WORKER_IMAGE } from "../config/registry/defaults";
-import { EnvKey } from "../config/registry/env-key";
-import { resolveApiBasePath } from "../common/path.util";
+import { ConfigService } from "../../config/config.service";
+import { DEFAULT_WORKER_IMAGE } from "../../config/registry/defaults";
+import { EnvKey } from "../../config/registry/env-key";
+import { resolveApiBasePath } from "../../common/path.util";
 
 /**
  * 把 server 的 ConfigService 拼成 `@agework/providers` 需要的 RuntimeConfig。

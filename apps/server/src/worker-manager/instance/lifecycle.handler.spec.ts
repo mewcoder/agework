@@ -36,10 +36,11 @@ function makeProvisioner(overrides: Record<string, unknown> = {}) {
 }
 
 function makeRuntimeService(overrides: Record<string, unknown> = {}) {
-  return {
+  const runtime = {
     destroy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
+  return { ...runtime, runtimeFor: vi.fn().mockReturnValue(runtime) };
 }
 
 function makeLivenessStore(overrides: Record<string, unknown> = {}) {

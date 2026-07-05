@@ -58,7 +58,7 @@ const dockerInput = (runId = "run-1") =>
 
 function make(d = deps()) {
   return new WorkerProvisioner(
-    d.runtime as any,
+    { runtimeFor: () => d.runtime } as any,
     d.registry as any,
     d.handshake as any,
     d.dispatcher as any,

@@ -29,7 +29,7 @@ describe("RuntimeModule wiring", () => {
   });
 
   it("assembles the provider resolver from config and resolves RuntimeService", async () => {
-    // RuntimeService 构造期 createRuntimeResolver(toRuntimeConfig(config)) 不抛,
+    // LocalRuntime 构造期 createRuntimeResolver(toRuntimeConfig(config)) 不抛,
     // 即证明 provider 装配从 ConfigService 成功建成。
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 

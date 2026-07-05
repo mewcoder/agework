@@ -1,31 +1,31 @@
 import { Injectable } from "@nestjs/common";
 import type { RuntimeSpec } from "@agework/shared/protocol";
-import {
-  createRuntimeResolver,
-  resolveRuntimeSpec,
-  type RuntimeProvider,
-  type RuntimeType,
-  type RuntimeLaunchContext,
-  type RuntimeInstanceRef,
-  type RuntimeSpecInput,
-} from "@agework/providers";
+import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
-import { toRuntimeConfig } from "./runtime-config";
+import { LocalRuntime } from "./local/local-runtime";
+import type { Runtime } from "./runtime.types";
 
 /**
- * Runtime 层对上层的门面:按 runtimeType 分发给 `@agework/providers` 装配好的 provider
- * + placement 计算 + 运行时策略。runtime provider 实现全在 `@agework/providers` 包内,
- * server 构造时经 resolver 拿到 RuntimeProvider 接口实例,不认识具体 provider 类。
+ * Runtime 领域门面:解析目标 `Runtime` 实现 + placement 计算 + 运行时策略。
+ * 起/停/毁 worker 的具体分发在 `Runtime` 实现内(见 `runtime.types.ts`)。
  */
 @Injectable()
 export class RuntimeService {
-  /** 建一次、进程内长活的 provider resolver(get/throw 收在包闭包内)。 */
-  private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly localRuntime: LocalRuntime
+  ) {}
 
-  constructor(private readonly configService: ConfigService) {
-    this.resolveProvider = createRuntimeResolver(
-      toRuntimeConfig(configService)
-    );
+  /**
+   * 解析目标 `Runtime` 实现(server 起/停/毁 worker 的唯一入口)。
+   * `runtimeId=null` = Managed(本机 in-process,现状唯一路径);
+   * 非 null 的 Registered runtime(`RemoteRuntime`)Phase 2 接入。
+   */
+  runtimeFor(runtimeId: string | null): Runtime {
+    if (runtimeId !== null) {
+      throw new Error(`Registered runtime not supported yet: ${runtimeId}`);
+    }
+    return this.localRuntime;
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
@@ -42,20 +42,5 @@ export class RuntimeService {
       allowedIsolationScopes: this.configService.getAllowedIsolationScopes(),
       idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
     };
-  }
-
-  /** 建环境 + 起 worker,返回运行时实例 id。 */
-  start(ctx: RuntimeLaunchContext): Promise<{ runtimeInstanceId: string }> {
-    return this.resolveProvider(ctx.runtimeType).start(ctx);
-  }
-
-  /** owner 仍在:停 worker,保留载体。 */
-  stop(ref: RuntimeInstanceRef): Promise<void> | void {
-    return this.resolveProvider(ref.runtimeType).stop(ref);
-  }
-
-  /** owner 永久消失:删除载体。 */
-  destroy(ref: RuntimeInstanceRef): Promise<void> | void {
-    return this.resolveProvider(ref.runtimeType).destroy(ref);
   }
 }

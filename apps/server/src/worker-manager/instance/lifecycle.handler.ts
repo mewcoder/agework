@@ -79,7 +79,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
       await this.registry.findRunningByRuntimeType("local");
     for (const row of staleLocalRows) {
       try {
-        await this.runtimeService.destroy({
+        await this.runtimeService.runtimeFor(null).destroy({
           runtimeType: "local",
           ownerId: row.ownerId,
           runtimeInstanceId: row.runtimeInstanceId,
