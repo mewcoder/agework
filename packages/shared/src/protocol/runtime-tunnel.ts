@@ -35,5 +35,5 @@ export interface RuntimeTunnelRegisteredMessage {
 
 export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
 
-/** 隧道 WS 关闭码:runtime 已被删除(撤 token),manager 收到后应退出而不是重连。 */
-export const RUNTIME_TUNNEL_CLOSE_GONE = 4410;
+// 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,
+// 内联在 protocol/index.ts(shared 源码直连消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。

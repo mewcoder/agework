@@ -102,4 +102,7 @@ export type {
   RuntimeTunnelRegisteredMessage,
   RuntimeTunnelServerMessage,
 } from "./runtime-tunnel";
-export { RUNTIME_TUNNEL_CLOSE_GONE } from "./runtime-tunnel";
+
+/** 隧道 WS 关闭码:runtime 已被删除(撤 token),manager 收到后应退出而不是重连。
+ *  (运行时值必须内联在本入口文件,原因见 common/index.ts 的 generateId 注释。) */
+export const RUNTIME_TUNNEL_CLOSE_GONE = 4410;
