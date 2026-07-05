@@ -159,8 +159,7 @@ describe("Launcher", () => {
       ...dockerConfig,
       runtimeType: "local",
       workerImage: undefined,
-      workerEntryPath: "/app/dist/main.js",
-      tsxCliPath: "/app/dist/main.js",
+      runtimeEntryPath: "/app/dist/main.js",
     };
     const launcher = new Launcher(localConfig, registry);
     const localParams: RuntimeLaunchRpcParams = {

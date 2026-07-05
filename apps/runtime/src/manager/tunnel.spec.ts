@@ -92,6 +92,7 @@ describe("TunnelClient", () => {
       type: "register",
       runtimeType: "docker",
       capabilities: { isolationScopes: ["user", "workspace"] },
+      version: "0.0.1",
     });
 
     connections[0].ws.send(

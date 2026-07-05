@@ -17,6 +17,7 @@ import {
   rpcRequestToCommandMessage,
   upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
+import { AGEWORK_VERSION } from "@agework/shared";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
@@ -195,6 +196,7 @@ export class WorkerHttpTransport {
     const body: WorkerRegisterRequest = {
       startToken: process.env.AGEWORK_WORKER_START_TOKEN ?? "",
       pid: process.pid,
+      version: AGEWORK_VERSION,
     };
     const res = await fetch(url, {
       method: "POST",

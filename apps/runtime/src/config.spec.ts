@@ -27,21 +27,35 @@ describe("resolveManagerConfig", () => {
     });
   });
 
-  it("falls back to env and prefers flags over env (local: worker-entry/tsx-cli required)", () => {
-    const config = resolveManagerConfig(["--token", "flag-token"], {
-      AGEWORK_SERVER_BASE_URL: "http://env:3000/api/v1",
-      AGEWORK_RUNTIME_TOKEN: "env-token",
-      AGEWORK_RUNTIME_TYPE: "local",
-      AGEWORK_RUNTIME_WORKER_ENTRY: "/app/dist/main.js",
-      AGEWORK_RUNTIME_TSX_CLI: "/app/dist/main.js",
-    });
+  it("falls back to env and prefers flags over env (local: runtime-entry optional)", () => {
+    const config = resolveManagerConfig(
+      ["--token", "flag-token", "--runtime-entry", "/path/flag.js"],
+      {
+        AGEWORK_SERVER_BASE_URL: "http://env:3000/api/v1",
+        AGEWORK_RUNTIME_TOKEN: "env-token",
+        AGEWORK_RUNTIME_TYPE: "local",
+        AGEWORK_RUNTIME_ENTRY: "/path/env.js",
+      }
+    );
     expect(config).toEqual({
       serverBaseUrl: "http://env:3000/api/v1",
       token: "flag-token",
       runtimeType: "local",
       runtimeLogHostPath: DEFAULT_LOG_DIR,
-      workerEntryPath: "/app/dist/main.js",
-      tsxCliPath: "/app/dist/main.js",
+      runtimeEntryPath: "/path/flag.js",
+    });
+  });
+
+  it("local without runtime-entry defaults to self (allowed)", () => {
+    const config = resolveManagerConfig(
+      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
+      {}
+    );
+    expect(config).toEqual({
+      serverBaseUrl: "http://h/api/v1",
+      token: "t",
+      runtimeType: "local",
+      runtimeLogHostPath: DEFAULT_LOG_DIR,
     });
   });
 
@@ -97,13 +111,12 @@ describe("resolveManagerConfig", () => {
     ).toThrow("missing worker image");
   });
 
-  it("rejects local without worker-entry/tsx-cli", () => {
-    expect(() =>
-      resolveManagerConfig(
-        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
-        {}
-      )
-    ).toThrow("missing local worker entry");
+  it("accepts local with no --runtime-entry (defaults later to process.argv[1])", () => {
+    const config = resolveManagerConfig(
+      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
+      {}
+    );
+    expect(config.runtimeType).toBe("local");
   });
 
   it("rejects a flag without value", () => {

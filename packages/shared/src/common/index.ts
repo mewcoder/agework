@@ -1,6 +1,14 @@
 import { v7 } from "uuid";
 
 /**
+ * agework 全局版本号,内联在本入口文件(原因同 generateId:shared 以源码形式被
+ * 消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。worker/manager 在 register
+ * 握手时带上自己的值,server 比对自己的值:不一致只告警+放行,不阻断(主要兜底
+ * Registered 远程 manager 单独构建后与 server 版本漂移的情形)。每次发版手动 bump。
+ */
+export const AGEWORK_VERSION = "0.0.1";
+
+/**
  * 生成 UUID v7(时序有序)。前后端统一 id 入口。
  *
  * 选 v7 而非 v4:PG 原生 uuid 类型(16字节)+ 时序有序(id 排序=创建序)+ B-tree 写入局部性。

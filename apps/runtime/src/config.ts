@@ -14,17 +14,17 @@ export interface ManagerConfig {
   runtimeLogHostPath: string;
   /** docker/opensandbox 起 worker 载体用的镜像 tag;local 不用。 */
   workerImage?: string;
-  /** local 专用:起 worker 子进程的入口路径 + tsx CLI 路径。见 packages/providers
-   *  的 LocalProviderConfig——Registered+local 场景下,manager 打包成单文件后没有
-   *  独立的 @agework/worker 模块可 require.resolve,需要显式指定,不猜测。 */
-  workerEntryPath?: string;
-  tsxCliPath?: string;
+  /** local 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
+   *  不传则默认 fork manager 自身(process.argv[1])——manager 与 worker 是同一
+   *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
+   *  的 LocalProviderConfig。Registered+local 场景下镜像里只有一份 bundle,默认即正确。 */
+  runtimeEntryPath?: string;
 }
 
 /**
  * manager 启动配置:CLI 参数优先,env 兜底。
  * `agework-runtime --server <url> --token <配对码> --runtime <type>
- *   [--worker-image <tag>] [--log-dir <path>] [--worker-entry <path>] [--tsx-cli <path>]`
+ *   [--worker-image <tag>] [--log-dir <path>] [--runtime-entry <path>]`
  */
 export function resolveManagerConfig(
   argv: string[],
@@ -37,8 +37,8 @@ export function resolveManagerConfig(
   const runtimeLogHostPath =
     args.get("log-dir") ?? env.AGEWORK_RUNTIME_LOG_DIR ?? DEFAULT_LOG_DIR;
   const workerImage = args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
-  const workerEntryPath = args.get("worker-entry") ?? env.AGEWORK_RUNTIME_WORKER_ENTRY;
-  const tsxCliPath = args.get("tsx-cli") ?? env.AGEWORK_RUNTIME_TSX_CLI;
+  const runtimeEntryPath =
+    args.get("runtime-entry") ?? env.AGEWORK_RUNTIME_ENTRY;
 
   if (!serverBaseUrl) {
     throw new Error("missing server url: pass --server or AGEWORK_SERVER_BASE_URL");
@@ -56,11 +56,6 @@ export function resolveManagerConfig(
       `missing worker image for --runtime ${runtimeType}: pass --worker-image or AGEWORK_RUNTIME_WORKER_IMAGE`
     );
   }
-  if (runtimeType === "local" && (!workerEntryPath || !tsxCliPath)) {
-    throw new Error(
-      "missing local worker entry: pass --worker-entry and --tsx-cli (or AGEWORK_RUNTIME_WORKER_ENTRY / AGEWORK_RUNTIME_TSX_CLI) for --runtime local"
-    );
-  }
 
   return {
     serverBaseUrl: serverBaseUrl.replace(/\/+$/, ""),
@@ -68,8 +63,7 @@ export function resolveManagerConfig(
     runtimeType,
     runtimeLogHostPath,
     ...(workerImage ? { workerImage } : {}),
-    ...(workerEntryPath ? { workerEntryPath } : {}),
-    ...(tsxCliPath ? { tsxCliPath } : {}),
+    ...(runtimeEntryPath ? { runtimeEntryPath } : {}),
   };
 }
 

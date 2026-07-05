@@ -250,4 +250,6 @@ export type AcquireInstanceResult =
 export type WorkerRegisterRequest = {
   startToken: string;
   pid?: number;
+  /** worker 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
+  version?: string;
 };

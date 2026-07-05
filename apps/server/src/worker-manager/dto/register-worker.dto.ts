@@ -8,4 +8,8 @@ export class RegisterWorkerDto {
   @IsOptional()
   @IsInt()
   pid?: number;
+
+  @IsOptional()
+  @IsString()
+  version?: string;
 }

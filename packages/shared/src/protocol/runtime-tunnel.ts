@@ -18,6 +18,8 @@ export interface RuntimeTunnelRegisterMessage {
   type: "register";
   runtimeType: string;
   capabilities: RuntimeCapabilities;
+  /** manager 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
+  version?: string;
 }
 
 /** manager → server:心跳。 */

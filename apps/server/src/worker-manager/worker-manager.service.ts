@@ -32,6 +32,7 @@ import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { safeLogJson } from "../common/logging";
 import { swallow } from "../common/swallow";
+import { AGEWORK_VERSION } from "@agework/shared";
 
 /**
  * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
@@ -103,6 +104,11 @@ export class WorkerManagerService {
     if (!accepted) {
       throw new BadRequestException(
         `no pending launch handshake for owner ${ownerId}, or token mismatch`
+      );
+    }
+    if (body.version && body.version !== AGEWORK_VERSION) {
+      this.logger.warn(
+        `worker version mismatch for owner ${ownerId}: worker=${body.version} server=${AGEWORK_VERSION} (允许接入,注意 Registered 远程 manager 单独构建后的漂移)`
       );
     }
     return { ok: true };

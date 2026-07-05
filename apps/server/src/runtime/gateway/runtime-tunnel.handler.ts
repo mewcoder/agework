@@ -23,6 +23,7 @@ import {
 import { getApiContext, ConfigService } from "../../config/config.service";
 import { resolveApiBasePath } from "../../common/path.util";
 import { RuntimeRepository } from "../runtime.repository";
+import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
 const CLOSE_REPLACED = 4409;
@@ -224,6 +225,11 @@ export class RuntimeTunnelHandler
         if (!found) {
           ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
           return;
+        }
+        if (message.version && message.version !== AGEWORK_VERSION) {
+          this.logger.warn(
+            `runtime ${runtimeId} version mismatch: manager=${message.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
+          );
         }
         const reply: RuntimeTunnelRegisteredMessage = {
           type: "registered",

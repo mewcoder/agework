@@ -10,6 +10,7 @@ import {
   rpcError,
   rpcSuccess,
 } from "@agework/shared/protocol/rpc";
+import { AGEWORK_VERSION } from "@agework/shared";
 import {
   resolveManagerConfig,
   type ManagerConfig,
@@ -97,6 +98,7 @@ export class TunnelClient {
         capabilities: {
           isolationScopes: ISOLATION_SCOPES[this.options.config.runtimeType],
         },
+        version: AGEWORK_VERSION,
       };
       ws.send(JSON.stringify(register));
     });

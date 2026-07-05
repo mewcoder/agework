@@ -87,8 +87,9 @@ function toRuntimeConfig(config: ManagerConfig): RuntimeConfig {
     runtimeLogHostPath: config.runtimeLogHostPath,
     serverBaseUrl: config.serverBaseUrl,
     local: {
-      workerEntryPath: config.workerEntryPath ?? "",
-      tsxCliPath: config.tsxCliPath ?? "",
+      // 默认 fork manager 自身(同一产物,ROLE=worker 角色启动)——
+      // Registered+local 场景下 manager 与 worker 共用同一 bundle。
+      runtimeEntryPath: config.runtimeEntryPath ?? process.argv[1] ?? "",
     },
     // 本 manager 实例专一,不用 opensandbox 时这些字段是未用的占位值——
     // createRuntimeResolver 仍会装配 OpenSandboxRuntimeProvider(包的唯一装配
