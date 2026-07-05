@@ -36,6 +36,7 @@ model User {
   workspaces         Workspace[]
   modelProviders     ModelProvider[]
   sessions           Session[]
+  runtimes           Runtime[]
 }
 
 /// 服务端登录会话：承载 refresh token 生命周期。只存 refresh token 的 hash，
@@ -252,4 +253,27 @@ model WorkspaceWorkerBinding {
   updatedAt        DateTime       @updatedAt
 
   @@index([workerInstanceId])
+}
+
+/// Registered Runtime 部署实例（远程机器上的 agework-runtime，出站注册到 server）。
+/// 不是 carrier：与 WorkerInstance（carrier↔worker 1:1）分开（ADR-0001）。
+/// Managed（本机 in-process）不占行——runtimeId=null 即 Managed。
+model Runtime {
+  id              String    @id
+  name            String
+  kind            String    @default("registered")
+  // 注册时由 manager 上报（--runtime 定死一种），创建配对时未知故可空。
+  runtimeType     String?
+  ownerId         String
+  owner           User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  status          String    @default("offline")
+  lastHeartbeatAt DateTime?
+  // 配对 token 的 SHA-256（token 高熵随机，明文只在创建响应里出现一次）。唯一约束便于按 token 反查。
+  tokenHash       String    @unique
+  // 能力矩阵：{ isolationScopes: string[] }，注册时上报。
+  capabilities    Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([ownerId, name])
 }

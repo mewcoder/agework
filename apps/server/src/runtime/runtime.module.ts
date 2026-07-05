@@ -1,16 +1,27 @@
 import { Module } from "@nestjs/common";
 
 import { RuntimeService } from "./runtime.service";
+import { RuntimeController } from "./runtime.controller";
+import { RuntimeRepository } from "./runtime.repository";
 import { LocalRuntime } from "./local/local-runtime";
+import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
+import { RuntimeLivenessWatchdog } from "./gateway/runtime-liveness.watchdog";
 
 /**
- * Runtime 领域的组合根:门面 Service + Managed 实现。`LocalRuntime` 是 internal
- * provider(不 export,上层经 `RuntimeService.runtimeFor()` 拿 `Runtime` 接口);
- * provider 装配(ConfigService → resolver)收在 `LocalRuntime` 构造函数内,
- * provider 实现与契约全在 `@agework/providers` 包里。
+ * Runtime 领域的组合根:门面 Service + Managed 实现 + Registered 配对/隧道。
+ * `LocalRuntime`(Managed in-process 实现)、`RuntimeTunnelHandler`(隧道 WS 端点)、
+ * `RuntimeLivenessWatchdog`(Runtime 级判死)都是 internal provider,不 export;
+ * 上层经 `RuntimeService.runtimeFor()` 拿 `Runtime` 接口。
  */
 @Module({
-  providers: [RuntimeService, LocalRuntime],
+  providers: [
+    RuntimeService,
+    RuntimeRepository,
+    LocalRuntime,
+    RuntimeTunnelHandler,
+    RuntimeLivenessWatchdog,
+  ],
+  controllers: [RuntimeController],
   exports: [RuntimeService],
 })
 export class RuntimeModule {}

@@ -94,3 +94,12 @@ export type {
   WorkerEventMethod,
   WorkerEventRpcNotification,
 } from "./rpc";
+export type {
+  RuntimeCapabilities,
+  RuntimeTunnelClientMessage,
+  RuntimeTunnelHeartbeatMessage,
+  RuntimeTunnelRegisterMessage,
+  RuntimeTunnelRegisteredMessage,
+  RuntimeTunnelServerMessage,
+} from "./runtime-tunnel";
+export { RUNTIME_TUNNEL_CLOSE_GONE } from "./runtime-tunnel";
