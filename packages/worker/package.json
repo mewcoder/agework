@@ -7,7 +7,7 @@
     ".": "./src/main.ts"
   },
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/main.js --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/main.js --banner:js=\"var __createRequire = (await import('module')).createRequire; var require = __createRequire(import.meta.url);\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

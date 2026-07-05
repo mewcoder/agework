@@ -105,12 +105,6 @@ importers:
       '@ai-sdk/openai':
         specifier: ^3.0.67
         version: 3.0.67(zod@4.4.3)
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.158
-        version: 0.3.158(@anthropic-ai/sdk@0.102.0(zod@4.4.3))(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(zod@4.4.3)
-      '@anthropic-ai/sdk':
-        specifier: ^0.102.0
-        version: 0.102.0(zod@4.4.3)
       '@assistant-ui/react-ag-ui':
         specifier: workspace:*
         version: link:../../packages/react-ag-ui
@@ -135,9 +129,6 @@ importers:
       '@nestjs/throttler':
         specifier: ^6.5.0
         version: 6.5.0(@nestjs/common@11.1.24(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.1))(@nestjs/core@11.1.24)(reflect-metadata@0.2.2)
-      '@openai/codex-sdk':
-        specifier: ^0.135.0
-        version: 0.135.0
       '@prisma/adapter-better-sqlite3':
         specifier: ^7.8.0
         version: 7.8.0
