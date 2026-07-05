@@ -16,7 +16,7 @@
 | 0b 依赖倒置 | ✅ 完成 | `84984b0d`(Runtime 接口 + LocalRuntime + 4 seam 走 runtimeFor(null)) |
 | 1 注册骨架 | ✅ 完成 | `aabeee2f`(server:Runtime 表/配对 API/隧道端点/判死)、`c32978f2`(apps/runtime:manager 注册/心跳/重连)、`081df4f3`(shared 值内联修复) |
 | 2 Registered 跑通 | ✅ 完成 | `1377afa7`(providers 回调拆解)、`41e1dd60`(RemoteRuntime+隧道 RPC)、`68a3e93a`(manager launcher/registry) |
-| 3 前端(范围见下) | 🟡 部分完成 | "我的运行环境"配对页已做;workspace 创建器接 runtimeId 未做(用户明确缩小范围,见下) |
+| 3 前端 + 全链路接线 | ✅ 完成 | `0a06e477`(配对页)、`3b344ebd`(Workspace.runtimeId 数据层+校验)、`451bed5e`(run 路径接线+stop/destroy 路由修复)、`d9ff8da7`(workspace-dialog.tsx Registered 分支) |
 | 4 收尾 | ⬜ 未开始 | 前置:§13 产物分发 |
 
 **Phase 2 落地摘要**(两个前置拍板点都按推荐方案定案并已实施):
@@ -71,10 +71,44 @@ Phase 2 的 `@agework/providers` 依赖漏加)。
   create→list→delete→list 全链路,响应结构与前端 TS 类型完全对上。**没有**在真实浏览器里点击
   验证(这个环境没有浏览器自动化工具),这一点如实告知,不谎称"浏览器验证过"。
 
-**下一步(如果继续做完整 Phase 3)**:workspace 创建器加"运行位置"选择(选 Registered Runtime 才
-需要,详见 §8 前端交互设计)、运行时在线状态标签、`Workspace.runtimeId` 加列 + 建 workspace API
-带上、`worker.provisioner.ts` 的 `runtimeFor(null)` 换成读 `workspace.runtimeId`。这几步互相依赖,
-建议放在同一批做,而不是拆碎。
+**Phase 3 后续:workspace 全链路接线(用户确认继续做完整版)**:
+
+在配对页基础上,把 Registered Runtime 真正接进 workspace 创建 + run 触发的完整链路。过程中发现
+并修了两个比"缺功能"更严重的既有正确性缺口:
+
+1. **workspace 目录语义分叉**:`WorkspaceDirectoryHandler.prepareCreate()` 原本对所有 workspace
+   做真实本机文件系统操作(`mkdirSync`/`realpathSync`/`statSync`/`git clone`)。Registered
+   workspace 的目录在远程机器上,server 摸不到——新增 `remote` 分支:必须手填绝对路径、不支持
+   Git 克隆,完全跳过文件系统校验,`directorySource="remote"`、`ownsDirectory=false`(删除不
+   `rmSync`)。
+2. **stop/destroy 从未真正路由到 RemoteRuntime**(比 1 更严重,是静默正确性 bug,不是缺功能):
+   `WorkerProvisioner.stop/destroy` 硬编码 `runtimeFor(null)`,对 Registered runtime 上的 worker,
+   idle timeout / workspace 删除 / fence 判死全部会尝试在本机 docker/进程表操作一个只存在于远程
+   机器的载体,静默失败、永久泄漏,且这条路径此前完全没有被测试覆盖过。修法:`WorkerInstance` 加
+   `runtimeId` 列记录载体绑定的 Registered Runtime,`RuntimeInstanceRef` 加 `targetRuntimeId`,
+   三处构造 ref 的调用点(`worker-manager.service.ts` 两处、`lifecycle.handler.ts` 一处)都补上;
+   顺带发现并修了第三处:重启孤儿回收(`onApplicationBootstrap`)误把 `runtimeType==="local"`
+   当作"一定是 Managed"——但 Registered manager 也能配成 `--runtime local`,已改成只处理
+   `runtimeId` 为空的行,不误杀远程机器上仍然健康的 worker。
+
+其余接线:`RunLauncher.getPlacement()` 对 Registered workspace 跳过部署级 allow-list 校验(那是
+Managed 专属策略,该 workspace 的 runtimeType/isolationScope 已在创建时对着目标 Runtime 自己的
+注册类型/能力矩阵校验过);`workspace-dialog.tsx` 按 Explore 调研的方案 A 加了顶层"运行位置"
+切换,新状态与原 Managed 状态机完全隔离,零配对机器的用户看到的表单不变。
+
+**真机验证**(本轮最扎实的一次):起真实 server + 真实 `apps/runtime` manager(`--runtime local`,
+worker 替身脚本)→ 真实 HTTP 配对(`/runtimes/create`)→ 真实创建 workspace 带 `runtimeId`(响应
+`directorySource="remote"`、`runtimeType` 从目标 Runtime 派生,未验证/未创建任何本机目录)→ 真实
+创建 model provider + conversation → 真实 POST `/conversations/agent/run` 触发一次 run → **manager
+日志(运行在完全独立的进程里)打出 `LocalRuntimeProvider local worker forked` 并带着这次 run 的
+runId**——证明 `workspace.runtimeId` 从真实 HTTP 请求一路经 `getRunContext → RunLauncher →
+WorkerProvisioner → RemoteRuntime → 隧道 RPC → 远程 manager → 真实 fork` 全部走通,不是靠单测
+mock 拼出来的信心。验证完毕清空所有测试数据(workspace/model-provider/runtime)并确认无残留进程。
+
+`pnpm typecheck` + `pnpm build` + 全部 5 个包测试套件(server 832 / web 261 / runtime 26 /
+providers 44 / shared 21,合计 1184)+ eslint 全绿,eslint 剩余问题均为改动前已存在的存量基线
+(server 2 条 floating-promise 警告、web 6 个 shadcn 组件的 react-refresh 错误 + 4 条第三方库
+warning),没有引入新问题。
 
 ---
 
