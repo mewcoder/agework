@@ -16,7 +16,7 @@
 | 0b 依赖倒置 | ✅ 完成 | `84984b0d`(Runtime 接口 + LocalRuntime + 4 seam 走 runtimeFor(null)) |
 | 1 注册骨架 | ✅ 完成 | `aabeee2f`(server:Runtime 表/配对 API/隧道端点/判死)、`c32978f2`(apps/runtime:manager 注册/心跳/重连)、`081df4f3`(shared 值内联修复) |
 | 2 Registered 跑通 | ✅ 完成 | `1377afa7`(providers 回调拆解)、`41e1dd60`(RemoteRuntime+隧道 RPC)、`68a3e93a`(manager launcher/registry) |
-| 3 前端 | ⬜ 未开始 | |
+| 3 前端(范围见下) | 🟡 部分完成 | "我的运行环境"配对页已做;workspace 创建器接 runtimeId 未做(用户明确缩小范围,见下) |
 | 4 收尾 | ⬜ 未开始 | 前置:§13 产物分发 |
 
 **Phase 2 落地摘要**(两个前置拍板点都按推荐方案定案并已实施):
@@ -52,10 +52,29 @@ ERR_MODULE_NOT_FOUND**,值必须内联在入口文件(见 `common/index.ts` 的 
 建议真机起 dev server 冒烟(Phase 1/Phase 2 都靠这个抓到了坑——Phase 1 的 ERR_MODULE_NOT_FOUND、
 Phase 2 的 `@agework/providers` 依赖漏加)。
 
-**下一步 Phase 3(前端)**:workspace 创建器加"运行位置"选择(选 Registered Runtime 才需要接
-`Workspace.runtimeId`)、"我的运行环境"配对页(调用已就绪的 `/api/v1/runtimes` list/create/delete)、
-运行时在线状态标签。前端接上 runtimeId 后,记得把 `worker.provisioner.ts` 里硬编码的
-`runtimeFor(null)` 换成读 `workspace.runtimeId`。
+**Phase 3 落地摘要(本轮范围:只做配对页,用户明确选定)**:
+
+用户在"workspace 创建器加 Runtime 选择"和"只做我的运行环境配对页"之间明确选了后者——workspace
+创建器(`workspace-dialog.tsx`)是个已在工作的 700 行复杂表单,现在也没有任何真实 workspace 能
+选 Registered runtime(`WorkerProvisioner` 仍写死 `runtimeFor(null)`),先不碰它,风险和收益不对等。
+
+已交付:
+- `apps/web/src/pages/settings/runtime.tsx` + `runtime/issued-runtime-token-dialog.tsx`:新用户
+  设置页"我的运行环境"(导航项在 `MonitorIcon`),DataTable 列出 list/create/delete,创建成功后
+  弹一次性配对命令(`agework-runtime --server <url> --token <token> --runtime docker`),关闭后
+  token 不可再取(后端只存 sha256,与 admin 的一次性密码弹窗同一模式)。
+- `apps/web/src/api/runtimes.ts` + `apps/web/src/hooks/use-runtime.ts`:照抄 `workspaces.ts`/
+  `use-workspace.ts` 的 api client + react-query hooks 结构。
+- 验证:typecheck/lint(0 新增问题,仅剩改动前就有的 6 个 shadcn 组件存量 lint 错误)/build 全绿;
+  web 单测 258→261(新增 `runtimes.test.ts`);**真机验证**——起真实 server(端口 3100)+ 真实
+  vite dev server(5183,代理到 3100),通过实际的前端会走的 dev proxy 路径 `curl` 了
+  create→list→delete→list 全链路,响应结构与前端 TS 类型完全对上。**没有**在真实浏览器里点击
+  验证(这个环境没有浏览器自动化工具),这一点如实告知,不谎称"浏览器验证过"。
+
+**下一步(如果继续做完整 Phase 3)**:workspace 创建器加"运行位置"选择(选 Registered Runtime 才
+需要,详见 §8 前端交互设计)、运行时在线状态标签、`Workspace.runtimeId` 加列 + 建 workspace API
+带上、`worker.provisioner.ts` 的 `runtimeFor(null)` 换成读 `workspace.runtimeId`。这几步互相依赖,
+建议放在同一批做,而不是拆碎。
 
 ---
 
