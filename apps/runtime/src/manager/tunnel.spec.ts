@@ -1,0 +1,124 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { once } from "node:events";
+import { WebSocketServer, type WebSocket, type RawData } from "ws";
+import { RUNTIME_TUNNEL_CLOSE_GONE } from "@agework/shared/protocol";
+import { TunnelClient } from "./tunnel.js";
+import type { ManagerConfig } from "../config.js";
+
+type ServerConnection = {
+  ws: WebSocket;
+  authorization?: string;
+  /** 消息在连接建立时就开始缓冲,避免 attach 监听前丢消息的竞态。 */
+  nextMessage: () => Promise<unknown>;
+};
+
+describe("TunnelClient", () => {
+  let wss: WebSocketServer;
+  let port: number;
+  let connections: ServerConnection[];
+  let client: TunnelClient | undefined;
+
+  beforeEach(async () => {
+    connections = [];
+    wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+    await once(wss, "listening");
+    const address = wss.address();
+    if (typeof address !== "object" || address === null) {
+      throw new Error("no wss address");
+    }
+    port = address.port;
+    wss.on("connection", (ws, req) => {
+      const buffered: unknown[] = [];
+      const waiters: ((message: unknown) => void)[] = [];
+      ws.on("message", (data: RawData) => {
+        const message: unknown = JSON.parse(String(data));
+        const waiter = waiters.shift();
+        if (waiter) waiter(message);
+        else buffered.push(message);
+      });
+      connections.push({
+        ws,
+        authorization: req.headers.authorization,
+        nextMessage: () => {
+          const queued = buffered.shift();
+          if (queued !== undefined) return Promise.resolve(queued);
+          return new Promise((resolve) => waiters.push(resolve));
+        },
+      });
+    });
+  });
+
+  afterEach(() => {
+    client?.stop();
+    wss.close();
+  });
+
+  function makeClient(onGone = vi.fn()) {
+    const config: ManagerConfig = {
+      serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
+      token: "pair-token",
+      runtimeType: "docker",
+    };
+    client = new TunnelClient({ config, onGone, reconnectBaseDelayMs: 20 });
+    return { client, onGone };
+  }
+
+  it("connects with the pairing token, registers, then heartbeats at the given interval", async () => {
+    makeClient();
+    client!.start();
+
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    expect(connections[0].authorization).toBe("Bearer pair-token");
+
+    await expect(connections[0].nextMessage()).resolves.toEqual({
+      type: "register",
+      runtimeType: "docker",
+      capabilities: { isolationScopes: ["user", "workspace"] },
+    });
+
+    connections[0].ws.send(
+      JSON.stringify({
+        type: "registered",
+        runtimeId: "rt-1",
+        heartbeatIntervalSeconds: 0.05,
+      })
+    );
+    await expect(connections[0].nextMessage()).resolves.toEqual({
+      type: "heartbeat",
+    });
+  });
+
+  it("exits via onGone on 4410 and does not reconnect", async () => {
+    const { onGone } = makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+
+    connections[0].ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+
+    await vi.waitFor(() => expect(onGone).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(connections).toHaveLength(1);
+  });
+
+  it("reconnects with backoff after an abnormal close", async () => {
+    makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+
+    connections[0].ws.terminate();
+
+    await vi.waitFor(() => expect(connections).toHaveLength(2), {
+      timeout: 2000,
+    });
+  });
+
+  it("stop closes the connection without reconnecting", async () => {
+    makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+
+    client!.stop();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(connections).toHaveLength(1);
+  });
+});
