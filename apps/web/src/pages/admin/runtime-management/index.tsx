@@ -6,8 +6,7 @@ import {
   PlusIcon,
   Trash2,
   RefreshCwIcon,
-  CheckCircle2Icon,
-  XCircleIcon,
+  PencilIcon,
 } from 'lucide-react';
 import { FormDialog } from '@/components/form-dialog';
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
@@ -15,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   SettingsSection,
   SettingsItem,
@@ -103,21 +103,6 @@ function AgentEnvItem({
           {status?.version && (
             <span className="text-xs">v{status.version}</span>
           )}
-          {status && (
-            <span
-              className={cn(
-                'flex items-center gap-1 text-xs',
-                status.authAvailable ? 'text-green-600' : 'text-destructive',
-              )}
-            >
-              {status.authAvailable ? (
-                <CheckCircle2Icon className="size-3" />
-              ) : (
-                <XCircleIcon className="size-3" />
-              )}
-              {status.authAvailable ? '已认证' : '未认证'}
-            </span>
-          )}
         </div>
       }
     >
@@ -139,59 +124,68 @@ function OverrideEditor({
   agentType: AgentType;
   currentOverride: string | undefined;
 }) {
+  const [open, setOpen] = useState(false);
   const [value, setValue] = useState(currentOverride ?? '');
-  const [editing, setEditing] = useState(false);
   const mutation = useUpdateEnvConfigOverride();
 
   const handleSave = () => {
     mutation.mutate(
       { id: runtimeId, agentType, executablePath: value.trim() },
-      { onSuccess: () => setEditing(false) },
+      { onSuccess: () => setOpen(false) },
     );
   };
 
-  if (editing) {
-    return (
-      <div className="flex items-center gap-1">
+  return (
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        if (next) setValue(currentOverride ?? '');
+        setOpen(next);
+      }}
+    >
+      <PopoverTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label={`编辑 ${agentType} CLI 路径`}
+          />
+        }
+      >
+        <PencilIcon className="size-3.5" />
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 space-y-2">
+        <p className="text-xs text-muted-foreground">
+          自定义可执行文件路径，留空清除覆盖
+        </p>
         <Input
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="留空清除"
-          className="h-7 w-36 text-xs"
+          placeholder="如 /usr/local/bin/claude"
+          className="h-8 text-xs"
           autoFocus
         />
-        <Button
-          size="sm"
-          className="h-7"
-          disabled={mutation.isPending}
-          onClick={handleSave}
-        >
-          保存
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-7"
-          onClick={() => setEditing(false)}
-        >
-          取消
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="h-7 text-xs"
-      onClick={() => {
-        setValue(currentOverride ?? '');
-        setEditing(true);
-      }}
-    >
-      {currentOverride ? '修改覆盖' : '设置覆盖'}
-    </Button>
+        <div className="flex justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7"
+            onClick={() => setOpen(false)}
+          >
+            取消
+          </Button>
+          <Button
+            size="sm"
+            className="h-7"
+            disabled={mutation.isPending}
+            onClick={handleSave}
+          >
+            保存
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -206,14 +200,15 @@ function RuntimeSection({
 }) {
   const detectMutation = useDetectEnv();
   const env = runtime.envStatus;
+  const canDelete = runtime.source !== 'builtin';
 
   return (
     <SettingsSection>
-      {/* Runtime 标题行 */}
-      <SettingsItem
-        title={
-          <div className="flex items-center gap-2">
-            <span className="font-medium">{runtime.name}</span>
+      {/* 机器级 header：与下方 CLI 状态行区分开，避免同级化 */}
+      <div className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">{runtime.name}</span>
             <Badge variant="outline">
               {runtimeTypeLabel(runtime.runtimeType)}
             </Badge>
@@ -228,19 +223,18 @@ function RuntimeSection({
               {runtime.status === 'online' ? '在线' : '离线'}
             </Badge>
           </div>
-        }
-        description={
-          <div className="flex items-center gap-3">
-            {runtime.lastHeartbeatAt && (
-              <span>心跳 {formatDateTime(runtime.lastHeartbeatAt)}</span>
-            )}
-            {env?.detectedAt && (
-              <span>检测于 {formatDateTime(env.detectedAt)}</span>
-            )}
-          </div>
-        }
-      >
-        <div className="flex items-center gap-1">
+          {(runtime.lastHeartbeatAt || env?.detectedAt) && (
+            <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+              {runtime.lastHeartbeatAt && (
+                <span>心跳 {formatDateTime(runtime.lastHeartbeatAt)}</span>
+              )}
+              {env?.detectedAt && (
+                <span>检测于 {formatDateTime(env.detectedAt)}</span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
           <Button
             variant="outline"
             size="sm"
@@ -256,7 +250,7 @@ function RuntimeSection({
             />
             重新检测
           </Button>
-          {runtime.source !== 'builtin' && (
+          {canDelete ? (
             <Button
               variant="ghost"
               size="icon"
@@ -266,9 +260,11 @@ function RuntimeSection({
             >
               <Trash2 className="size-3.5" />
             </Button>
+          ) : (
+            <div className="h-8 w-8" aria-hidden />
           )}
         </div>
-      </SettingsItem>
+      </div>
 
       {/* Claude CLI 行 */}
       <AgentEnvItem
