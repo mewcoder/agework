@@ -2,12 +2,7 @@ import { useState } from 'react';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm } from 'react-hook-form';
 import { z } from 'zod';
-import {
-  PlusIcon,
-  Trash2,
-  RefreshCwIcon,
-  PencilIcon,
-} from 'lucide-react';
+import { PlusIcon, Trash2, RefreshCwIcon, PencilIcon } from 'lucide-react';
 import { FormDialog } from '@/components/form-dialog';
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
 import { Button } from '@/components/ui/button';
@@ -19,6 +14,7 @@ import {
   SettingsSection,
   SettingsItem,
 } from '@/components/settings/settings-section';
+import { AgentIcon } from '@/components/icons/agent';
 import { useConfirmDelete } from '@/hooks/use-confirm-delete';
 import {
   useCreateRuntime,
@@ -61,7 +57,10 @@ function runtimeTypeLabel(runtimeType: string | null) {
 }
 
 // ── 单个 Agent CLI 环境行 ─────────────────────────────────────────────
-
+//
+// 复用 AgentIcon（系统组件）展示 agent 类型图标，
+// 路径/版本放在 description 区，操作按钮通过 SettingsItem children 放置。
+//
 function AgentEnvItem({
   agentType,
   status,
@@ -76,42 +75,70 @@ function AgentEnvItem({
   return (
     <SettingsItem
       title={
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className="w-16 justify-center">
-            {agentType}
-          </Badge>
-          {status?.resolvedPath ? (
+        <div className="flex items-center gap-2 min-w-0">
+          <AgentIcon agent={agentType} size={14} />
+          <span className="font-medium">{agentType}</span>
+        </div>
+      }
+      description={
+        status?.resolvedPath ? (
+          <span className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={status.source === 'custom' ? 'default' : 'secondary'}
+              className="shrink-0"
+            >
+              {status.source === 'custom' ? '自定义' : '系统'}
+            </Badge>
+            {status.version && (
+              <Badge variant="outline" className="shrink-0 font-mono">
+                v{status.version}
+              </Badge>
+            )}
             <span
-              className="min-w-0 flex-1 truncate font-mono text-xs"
+              className="truncate font-mono text-xs"
               title={status.resolvedPath}
             >
               {status.resolvedPath}
             </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              {status ? '未找到 CLI' : '未检测'}
-            </span>
-          )}
-          <OverrideEditor
-            runtimeId={runtimeId}
-            agentType={agentType}
-            currentOverride={overridePath}
-          />
-        </div>
+          </span>
+        ) : (
+          <span>{status ? '未找到 CLI' : '未检测'}</span>
+        )
       }
-      description={
-        <div className="flex flex-wrap items-center gap-2">
-          {status?.resolvedPath && (
-            <Badge variant={status.source === 'custom' ? 'default' : 'outline'}>
-              {status.source === 'custom' ? '覆盖' : '系统'}
-            </Badge>
-          )}
-          {status?.version && (
-            <span className="text-xs">v{status.version}</span>
-          )}
-        </div>
-      }
-    />
+    >
+      <div className="flex items-center gap-1.5">
+        {status && !status.resolvedPath && (
+          <AgentInstallButton runtimeId={runtimeId} agentType={agentType} />
+        )}
+        <OverrideEditor
+          runtimeId={runtimeId}
+          agentType={agentType}
+          currentOverride={overridePath}
+        />
+      </div>
+    </SettingsItem>
+  );
+}
+
+function AgentInstallButton({
+  runtimeId,
+  agentType,
+}: {
+  runtimeId: string;
+  agentType: AgentType;
+}) {
+  const installMutation = useInstallCli();
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="h-7"
+      disabled={installMutation.isPending}
+      onClick={() => installMutation.mutate({ id: runtimeId, agentType })}
+    >
+      {installMutation.isPending ? '安装中…' : '安装'}
+    </Button>
   );
 }
 
@@ -127,7 +154,6 @@ function OverrideEditor({
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(currentOverride ?? '');
   const overrideMutation = useUpdateEnvConfigOverride();
-  const installMutation = useInstallCli();
 
   const handleSave = () => {
     overrideMutation.mutate(
@@ -136,21 +162,11 @@ function OverrideEditor({
     );
   };
 
-  const handleInstall = () => {
-    installMutation.mutate(
-      { id: runtimeId, agentType },
-      { onSuccess: () => setOpen(false) },
-    );
-  };
-
   return (
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (next) {
-          setValue(currentOverride ?? '');
-          installMutation.reset();
-        }
+        if (next) setValue(currentOverride ?? '');
         setOpen(next);
       }}
     >
@@ -197,32 +213,19 @@ function OverrideEditor({
             </Button>
           </div>
         </div>
-        <div className="flex items-center justify-between gap-2 border-t pt-3">
-          <p className="text-xs text-muted-foreground">
-            或一键装到本机专属目录
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7"
-            disabled={installMutation.isPending}
-            onClick={handleInstall}
-          >
-            {installMutation.isPending ? '安装中…' : '安装'}
-          </Button>
-        </div>
-        {installMutation.isError && (
-          <p className="text-xs text-destructive">
-            {errorMessage(installMutation.error, '安装失败')}
-          </p>
-        )}
       </PopoverContent>
     </Popover>
   );
 }
 
 // ── 单个 Runtime 区块 ─────────────────────────────────────────────────
-
+//
+// 结构：
+//   SettingsSection（卡片容器）
+//     ├─ 自定义 header div（名称 + Badge | 右侧：时间 + 操作按钮）
+//     ├─ AgentEnvItem（claude 行）
+//     └─ AgentEnvItem（codex 行）
+//
 function RuntimeSection({
   runtime,
   onDelete,
@@ -236,18 +239,19 @@ function RuntimeSection({
 
   return (
     <SettingsSection>
-      {/* 机器级 header：与下方 CLI 状态行区分开，避免同级化 */}
-      <div className="flex items-center gap-4 border-b bg-muted/40 px-4 py-3">
+      {/* 自定义 header：不用 SettingsItem（避免 flex-1 撑开右侧空隙） */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        {/* 左侧：名称 + Badge + 时间 */}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{runtime.name}</span>
-            <Badge variant="outline">
-              {runtimeTypeLabel(runtime.runtimeType)}
-            </Badge>
             <Badge
               variant={runtime.source === 'builtin' ? 'secondary' : 'outline'}
             >
               {runtime.source === 'builtin' ? '内置' : '注册'}
+            </Badge>
+            <Badge variant="outline">
+              {runtimeTypeLabel(runtime.runtimeType)}
             </Badge>
             <Badge
               variant={runtime.status === 'online' ? 'default' : 'secondary'}
@@ -255,18 +259,15 @@ function RuntimeSection({
               {runtime.status === 'online' ? '在线' : '离线'}
             </Badge>
           </div>
-          {(runtime.lastHeartbeatAt || env?.detectedAt) && (
-            <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
-              {runtime.lastHeartbeatAt && (
-                <span>心跳 {formatDateTime(runtime.lastHeartbeatAt)}</span>
-              )}
-              {env?.detectedAt && (
-                <span>检测于 {formatDateTime(env.detectedAt)}</span>
-              )}
+          {env?.detectedAt && (
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              检测于 {formatDateTime(env.detectedAt)}
             </div>
           )}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+
+        {/* 右侧：操作按钮 — 紧凑对齐 */}
+        <div className="flex shrink-0 items-center gap-1.5">
           {runtime.runtimeType === 'local' && (
             <Button
               variant="outline"
@@ -281,36 +282,32 @@ function RuntimeSection({
                   detectMutation.isPending && 'animate-spin',
                 )}
               />
-              重新检测
+              检测 Agent
             </Button>
           )}
           {canDelete ? (
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive"
               aria-label={`删除运行环境 ${runtime.name}`}
               onClick={() => onDelete(runtime)}
             >
               <Trash2 className="size-3.5" />
             </Button>
-          ) : (
-            <div className="h-8 w-8" aria-hidden />
-          )}
+          ) : null}
         </div>
       </div>
 
+      {/* CLI 环境行 */}
       {runtime.runtimeType === 'local' ? (
         <>
-          {/* Claude CLI 行 */}
           <AgentEnvItem
             agentType="claude"
             status={env?.claude ?? null}
             runtimeId={runtime.id}
             overridePath={runtime.envConfigOverride?.claude?.executablePath}
           />
-
-          {/* Codex CLI 行 */}
           <AgentEnvItem
             agentType="codex"
             status={env?.codex ?? null}
@@ -318,13 +315,7 @@ function RuntimeSection({
             overridePath={runtime.envConfigOverride?.codex?.executablePath}
           />
         </>
-      ) : (
-        runtime.runtimeType && (
-          <div className="px-4 py-3 text-sm text-muted-foreground">
-            此类型的 CLI 路径由镜像固定，不支持检测/覆盖/安装
-          </div>
-        )
-      )}
+      ) : null}
     </SettingsSection>
   );
 }
@@ -357,13 +348,13 @@ export function AdminRuntimeManagementPanel({
           <div>
             <h2 className="text-lg font-semibold">运行环境</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              管理所有 Runtime，添加机器、注销配对、CLI 路径覆盖与重新检测
+              管理运行环境及 Agent CLI
             </p>
           </div>
         )}
         <Button type="button" size="sm" onClick={() => setCreateOpen(true)}>
           <PlusIcon data-icon="inline-start" />
-          添加机器
+          添加
         </Button>
       </div>
 

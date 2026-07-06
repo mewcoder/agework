@@ -51,3 +51,4 @@ coverage
 
 # check-module 报告输出
 reports/
+.codebuddy/settings.local.json
