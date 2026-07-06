@@ -1,5 +1,16 @@
-import { describe, expect, it } from "vitest";
-import { resolveCliPaths, toAgentRunInput } from "./index";
+import { describe, expect, it, vi } from "vitest";
+import { toAgentRunInput } from "./index";
+
+// Mock execSync before importing resolveCliPaths so the module-level
+// reference is replaced.  (Vitest hoists vi.mock automatically.)
+vi.mock("node:child_process", () => ({
+  execSync: vi.fn(),
+}));
+
+import { resolveCliPaths } from "./index";
+import { execSync } from "node:child_process";
+
+const mockedExecSync = vi.mocked(execSync);
 
 describe("agent input", () => {
   it("keeps an existing AG-UI thread id", () => {
@@ -31,7 +42,15 @@ describe("agent input", () => {
 });
 
 describe("agent CLI paths", () => {
-  it("returns undefined paths when env vars are not set", () => {
+  beforeEach(() => {
+    mockedExecSync.mockReset();
+  });
+
+  it("returns undefined when env vars are not set and CLI not in PATH", () => {
+    mockedExecSync.mockImplementation(() => {
+      throw new Error("not found");
+    });
+
     expect(resolveCliPaths({})).toEqual({
       claudeExecutablePath: undefined,
       codexExecutablePath: undefined,
@@ -51,6 +70,10 @@ describe("agent CLI paths", () => {
   });
 
   it("treats empty-string env vars as unset", () => {
+    mockedExecSync.mockImplementation(() => {
+      throw new Error("not found");
+    });
+
     expect(
       resolveCliPaths({
         AGEWORK_CLAUDE_CLI_PATH: "",
@@ -59,6 +82,30 @@ describe("agent CLI paths", () => {
     ).toEqual({
       claudeExecutablePath: undefined,
       codexExecutablePath: undefined,
+    });
+  });
+
+  it("falls back to PATH lookup when env vars are not set", () => {
+    mockedExecSync
+      .mockImplementationOnce(() => "/usr/local/bin/claude\n")
+      .mockImplementationOnce(() => "/usr/local/bin/codex\n");
+
+    expect(resolveCliPaths({})).toEqual({
+      claudeExecutablePath: "/usr/local/bin/claude",
+      codexExecutablePath: "/usr/local/bin/codex",
+    });
+  });
+
+  it("env var takes priority over PATH lookup", () => {
+    // claude: env var set → findInPath("claude") not called
+    // codex: env var not set → findInPath("codex") called (1st mock slot)
+    mockedExecSync.mockImplementationOnce(() => "/usr/bin/codex\n");
+
+    expect(
+      resolveCliPaths({ AGEWORK_CLAUDE_CLI_PATH: "/custom/claude" })
+    ).toEqual({
+      claudeExecutablePath: "/custom/claude",
+      codexExecutablePath: "/usr/bin/codex",
     });
   });
 });
