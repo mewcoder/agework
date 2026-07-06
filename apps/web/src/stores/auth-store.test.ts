@@ -13,6 +13,7 @@ beforeEach(() => {
     authRequired: true,
     setupRequired: false,
     appName: 'AgeWork',
+    configLoaded: false,
   });
 });
 
@@ -23,6 +24,7 @@ describe('useAuthStore', () => {
     expect(useAuthStore.getState().authRequired).toBe(true);
     expect(useAuthStore.getState().setupRequired).toBe(false);
     expect(useAuthStore.getState().appName).toBe('AgeWork');
+    expect(useAuthStore.getState().configLoaded).toBe(false);
   });
 
   it('setAuth 同时设置 token 和 user', () => {
@@ -71,6 +73,14 @@ describe('useAuthStore', () => {
   it('setAppName 更新 appName', () => {
     useAuthStore.getState().setAppName('MyApp');
     expect(useAuthStore.getState().appName).toBe('MyApp');
+  });
+
+  it('setConfigLoaded 更新 configLoaded', () => {
+    expect(useAuthStore.getState().configLoaded).toBe(false);
+    useAuthStore.getState().setConfigLoaded(true);
+    expect(useAuthStore.getState().configLoaded).toBe(true);
+    useAuthStore.getState().setConfigLoaded(false);
+    expect(useAuthStore.getState().configLoaded).toBe(false);
   });
 
   it('不把 token/user 持久化到 localStorage（access token 仅存内存）', () => {

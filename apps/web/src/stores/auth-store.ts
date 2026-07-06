@@ -9,11 +9,13 @@ interface AuthStore {
   authRequired: boolean;        // 从服务端读取，不持久化
   setupRequired: boolean;       // 从服务端读取，不持久化
   appName: string;              // 从服务端读取，不持久化
+  configLoaded: boolean;        // auth config 是否已从服务端成功加载
   setAuth: (token: string | null, user: AuthUser) => void;
   setUser: (user: AuthUser) => void;
   setAuthRequired: (v: boolean) => void;
   setSetupRequired: (v: boolean) => void;
   setAppName: (v: string) => void;
+  setConfigLoaded: (v: boolean) => void;
   logout: () => void;
 }
 
@@ -25,10 +27,12 @@ export const useAuthStore = create<AuthStore>()((set) => ({
   authRequired: true,
   setupRequired: false,
   appName: "AgeWork",
+  configLoaded: false,
   setAuth: (token, user) => set({ token, user }),
   setUser: (user) => set({ user }),
   setAuthRequired: (authRequired) => set({ authRequired }),
   setSetupRequired: (setupRequired) => set({ setupRequired }),
   setAppName: (appName) => set({ appName }),
+  setConfigLoaded: (configLoaded) => set({ configLoaded }),
   logout: () => set({ token: null, user: null }),
 }));

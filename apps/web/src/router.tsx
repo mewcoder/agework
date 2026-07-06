@@ -24,6 +24,7 @@ function applyAuthConfig(config: AuthConfigResponse) {
   store.setAuthRequired(config.authRequired);
   store.setSetupRequired(config.setupRequired);
   store.setAppName(config.appName);
+  store.setConfigLoaded(true);
   document.title = config.appName;
 
   if (config.setupRequired) {
@@ -109,7 +110,9 @@ const authenticatedRoute = createRoute({
   getParentRoute: () => rootRoute,
   id: "authenticated",
   beforeLoad: () => {
-    const { token, authRequired, setupRequired, user } = useAuthStore.getState();
+    const { token, authRequired, setupRequired, user, configLoaded } = useAuthStore.getState();
+    // config 未加载时（server 还没启动），不做路由判断，避免误跳 /login
+    if (!configLoaded) return;
     if (authRequired && setupRequired) throw redirect({ to: "/login" });
     if (authRequired && !token) throw redirect({ to: "/login" });
     if (authRequired && user?.mustChangePassword) {
