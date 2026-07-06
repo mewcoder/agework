@@ -3,7 +3,7 @@ import { once } from "node:events";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import { RUNTIME_TUNNEL_CLOSE_GONE } from "@agework/shared/protocol";
 import { TunnelClient, type LaunchDispatcher } from "./tunnel.js";
-import type { ManagerConfig } from "../config.js";
+import type { RegisteredRuntimeConfig } from "../config.js";
 
 type ServerConnection = {
   ws: WebSocket;
@@ -65,7 +65,7 @@ describe("TunnelClient", () => {
     onGone = vi.fn(),
     dispatcher: LaunchDispatcher = makeDispatcher()
   ) {
-    const config: ManagerConfig = {
+    const config: RegisteredRuntimeConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
       runtimeType: "docker",

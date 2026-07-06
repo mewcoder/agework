@@ -4,7 +4,7 @@ import type {
   RuntimeInstanceRefRpcParams,
   RuntimeLaunchRpcParams,
 } from "@agework/shared/protocol";
-import type { ManagerConfig } from "../config.js";
+import type { RegisteredRuntimeConfig } from "../config.js";
 import { Launcher } from "./launcher.js";
 import { LiveCarrierStore } from "./registry.js";
 
@@ -37,7 +37,7 @@ function makeFakeProvider(type: RuntimeType): RuntimeProvider & {
   };
 }
 
-const dockerConfig: ManagerConfig = {
+const dockerConfig: RegisteredRuntimeConfig = {
   serverBaseUrl: "http://server/api/v1",
   token: "t",
   runtimeType: "docker",
@@ -77,7 +77,7 @@ describe("Launcher", () => {
     registry = new LiveCarrierStore();
   });
 
-  it("launch dispatches to the provider matching the manager's configured runtimeType", async () => {
+  it("launch dispatches to the provider matching the configured runtimeType", async () => {
     const launcher = new Launcher(dockerConfig, registry);
 
     const result = await launcher.launch(launchParams);
@@ -155,7 +155,7 @@ describe("Launcher", () => {
   });
 
   it("records isolationScope='workspace' for local placements (no sandbox object)", async () => {
-    const localConfig: ManagerConfig = {
+    const localConfig: RegisteredRuntimeConfig = {
       ...dockerConfig,
       runtimeType: "local",
       workerImage: undefined,

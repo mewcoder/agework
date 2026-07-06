@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { resolveManagerConfig } from "./config.js";
+import { resolveRegisteredRuntimeConfig } from "./config.js";
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
 
-describe("resolveManagerConfig", () => {
+describe("resolveRegisteredRuntimeConfig", () => {
   it("reads flags and strips trailing slash from server url (docker: worker-image required)", () => {
-    const config = resolveManagerConfig(
+    const config = resolveRegisteredRuntimeConfig(
       [
         "--server",
         "http://host:3000/api/v1/",
@@ -28,7 +28,7 @@ describe("resolveManagerConfig", () => {
   });
 
   it("falls back to env and prefers flags over env (local: runtime-entry optional)", () => {
-    const config = resolveManagerConfig(
+    const config = resolveRegisteredRuntimeConfig(
       ["--token", "flag-token", "--runtime-entry", "/path/flag.js"],
       {
         AGEWORK_SERVER_BASE_URL: "http://env:3000/api/v1",
@@ -47,7 +47,7 @@ describe("resolveManagerConfig", () => {
   });
 
   it("local without runtime-entry defaults to self (allowed)", () => {
-    const config = resolveManagerConfig(
+    const config = resolveRegisteredRuntimeConfig(
       ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
       {}
     );
@@ -60,7 +60,7 @@ describe("resolveManagerConfig", () => {
   });
 
   it("reads a custom log dir", () => {
-    const config = resolveManagerConfig(
+    const config = resolveRegisteredRuntimeConfig(
       [
         "--server",
         "http://h/api/v1",
@@ -80,13 +80,13 @@ describe("resolveManagerConfig", () => {
 
   it("rejects missing server url", () => {
     expect(() =>
-      resolveManagerConfig(["--token", "t", "--runtime", "docker"], {})
+      resolveRegisteredRuntimeConfig(["--token", "t", "--runtime", "docker"], {})
     ).toThrow("missing server url");
   });
 
   it("rejects missing token", () => {
     expect(() =>
-      resolveManagerConfig(
+      resolveRegisteredRuntimeConfig(
         ["--server", "http://h/api/v1", "--runtime", "docker"],
         {}
       )
@@ -95,7 +95,7 @@ describe("resolveManagerConfig", () => {
 
   it("rejects unknown runtime type", () => {
     expect(() =>
-      resolveManagerConfig(
+      resolveRegisteredRuntimeConfig(
         ["--server", "http://h/api/v1", "--token", "t", "--runtime", "vm"],
         {}
       )
@@ -104,7 +104,7 @@ describe("resolveManagerConfig", () => {
 
   it("rejects docker/opensandbox without a worker image", () => {
     expect(() =>
-      resolveManagerConfig(
+      resolveRegisteredRuntimeConfig(
         ["--server", "http://h/api/v1", "--token", "t", "--runtime", "docker"],
         {}
       )
@@ -112,7 +112,7 @@ describe("resolveManagerConfig", () => {
   });
 
   it("accepts local with no --runtime-entry (defaults later to process.argv[1])", () => {
-    const config = resolveManagerConfig(
+    const config = resolveRegisteredRuntimeConfig(
       ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
       {}
     );
@@ -121,7 +121,7 @@ describe("resolveManagerConfig", () => {
 
   it("rejects a flag without value", () => {
     expect(() =>
-      resolveManagerConfig(["--server", "--token", "t"], {})
+      resolveRegisteredRuntimeConfig(["--server", "--token", "t"], {})
     ).toThrow("flag --server requires a value");
   });
 });

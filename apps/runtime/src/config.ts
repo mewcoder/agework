@@ -3,7 +3,7 @@ export type RuntimeType = (typeof RUNTIME_TYPES)[number];
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
 
-export interface ManagerConfig {
+export interface RegisteredRuntimeConfig {
   /** server 基地址(含 API base path,如 http://host:3000/api/v1),与 worker 的 AGEWORK_SERVER_BASE_URL 同语义。 */
   serverBaseUrl: string;
   /** 配对 token(server 创建 Runtime 时下发,明文只出现一次)。 */
@@ -15,21 +15,21 @@ export interface ManagerConfig {
   /** docker/opensandbox 起 worker 载体用的镜像 tag;local 不用。 */
   workerImage?: string;
   /** local 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
-   *  不传则默认 fork manager 自身(process.argv[1])——manager 与 worker 是同一
+   *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
    *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
    *  的 LocalProviderConfig。Registered+local 场景下镜像里只有一份 bundle,默认即正确。 */
   runtimeEntryPath?: string;
 }
 
 /**
- * manager 启动配置:CLI 参数优先,env 兜底。
+ * Registered Runtime 启动配置:CLI 参数优先,env 兜底。
  * `agework-runtime --server <url> --token <配对码> --runtime <type>
  *   [--worker-image <tag>] [--log-dir <path>] [--runtime-entry <path>]`
  */
-export function resolveManagerConfig(
+export function resolveRegisteredRuntimeConfig(
   argv: string[],
   env: NodeJS.ProcessEnv
-): ManagerConfig {
+): RegisteredRuntimeConfig {
   const args = parseFlags(argv);
   const serverBaseUrl = args.get("server") ?? env.AGEWORK_SERVER_BASE_URL;
   const token = args.get("token") ?? env.AGEWORK_RUNTIME_TOKEN;

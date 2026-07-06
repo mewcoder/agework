@@ -9,20 +9,20 @@ import type {
   RuntimeInstanceRefRpcParams,
   RuntimeLaunchRpcParams,
 } from "@agework/shared/protocol";
-import type { ManagerConfig, RuntimeType } from "../config.js";
+import type { RegisteredRuntimeConfig, RuntimeType } from "../config.js";
 import { LiveCarrierStore } from "./registry.js";
 
 /**
- * 用 packages/providers 起/停/毁 worker。manager 实例专一,只用自己配置的那
- * 一种 runtimeType;createRuntimeResolver 是包唯一的装配出口,仍会装配全部三种
- * provider,这里只取自己那一个用,其余两种的 config 字段允许是占位值。
+ * 用 packages/providers 起/停/毁 worker。Registered Runtime 实例专一,只用自己
+ * 配置的那一种 runtimeType;createRuntimeResolver 是包唯一的装配出口,仍会装配
+ * 全部三种 provider,这里只取自己那一个用,其余两种的 config 字段允许是占位值。
  */
 export class Launcher {
   private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
   private readonly runtimeType: RuntimeType;
 
   constructor(
-    config: ManagerConfig,
+    config: RegisteredRuntimeConfig,
     private readonly registry: LiveCarrierStore
   ) {
     this.runtimeType = config.runtimeType;
@@ -81,17 +81,17 @@ function isolationScopeOf(params: RuntimeLaunchRpcParams): string {
     : params.placement.sandbox.isolationScope;
 }
 
-function toRuntimeConfig(config: ManagerConfig): RuntimeConfig {
+function toRuntimeConfig(config: RegisteredRuntimeConfig): RuntimeConfig {
   return {
     workerImage: config.workerImage ?? "",
     runtimeLogHostPath: config.runtimeLogHostPath,
     serverBaseUrl: config.serverBaseUrl,
     local: {
-      // 默认 fork manager 自身(同一产物,ROLE=worker 角色启动)——
-      // Registered+local 场景下 manager 与 worker 共用同一 bundle。
+      // 默认 fork Registered Runtime 自身(同一产物,ROLE=worker 角色启动)——
+      // Registered+local 场景下它与 worker 共用同一 bundle。
       runtimeEntryPath: config.runtimeEntryPath ?? process.argv[1] ?? "",
     },
-    // 本 manager 实例专一,不用 opensandbox 时这些字段是未用的占位值——
+    // 本 Registered Runtime 实例专一,不用 opensandbox 时这些字段是未用的占位值——
     // createRuntimeResolver 仍会装配 OpenSandboxRuntimeProvider(包的唯一装配
     // 出口),但只要 resolveProvider() 不取它,构造期不做校验,占位无害。
     openSandbox: {

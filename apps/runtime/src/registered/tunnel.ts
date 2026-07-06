@@ -12,8 +12,8 @@ import {
 } from "@agework/shared/protocol/rpc";
 import { AGEWORK_VERSION } from "@agework/shared";
 import {
-  resolveManagerConfig,
-  type ManagerConfig,
+  resolveRegisteredRuntimeConfig,
+  type RegisteredRuntimeConfig,
   type RuntimeType,
 } from "../config.js";
 import { Launcher } from "./launcher.js";
@@ -43,7 +43,7 @@ function log(message: string, level: "info" | "error" = "info"): void {
 }
 
 export interface TunnelClientOptions {
-  config: ManagerConfig;
+  config: RegisteredRuntimeConfig;
   /** 收到的 launch/stop/destroy RPC 转给它执行;它已知自己固定的 runtimeType。 */
   dispatcher: LaunchDispatcher;
   /** runtime 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
@@ -77,7 +77,7 @@ export class TunnelClient {
   stop(): void {
     this.stopped = true;
     this.clearTimers();
-    this.ws?.close(1000, "manager shutting down");
+    this.ws?.close(1000, "registered runtime shutting down");
   }
 
   private tunnelUrl(): string {
@@ -215,9 +215,9 @@ export class TunnelClient {
   }
 }
 
-/** manager 常驻入口:解析配置、装配 launcher、起隧道、挂信号处理。 */
-export async function runManager(): Promise<void> {
-  const config = resolveManagerConfig(process.argv.slice(2), process.env);
+/** Registered Runtime 常驻入口:解析配置、装配 launcher、起隧道、挂信号处理。 */
+export async function runRegisteredRuntime(): Promise<void> {
+  const config = resolveRegisteredRuntimeConfig(process.argv.slice(2), process.env);
   const dispatcher = new Launcher(config, new LiveCarrierStore());
   const client = new TunnelClient({
     config,
@@ -231,7 +231,7 @@ export async function runManager(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   log(
-    `manager starting: server=${config.serverBaseUrl} runtime=${config.runtimeType}`
+    `registered runtime starting: server=${config.serverBaseUrl} runtime=${config.runtimeType}`
   );
   client.start();
   // 常驻:存活由 WS 连接/重连 timer 维持

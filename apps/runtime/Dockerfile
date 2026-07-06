@@ -5,7 +5,7 @@
 # dist/main.js + dist/runner.js via esbuild; this must be built locally before
 # `docker build`, the image only copies the pre-built dist files.)
 #
-# 同一镜像两种角色:默认(无 AGEWORK_WORKER_ROLE)= manager;
+# 同一镜像两种角色:默认(无 AGEWORK_WORKER_ROLE)= Registered Runtime;
 # launcher 注入 AGEWORK_WORKER_ROLE=worker 起 worker(worker 镜像 = 本镜像)。
 # runner 是独立产物 dist/runner.js,由容器内已在跑的 worker 进程按需 fork,
 # 不经这个入口(见 packages/worker/docs/adr/0001)。
