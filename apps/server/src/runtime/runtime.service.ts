@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -186,6 +187,29 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!updated) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
+  }
+
+  /**
+   * 管理员一键安装 runtime 的独立 CLI(仅支持 local 类型;docker/opensandbox
+   * 走镜像固定路径,装不装不影响实际执行,不支持此操作)。
+   * 安装成功后自动写入 override 并重新检测刷新展示状态。
+   */
+  async installCli(
+    id: string,
+    agentType: AgentType
+  ): Promise<DetectEnvResponse> {
+    const row = await this.repository.findById(id);
+    if (!row) {
+      throw new NotFoundException(`runtime not found: ${id}`);
+    }
+    if (row.runtimeType !== "local") {
+      throw new BadRequestException(
+        `runtime ${id} is not a local runtime, cannot install CLI`
+      );
+    }
+    const executablePath = await this.localRuntime.installCli(agentType);
+    await this.updateEnvConfigOverride(id, agentType, executablePath);
+    return this.detectEnv(id);
   }
 
   /**

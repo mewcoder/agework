@@ -44,6 +44,8 @@ export const AGEWORK_HOST_RUNTIME_LOG_DIR = join(
   "logs",
   "runtime"
 );
+/** 一键安装的独立 agent CLI 落地目录，per-agent 一个子目录，不占用户系统全局 npm。 */
+export const AGEWORK_HOST_CLI_DIR = join(AGEWORK_HOST_DATA_DIR, "cli");
 
 export const CONTAINER_HOME = "/home/agework";
 export const CONTAINER_WORKSPACES_ROOT = `${CONTAINER_HOME}/workspaces`;

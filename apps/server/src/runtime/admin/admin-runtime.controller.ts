@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../runtime.service";
 import { UpdateEnvConfigOverrideDto } from "../dto/update-env-config-override.dto";
+import { InstallCliDto } from "../dto/install-cli.dto";
 
 /**
  * Runtime 管理后台：列出全部 Runtime、CLI 状态查看、envConfig 覆盖、触发重检。
@@ -33,5 +34,11 @@ export class AdminRuntimeController {
       body.executablePath
     );
     return { ok: true };
+  }
+
+  /** 管理员一键安装 runtime 的独立 CLI（仅 local 类型）。 */
+  @Post("install-cli")
+  async installCli(@Body() body: InstallCliDto) {
+    return this.runtimeService.installCli(body.id, body.agentType);
   }
 }
