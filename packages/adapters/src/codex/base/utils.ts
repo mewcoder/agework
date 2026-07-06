@@ -1,4 +1,6 @@
 import type { RunAgentInput } from "@ag-ui/core";
+import type { Usage } from "@openai/codex-sdk";
+import type { RunUsage } from "@agework/shared/protocol";
 
 /**
  * Check if a state value is meaningful (non-null, non-undefined).
@@ -67,4 +69,21 @@ export function buildStateContextAddendum(input: RunAgentInput): string {
   }
 
   return parts.join("\n");
+}
+
+/**
+ * Map a Codex SDK turn usage onto the AG UI-agnostic `RunUsage` shape.
+ * `totalCostUsd`/`durationApiMs`/`cacheCreationInputTokens` have no Codex equivalent.
+ */
+export function toRunUsage(usage: Usage, numTurns: number): RunUsage {
+  return {
+    inputTokens: usage.input_tokens,
+    outputTokens: usage.output_tokens,
+    cachedInputTokens: usage.cached_input_tokens,
+    reasoningOutputTokens: usage.reasoning_output_tokens,
+    cacheCreationInputTokens: 0,
+    totalCostUsd: null,
+    numTurns,
+    durationApiMs: null,
+  };
 }

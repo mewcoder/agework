@@ -167,56 +167,45 @@ export class WorkerAgUiEventHandler {
 }
 
 /**
- * 从 `RUN_FINISHED.result`（unknown）安全抽取并归一化为 `RunUsage`。
+ * 从 `RUN_FINISHED.result`（unknown）安全抽取 `RunUsage`。
  *
- * 两个 adapter 上报的字段名不同：
- * - Codex：`{ usage: { input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens }, numTurns }`
- * - Claude：`{ usage: { input_tokens, cache_read_input_tokens, cache_creation_input_tokens, output_tokens }, totalCostUsd, numTurns }`
- *
- * 任一非数值字段按 0 处理；整体为 null/非对象/没有任何已知 token 字段时返回 null。
+ * adapter 侧已经把两个 SDK 各自的字段名归一化成 `RunUsage` 形状写进
+ * `result.usage`（见 packages/adapters 的 `toRunUsage`），这里只做一次跨进程
+ * 边界必要的运行时校验，不再猜字段名。字段名对不上时按 0/null 处理；整体为
+ * null/非对象/没有任何已知字段时返回 null。
  */
 function normalizeRunUsage(result: unknown): RunUsage | null {
   if (!result || typeof result !== "object") return null;
-  const r = result as Record<string, unknown>;
-  const usageRaw = r.usage;
-  const usage =
-    usageRaw && typeof usageRaw === "object"
-      ? (usageRaw as Record<string, unknown>)
-      : {};
+  const usageRaw = (result as Record<string, unknown>).usage;
+  if (!usageRaw || typeof usageRaw !== "object") return null;
+  const u = usageRaw as Record<string, unknown>;
 
-  const inputTokens = num(usage.input_tokens);
-  const outputTokens = num(usage.output_tokens);
-  const cachedInputTokens =
-    num(usage.cached_input_tokens) || num(usage.cache_read_input_tokens);
-  const reasoningOutputTokens = num(usage.reasoning_output_tokens);
-  const cacheCreationInputTokens = num(usage.cache_creation_input_tokens);
-  const totalCostUsd = nullableNum(r.totalCostUsd);
-  const numTurns = num(r.numTurns);
-  const durationApiMs = nullableNum(r.durationApiMs);
-
-  if (
-    inputTokens === 0 &&
-    outputTokens === 0 &&
-    cachedInputTokens === 0 &&
-    reasoningOutputTokens === 0 &&
-    cacheCreationInputTokens === 0 &&
-    totalCostUsd === null &&
-    numTurns === 0 &&
-    durationApiMs === null
-  ) {
-    return null;
-  }
-
-  return {
-    inputTokens,
-    outputTokens,
-    cachedInputTokens,
-    reasoningOutputTokens,
-    cacheCreationInputTokens,
-    totalCostUsd,
-    numTurns,
-    durationApiMs,
+  const usage: RunUsage = {
+    inputTokens: num(u.inputTokens),
+    outputTokens: num(u.outputTokens),
+    cachedInputTokens: num(u.cachedInputTokens),
+    reasoningOutputTokens: num(u.reasoningOutputTokens),
+    cacheCreationInputTokens: num(u.cacheCreationInputTokens),
+    totalCostUsd: nullableNum(u.totalCostUsd),
+    numTurns: num(u.numTurns),
+    durationApiMs: nullableNum(u.durationApiMs),
   };
+
+  return isEmptyRunUsage(usage) ? null : usage;
+}
+
+/** 全部 token/次数字段为 0 且没有 cost/耗时信息时视为空，跳过持久化。 */
+function isEmptyRunUsage(usage: RunUsage): boolean {
+  return (
+    usage.inputTokens === 0 &&
+    usage.outputTokens === 0 &&
+    usage.cachedInputTokens === 0 &&
+    usage.reasoningOutputTokens === 0 &&
+    usage.cacheCreationInputTokens === 0 &&
+    usage.totalCostUsd === null &&
+    usage.numTurns === 0 &&
+    usage.durationApiMs === null
+  );
 }
 
 /** 取数值字段：非有限数（含 null/undefined/NaN/string）一律视为 0。 */

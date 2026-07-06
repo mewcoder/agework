@@ -17,8 +17,9 @@ export type RunStatusPayload = {
 };
 
 /**
- * 一次 run 的 token 用量，在 API 侧从 `RUN_FINISHED.result` 归一化得到。
- * Claude / Codex 两个 adapter 上报的字段名不同，由 API 侧 WorkerEventProcessor 统一到这里。
+ * 一次 run 的 token 用量。Claude / Codex 两个 SDK 上报的字段名不同，各自的
+ * adapter（packages/adapters 的 `toRunUsage`）在 emit `RUN_FINISHED` 前
+ * 归一化到这个形状；API 侧只做一次轻量运行时校验，不再猜字段名。
  */
 export interface RunUsage {
   inputTokens: number;

@@ -7,8 +7,9 @@
 import { z } from "zod";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { RunAgentInput, Tool, AssistantMessage, ToolCall, Message } from "@ag-ui/core";
-import type { SDKAssistantMessage } from "@anthropic-ai/claude-agent-sdk";
+import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { RunUsage } from "@agework/shared/protocol";
 import {
   ALLOWED_FORWARDED_PROPS,
   STATE_MANAGEMENT_TOOL_NAME,
@@ -432,5 +433,22 @@ export function buildAguiToolMessage(
     role: "tool" as const,
     content: resultStr,
     toolCallId: toolUseId,
+  };
+}
+
+/**
+ * Map a Claude SDK result message onto the AG UI-agnostic `RunUsage` shape.
+ * `reasoningOutputTokens` is Codex-only; Claude has no equivalent field.
+ */
+export function toRunUsage(resultMsg: SDKResultMessage): RunUsage {
+  return {
+    inputTokens: resultMsg.usage.input_tokens,
+    outputTokens: resultMsg.usage.output_tokens,
+    cachedInputTokens: resultMsg.usage.cache_read_input_tokens,
+    cacheCreationInputTokens: resultMsg.usage.cache_creation_input_tokens,
+    reasoningOutputTokens: 0,
+    totalCostUsd: resultMsg.total_cost_usd,
+    numTurns: resultMsg.num_turns,
+    durationApiMs: resultMsg.duration_api_ms,
   };
 }

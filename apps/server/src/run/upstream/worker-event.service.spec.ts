@@ -773,12 +773,15 @@ describe("WorkerEventService", () => {
       payload: {
         type: "RUN_FINISHED",
         result: {
-          numTurns: 3,
           usage: {
-            input_tokens: 1000,
-            cached_input_tokens: 200,
-            output_tokens: 500,
-            reasoning_output_tokens: 80,
+            inputTokens: 1000,
+            outputTokens: 500,
+            cachedInputTokens: 200,
+            reasoningOutputTokens: 80,
+            cacheCreationInputTokens: 0,
+            totalCostUsd: null,
+            numTurns: 3,
+            durationApiMs: null,
           },
         },
       },
@@ -821,7 +824,7 @@ describe("WorkerEventService", () => {
       type: "agui.event" as const,
       payload: {
         type: "RUN_FINISHED",
-        result: { usage: { input_tokens: "oops", output_tokens: null } },
+        result: { usage: { inputTokens: "oops", outputTokens: null } },
       },
       ts: new Date().toISOString(),
     });

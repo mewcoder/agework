@@ -2,6 +2,7 @@ import { Observable, Subscriber } from "rxjs";
 import { AbstractAgent, EventType } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput, Message } from "@ag-ui/core";
 import { generateId } from "@agework/shared";
+import type { RunUsage } from "@agework/shared/protocol";
 import type {
   ThreadEvent,
   ThreadItem,
@@ -21,7 +22,12 @@ import type {
   ProcessedEvent,
 } from "./types";
 import { ALLOWED_FORWARDED_PROPS } from "./config";
-import { hasState, processMessages, buildStateContextAddendum } from "./utils";
+import {
+  hasState,
+  processMessages,
+  buildStateContextAddendum,
+  toRunUsage,
+} from "./utils";
 
 /** Reconnecting... N/M errors emitted by codex exec — safe to ignore. */
 const RETRYABLE_ERROR_RE = /^Reconnecting\.\.\. \d+\/\d+ /;
@@ -36,9 +42,8 @@ type ToolState = {
 type CodexResultData = {
   isError: boolean;
   errorMessage?: string;
-  numTurns: number;
   durationMs?: number;
-  usage: Usage | Record<string, unknown>;
+  usage: RunUsage;
 };
 
 type TraceContext = {
@@ -171,9 +176,16 @@ export class CodexAgentAdapter extends AbstractAgent {
       runCtx.lastResultData = {
         isError: true,
         errorMessage: message,
-        numTurns: 0,
         durationMs: Date.now() - runStartMs,
-        usage: {},
+        usage: toRunUsage(
+          {
+            input_tokens: 0,
+            cached_input_tokens: 0,
+            output_tokens: 0,
+            reasoning_output_tokens: 0,
+          },
+          0,
+        ),
       };
 
       subscriber.next({ type: EventType.RUN_ERROR, threadId, runId, message });
@@ -262,8 +274,7 @@ export class CodexAgentAdapter extends AbstractAgent {
             // drain before RUN_FINISHED so any subprocess side effects are done.
             runCtx.lastResultData = {
               isError: false,
-              numTurns: turnCount,
-              usage: accumulatedUsage,
+              usage: toRunUsage(accumulatedUsage, turnCount),
             };
             this.flushMessages(input, runMessages, subscriber);
             try {
@@ -288,8 +299,7 @@ export class CodexAgentAdapter extends AbstractAgent {
           runCtx.lastResultData = {
             isError: true,
             errorMessage: event.error.message,
-            numTurns: turnCount,
-            usage: accumulatedUsage,
+            usage: toRunUsage(accumulatedUsage, turnCount),
           };
           throw new Error(event.error.message);
         }
@@ -309,8 +319,7 @@ export class CodexAgentAdapter extends AbstractAgent {
     if (!runCtx.lastResultData) {
       runCtx.lastResultData = {
         isError: false,
-        numTurns: turnCount,
-        usage: accumulatedUsage,
+        usage: toRunUsage(accumulatedUsage, turnCount),
       };
     }
 

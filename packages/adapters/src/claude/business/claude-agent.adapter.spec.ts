@@ -506,7 +506,21 @@ describe("ClaudeAgentAdapter run() 端到端", () => {
             if (done) return { value: undefined, done: true };
             done = true;
             return {
-              value: { type: "result", result: "hi", is_error: false },
+              value: {
+                type: "result",
+                subtype: "success",
+                result: "hi",
+                is_error: false,
+                num_turns: 1,
+                total_cost_usd: 0.01,
+                duration_api_ms: 100,
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 5,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              },
               done: false,
             };
           },

@@ -6,6 +6,7 @@ import { Observable, Subscriber } from "rxjs";
 import { AbstractAgent, EventType } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput, Message } from "@ag-ui/core";
 import { generateId } from "@agework/shared";
+import type { RunUsage } from "@agework/shared/protocol";
 
 import { createSdkMcpServer, query } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -37,8 +38,17 @@ import {
   buildAguiAssistantMessage,
   buildAguiToolMessage,
   isStateManagementTool,
+  toRunUsage,
 } from "./utils";
 import { handleToolUseBlock } from "./handlers";
+
+/** Result data captured at the end of a Claude run. */
+type ClaudeResultData = {
+  isError: boolean;
+  durationMs?: number;
+  structuredOutput?: unknown;
+  usage: RunUsage;
+};
 
 /**
  * AG-UI adapter for the Anthropic Claude Agent SDK.
@@ -307,7 +317,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
 
     const runCtx = {
       currentState: hasState(input.state) ? input.state : null,
-      lastResultData: undefined as Record<string, unknown> | undefined,
+      lastResultData: undefined as ClaudeResultData | undefined,
     };
 
     try {
@@ -518,7 +528,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
     subscriber: Subscriber<ProcessedEvent>,
     runCtx: {
       currentState: unknown;
-      lastResultData: Record<string, unknown> | undefined;
+      lastResultData: ClaudeResultData | undefined;
     },
   ): Promise<void> {
     // Per-run state (local to this invocation)
@@ -984,22 +994,18 @@ export class ClaudeAgentAdapter extends AbstractAgent {
         // Handle result messages
         else if (message.type === "result") {
           const resultMsg = message as SDKResultMessage;
+          const isSuccess = resultMsg.subtype === "success";
 
           runCtx.lastResultData = {
-            isError: (resultMsg as { is_error?: boolean }).is_error ?? false,
-            durationMs: (resultMsg as { duration_ms?: number }).duration_ms,
-            durationApiMs: (resultMsg as { duration_api_ms?: number })
-              .duration_api_ms,
-            numTurns: (resultMsg as { num_turns?: number }).num_turns,
-            totalCostUsd: (resultMsg as { total_cost_usd?: number })
-              .total_cost_usd,
-            usage:
-              (resultMsg as { usage?: Record<string, unknown> }).usage ?? {},
-            structuredOutput: (resultMsg as { structured_output?: unknown })
-              .structured_output,
+            isError: resultMsg.is_error,
+            durationMs: resultMsg.duration_ms,
+            structuredOutput: isSuccess
+              ? resultMsg.structured_output
+              : undefined,
+            usage: toRunUsage(resultMsg),
           };
 
-          const resultText = (resultMsg as { result?: string }).result;
+          const resultText = isSuccess ? resultMsg.result : undefined;
           if (!hasStreamedText && resultText) {
             const resultMsgId = generateId();
             subscriber.next({
