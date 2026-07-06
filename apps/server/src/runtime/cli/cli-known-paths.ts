@@ -1,6 +1,6 @@
 /**
  * Agent CLI 已知安装位置搜索（server 端本地检测副本）。
- * 逻辑与 apps/runtime/src/cli/known-locations.ts 保持一致。
+ * 逻辑与 apps/runtime/src/cli/cli-known-paths.ts 保持一致。
  */
 
 import { existsSync, statSync } from "node:fs";
