@@ -43,26 +43,6 @@ export function runningInstanceMetadata(input: {
   };
 }
 
-export function stoppedInstanceMetadata(input: {
-  runtimeType: string;
-  isolationScope: string;
-  ownerId: string;
-  reason: string;
-  errorMessage?: string;
-  now?: Date;
-}): WorkerInstanceDiagnosticMetadata {
-  const now = (input.now ?? new Date()).toISOString();
-  return {
-    ownerId: input.ownerId,
-    runtimeType: input.runtimeType,
-    isolationScope: input.isolationScope,
-    statusReason: input.reason,
-    lastSeenAt: now,
-    stoppedAt: now,
-    ...(input.errorMessage ? { errorMessage: input.errorMessage } : {}),
-  };
-}
-
 export function statusInstanceMetadata(input: {
   runtimeType: string;
   isolationScope: string;

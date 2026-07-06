@@ -45,6 +45,7 @@ function makeInput(
       conversationId: "conversation-1",
     } as WorkerExecutionStartInput["runConfig"],
     runtimeTarget: makeRuntimeSpec(runtimeType),
+    targetRuntimeId: "builtin-local",
   };
 }
 

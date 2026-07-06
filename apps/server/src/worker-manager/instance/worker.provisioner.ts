@@ -67,7 +67,7 @@ export class WorkerProvisioner {
     const ownerId = runtimeTarget.ownerId;
     const { runtimeType, isolationScope } = this.identity(input);
     const startToken = randomUUID();
-    const targetRuntimeId = input.targetRuntimeId ?? null;
+    const targetRuntimeId = input.targetRuntimeId;
 
     try {
       const insert = await this.registry.insertStarting(
@@ -106,8 +106,8 @@ export class WorkerProvisioner {
         runConfig.workspaceId
       );
       const expectedRuntimeInstanceId =
-        binding && binding.workerInstance.runtimeType === runtimeType
-          ? binding.workerInstance.runtimeInstanceId
+        binding && binding.worker.runtimeType === runtimeType
+          ? binding.worker.instanceId
           : null;
 
       const ctx: RuntimeLaunchContext = {
@@ -155,7 +155,8 @@ export class WorkerProvisioner {
             ownerId,
           },
           runtimeInstanceId,
-          "http"
+          "http",
+          targetRuntimeId
         )
         .catch(swallow(this.logger, `upsert running for owner ${ownerId}`));
 
@@ -172,12 +173,7 @@ export class WorkerProvisioner {
         `worker launch failed for owner ${ownerId}`
       );
       await this.registry
-        .markErrorByOwner(
-          runtimeType,
-          isolationScope,
-          ownerId,
-          err instanceof Error ? err.message : String(err)
-        )
+        .markErrorByOwner(runtimeType, isolationScope, ownerId)
         .catch(swallow(this.logger, `mark launch error for owner ${ownerId}`));
       this.owners.delete(ownerId);
       this.logger.warn(
@@ -193,14 +189,14 @@ export class WorkerProvisioner {
   /** owner 仍在(fence 判死 / admin 手动停):停 worker,保留载体。 */
   stop(ref: RuntimeInstanceRef): Promise<void> {
     return this.finalize(ref, (r) =>
-      this.runtimeService.runtimeFor(r.targetRuntimeId ?? null).stop(r)
+      this.runtimeService.runtimeFor(requireTargetRuntimeId(r)).stop(r)
     );
   }
 
   /** owner 永久消失(删 workspace / user):删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> {
     return this.finalize(ref, (r) =>
-      this.runtimeService.runtimeFor(r.targetRuntimeId ?? null).destroy(r)
+      this.runtimeService.runtimeFor(requireTargetRuntimeId(r)).destroy(r)
     );
   }
 
@@ -212,9 +208,14 @@ export class WorkerProvisioner {
   ): Promise<void> {
     this.owners.delete(ref.ownerId);
     this.commandDispatcher.cleanupByOwnerId(ref.ownerId);
-    await Promise.resolve(runtimeAction(ref)).catch(
-      swallow(this.logger, `provider teardown for owner ${ref.ownerId}`)
-    );
+    // Promise.resolve().then(...) 而不是 Promise.resolve(runtimeAction(ref)):
+    // runtimeAction 内部(requireTargetRuntimeId)可能同步 throw,同步 throw 发生在
+    // Promise.resolve(...) 求值参数阶段,不会被后面的 .catch() 接住,会导致 finalize
+    // 直接 reject、跳过下面必须执行的 markStoppedByOwner 清理。放进 .then() 回调里
+    // 执行,同步 throw 才会正确变成 rejected promise、被 .catch() 吞掉。
+    await Promise.resolve()
+      .then(() => runtimeAction(ref))
+      .catch(swallow(this.logger, `provider teardown for owner ${ref.ownerId}`));
     await this.registry
       .markStoppedByOwner(ref.runtimeType, ref.isolationScope, ref.ownerId)
       .catch(swallow(this.logger, `mark stopped for owner ${ref.ownerId}`));
@@ -251,4 +252,18 @@ export class WorkerProvisioner {
     }
     return env;
   }
+}
+
+/**
+ * `RuntimeInstanceRef.targetRuntimeId` 是可选的(该 ref 类型也被不认识 server
+ * Runtime 概念的远程 manager 复用),但 server 侧构造的每一个 ref 都来自 Worker.runtimeId
+ * 必填列,恒有值——这里收窄给 `RuntimeService.runtimeFor()` 用。
+ */
+function requireTargetRuntimeId(ref: RuntimeInstanceRef): string {
+  if (!ref.targetRuntimeId) {
+    throw new Error(
+      `missing targetRuntimeId for owner ${ref.ownerId} (server-constructed ref should always have one)`
+    );
+  }
+  return ref.targetRuntimeId;
 }

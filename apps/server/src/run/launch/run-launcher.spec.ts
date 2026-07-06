@@ -74,8 +74,10 @@ function makeWorkspaceView(
     workspaceId: "ws-1",
     workspaceRootPath: "/tmp/ws",
     runtimeType: "local",
-    isolationScope: null,
+    isolationScope: "workspace",
     username: "admin-1",
+    runtimeId: "builtin-local",
+    runtimeSource: "builtin",
     ...overrides,
   };
 }

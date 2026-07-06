@@ -2,11 +2,14 @@ import type { RuntimeCapabilities } from "../protocol/runtime-tunnel";
 
 export type RuntimeStatus = "online" | "offline";
 
-/** /api/v1/runtimes/list 的条目(Registered Runtime 部署实例)。 */
+/** /api/v1/runtimes/list 的条目(builtin 本机内置 + Registered 部署实例)。 */
 export type RuntimeResponse = {
   id: string;
   name: string;
-  kind: string;
+  /** "registered"=远程机器注册, "builtin"=本机内置(全局,不可删除)。 */
+  source: string;
+  /** null = 全局 builtin,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
+  ownerId: string | null;
   /** manager 注册时上报,配对未完成时为 null。 */
   runtimeType: string | null;
   status: RuntimeStatus;

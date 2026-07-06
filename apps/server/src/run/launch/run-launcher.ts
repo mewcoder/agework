@@ -87,7 +87,7 @@ export class RunLauncher {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
-    const targetRuntimeId = workspace.runtimeId ?? null;
+    const targetRuntimeId = workspace.runtimeId;
     const runtimeTarget = this.getPlacement({ workspace, userId });
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
@@ -190,9 +190,8 @@ export class RunLauncher {
     userId: string;
   }): RuntimeSpec {
     const { workspace, userId } = input;
-    const isRegistered = Boolean(workspace.runtimeId);
-    const requestedRuntimeType =
-      workspace.runtimeType ?? this.configService.getDefaultRuntimeType();
+    const isRegistered = workspace.runtimeSource !== "builtin";
+    const requestedRuntimeType = workspace.runtimeType;
     if (
       !isRegistered &&
       !this.configService.isRuntimeTypeAllowed(requestedRuntimeType)
@@ -224,8 +223,7 @@ export class RunLauncher {
       });
     }
 
-    const requestedIsolationScope =
-      workspace.isolationScope ?? this.configService.getDefaultIsolationScope();
+    const requestedIsolationScope = workspace.isolationScope;
     if (
       !isRegistered &&
       !this.configService.isIsolationScopeAllowed(requestedIsolationScope)
@@ -505,7 +503,7 @@ export class RunLauncher {
     isolationScope?: string;
     runConfig: RunConfig;
     runtimeTarget: RuntimeSpec;
-    targetRuntimeId: string | null;
+    targetRuntimeId: string;
     stream: RunStream;
   }): Promise<WorkerExecutionHandle | null> {
     const {

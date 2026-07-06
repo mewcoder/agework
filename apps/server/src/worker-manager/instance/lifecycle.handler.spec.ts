@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { WorkerInstanceLifecycleHandler } from "./lifecycle.handler";
+import { WorkerLifecycleHandler } from "./lifecycle.handler";
 
 function makeResource(overrides: Record<string, unknown> = {}) {
   return {
@@ -7,7 +7,8 @@ function makeResource(overrides: Record<string, unknown> = {}) {
     runtimeType: "docker",
     isolationScope: "workspace",
     ownerId: "ws-1",
-    runtimeInstanceId: "container-1",
+    instanceId: "container-1",
+    runtimeId: "rt-1",
     status: "running",
     ...overrides,
   };
@@ -40,7 +41,11 @@ function makeRuntimeService(overrides: Record<string, unknown> = {}) {
     destroy: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
-  return { ...runtime, runtimeFor: vi.fn().mockReturnValue(runtime) };
+  return {
+    ...runtime,
+    runtimeFor: vi.fn().mockReturnValue(runtime),
+    getBuiltinRuntimeId: vi.fn().mockReturnValue("builtin-local"),
+  };
 }
 
 function makeLivenessStore(overrides: Record<string, unknown> = {}) {
@@ -50,20 +55,20 @@ function makeLivenessStore(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe("WorkerInstanceLifecycleHandler", () => {
+describe("WorkerLifecycleHandler", () => {
   describe("shutdownForWorkspace", () => {
     it("shuts down a workspace-owned sandbox resource through the provisioner and deletes the workspace binding", async () => {
       const registry = makeRegistry({
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          workerInstance: makeResource(),
+          worker: makeResource(),
         }),
       });
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new WorkerInstanceLifecycleHandler(
+      const service = new WorkerLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -78,6 +83,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
         ownerId: "ws-1",
         runtimeInstanceId: "container-1",
         isolationScope: "workspace",
+        targetRuntimeId: "rt-1",
       });
       expect(registry.markStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1" }),
@@ -91,7 +97,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          workerInstance: makeResource({
+          worker: makeResource({
             isolationScope: "user",
             ownerId: "user-1",
           }),
@@ -100,7 +106,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new WorkerInstanceLifecycleHandler(
+      const service = new WorkerLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -119,16 +125,16 @@ describe("WorkerInstanceLifecycleHandler", () => {
         findBindingWithResource: vi.fn().mockResolvedValue({
           id: "wr-1",
           workspaceId: "ws-1",
-          workerInstance: makeResource({
+          worker: makeResource({
             runtimeType: "local",
-            runtimeInstanceId: "4242:token",
+            instanceId: "4242:token",
           }),
         }),
       });
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new WorkerInstanceLifecycleHandler(
+      const service = new WorkerLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -142,6 +148,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
         ownerId: "ws-1",
         runtimeInstanceId: "4242:token",
         isolationScope: "workspace",
+        targetRuntimeId: "rt-1",
       });
       expect(registry.markStoppedById).toHaveBeenCalledWith(
         expect.objectContaining({ id: "rr-1", runtimeType: "local" }),
@@ -160,19 +167,19 @@ describe("WorkerInstanceLifecycleHandler", () => {
             id: "rr-user",
             isolationScope: "user",
             ownerId: "user-1",
-            runtimeInstanceId: "container-user",
+            instanceId: "container-user",
           }),
           makeResource({
             id: "rr-ws",
             ownerId: "ws-2",
-            runtimeInstanceId: "container-ws",
+            instanceId: "container-ws",
           }),
         ]),
       });
       const provisioner = makeProvisioner();
       const runtimeService = makeRuntimeService();
       const livenessStore = makeLivenessStore();
-      const service = new WorkerInstanceLifecycleHandler(
+      const service = new WorkerLifecycleHandler(
         registry as never,
         provisioner as never,
         runtimeService as never,
@@ -222,7 +229,7 @@ describe("WorkerInstanceLifecycleHandler", () => {
     const provisioner = makeProvisioner({ destroy });
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -243,21 +250,23 @@ describe("onApplicationBootstrap", () => {
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-1",
-          runtimeInstanceId: "4242:token",
+          instanceId: "4242:token",
+          runtimeId: "builtin-local",
         },
         {
           id: "rr-2",
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-2",
-          runtimeInstanceId: "5555:token",
+          instanceId: "5555:token",
+          runtimeId: "builtin-local",
         },
       ]),
     });
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -298,15 +307,15 @@ describe("onApplicationBootstrap", () => {
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-1",
-          runtimeInstanceId: "4242:token",
-          runtimeId: null,
+          instanceId: "4242:token",
+          runtimeId: "builtin-local",
         },
         {
           id: "rr-registered",
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-2",
-          runtimeInstanceId: "9999:token",
+          instanceId: "9999:token",
           runtimeId: "rt-1",
         },
       ]),
@@ -314,7 +323,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -344,7 +353,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -376,7 +385,7 @@ describe("onApplicationBootstrap", () => {
     const provisioner = makeProvisioner();
     const runtimeService = makeRuntimeService();
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,
@@ -400,14 +409,16 @@ describe("onApplicationBootstrap", () => {
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-1",
-          runtimeInstanceId: "4242:token",
+          instanceId: "4242:token",
+          runtimeId: "builtin-local",
         },
         {
           id: "rr-2",
           runtimeType: "local",
           isolationScope: "workspace",
           ownerId: "ws-2",
-          runtimeInstanceId: "5555:token",
+          instanceId: "5555:token",
+          runtimeId: "builtin-local",
         },
       ]),
     });
@@ -418,7 +429,7 @@ describe("onApplicationBootstrap", () => {
       .mockResolvedValueOnce(undefined);
     const runtimeService = makeRuntimeService({ destroy });
     const livenessStore = makeLivenessStore();
-    const service = new WorkerInstanceLifecycleHandler(
+    const service = new WorkerLifecycleHandler(
       registry as never,
       provisioner as never,
       runtimeService as never,

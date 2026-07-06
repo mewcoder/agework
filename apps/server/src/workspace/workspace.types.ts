@@ -6,9 +6,12 @@
 export type WorkspaceRunContext = {
   workspaceId: string;
   workspaceRootPath: string;
-  runtimeType?: string;
-  isolationScope?: string | null;
+  /** 派生自 workspace.runtime.runtimeType,恒有值(Runtime 行必然存在)。 */
+  runtimeType: string;
+  isolationScope: string;
   username: string;
-  /** 绑定的 Registered Runtime id;null/undefined = Managed(本机 in-process)。 */
-  runtimeId?: string | null;
+  /** 绑定的 Runtime(builtin 或 registered)id,恒有值。 */
+  runtimeId: string;
+  /** 绑定 Runtime 的来源:"builtin" = Managed(本机 in-process),"registered" = 远程机器。 */
+  runtimeSource: string;
 };

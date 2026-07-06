@@ -2,6 +2,21 @@ import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
 } from "@agework/providers";
+import type { RuntimeType } from "../config/config.service";
+
+const BUILTIN_RUNTIME_ID_PREFIX = "builtin-";
+
+/** builtin（本机 in-process）Runtime 的固定 id：`builtin-${runtimeType}`。
+ *  这些行在服务启动时 upsert，id 恒定，不用查库反查 source 就能判断。 */
+export function builtinRuntimeId(runtimeType: RuntimeType): string {
+  return `${BUILTIN_RUNTIME_ID_PREFIX}${runtimeType}`;
+}
+
+/** 是否是 builtin Runtime id——固定前缀匹配，不用查库；替代原先 `runtimeId === null`
+ *  判断 Managed 的方式（见 runtime 模块 ADR-0001）。 */
+export function isBuiltinRuntimeId(runtimeId: string): boolean {
+  return runtimeId.startsWith(BUILTIN_RUNTIME_ID_PREFIX);
+}
 
 /**
  * server 与执行侧的唯一控制面边界:起/停/毁 worker 载体。

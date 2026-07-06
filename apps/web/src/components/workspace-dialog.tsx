@@ -48,9 +48,12 @@ const ISOLATION_SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["managed", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
-/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选)。 */
+/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选;builtin 全局运行环境
+ *  走上面的 runtimeType/isolationScope 下拉,不在这个"选择已配对机器"的列表里出现)。 */
 function eligibleRuntimes(runtimes: Runtime[]): Runtime[] {
-  return runtimes.filter((runtime) => runtime.runtimeType !== null);
+  return runtimes.filter(
+    (runtime) => runtime.runtimeType !== null && runtime.source !== "builtin"
+  );
 }
 
 function defaultWorkspaceName(): string {

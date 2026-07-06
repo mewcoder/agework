@@ -1,6 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { WorkerInstanceLifecycleHandler } from "./lifecycle.handler";
+import { WorkerLifecycleHandler } from "./lifecycle.handler";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -17,10 +17,10 @@ import {
  * best-effort:失败仅记录日志,不影响来源操作(idle 超时与 GC 仍是兜底)。
  */
 @Injectable()
-export class WorkerInstanceLifecycleListener {
-  private readonly logger = new Logger(WorkerInstanceLifecycleListener.name);
+export class WorkerLifecycleListener {
+  private readonly logger = new Logger(WorkerLifecycleListener.name);
 
-  constructor(private readonly lifecycle: WorkerInstanceLifecycleHandler) {}
+  constructor(private readonly lifecycle: WorkerLifecycleHandler) {}
 
   @OnEvent(WORKSPACE_DELETED_EVENT)
   async onWorkspaceDeleted({

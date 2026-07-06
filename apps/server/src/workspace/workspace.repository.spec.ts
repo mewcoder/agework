@@ -33,13 +33,25 @@ function makePrisma(parts: {
 describe("WorkspaceRepository", () => {
   it("createWithDirectory persists workspace fields and a managed directory atomically", async () => {
     const workspaceCreate = vi.fn((args: { data: Record<string, unknown> }) =>
-      Promise.resolve({ ...args.data })
+      Promise.resolve({ id: args.data.id })
     );
     const directoryCreate = vi.fn((args: { data: Record<string, unknown> }) =>
       Promise.resolve({ ...args.data })
     );
+    const findUniqueOrThrow = vi.fn().mockResolvedValue({
+      id: "ws-1",
+      name: "Local workspace",
+      userId: "admin-1",
+      isolationScope: "workspace",
+      runtimeId: "builtin-local",
+      runtime: { runtimeType: "local" },
+      directory: { source: "managed" },
+    });
     const prisma = makePrisma({
-      workspace: { create: workspaceCreate },
+      workspace: {
+        create: workspaceCreate,
+        findUniqueOrThrow,
+      },
       workspaceDirectory: { create: directoryCreate },
     });
     const repo = new WorkspaceRepository(prisma as never);
@@ -50,18 +62,18 @@ describe("WorkspaceRepository", () => {
       gitUrl: undefined,
       description: null,
       userId: "admin-1",
-      runtimeType: "local",
-      isolationScope: null,
+      isolationScope: "workspace",
       rootPath: "/tmp/ws-1",
       directorySource: "managed",
+      runtimeId: "builtin-local",
     });
 
     expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
       id: "ws-1",
       name: "Local workspace",
       userId: "admin-1",
-      runtimeType: "local",
-      isolationScope: null,
+      isolationScope: "workspace",
+      runtimeId: "builtin-local",
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {

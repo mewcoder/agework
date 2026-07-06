@@ -88,12 +88,16 @@ async function createRunsTestingModule(
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())
     .overrideProvider(PrismaService)
-    // WorkerInstanceLifecycleHandler.onApplicationBootstrap（worker-manager 模块内）
-    // 在 init() 时经 WorkerRegistryRepository 做重启扫尾，这里给对应查询空实现。
+    // WorkerLifecycleHandler.onApplicationBootstrap（worker-manager 模块内）在
+    // init() 时经 WorkerRegistryRepository 做重启扫尾;RuntimeService.onApplicationBootstrap
+    // 同时 upsert builtin Runtime 行——这里给对应查询空实现。
     .useValue({
-      workerInstance: {
-        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+      worker: {
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         findMany: vi.fn().mockResolvedValue([]),
+      },
+      runtime: {
+        upsert: vi.fn().mockResolvedValue({}),
       },
     })
     .overrideProvider(ModelProviderService)
@@ -108,6 +112,7 @@ async function createRunsTestingModule(
 function createConfigServiceMock(): Partial<ConfigService> {
   return {
     getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
+    getAllowedRuntimeTypes: vi.fn().mockReturnValue(["local"]),
     getDefaultIsolationScope: vi.fn().mockReturnValue("workspace"),
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),

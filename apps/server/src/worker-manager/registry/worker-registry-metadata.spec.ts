@@ -4,7 +4,6 @@ import {
   runningInstanceMetadata,
   workerInstanceDiagnostics,
   statusInstanceMetadata,
-  stoppedInstanceMetadata,
 } from "./worker-registry-metadata";
 
 describe("worker-registry-metadata", () => {
@@ -38,20 +37,6 @@ describe("worker-registry-metadata", () => {
       existing: { customField: "kept" },
     });
     expect(result.customField).toBe("kept");
-  });
-
-  it("stoppedInstanceMetadata sets stoppedAt and optional errorMessage", () => {
-    const now = new Date("2026-01-01T00:00:00.000Z");
-    const result = stoppedInstanceMetadata({
-      runtimeType: "sandbox",
-      isolationScope: "workspace",
-      ownerId: "ws-1",
-      reason: "owner_released",
-      now,
-    });
-    expect(result.statusReason).toBe("owner_released");
-    expect(result.stoppedAt).toBe(now.toISOString());
-    expect(result.errorMessage).toBeUndefined();
   });
 
   it("statusInstanceMetadata does not set stoppedAt", () => {

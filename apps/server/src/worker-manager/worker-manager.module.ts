@@ -11,8 +11,8 @@ import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 import { WorkerProvisioner } from "./instance/worker.provisioner";
-import { WorkerInstanceLifecycleHandler } from "./instance/lifecycle.handler";
-import { WorkerInstanceLifecycleListener } from "./instance/lifecycle.listener";
+import { WorkerLifecycleHandler } from "./instance/lifecycle.handler";
+import { WorkerLifecycleListener } from "./instance/lifecycle.listener";
 import { AdminWorkerController } from "./admin/admin-worker.controller";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
@@ -49,8 +49,8 @@ import { WorkerLivenessWatchdog } from "./connection/worker-liveness.watchdog";
     WorkerHandshakeStore,
     WorkerTokenGuard,
     WorkerProvisioner,
-    WorkerInstanceLifecycleHandler,
-    WorkerInstanceLifecycleListener,
+    WorkerLifecycleHandler,
+    WorkerLifecycleListener,
     WorkerLivenessStore,
     WorkerLivenessWatchdog,
     WorkerManagerService,

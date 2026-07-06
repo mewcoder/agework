@@ -3,12 +3,16 @@ import { generateId } from "@agework/shared";
 import { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
 
-const WORKSPACE_INCLUDE = { directory: true } as const;
+const WORKSPACE_INCLUDE = {
+  directory: true,
+  runtime: { select: { runtimeType: true } },
+} as const;
 
 const WORKSPACE_META_INCLUDE = {
   user: { select: { username: true } },
   _count: { select: { conversations: { where: { deletedAt: null } } } },
   directory: true,
+  runtime: { select: { runtimeType: true } },
 } as const;
 
 export type WorkspaceRow = Prisma.WorkspaceGetPayload<{
@@ -25,12 +29,11 @@ export type WorkspaceCreateInput = {
   gitUrl?: string;
   description: string | null;
   userId: string;
-  runtimeType: string;
-  isolationScope: string | null;
+  isolationScope: string;
   rootPath: string;
   directorySource: string;
-  /** 绑定的 Registered Runtime id;null/undefined = Managed。 */
-  runtimeId?: string | null;
+  /** 绑定的 Runtime(builtin 或 registered),必填。 */
+  runtimeId: string;
 };
 
 export type WorkspacePatch = {
@@ -89,12 +92,11 @@ export class WorkspaceRepository {
           gitUrl: input.gitUrl,
           description: input.description,
           userId: input.userId,
-          runtimeType: input.runtimeType,
           isolationScope: input.isolationScope,
-          runtimeId: input.runtimeId ?? null,
+          runtimeId: input.runtimeId,
         },
       });
-      const directory = await tx.workspaceDirectory.create({
+      await tx.workspaceDirectory.create({
         data: {
           id: generateId(),
           workspaceId: created.id,
@@ -104,7 +106,13 @@ export class WorkspaceRepository {
           metadata: {},
         },
       });
-      return { ...created, directory };
+      // 重新查一遍带上 include(directory/runtime),换一次多余往返换回类型一致的
+      // WorkspaceRow,不在这里手工拼凑关联字段。
+      const row = await tx.workspace.findUniqueOrThrow({
+        where: { id: created.id },
+        include: WORKSPACE_INCLUDE,
+      });
+      return row;
     });
   }
 
@@ -148,7 +156,11 @@ export class WorkspaceRepository {
   findRunView(id: string) {
     return this.prisma.workspace.findFirst({
       where: { id, deletedAt: null },
-      include: { directory: true, user: { select: { username: true } } },
+      include: {
+        directory: true,
+        user: { select: { username: true } },
+        runtime: { select: { runtimeType: true, source: true } },
+      },
     });
   }
 

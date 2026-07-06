@@ -10,27 +10,30 @@ function makeRow(overrides: Partial<RuntimeRow> = {}): RuntimeRow {
   return {
     id: "rt-1",
     name: "mac-studio",
-    kind: "registered",
+    source: "registered",
     runtimeType: null,
     ownerId: "u-1",
     status: "offline",
     lastHeartbeatAt: null,
     createdAt: new Date("2026-07-04T00:00:00Z"),
     capabilities: null,
+    removedAt: null,
     ...overrides,
   };
 }
 
 // 起/停/毁的 provider 分发测试在 local/local-runtime.spec.ts;这里测门面:
-// runtimeFor 解析、resolveRuntimeSpec 纯计算、getRuntimePolicy 读配置、配对管理。
+// runtimeFor 解析、resolveRuntimeSpec 纯计算、getRuntimePolicy 读配置、配对管理、
+// builtin 注册表 upsert。
 describe("RuntimeService", () => {
   let configService: Partial<ConfigService>;
   let localRuntime: LocalRuntime;
   let repository: {
     create: ReturnType<typeof vi.fn>;
-    listByOwner: ReturnType<typeof vi.fn>;
-    deleteByOwner: ReturnType<typeof vi.fn>;
-    findOwned: ReturnType<typeof vi.fn>;
+    listVisibleToOwner: ReturnType<typeof vi.fn>;
+    revokeByOwner: ReturnType<typeof vi.fn>;
+    findVisibleToOwner: ReturnType<typeof vi.fn>;
+    upsertBuiltin: ReturnType<typeof vi.fn>;
   };
   let tunnelHandler: { closeConnection: ReturnType<typeof vi.fn> };
   let service: RuntimeService;
@@ -53,9 +56,10 @@ describe("RuntimeService", () => {
     } as unknown as LocalRuntime;
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
-      listByOwner: vi.fn().mockResolvedValue([makeRow()]),
-      deleteByOwner: vi.fn().mockResolvedValue(true),
-      findOwned: vi.fn().mockResolvedValue(makeRow()),
+      listVisibleToOwner: vi.fn().mockResolvedValue([makeRow()]),
+      revokeByOwner: vi.fn().mockResolvedValue(true),
+      findVisibleToOwner: vi.fn().mockResolvedValue(makeRow()),
+      upsertBuiltin: vi.fn().mockResolvedValue(makeRow({ source: "builtin" })),
     };
     tunnelHandler = { closeConnection: vi.fn() };
     service = new RuntimeService(
@@ -66,13 +70,23 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("runtimeFor(null) resolves the managed LocalRuntime", () => {
-    expect(service.runtimeFor(null)).toBe(localRuntime);
+  it("runtimeFor(builtin id) resolves the managed LocalRuntime", () => {
+    expect(service.runtimeFor("builtin-local")).toBe(localRuntime);
+    expect(service.runtimeFor("builtin-docker")).toBe(localRuntime);
   });
 
-  it("runtimeFor(runtimeId) resolves a RemoteRuntime bound to that id", () => {
+  it("runtimeFor(registered id) resolves a RemoteRuntime bound to that id", () => {
     const remote = service.runtimeFor("rt-1");
     expect(remote).toBeInstanceOf(RemoteRuntime);
+  });
+
+  it("isManaged distinguishes builtin ids from registered ids", () => {
+    expect(service.isManaged("builtin-local")).toBe(true);
+    expect(service.isManaged("rt-1")).toBe(false);
+  });
+
+  it("getBuiltinRuntimeId returns the fixed id for a runtimeType", () => {
+    expect(service.getBuiltinRuntimeId("docker")).toBe("builtin-docker");
   });
 
   it("resolveRuntimeSpec delegates to the pure resolver", () => {
@@ -96,6 +110,25 @@ describe("RuntimeService", () => {
       allowedIsolationScopes: ["user", "workspace"],
       idleTimeoutSeconds: 600,
     });
+  });
+
+  it("onApplicationBootstrap upserts a builtin row per allowed runtimeType", async () => {
+    await service.onApplicationBootstrap();
+    expect(repository.upsertBuiltin).toHaveBeenCalledTimes(3);
+    expect(repository.upsertBuiltin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "builtin-local",
+        runtimeType: "local",
+        capabilities: { isolationScopes: ["workspace"] },
+      })
+    );
+    expect(repository.upsertBuiltin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "builtin-docker",
+        runtimeType: "docker",
+        capabilities: { isolationScopes: ["user", "workspace"] },
+      })
+    );
   });
 
   it("create stores only the sha256 of the pairing token and returns the plaintext once", async () => {
@@ -123,7 +156,8 @@ describe("RuntimeService", () => {
       {
         id: "rt-1",
         name: "mac-studio",
-        kind: "registered",
+        source: "registered",
+        ownerId: "u-1",
         runtimeType: null,
         status: "offline",
         capabilities: null,
@@ -133,28 +167,27 @@ describe("RuntimeService", () => {
     ]);
   });
 
-  it("delete kicks the live tunnel connection after removing the row", async () => {
+  it("delete revokes the row but does not touch the live tunnel connection", async () => {
     await service.delete("u-1", "rt-1");
-    expect(repository.deleteByOwner).toHaveBeenCalledWith("u-1", "rt-1");
-    expect(tunnelHandler.closeConnection).toHaveBeenCalledWith("rt-1");
-  });
-
-  it("delete throws NotFound when the row is missing or owned by someone else", async () => {
-    repository.deleteByOwner.mockResolvedValueOnce(false);
-    await expect(service.delete("u-1", "rt-x")).rejects.toThrow(
-      "runtime not found"
-    );
+    expect(repository.revokeByOwner).toHaveBeenCalledWith("u-1", "rt-1");
     expect(tunnelHandler.closeConnection).not.toHaveBeenCalled();
   });
 
-  it("getOwned delegates to repository.findOwned and returns the row", async () => {
+  it("delete throws NotFound when the row is missing or owned by someone else", async () => {
+    repository.revokeByOwner.mockResolvedValueOnce(false);
+    await expect(service.delete("u-1", "rt-x")).rejects.toThrow(
+      "runtime not found"
+    );
+  });
+
+  it("getOwned delegates to repository.findVisibleToOwner and returns the row", async () => {
     const result = await service.getOwned("u-1", "rt-1");
-    expect(repository.findOwned).toHaveBeenCalledWith("u-1", "rt-1");
+    expect(repository.findVisibleToOwner).toHaveBeenCalledWith("u-1", "rt-1");
     expect(result).toEqual(makeRow());
   });
 
   it("getOwned returns null when the row is missing or owned by someone else", async () => {
-    repository.findOwned.mockResolvedValueOnce(null);
+    repository.findVisibleToOwner.mockResolvedValueOnce(null);
     const result = await service.getOwned("u-1", "rt-x");
     expect(result).toBeNull();
   });

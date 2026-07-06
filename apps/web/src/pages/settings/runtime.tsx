@@ -112,17 +112,21 @@ export function RuntimeSettings() {
       id: "actions",
       header: "操作",
       meta: { headerClassName: "pr-4 text-right", cellClassName: "pr-4 text-right" },
-      cell: ({ row }) => (
-        <DataTableActions>
-          <DataTableActionButton
-            tone="destructive"
-            aria-label={`删除运行环境 ${row.original.name}`}
-            onClick={() => deleteDialog.requestDelete(row.original)}
-          >
-            <Trash2 />
-          </DataTableActionButton>
-        </DataTableActions>
-      ),
+      cell: ({ row }) => {
+        // builtin 是全局内置运行环境，所有人可用、不可删除，不渲染删除按钮。
+        if (row.original.source === "builtin") return null;
+        return (
+          <DataTableActions>
+            <DataTableActionButton
+              tone="destructive"
+              aria-label={`删除运行环境 ${row.original.name}`}
+              onClick={() => deleteDialog.requestDelete(row.original)}
+            >
+              <Trash2 />
+            </DataTableActionButton>
+          </DataTableActions>
+        );
+      },
     },
   ];
 

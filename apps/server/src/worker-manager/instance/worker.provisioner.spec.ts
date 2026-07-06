@@ -36,6 +36,7 @@ const input = (runId = "run-1") =>
       runtimePath: "/w",
       runtimeLogDir: "/logs",
     },
+    targetRuntimeId: "builtin-local",
   }) as any;
 
 const dockerInput = (runId = "run-1") =>
@@ -54,6 +55,7 @@ const dockerInput = (runId = "run-1") =>
         mountTarget: "/workspaces",
       },
     },
+    targetRuntimeId: "builtin-docker",
   }) as any;
 
 function make(d = deps()) {
@@ -82,11 +84,11 @@ describe("WorkerProvisioner", () => {
   });
 
   describe("targetRuntimeId routing", () => {
-    it("routes start() to runtimeFor(null) for a Managed run (no targetRuntimeId)", async () => {
+    it("routes start() to runtimeFor(targetRuntimeId) for a Managed run (builtin id)", async () => {
       const d = deps();
       const { provisioner, runtimeFor } = make(d);
       await provisioner.acquireInstanceForRun(input());
-      expect(runtimeFor).toHaveBeenCalledWith(null);
+      expect(runtimeFor).toHaveBeenCalledWith("builtin-local");
     });
 
     it("routes start() to runtimeFor(targetRuntimeId) for a Registered run", async () => {
@@ -106,7 +108,7 @@ describe("WorkerProvisioner", () => {
       );
     });
 
-    it("stop() routes to runtimeFor(ref.targetRuntimeId ?? null)", async () => {
+    it("stop() routes to runtimeFor(ref.targetRuntimeId)", async () => {
       const d = deps();
       const { provisioner, runtimeFor } = make(d);
       await provisioner.stop({
@@ -120,7 +122,7 @@ describe("WorkerProvisioner", () => {
       expect(d.runtime.stop).toHaveBeenCalledOnce();
     });
 
-    it("destroy() falls back to runtimeFor(null) when the ref carries no targetRuntimeId (Managed)", async () => {
+    it("destroy() routes to runtimeFor(ref.targetRuntimeId) for a Managed ref (builtin id)", async () => {
       const d = deps();
       const { provisioner, runtimeFor } = make(d);
       await provisioner.destroy({
@@ -128,9 +130,30 @@ describe("WorkerProvisioner", () => {
         ownerId: "owner-1",
         runtimeInstanceId: "1234:token",
         isolationScope: "workspace",
+        targetRuntimeId: "builtin-local",
       });
-      expect(runtimeFor).toHaveBeenCalledWith(null);
+      expect(runtimeFor).toHaveBeenCalledWith("builtin-local");
       expect(d.runtime.destroy).toHaveBeenCalledOnce();
+    });
+
+    it("destroy() swallows a missing targetRuntimeId but still cleans up the registry row (server-constructed refs should always have one)", async () => {
+      const d = deps();
+      const { provisioner } = make(d);
+      await expect(
+        provisioner.destroy({
+          runtimeType: "local",
+          ownerId: "owner-1",
+          runtimeInstanceId: "1234:token",
+          isolationScope: "workspace",
+        })
+      ).resolves.toBeUndefined();
+      // finalize() swallows the teardown error and still tears down the registry row
+      expect(d.registry.markStoppedByOwner).toHaveBeenCalledWith(
+        "local",
+        "workspace",
+        "owner-1"
+      );
+      expect(d.runtime.destroy).not.toHaveBeenCalled();
     });
   });
 
@@ -147,7 +170,7 @@ describe("WorkerProvisioner", () => {
       expect.any(String),
       "http",
       expect.any(String),
-      null
+      "builtin-docker"
     );
   });
 
@@ -162,7 +185,7 @@ describe("WorkerProvisioner", () => {
   it("sets ctx.expectedRuntimeInstanceId to the bound instance id when runtimeType matches", async () => {
     const d = deps();
     d.registry.findBindingWithResource.mockResolvedValueOnce({
-      workerInstance: { runtimeType: "local", runtimeInstanceId: "bound-1" },
+      worker: { runtimeType: "local", instanceId: "bound-1" },
     });
     await make(d).provisioner.acquireInstanceForRun(input());
     const ctx = d.runtime.start.mock.calls[0][0];
@@ -172,7 +195,7 @@ describe("WorkerProvisioner", () => {
   it("treats a binding for a different runtimeType as no binding (expectedRuntimeInstanceId=null)", async () => {
     const d = deps();
     d.registry.findBindingWithResource.mockResolvedValueOnce({
-      workerInstance: { runtimeType: "docker", runtimeInstanceId: "bound-1" },
+      worker: { runtimeType: "docker", instanceId: "bound-1" },
     });
     await make(d).provisioner.acquireInstanceForRun(input());
     const ctx = d.runtime.start.mock.calls[0][0];

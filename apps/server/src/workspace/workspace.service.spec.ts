@@ -28,14 +28,19 @@ beforeEach(() => {
 });
 
 // Repository 返回的行由入参回推，保证 toWorkspaceDto 的 rootPath / source 映射可被断言。
-function workspaceRowFromCreate(input: WorkspaceCreateInput) {
+// runtimeType 不再是 WorkspaceCreateInput 的字段（由 runtimeId 关联的 Runtime 派生），
+// 从 builtin runtimeId（"builtin-xxx"）反推，registered runtimeId 由调用方显式传入。
+function workspaceRowFromCreate(
+  input: WorkspaceCreateInput,
+  runtimeType: string
+) {
   return {
     id: input.id,
     name: input.name,
     gitUrl: input.gitUrl ?? null,
     description: input.description,
     userId: input.userId,
-    runtimeType: input.runtimeType,
+    runtime: { runtimeType },
     isolationScope: input.isolationScope,
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -58,7 +63,14 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     listAllWithMeta: vi.fn().mockResolvedValue({ list: [], total: 0 }),
     listByOwner: vi.fn().mockResolvedValue([]),
     createWithDirectory: vi.fn((input: WorkspaceCreateInput) =>
-      Promise.resolve(workspaceRowFromCreate(input))
+      Promise.resolve(
+        workspaceRowFromCreate(
+          input,
+          input.runtimeId.startsWith("builtin-")
+            ? input.runtimeId.slice("builtin-".length)
+            : "docker"
+        )
+      )
     ),
     updateOwned: vi.fn().mockResolvedValue(null),
     updateById: vi.fn().mockResolvedValue(null),
@@ -95,6 +107,10 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 function makeRuntimeService(overrides: Record<string, unknown> = {}) {
   return {
     getOwned: vi.fn().mockResolvedValue(null),
+    getBuiltinRuntimeId: vi.fn(
+      (runtimeType: string) => `builtin-${runtimeType}`
+    ),
+    isManaged: vi.fn((runtimeId: string) => runtimeId.startsWith("builtin-")),
     ...overrides,
   };
 }
@@ -139,8 +155,8 @@ describe("WorkspaceService", () => {
       expect.objectContaining({
         id: "ws260614113047",
         userId: "admin-1",
-        runtimeType: "local",
-        isolationScope: null,
+        runtimeId: "builtin-local",
+        isolationScope: "workspace",
         rootPath: expectedRootPath,
         directorySource: "managed",
       })
@@ -195,7 +211,7 @@ describe("WorkspaceService", () => {
 
     expect(repo.createWithDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeType: "docker",
+        runtimeId: "builtin-docker",
         isolationScope: "workspace",
       })
     );
@@ -226,7 +242,7 @@ describe("WorkspaceService", () => {
 
     expect(repo.createWithDirectory).toHaveBeenCalledWith(
       expect.objectContaining({
-        runtimeType: "docker",
+        runtimeId: "builtin-docker",
         isolationScope: "workspace",
         rootPath: expectedRootPath,
         directorySource: "managed",
@@ -333,7 +349,7 @@ describe("WorkspaceService", () => {
       return {
         id: "rt-1",
         name: "mac-studio",
-        kind: "registered",
+        source: "registered",
         runtimeType: "docker",
         ownerId: "admin-1",
         status: "online",
@@ -363,7 +379,6 @@ describe("WorkspaceService", () => {
       expect(mkdirSync).not.toHaveBeenCalled();
       expect(repo.createWithDirectory).toHaveBeenCalledWith(
         expect.objectContaining({
-          runtimeType: "docker",
           isolationScope: "workspace",
           rootPath: "/remote/project",
           directorySource: "remote",
@@ -393,7 +408,11 @@ describe("WorkspaceService", () => {
     });
 
     it("treats a registered local runtime like local: no isolationScope, no fs validation", async () => {
-      const repo = makeRepo();
+      const repo = makeRepo({
+        createWithDirectory: vi.fn((input: WorkspaceCreateInput) =>
+          Promise.resolve(workspaceRowFromCreate(input, "local"))
+        ),
+      });
       const runtimeService = makeRuntimeService({
         getOwned: vi.fn().mockResolvedValue(
           makeRegisteredRuntimeRow({
@@ -412,7 +431,10 @@ describe("WorkspaceService", () => {
       });
 
       expect(repo.createWithDirectory).toHaveBeenCalledWith(
-        expect.objectContaining({ runtimeType: "local", isolationScope: null })
+        expect.objectContaining({
+          runtimeId: "rt-1",
+          isolationScope: "workspace",
+        })
       );
       expect(workspace.isolationScope).toBeNull();
     });
@@ -536,7 +558,7 @@ describe("WorkspaceService", () => {
           name: "Sandbox workspace",
           gitUrl: null,
           description: null,
-          runtimeType: "docker",
+          runtime: { runtimeType: "docker" },
           isolationScope: "workspace",
           userId: "admin-1",
           createdAt: new Date(),
@@ -609,8 +631,9 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
           id: "ws-1",
-          runtimeType: "docker",
+          runtime: { runtimeType: "docker", source: "builtin" },
           isolationScope: "workspace",
+          runtimeId: "builtin-docker",
           directory: { rootPath: "/tmp/ws" },
           user: { username: "mew" },
         }),
@@ -625,7 +648,8 @@ describe("WorkspaceService", () => {
         runtimeType: "docker",
         isolationScope: "workspace",
         username: "mew",
-        runtimeId: undefined,
+        runtimeId: "builtin-docker",
+        runtimeSource: "builtin",
       });
     });
 
@@ -633,7 +657,7 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
           id: "ws-1",
-          runtimeType: "docker",
+          runtime: { runtimeType: "docker", source: "registered" },
           isolationScope: "workspace",
           runtimeId: "rt-1",
           directory: { rootPath: "/remote/ws" },
@@ -645,6 +669,7 @@ describe("WorkspaceService", () => {
       const view = await service.getRunContext("ws-1");
 
       expect(view.runtimeId).toBe("rt-1");
+      expect(view.runtimeSource).toBe("registered");
     });
 
     it("404s when the workspace does not exist", async () => {
@@ -660,8 +685,9 @@ describe("WorkspaceService", () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
           id: "ws-1",
-          runtimeType: "local",
-          isolationScope: null,
+          runtime: { runtimeType: "local", source: "builtin" },
+          isolationScope: "workspace",
+          runtimeId: "builtin-local",
           directory: null,
           user: { username: "mew" },
         }),

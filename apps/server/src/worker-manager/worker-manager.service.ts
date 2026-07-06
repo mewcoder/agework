@@ -197,7 +197,7 @@ export class WorkerManagerService {
     const ref: RuntimeInstanceRef = {
       runtimeType: row.runtimeType,
       ownerId: row.ownerId,
-      runtimeInstanceId: row.runtimeInstanceId,
+      runtimeInstanceId: row.instanceId,
       isolationScope: row.isolationScope,
       targetRuntimeId: row.runtimeId,
     };
@@ -324,7 +324,7 @@ export class WorkerManagerService {
     const ref: RuntimeInstanceRef = {
       runtimeType: resource.runtimeType,
       ownerId: resource.ownerId,
-      runtimeInstanceId: resource.runtimeInstanceId,
+      runtimeInstanceId: resource.instanceId,
       isolationScope: resource.isolationScope,
       targetRuntimeId: resource.runtimeId,
     };
@@ -337,39 +337,38 @@ export class WorkerManagerService {
 // ── admin 响应组装(纯函数)。行形状由 WorkerRegistryRepository 的查询 select
 //    决定,这里只消费。单一使用、无独立测试,按响应形状就近内联的约定放在门面同文件。──
 
-type WorkspaceWorkerBindingRow = {
+type WorkerWorkspaceBindingRow = {
   id: string;
   workspaceId: string;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
 
-type WorkerInstanceRow = {
+type WorkerRow = {
   id: string;
   runtimeType: string;
   isolationScope: string;
   ownerId: string;
-  runtimeInstanceId: string;
+  instanceId: string;
   status: string;
   expiresAt: Date | string | null;
   metadata: unknown;
   createdAt: Date | string;
   updatedAt: Date | string;
-  workspaceWorkerBindings?: WorkspaceWorkerBindingRow[];
+  bindings?: WorkerWorkspaceBindingRow[];
 };
 
 /** 管理端 runtime 资源列表行:附 isReusable / workspaceCount / diagnostics 汇总。 */
-function toWorkerInstanceResponse(resource: WorkerInstanceRow) {
+function toWorkerInstanceResponse(resource: WorkerRow) {
   const diagnostics = workerInstanceDiagnostics(resource.metadata);
-  const workspaceBindings =
-    resource.workspaceWorkerBindings?.map(toWorkspaceBinding);
+  const workspaceBindings = resource.bindings?.map(toWorkspaceBinding);
 
   return {
     id: resource.id,
     runtimeType: resource.runtimeType,
     isolationScope: resource.isolationScope,
     ownerId: resource.ownerId,
-    runtimeInstanceId: resource.runtimeInstanceId,
+    runtimeInstanceId: resource.instanceId,
     status: resource.status,
     isReusable: resource.status === "running",
     workspaceCount: workspaceBindings?.length ?? 0,
@@ -378,8 +377,7 @@ function toWorkerInstanceResponse(resource: WorkerInstanceRow) {
     diagnostics: {
       ...diagnostics,
       ownerId: diagnostics.ownerId ?? resource.ownerId,
-      runtimeInstanceId:
-        diagnostics.runtimeInstanceId ?? resource.runtimeInstanceId,
+      runtimeInstanceId: diagnostics.runtimeInstanceId ?? resource.instanceId,
     },
     createdAt: toIsoString(resource.createdAt),
     updatedAt: toIsoString(resource.updatedAt),
@@ -389,21 +387,22 @@ function toWorkerInstanceResponse(resource: WorkerInstanceRow) {
 
 /** 管理端 run 详情里的 runtime 实例视图(findRunInstanceView 的行,不含 metadata)。 */
 function toAdminWorkerInstanceResponse(
-  record: Omit<WorkerInstanceRow, "metadata" | "workspaceWorkerBindings"> & {
-    workspaceWorkerBindings: WorkspaceWorkerBindingRow[];
+  record: Omit<WorkerRow, "metadata" | "bindings"> & {
+    bindings: WorkerWorkspaceBindingRow[];
   }
 ): AdminRunWorkerInstanceResponse {
-  const { workspaceWorkerBindings, ...resource } = record;
+  const { bindings, instanceId, ...resource } = record;
   return {
     ...resource,
+    runtimeInstanceId: instanceId,
     expiresAt: resource.expiresAt ? toIsoString(resource.expiresAt) : null,
     createdAt: toIsoString(resource.createdAt),
     updatedAt: toIsoString(resource.updatedAt),
-    workspaceBindings: workspaceWorkerBindings.map(toWorkspaceBinding),
+    workspaceBindings: bindings.map(toWorkspaceBinding),
   };
 }
 
-function toWorkspaceBinding(binding: WorkspaceWorkerBindingRow) {
+function toWorkspaceBinding(binding: WorkerWorkspaceBindingRow) {
   return {
     id: binding.id,
     workspaceId: binding.workspaceId,

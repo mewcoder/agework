@@ -100,10 +100,13 @@ export class WorkspaceService {
     return {
       workspaceId: workspace.id,
       workspaceRootPath: workspace.directory.rootPath,
-      runtimeType: workspace.runtimeType ?? undefined,
+      // Runtime 行必然存在,runtimeType 在配对完成前才可能为空(见
+      // WorkspaceService.resolveRegisteredPlacement,创建时已经校验过)。
+      runtimeType: workspace.runtime.runtimeType as string,
       isolationScope: workspace.isolationScope,
       username: workspace.user.username,
       runtimeId: workspace.runtimeId,
+      runtimeSource: workspace.runtime.source,
     };
   }
 
@@ -139,21 +142,25 @@ export class WorkspaceService {
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
-    const { runtimeType, isolationScope, targetRuntimeId } = requestedRuntimeId
-      ? await this.resolveRegisteredPlacement(
-          userId,
-          requestedRuntimeId,
-          requestedIsolationScope
-        )
-      : {
-          ...this.runtimePolicy.resolveCreateRuntime({
-            runtimeType: requestedRuntimeType,
-            isolationScope: requestedIsolationScope,
-            hasCustomRootPath: Boolean(requestedRootPath?.trim()),
-          }),
-          targetRuntimeId: null as string | null,
-        };
+    const { runtimeType, isolationScope, targetRuntimeId } =
+      await this.resolvePlacement({
+        userId,
+        requestedRuntimeType,
+        requestedIsolationScope,
+        requestedRuntimeId,
+        hasCustomRootPath: Boolean(requestedRootPath?.trim()),
+      });
+    // local 没有隔离概念,isolationScope 解析结果是 null;Workspace.isolationScope
+    // 列必填,用 "workspace" 占位(与 Worker 侧同一约定,见 worker.provisioner.ts
+    // 的 identity())。
+    const storedIsolationScope = isolationScope ?? "workspace";
     const id = generateId();
+    // directoryHandler 用 targetRuntimeId 是否有值判断"目录在远程机器上,不碰本机
+    // 文件系统"——builtin runtimeId 现在也总是有值,但 builtin 就是 Managed(本机),
+    // 目录仍要走本机 fs 校验/创建,只有 registered 才传给它。
+    const remoteRuntimeId = this.runtimeService.isManaged(targetRuntimeId)
+      ? undefined
+      : targetRuntimeId;
     const directory = await this.directoryHandler.prepareCreate({
       userId,
       workspaceId: id,
@@ -161,7 +168,7 @@ export class WorkspaceService {
       isolationScope,
       gitUrl: workspaceGitUrl,
       requestedRootPath,
-      targetRuntimeId,
+      targetRuntimeId: remoteRuntimeId,
     });
 
     try {
@@ -171,8 +178,7 @@ export class WorkspaceService {
         gitUrl: workspaceGitUrl,
         description: workspaceDescription,
         userId,
-        runtimeType,
-        isolationScope,
+        isolationScope: storedIsolationScope,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
         runtimeId: targetRuntimeId,
@@ -182,6 +188,42 @@ export class WorkspaceService {
       this.directoryHandler.cleanupCreated(directory);
       throw err;
     }
+  }
+
+  /**
+   * 解析 placement:Registered(传了 runtimeId)分支复用 resolveRegisteredPlacement;
+   * Managed 分支按部署策略解析 runtimeType/isolationScope 后,落到该 runtimeType
+   * 对应的 builtin Runtime id。
+   */
+  private async resolvePlacement(input: {
+    userId: string;
+    requestedRuntimeType?: string;
+    requestedIsolationScope?: string;
+    requestedRuntimeId?: string;
+    hasCustomRootPath: boolean;
+  }): Promise<{
+    runtimeType: RuntimeType;
+    isolationScope: IsolationScope | null;
+    targetRuntimeId: string;
+  }> {
+    if (input.requestedRuntimeId) {
+      return this.resolveRegisteredPlacement(
+        input.userId,
+        input.requestedRuntimeId,
+        input.requestedIsolationScope
+      );
+    }
+    const { runtimeType, isolationScope } =
+      this.runtimePolicy.resolveCreateRuntime({
+        runtimeType: input.requestedRuntimeType,
+        isolationScope: input.requestedIsolationScope,
+        hasCustomRootPath: input.hasCustomRootPath,
+      });
+    return {
+      runtimeType,
+      isolationScope,
+      targetRuntimeId: this.runtimeService.getBuiltinRuntimeId(runtimeType),
+    };
   }
 
   /**
@@ -291,13 +333,13 @@ export class WorkspaceService {
         status: string;
         source?: string | null;
       } | null;
-      runtimeType?: string | null;
-      isolationScope?: string | null;
+      runtime: { runtimeType: string | null };
+      isolationScope: string;
     },
   >(workspace: T) {
     const {
       directory,
-      runtimeType: storedRuntimeType,
+      runtime,
       isolationScope: storedIsolationScope,
       ...rest
     } = workspace;
@@ -307,7 +349,7 @@ export class WorkspaceService {
       );
     }
     const runtimeType =
-      storedRuntimeType ?? this.runtimePolicy.defaultRuntimeType();
+      runtime.runtimeType ?? this.runtimePolicy.defaultRuntimeType();
     const workspaceIsolationScope =
       runtimeType !== "local"
         ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)

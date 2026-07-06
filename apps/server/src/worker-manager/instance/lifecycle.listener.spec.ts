@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import { WorkerInstanceLifecycleListener } from "./lifecycle.listener";
+import { WorkerLifecycleListener } from "./lifecycle.listener";
 import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { UserDeletedEvent, UserDisabledEvent } from "../../user/user.events";
 
-describe("WorkerInstanceLifecycleListener", () => {
+describe("WorkerLifecycleListener", () => {
   it("shuts down the workspace runtime resource on WorkspaceDeletedEvent", async () => {
     const shutdownForWorkspace = vi.fn().mockResolvedValue(undefined);
-    const listener = new WorkerInstanceLifecycleListener({
+    const listener = new WorkerLifecycleListener({
       shutdownForWorkspace,
     } as never);
 
@@ -17,7 +17,7 @@ describe("WorkerInstanceLifecycleListener", () => {
 
   it("swallows shutdown failures so the source operation is unaffected", async () => {
     const shutdownForWorkspace = vi.fn().mockRejectedValue(new Error("boom"));
-    const listener = new WorkerInstanceLifecycleListener({
+    const listener = new WorkerLifecycleListener({
       shutdownForWorkspace,
     } as never);
 
@@ -28,7 +28,7 @@ describe("WorkerInstanceLifecycleListener", () => {
 
   it("shuts down user runtime resources on UserDeletedEvent and UserDisabledEvent", async () => {
     const shutdownForUser = vi.fn().mockResolvedValue(undefined);
-    const listener = new WorkerInstanceLifecycleListener({
+    const listener = new WorkerLifecycleListener({
       shutdownForUser,
     } as never);
 
@@ -41,7 +41,7 @@ describe("WorkerInstanceLifecycleListener", () => {
 
   it("swallows user shutdown failures", async () => {
     const shutdownForUser = vi.fn().mockRejectedValue(new Error("boom"));
-    const listener = new WorkerInstanceLifecycleListener({
+    const listener = new WorkerLifecycleListener({
       shutdownForUser,
     } as never);
 

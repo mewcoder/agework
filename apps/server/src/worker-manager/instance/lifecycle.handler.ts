@@ -11,7 +11,7 @@ import { WorkerLivenessStore } from "../connection/worker-liveness.store";
 import { swallow } from "../../common/swallow";
 
 /**
- * Worker 实例生命周期清理:
+ * Worker 生命周期清理:
  * - workspace 删除:解除 workspace 的 worker 绑定,只关闭专属于该 workspace 的载体。
  * - user 删除:关闭该用户名下的所有 user/workspace 隔离载体。
  *
@@ -19,8 +19,8 @@ import { swallow } from "../../common/swallow";
  * WorkerProvisioner/RuntimeService 内部,这里不再区分)。
  */
 @Injectable()
-export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
-  private readonly logger = new Logger(WorkerInstanceLifecycleHandler.name);
+export class WorkerLifecycleHandler implements OnApplicationBootstrap {
+  private readonly logger = new Logger(WorkerLifecycleHandler.name);
 
   constructor(
     private readonly registry: WorkerRegistryRepository,
@@ -32,8 +32,8 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
   /** 关闭专属于该 workspace 的 worker 载体(user 隔离下的共享载体不受影响)。 */
   async shutdownForWorkspace(workspaceId: string): Promise<void> {
     const binding = await this.registry.findBindingWithResource(workspaceId);
-    if (binding?.workerInstance.status === "running") {
-      const resource = binding.workerInstance;
+    if (binding?.worker.status === "running") {
+      const resource = binding.worker;
       if (
         resource.isolationScope === "workspace" &&
         resource.ownerId === workspaceId
@@ -77,23 +77,24 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
 
     // "local" runtimeType 不等于 Managed——Registered manager 也能配成
     // --runtime local(裸远程机器)。这条扫尾专治"server 重启,fork 出的子进程
-    // 父子关系断了"这一种孤儿,只对 Managed(runtimeId 为空)成立:Registered
+    // 父子关系断了"这一种孤儿,只对 Managed(builtin-local)成立:Registered
     // worker 的父进程是远程 manager,server 重启跟它无关,不是孤儿,不该动它——
     // 它的存活由心跳 fence 另行判定。
+    const builtinLocalId = this.runtimeService.getBuiltinRuntimeId("local");
     const staleLocalRows = (
       await this.registry.findRunningByRuntimeType("local")
-    ).filter((row) => !row.runtimeId);
+    ).filter((row) => row.runtimeId === builtinLocalId);
     for (const row of staleLocalRows) {
       try {
-        await this.runtimeService.runtimeFor(null).destroy({
+        await this.runtimeService.runtimeFor(builtinLocalId).destroy({
           runtimeType: "local",
           ownerId: row.ownerId,
-          runtimeInstanceId: row.runtimeInstanceId,
+          runtimeInstanceId: row.instanceId,
           isolationScope: row.isolationScope,
         });
       } catch (err) {
         this.logger.warn(
-          `Failed to recover orphaned local instance ${row.runtimeInstanceId}: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to recover orphaned local instance ${row.instanceId}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
       await this.registry
@@ -114,8 +115,8 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
     runtimeType: string;
     isolationScope: string;
     ownerId: string;
-    runtimeInstanceId: string;
-    runtimeId?: string | null;
+    instanceId: string;
+    runtimeId: string;
   }): Promise<void> {
     if (!isRuntimeType(resource.runtimeType)) {
       this.logger.warn(
@@ -127,7 +128,7 @@ export class WorkerInstanceLifecycleHandler implements OnApplicationBootstrap {
       const ref: RuntimeInstanceRef = {
         runtimeType: resource.runtimeType,
         ownerId: resource.ownerId,
-        runtimeInstanceId: resource.runtimeInstanceId,
+        runtimeInstanceId: resource.instanceId,
         isolationScope: resource.isolationScope,
         targetRuntimeId: resource.runtimeId,
       };

@@ -283,7 +283,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       id: "rr-1",
       runtimeType: "docker",
       ownerId: "ws-1",
-      runtimeInstanceId: "container-1",
+      instanceId: "container-1",
       isolationScope: "workspace",
       status: "running",
     });
@@ -310,7 +310,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       id: "rr-2",
       runtimeType: "local",
       ownerId: "ws-2",
-      runtimeInstanceId: "4242:token",
+      instanceId: "4242:token",
       isolationScope: "workspace",
       status: "running",
     });
@@ -497,7 +497,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       startToken: "token",
       runtimeType: "docker",
       ownerId: "owner-1",
-      runtimeInstanceId: "container-1",
+      instanceId: "container-1",
       isolationScope: "workspace",
       ...overrides,
     };
@@ -570,7 +570,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     await service.resolveInstance(acquireInput("run-4a", "owner-4"));
     await service.resolveInstance(acquireInput("run-4b", "owner-4"));
     registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-4", runtimeInstanceId: "container-4" })
+      activeRow({ ownerId: "owner-4", instanceId: "container-4" })
     );
 
     await service.fenceOwner("owner-4", "heartbeat timeout");
@@ -599,7 +599,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
       activeRow({
         ownerId: "owner-5",
         runtimeType: "local",
-        runtimeInstanceId: "4242:token",
+        instanceId: "4242:token",
       })
     );
 
@@ -634,7 +634,7 @@ describe("WorkerManagerService — owner→run index and fenceOwner", () => {
     await service.resolveInstance(acquireInput("run-6", "owner-6"));
     upstream.notifyWorkerLost.mockRejectedValue(new Error("run already gone"));
     registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-6", runtimeInstanceId: "container-6" })
+      activeRow({ ownerId: "owner-6", instanceId: "container-6" })
     );
 
     await expect(
