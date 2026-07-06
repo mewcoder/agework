@@ -12,10 +12,25 @@ function createService(overrides: Record<string, unknown> = {}) {
     delete: vi.fn(),
     ...overrides,
   };
+  const configService = {
+    isSystemEnvEnabled: vi.fn().mockReturnValue(true),
+  };
+  const runtimeService = {
+    getResolvedCliPaths: vi.fn().mockResolvedValue({
+      claude: "/usr/bin/claude",
+      codex: null,
+    }),
+  };
 
   return {
     repo,
-    service: new ModelProviderService(repo as never),
+    configService,
+    runtimeService,
+    service: new ModelProviderService(
+      repo as never,
+      configService as never,
+      runtimeService as never
+    ),
   };
 }
 

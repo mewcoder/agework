@@ -13,7 +13,9 @@ import {
 import type { ProviderConfig } from "@agework/shared/api";
 import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
+import { ConfigService } from "../config/config.service";
 import { getLLMClient } from "../common/llm";
+import { RuntimeService } from "../runtime/runtime.service";
 import { ModelProviderRepository } from "./model-provider.repository";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
@@ -89,7 +91,11 @@ function serializeProviderConfig(
 
 @Injectable()
 export class ModelProviderService implements OnModuleInit {
-  constructor(private repo: ModelProviderRepository) {}
+  constructor(
+    private repo: ModelProviderRepository,
+    private configService: ConfigService,
+    private runtimeService: RuntimeService
+  ) {}
 
   async onModuleInit() {
     await Promise.all(
@@ -162,10 +168,62 @@ export class ModelProviderService implements OnModuleInit {
     );
   }
 
-  /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。 */
-  async listEnabled(agentType: string) {
-    const list = await this.list(agentType, false);
-    return { list };
+  /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。
+   *
+   * 「系统环境」模型配置的可见性由两层 AND 决定（见 runtime 模块 CONTEXT.md）：
+   * 1. admin 全局开关 SYSTEM_ENV_ENABLED
+   * 2. 传入 runtimeId 时，该 runtime 的 envConfig 检测到对应 agent 的 CLI（resolvedPath != null）
+   * 未传 runtimeId 时（如设置页）只检查开关，不做 runtime 检测。 */
+  async listEnabled(agentType: string, runtimeId?: string) {
+    const resolvedAgentType = this.resolveAgentType(agentType);
+    const systemAvailable = await this.isSystemEnvAvailable(
+      resolvedAgentType,
+      runtimeId
+    );
+
+    // 获取已启用的自定义模型服务
+    const enabledProviders = await this.repo.findManyByAgent(
+      resolvedAgentType,
+      false
+    );
+
+    // 开关关闭时，从结果中过滤掉系统环境（即使 DB 里 isEnabled=true 也不返回）
+    let result = systemAvailable
+      ? enabledProviders
+      : enabledProviders.filter((p) => !isSystemModelProviderId(p.id));
+
+    // 开关打开时，主动把系统环境模型配置加入列表（不管 DB isEnabled 字段）
+    if (systemAvailable) {
+      const systemProvider = await this.repo.findById(
+        systemModelProviderId(resolvedAgentType)
+      );
+      if (systemProvider && !result.some((p) => isSystemModelProviderId(p.id))) {
+        result = [...result, systemProvider];
+      }
+    }
+
+    const sorted = [...result].sort((a, b) => {
+      const aSystem = isSystemModelProviderId(a.id);
+      const bSystem = isSystemModelProviderId(b.id);
+      if (aSystem !== bSystem) return aSystem ? -1 : 1;
+      return a.createdAt.getTime() - b.createdAt.getTime();
+    });
+
+    return { list: sorted.map((p) => toModelProviderDto(p, true)) };
+  }
+
+  /** 系统环境可用性判断：admin 全局开关 AND（传入 runtimeId 时）runtime 检测到 CLI。 */
+  private async isSystemEnvAvailable(
+    agentType: AgentType,
+    runtimeId?: string
+  ): Promise<boolean> {
+    if (!this.configService.isSystemEnvEnabled()) return false;
+    if (!runtimeId) return true;
+
+    const cliPaths = await this.runtimeService.getResolvedCliPaths(runtimeId);
+    if (!cliPaths) return false;
+    const resolvedPath = cliPaths[agentType as "claude" | "codex"];
+    return !!resolvedPath;
   }
 
   /** 列出指定 agent 类型下全部模型服务（含未启用），供 admin 管理端使用；原样回显 `apiKey`，不脱敏。 */

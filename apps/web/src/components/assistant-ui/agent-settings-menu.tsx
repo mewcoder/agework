@@ -9,6 +9,7 @@ import {
 } from "@/stores/selection-store";
 import { useModelProviders } from "@/hooks/model-provider-hooks";
 import { useAgentOptions } from "@/hooks/use-agent-options";
+import { useWorkspaces } from "@/hooks/use-workspace";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -199,7 +200,13 @@ function ModelSettingsSelector({
   const effort = useSelectionStore((s) => s.modelReasoningEffort);
   const claudeThinkingMode = useSelectionStore((s) => s.claudeThinkingMode);
   const setClaudeThinkingMode = useSelectionStore((s) => s.setClaudeThinkingMode);
-  const { data: modelProviders = [], isLoading } = useModelProviders(selectedAgentType);
+  const selectedWorkspaceId = useSelectionStore((s) => s.selectedWorkspaceId);
+  const { data: workspaces = [] } = useWorkspaces();
+  const targetWorkspace = selectedWorkspaceId
+    ? workspaces.find((w) => w.id === selectedWorkspaceId)
+    : undefined;
+  const runtimeId = targetWorkspace?.runtimeId ?? undefined;
+  const { data: modelProviders = [], isLoading } = useModelProviders(selectedAgentType, runtimeId);
   const selectedModelProviderId = selectedModelProviderIds[selectedAgentType];
   const matchedModelProvider = modelProviders.find(
     (modelProvider) => modelProvider.modelProviderId === selectedModelProviderId,

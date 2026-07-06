@@ -258,7 +258,6 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     s.thread.messages.findLast((message) => message.role === "assistant")?.id,
   );
   const { data: workspaces = [] } = useWorkspaces();
-  const { data: modelProviders = [] } = useModelProviders(selectedAgentType);
   const { data: conversationsData } = useConversations(undefined, "updatedAt");
   const selectedConversation = selectedConversationId
     ? conversationsData?.conversations.find(
@@ -269,6 +268,8 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const targetWorkspace = targetWorkspaceId
     ? workspaces.find((workspace) => workspace.id === targetWorkspaceId)
     : undefined;
+  const runtimeId = targetWorkspace?.runtimeId ?? undefined;
+  const { data: modelProviders = [] } = useModelProviders(selectedAgentType, runtimeId);
   const selectedModelProvider = selectedModelProviderId
     ? modelProviders.find(
         (modelProvider) => modelProvider.modelProviderId === selectedModelProviderId,

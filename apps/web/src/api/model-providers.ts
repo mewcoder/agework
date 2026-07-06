@@ -16,8 +16,11 @@ export type ProviderConfigValues = ProviderConfig;
 export type { ModelProviderTestResponse };
 
 export const modelProvidersApi = {
-  list: (agentType: AgentType) =>
-    apiGet<ModelProviderListResponse>(`/api/v1/model-providers/list?agentType=${encodeURIComponent(agentType)}`),
+  list: (agentType: AgentType, runtimeId?: string) => {
+    const params = new URLSearchParams({ agentType });
+    if (runtimeId) params.set('runtimeId', runtimeId);
+    return apiGet<ModelProviderListResponse>(`/api/v1/model-providers/list?${params.toString()}`);
+  },
 
   adminList: (agentType: AgentType) =>
     apiGet<ModelProviderListResponse>(`/api/v1/admin/model-providers/list?agentType=${encodeURIComponent(agentType)}`),
