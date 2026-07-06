@@ -81,7 +81,7 @@ function AgentEnvItem({
           </Badge>
           {status?.resolvedPath ? (
             <span
-              className="truncate font-mono text-xs"
+              className="min-w-0 flex-1 truncate font-mono text-xs"
               title={status.resolvedPath}
             >
               {status.resolvedPath}
@@ -91,6 +91,11 @@ function AgentEnvItem({
               {status ? '未找到 CLI' : '未检测'}
             </span>
           )}
+          <OverrideEditor
+            runtimeId={runtimeId}
+            agentType={agentType}
+            currentOverride={overridePath}
+          />
         </div>
       }
       description={
@@ -105,13 +110,7 @@ function AgentEnvItem({
           )}
         </div>
       }
-    >
-      <OverrideEditor
-        runtimeId={runtimeId}
-        agentType={agentType}
-        currentOverride={overridePath}
-      />
-    </SettingsItem>
+    />
   );
 }
 
@@ -235,21 +234,23 @@ function RuntimeSection({
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7"
-            disabled={detectMutation.isPending}
-            onClick={() => detectMutation.mutate(runtime.id)}
-          >
-            <RefreshCwIcon
-              className={cn(
-                'size-3.5',
-                detectMutation.isPending && 'animate-spin',
-              )}
-            />
-            重新检测
-          </Button>
+          {runtime.runtimeType === 'local' && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7"
+              disabled={detectMutation.isPending}
+              onClick={() => detectMutation.mutate(runtime.id)}
+            >
+              <RefreshCwIcon
+                className={cn(
+                  'size-3.5',
+                  detectMutation.isPending && 'animate-spin',
+                )}
+              />
+              重新检测
+            </Button>
+          )}
           {canDelete ? (
             <Button
               variant="ghost"
@@ -266,21 +267,31 @@ function RuntimeSection({
         </div>
       </div>
 
-      {/* Claude CLI 行 */}
-      <AgentEnvItem
-        agentType="claude"
-        status={env?.claude ?? null}
-        runtimeId={runtime.id}
-        overridePath={runtime.envConfigOverride?.claude?.executablePath}
-      />
+      {runtime.runtimeType === 'local' ? (
+        <>
+          {/* Claude CLI 行 */}
+          <AgentEnvItem
+            agentType="claude"
+            status={env?.claude ?? null}
+            runtimeId={runtime.id}
+            overridePath={runtime.envConfigOverride?.claude?.executablePath}
+          />
 
-      {/* Codex CLI 行 */}
-      <AgentEnvItem
-        agentType="codex"
-        status={env?.codex ?? null}
-        runtimeId={runtime.id}
-        overridePath={runtime.envConfigOverride?.codex?.executablePath}
-      />
+          {/* Codex CLI 行 */}
+          <AgentEnvItem
+            agentType="codex"
+            status={env?.codex ?? null}
+            runtimeId={runtime.id}
+            overridePath={runtime.envConfigOverride?.codex?.executablePath}
+          />
+        </>
+      ) : (
+        runtime.runtimeType && (
+          <div className="px-4 py-3 text-sm text-muted-foreground">
+            此类型的 CLI 路径由镜像固定，不支持检测/覆盖/安装
+          </div>
+        )
+      )}
     </SettingsSection>
   );
 }
