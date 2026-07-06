@@ -3,13 +3,13 @@ import {
   Activity,
   Archive,
   Bot,
+  Boxes,
+  Container,
   FolderIcon,
   Folders,
-  MonitorIcon,
   ServerIcon,
   SettingsIcon,
   SlidersHorizontal,
-  TerminalIcon,
   UsersIcon,
   UserRoundIcon,
 } from 'lucide-react';
@@ -43,7 +43,14 @@ type UserCategory =
   | 'workspaces'
   | 'runtimes'
   | 'archived';
-type AdminCategory = 'users' | 'model-management' | 'workspaces-overview' | 'runs' | 'workspace-runtimes' | 'runtime-management' | 'system-config';
+type AdminCategory =
+  | 'users'
+  | 'workspaces-overview'
+  | 'model-providers'
+  | 'runtime-management'
+  | 'workers'
+  | 'runs'
+  | 'system-config';
 type Category = UserCategory | AdminCategory;
 
 const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
@@ -51,16 +58,16 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'general', label: '通用', icon: SettingsIcon },
   { id: 'model', label: '模型配置', icon: Bot },
   { id: 'workspaces', label: '工作空间', icon: FolderIcon },
-  { id: 'runtimes', label: '运行环境', icon: MonitorIcon },
+  { id: 'runtimes', label: '运行环境', icon: Container },
   { id: 'archived', label: '已归档对话', icon: Archive },
 ];
 
 const ADMIN_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'users', label: '用户管理', icon: UsersIcon },
-  { id: 'model-management', label: '模型服务管理', icon: Bot },
-  { id: 'runtime-management', label: '运行环境管理', icon: TerminalIcon },
   { id: 'workspaces-overview', label: '工作空间管理', icon: Folders },
-  { id: 'workspace-runtimes', label: 'Worker 管理', icon: ServerIcon },
+  { id: 'model-providers', label: '模型服务管理', icon: Bot },
+  { id: 'runtime-management', label: '运行环境管理', icon: Boxes },
+  { id: 'workers', label: 'Worker 管理', icon: ServerIcon },
   { id: 'runs', label: '运行日志', icon: Activity },
   { id: 'system-config', label: '系统配置', icon: SlidersHorizontal },
 ];
@@ -80,9 +87,14 @@ const ADMIN_NAV_GROUPS: SettingsNavGroup<Category>[] = [
 ];
 
 const ALL_CATEGORIES = [...USER_NAV_ITEMS, ...ADMIN_NAV_ITEMS].map((i) => i.id);
+const ADMIN_CATEGORY_IDS = new Set<Category>(ADMIN_NAV_ITEMS.map((i) => i.id));
 
 function isCategory(value: string): value is Category {
   return (ALL_CATEGORIES as string[]).includes(value);
+}
+
+function isAdminCategory(id: Category): id is AdminCategory {
+  return ADMIN_CATEGORY_IDS.has(id);
 }
 
 function navSections(isAdmin: boolean): SettingsNavSection<Category>[] {
@@ -109,7 +121,9 @@ function navSections(isAdmin: boolean): SettingsNavSection<Category>[] {
 }
 
 export default function SettingsPage() {
-  const { category: rawCategory } = useParams({ from: '/authenticated/settings/$category' });
+  // 两条子路由（/settings/$category、/settings/admin/$category）共用这个页面，
+  // 用 strict: false 读 category 参数，不管当前匹配的是哪一条
+  const { category: rawCategory } = useParams({ strict: false });
   const navigate = useNavigate();
   const { user, authRequired } = useAuthStore();
   const isAdmin = checkIsAdmin(user?.role);
@@ -117,7 +131,7 @@ export default function SettingsPage() {
   const lockedToAccount = authRequired && user?.mustChangePassword === true;
 
   // URL 里的 category 只是字符串，做一次校验/兜底
-  const category = isCategory(rawCategory) ? rawCategory : 'account';
+  const category = rawCategory && isCategory(rawCategory) ? rawCategory : 'account';
   const activeCategory = lockedToAccount ? 'account' : category;
 
   return (
@@ -126,7 +140,11 @@ export default function SettingsPage() {
       navSections={navSections(lockedToAccount ? false : isAdmin)}
       onCategoryChange={(next) => {
         if (lockedToAccount) return;
-        navigate({ to: '/settings/$category', params: { category: next } });
+        if (isAdminCategory(next)) {
+          navigate({ to: '/settings/admin/$category', params: { category: next } });
+        } else {
+          navigate({ to: '/settings/$category', params: { category: next } });
+        }
       }}
     >
       {activeCategory === 'account' && <AccountSettings />}
@@ -155,7 +173,7 @@ export default function SettingsPage() {
           <UsersPanel showHeader={false} />
         </div>
       )}
-      {isAdmin && activeCategory === 'model-management' && (
+      {isAdmin && activeCategory === 'model-providers' && (
         <div className="space-y-6">
           <SettingsPageHeader
             title="模型服务管理"
@@ -191,7 +209,7 @@ export default function SettingsPage() {
           <RunsPanel showHeader={false} />
         </div>
       )}
-      {isAdmin && activeCategory === 'workspace-runtimes' && (
+      {isAdmin && activeCategory === 'workers' && (
         <div className="space-y-6">
           <SettingsPageHeader
             title="Worker 管理"

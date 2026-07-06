@@ -169,6 +169,21 @@ const settingsCategoryRoute = createRoute({
   component: lazy(() => import("@/pages/settings")),
 });
 
+// 系统管理分类单独挂在 /settings/admin/ 前缀下，和后端 /api/v1/admin/... 的约定保持一致，
+// URL 上就能区分"个人设置"和"系统管理"，不用靠 category 字符串本身避免撞名。
+const settingsAdminCategoryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/admin/$category",
+  beforeLoad: () => {
+    const { authRequired, user } = useAuthStore.getState();
+    const lockedToAccount = authRequired && user?.mustChangePassword === true;
+    if (lockedToAccount) {
+      throw redirect({ to: "/settings/$category", params: { category: "account" } });
+    }
+  },
+  component: lazy(() => import("@/pages/settings")),
+});
+
 const conversationRoute = createRoute({
   getParentRoute: () => workbenchRuntimeRoute,
   path: "/c/$conversationId",
@@ -203,7 +218,11 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authenticatedRoute.addChildren([
     workbenchRuntimeRoute.addChildren([indexRoute, conversationRoute]),
-    settingsRoute.addChildren([settingsIndexRoute, settingsCategoryRoute]),
+    settingsRoute.addChildren([
+      settingsIndexRoute,
+      settingsCategoryRoute,
+      settingsAdminCategoryRoute,
+    ]),
   ]),
   notFoundRoute,
 ]);
