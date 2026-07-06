@@ -59,6 +59,10 @@ export type RunConfig = {
   agentProviderConfig: AgentProviderConfig;
   agentEventTrace?: AgentEventTraceConfig;
   workerLogFilePath?: string;
+  /** local runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  claudeExecutablePath?: string;
+  /** local runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  codexExecutablePath?: string;
 };
 
 /**

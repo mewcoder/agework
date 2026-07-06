@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { RuntimeCapabilities } from "@agework/shared/protocol";
+import type { RuntimeEnvConfig, RuntimeEnvConfigOverride } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type RuntimeRow = {
@@ -13,6 +14,8 @@ export type RuntimeRow = {
   lastHeartbeatAt: Date | null;
   createdAt: Date;
   capabilities: unknown;
+  envConfig: unknown;
+  envConfigOverride: unknown;
   removedAt: Date | null;
 };
 
@@ -32,6 +35,8 @@ export class RuntimeRepository {
     lastHeartbeatAt: true,
     createdAt: true,
     capabilities: true,
+    envConfig: true,
+    envConfigOverride: true,
     removedAt: true,
   } as const;
 
@@ -87,9 +92,26 @@ export class RuntimeRepository {
     });
   }
 
+  /** admin: 列出全部 Runtime 行（builtin + 所有用户的 registered），不含已注销。 */
+  listAll(): Promise<RuntimeRow[]> {
+    return this.prisma.runtime.findMany({
+      where: { removedAt: null },
+      orderBy: [{ source: "asc" }, { createdAt: "desc" }],
+      select: this.rowSelect,
+    });
+  }
+
   findByTokenHash(tokenHash: string): Promise<RuntimeRow | null> {
     return this.prisma.runtime.findUnique({
       where: { tokenHash },
+      select: this.rowSelect,
+    });
+  }
+
+  /** 按 id 查单条（不过滤 owner，admin 场景用）。 */
+  findById(id: string): Promise<RuntimeRow | null> {
+    return this.prisma.runtime.findUnique({
+      where: { id },
       select: this.rowSelect,
     });
   }
@@ -118,20 +140,46 @@ export class RuntimeRepository {
     return count > 0;
   }
 
-  /** 注册成功:落 runtimeType/能力矩阵,置 online 并刷心跳。 */
+  /** 注册成功:落 runtimeType/能力矩阵/envConfig,置 online 并刷心跳。 */
   async markRegistered(
     id: string,
     runtimeType: string,
-    capabilities: RuntimeCapabilities
+    capabilities: RuntimeCapabilities,
+    envConfig?: RuntimeEnvConfig
   ): Promise<boolean> {
     const { count } = await this.prisma.runtime.updateMany({
       where: { id },
       data: {
         runtimeType,
         capabilities,
+        ...(envConfig ? { envConfig } : {}),
         status: "online",
         lastHeartbeatAt: new Date(),
       },
+    });
+    return count > 0;
+  }
+
+  /** admin 覆盖 envConfig（per-agent 合并写入）。 */
+  async updateEnvConfigOverride(
+    id: string,
+    override: RuntimeEnvConfigOverride
+  ): Promise<boolean> {
+    const { count } = await this.prisma.runtime.updateMany({
+      where: { id },
+      data: { envConfigOverride: override },
+    });
+    return count > 0;
+  }
+
+  /** admin 触发重检后，更新 runtime 上报的 envConfig。 */
+  async updateEnvConfig(
+    id: string,
+    envConfig: RuntimeEnvConfig
+  ): Promise<boolean> {
+    const { count } = await this.prisma.runtime.updateMany({
+      where: { id },
+      data: { envConfig },
     });
     return count > 0;
   }

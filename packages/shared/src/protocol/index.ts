@@ -105,6 +105,8 @@ export type {
   RuntimeInstanceRefRpcParams,
   RuntimeTunnelRpcRequest,
   RuntimeLaunchRpcResult,
+  RuntimeDetectEnvRpcParams,
+  RuntimeDetectEnvRpcResult,
   RuntimeTunnelRpcResponse,
 } from "./runtime-tunnel";
 

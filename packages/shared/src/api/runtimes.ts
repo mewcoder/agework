@@ -1,6 +1,58 @@
 import type { RuntimeCapabilities } from "../protocol/runtime-tunnel";
+import type { AgentType } from "../common";
 
 export type RuntimeStatus = "online" | "offline";
+
+// ── EnvConfig 类型（见 runtime 模块 ADR-0002 两层分离）──────────────────
+
+/** Runtime manager 检测到的单个 agent CLI 环境信息（上报层，不可被 admin 直接覆写）。 */
+export type AgentDetectedEnv = {
+  /** 检测到的可执行文件绝对路径；没找到为 null。 */
+  executablePath: string | null;
+  /** CLI --version 输出；取不到为 null。 */
+  version: string | null;
+  /** 本机是否有可用认证（~/.claude.json / 环境变量等）。 */
+  authAvailable: boolean;
+};
+
+/** 一个 Runtime 上报的完整环境配置——每个 agent 一条。 */
+export type RuntimeEnvConfig = {
+  claude: AgentDetectedEnv;
+  codex: AgentDetectedEnv;
+  /** 检测时间戳（ISO 8601），供前端判断新鲜度。 */
+  detectedAt: string;
+};
+
+/** 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。per-runtime per-agent 粒度。 */
+export type RuntimeEnvConfigOverride = {
+  claude?: { executablePath: string };
+  codex?: { executablePath: string };
+};
+
+/** resolved CLI path 的来源标记，实时派生不持久化（见 ADR-0002）。 */
+export type EnvConfigSource = "system" | "custom";
+
+/** 单个 agent 的展示层派生结果（override + detected 合并后，不存 DB）。 */
+export type AgentEnvStatus = {
+  /** 最终生效路径：override ?? detected ?? null。 */
+  resolvedPath: string | null;
+  /** 路径来源：override 有值 → "custom"，否则 → "system"。resolvedPath 为 null 时仍为 "system"。 */
+  source: EnvConfigSource;
+  /** runtime 上报的原始检测路径。 */
+  detectedPath: string | null;
+ /** CLI --version 输出。 */
+  version: string | null;
+  /** 本机是否有可用认证。 */
+  authAvailable: boolean;
+};
+
+/** Runtime 展示层 env 状态（claude + codex 各一条派生结果）。 */
+export type RuntimeEnvStatus = {
+  claude: AgentEnvStatus;
+  codex: AgentEnvStatus;
+  /** 检测时间戳（ISO 8601）。 */
+  detectedAt: string | null;
+};
 
 /** /api/v1/runtimes/list 的条目(builtin 本机内置 + Registered 部署实例)。 */
 export type RuntimeResponse = {
@@ -14,6 +66,12 @@ export type RuntimeResponse = {
   runtimeType: string | null;
   status: RuntimeStatus;
   capabilities: RuntimeCapabilities | null;
+  /** runtime manager 上报的环境检测原始值；未上报为 null。 */
+  envConfig: RuntimeEnvConfig | null;
+  /** 管理员覆盖；未覆盖为 null。 */
+  envConfigOverride: RuntimeEnvConfigOverride | null;
+  /** override + detected 合并后的展示层派生结果；envConfig 为 null 时整体为 null。 */
+  envStatus: RuntimeEnvStatus | null;
   /** ISO 8601 */
   lastHeartbeatAt: string | null;
   /** ISO 8601 */
@@ -31,3 +89,19 @@ export type CreateRuntimeResponse = {
 };
 
 export type RuntimeIdRequest = { id: string };
+
+/** admin 覆盖 envConfig 的请求 body：per-agent，只覆盖指定的 agent。 */
+export type UpdateEnvConfigOverrideRequest = {
+  /** 目标 runtime id。 */
+  id: string;
+  /** 指定要覆盖的 agent。 */
+  agentType: AgentType;
+  /** 覆盖路径；空字符串 = 清除该 agent 的覆盖。 */
+  executablePath: string;
+};
+
+/** admin 触发 runtime 重检 envConfig 的响应。 */
+export type DetectEnvResponse = {
+  /** 重检后的 envConfig；runtime 未连接时为 null。 */
+  envConfig: RuntimeEnvConfig | null;
+};

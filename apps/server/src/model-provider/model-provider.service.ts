@@ -15,7 +15,6 @@ import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
 import { getLLMClient } from "../common/llm";
 import { ModelProviderRepository } from "./model-provider.repository";
-import { getSystemStatus, type SystemStatus } from "./agent-cli-status";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
 const SYSTEM_PREFIX = "system:";
@@ -159,15 +158,7 @@ export class ModelProviderService implements OnModuleInit {
     // includeDisabled=false 代表 listEnabled（非 admin），脱敏。
     const desensitize = !includeDisabled;
     return sorted.map((p) =>
-      toModelProviderDto(
-        {
-          ...p,
-          systemStatus: isSystemModelProviderId(p.id)
-            ? getSystemStatus(p.agentType)
-            : undefined,
-        },
-        desensitize
-      )
+      toModelProviderDto(p, desensitize)
     );
   }
 
@@ -377,7 +368,6 @@ function toModelProviderDto(
     userId: string | null;
     name: string;
     isEnabled: boolean;
-    systemStatus?: SystemStatus;
     createdAt: Date | string;
     updatedAt: Date | string;
   },
@@ -391,9 +381,6 @@ function toModelProviderDto(
     name: modelProvider.name,
     isEnabled: modelProvider.isEnabled,
     providerConfig: serializeProviderConfig(modelProvider, desensitize),
-    ...(modelProvider.systemStatus
-      ? { systemStatus: modelProvider.systemStatus }
-      : {}),
     createdAt:
       modelProvider.createdAt instanceof Date
         ? modelProvider.createdAt.toISOString()

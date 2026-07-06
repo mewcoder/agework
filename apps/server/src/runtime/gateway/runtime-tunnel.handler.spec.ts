@@ -90,9 +90,12 @@ describe("RuntimeTunnelHandler", () => {
       runtimeId: "rt-1",
       heartbeatIntervalSeconds: 10,
     });
-    expect(repository.markRegistered).toHaveBeenCalledWith("rt-1", "docker", {
-      isolationScopes: ["user", "workspace"],
-    });
+    expect(repository.markRegistered).toHaveBeenCalledWith(
+      "rt-1",
+      "docker",
+      { isolationScopes: ["user", "workspace"] },
+      undefined
+    );
   });
 
   it("rejects a bad token during upgrade", async () => {

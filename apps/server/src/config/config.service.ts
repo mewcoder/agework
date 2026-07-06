@@ -42,7 +42,7 @@ export type SettingSource = "db" | "env" | "default";
 
 export interface SettingListItem {
   key: string;
-  type: "string" | "number";
+  type: "string" | "number" | "boolean";
   label: string;
   description: string;
   value: string | undefined;
@@ -337,6 +337,13 @@ export class ConfigService implements OnModuleInit {
         SettingKey.RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS
       ) ?? DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS
     );
+  }
+
+  /** 是否允许用户选择"系统环境"模型配置（admin 全局开关，见 runtime ADR-0003）。 */
+  isSystemEnvEnabled(): boolean {
+    const raw = this.getSetting(SettingKey.SYSTEM_ENV_ENABLED);
+    if (raw === undefined) return true;
+    return raw === "true";
   }
 
   getOpenSandboxConfig(): {

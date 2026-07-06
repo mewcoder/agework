@@ -6,6 +6,7 @@ import type {
   RuntimeLaunchRpcResult,
   RuntimeTunnelRpcRequest,
 } from "@agework/shared/protocol";
+import type { RuntimeEnvConfig } from "@agework/shared/api";
 import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
@@ -56,6 +57,16 @@ export class RemoteRuntime implements Runtime {
 
   async destroy(ref: RuntimeInstanceRef): Promise<void> {
     await this.sendInstanceAction("runtime.destroy", ref);
+  }
+
+  /** 通过隧道发 detect-env RPC,远程 manager 重检后返回 envConfig。 */
+  async detectEnv(): Promise<RuntimeEnvConfig> {
+    const result = await this.tunnel.sendRequest<{ envConfig: RuntimeEnvConfig }>(
+      this.runtimeId,
+      this.request("runtime.detect-env", {}),
+      this.launchTimeoutMs
+    );
+    return result.envConfig;
   }
 
   private async sendInstanceAction(

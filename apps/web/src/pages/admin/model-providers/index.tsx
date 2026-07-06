@@ -28,36 +28,12 @@ import {
   type ManagedAgent,
   compareModelProviders,
   getBaseUrl,
-  isSystemModelProvider,
   getModel,
 } from "@/utils/model-provider";
 import {
   AdminModelProviderActions,
   ModelProviderValue,
 } from "./admin-model-provider-row";
-
-function SystemStatusBadge({ modelProvider }: { modelProvider: ModelProvider }) {
-  if (!isSystemModelProvider(modelProvider)) return null;
-
-  const status = modelProvider.systemStatus;
-  if (!status) return null;
-
-  const isReady = status.commandAvailable && status.configAvailable;
-  const label = isReady
-    ? "本地可用"
-    : status.commandAvailable
-      ? "未检测到配置"
-      : "未检测到本地 CLI";
-
-  return (
-    <DataTableBadge
-      variant={isReady ? "default" : "outline"}
-      title={`${status.command}: ${label}`}
-    >
-      {label}
-    </DataTableBadge>
-  );
-}
 
 export function AdminModelProvidersPanel({
   showHeader = true,
@@ -161,7 +137,6 @@ export function AdminModelProvidersPanel({
       cell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-2">
           <DataTableText className="font-medium">{row.original.name}</DataTableText>
-          <SystemStatusBadge modelProvider={row.original} />
         </div>
       ),
     },

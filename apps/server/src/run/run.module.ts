@@ -18,10 +18,11 @@ import { WorkerAgUiEventHandler } from "./upstream/worker-agui-event.handler";
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
-// deps（向下依赖：worker-manager / run-event / conversation）
+// deps（向下依赖：worker-manager / run-event / conversation / runtime）
 import { WorkerManagerModule } from "../worker-manager/worker-manager.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
+import { RuntimeModule } from "../runtime/runtime.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。只依赖 worker-manager 一个模块获取
@@ -31,7 +32,7 @@ import { ConversationModule } from "../conversation/conversation.module";
  * 注入 run driver；WorkerUpstreamPort → worker-manager 的 WorkerRunController。
  */
 @Module({
-  imports: [WorkerManagerModule, RunEventModule, ConversationModule],
+  imports: [WorkerManagerModule, RunEventModule, ConversationModule, RuntimeModule],
   controllers: [AdminRunController],
   providers: [
     RunRepository,

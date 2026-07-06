@@ -34,6 +34,7 @@ import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { safePathPart } from "../../common/safe-path";
 import { RunStream } from "../streaming/run-stream";
+import { RuntimeService } from "../../runtime/runtime.service";
 
 type SaveRun = (
   complete: boolean,
@@ -65,7 +66,8 @@ export class RunLauncher {
     private readonly driver: RunDriver,
     private readonly conversations: ConversationService,
     private readonly runEvents: RunEventService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /** 启动一次 run：从 placement 解析到 live handle 注册的完整出站准备链路。 */
@@ -92,13 +94,15 @@ export class RunLauncher {
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
       runtimeTarget.runtimeType !== "local" ? runtimeTarget.sandbox : undefined;
-    const runConfig = this.makeRunConfig({
+    const runConfig = await this.makeRunConfig({
       agentProviderConfig,
       placement: runtimeTarget,
       workspaceId: workspace.workspaceId,
       runId,
       conversationId,
       input: runInput,
+      targetRuntimeId,
+      runtimeType,
     });
     const stream = new RunStream(res);
 
@@ -256,14 +260,16 @@ export class RunLauncher {
     }
   }
 
-  private makeRunConfig(params: {
+  private async makeRunConfig(params: {
     agentProviderConfig: AgentProviderConfig;
     placement: RuntimeSpec;
     workspaceId: string;
     runId: string;
     conversationId: string;
     input: unknown;
-  }): RunConfig {
+    targetRuntimeId: string;
+    runtimeType: string;
+  }): Promise<RunConfig> {
     const {
       agentProviderConfig,
       placement,
@@ -271,9 +277,23 @@ export class RunLauncher {
       runId,
       conversationId,
       input,
+      targetRuntimeId,
+      runtimeType,
     } = params;
     try {
       const logPaths = this.makeLogPaths(placement, conversationId);
+
+      // local 类型从 runtime envConfig 提取 CLI 路径（override > detected）。
+      // container 不走此链路（镜像固定路径，经 env 注入，见 ADR-0004）。
+      let claudeExecutablePath: string | undefined;
+      let codexExecutablePath: string | undefined;
+      if (runtimeType === "local") {
+        const resolved = await this.runtimeService.getResolvedCliPaths(targetRuntimeId);
+        if (resolved) {
+          if (resolved.claude) claudeExecutablePath = resolved.claude;
+          if (resolved.codex) codexExecutablePath = resolved.codex;
+        }
+      }
 
       return {
         runId,
@@ -292,6 +312,8 @@ export class RunLauncher {
           ...logPaths,
         }),
         workerLogFilePath: logPaths.workerRuntimeFilePath,
+        ...(claudeExecutablePath ? { claudeExecutablePath } : {}),
+        ...(codexExecutablePath ? { codexExecutablePath } : {}),
       };
     } catch (err) {
       throw new BadRequestException(

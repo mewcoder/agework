@@ -302,6 +302,12 @@ model Runtime {
   tokenHash       String?   @unique
   // 能力矩阵：{ isolationScopes: string[] }，注册时上报；builtin 行创建时按 runtimeType 写死。
   capabilities    Json?
+  /// Runtime manager 上报的 agent CLI 环境检测结果（路径/版本/认证状态）。
+  /// 注册时检测上报，admin 可通过隧道 RPC 触发重检刷新。server 只存不测（见 ADR-0003）。
+  envConfig       Json?
+  /// 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。
+  /// per-runtime per-agent 粒度：{ claude?: { executablePath }, codex?: { executablePath } }。
+  envConfigOverride Json?
   /// 用户注销该 Runtime 的时间；有值 = 已注销，不可再被新 Workspace 绑定，但行不物理
   /// 删除（Workspace/Worker.runtimeId 是必填 FK，指向的行必须一直存在）。注销时 name 会
   /// 打散（追加 id 后缀），腾出原名给用户重新注册同名机器。builtin 行恒为 null，不可注销。

@@ -88,6 +88,11 @@ export class RuntimeTunnelHandler
     socket.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
   }
 
+  /** runtime 是否在线（隧道连接存在）。 */
+  isConnected(runtimeId: string): boolean {
+    return this.connections.has(runtimeId);
+  }
+
   /** 向目标 runtimeId 发一次 launch/stop/destroy RPC,等它回应或超时。
    *  这是 RemoteRuntime 的唯一后端:RemoteRuntime 只组包、这里管连接与关联。 */
   sendRequest<Result>(
@@ -220,7 +225,8 @@ export class RuntimeTunnelHandler
         const found = await this.repository.markRegistered(
           runtimeId,
           message.runtimeType,
-          message.capabilities
+          message.capabilities,
+          message.envConfig
         );
         if (!found) {
           ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");

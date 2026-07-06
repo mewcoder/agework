@@ -76,9 +76,12 @@ export function createAgentDriver(
   ) => void
 ): AgentDriver {
   const { agentProviderConfig, runtimePath } = config;
-  const { claudeExecutablePath, codexExecutablePath } = resolveCliPaths(
-    process.env
-  );
+  // RunConfig 里的路径（local runtime 从 envConfig 提取）优先于 worker env。
+  const envCliPaths = resolveCliPaths(process.env);
+  const claudeExecutablePath =
+    config.claudeExecutablePath ?? envCliPaths.claudeExecutablePath;
+  const codexExecutablePath =
+    config.codexExecutablePath ?? envCliPaths.codexExecutablePath;
 
   const pendingActionSink = (event: {
     threadId: string;

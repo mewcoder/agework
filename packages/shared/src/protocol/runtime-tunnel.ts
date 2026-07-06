@@ -1,5 +1,6 @@
 import type { RpcRequest, RpcResponse } from "./rpc";
 import type { RuntimeSpec } from "./channel";
+import type { RuntimeEnvConfig } from "../api/runtimes";
 
 /**
  * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。
@@ -20,6 +21,8 @@ export interface RuntimeTunnelRegisterMessage {
   capabilities: RuntimeCapabilities;
   /** manager 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
   version?: string;
+  /** manager 启动时检测本机 agent CLI 的结果（路径/版本/认证状态）。 */
+  envConfig?: RuntimeEnvConfig;
 }
 
 /** manager → server:心跳。 */
@@ -66,15 +69,21 @@ export type RuntimeInstanceRefRpcParams = {
   isolationScope: string;
 };
 
+/** server → manager：触发重新检测本机 agent CLI 环境并上报结果。 */
+export type RuntimeDetectEnvRpcParams = Record<string, never>;
+
 export type RuntimeTunnelRpcRequest =
   | RpcRequest<"runtime.launch", RuntimeLaunchRpcParams>
   | RpcRequest<"runtime.stop", RuntimeInstanceRefRpcParams>
-  | RpcRequest<"runtime.destroy", RuntimeInstanceRefRpcParams>;
+  | RpcRequest<"runtime.destroy", RuntimeInstanceRefRpcParams>
+  | RpcRequest<"runtime.detect-env", RuntimeDetectEnvRpcParams>;
 
 export type RuntimeLaunchRpcResult = { runtimeInstanceId: string };
+export type RuntimeDetectEnvRpcResult = { envConfig: RuntimeEnvConfig };
 
 export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeLaunchRpcResult>
+  | RpcResponse<RuntimeDetectEnvRpcResult>
   | RpcResponse<null>;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,

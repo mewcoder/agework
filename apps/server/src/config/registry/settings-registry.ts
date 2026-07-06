@@ -22,11 +22,12 @@ export const SettingKey = {
     "AGEWORK_RUNTIME_HEARTBEAT_TIMEOUT_SECONDS",
   RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS:
     "AGEWORK_RUNTIME_HEARTBEAT_CHECK_INTERVAL_SECONDS",
+  SYSTEM_ENV_ENABLED: "AGEWORK_SYSTEM_ENV_ENABLED",
 } as const;
 
 export type SettingKey = (typeof SettingKey)[keyof typeof SettingKey];
 
-export type SettingType = "string" | "number";
+export type SettingType = "string" | "number" | "boolean";
 
 export interface SettingDefinition {
   key: SettingKey;
@@ -84,6 +85,14 @@ export const SETTINGS_REGISTRY: SettingDefinition[] = [
     description: "watchdog 扫描一次所有 owner 心跳的间隔",
     defaultValue: String(DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS),
   },
+  {
+    key: SettingKey.SYSTEM_ENV_ENABLED,
+    type: "boolean",
+    label: "允许选择系统环境",
+    description:
+      "开启后用户可选择「系统环境」模型配置（使用本机 agent CLI 自带认证）。实际是否可用还取决于工作空间绑定的 Runtime 是否检测到对应 CLI + 认证。",
+    defaultValue: "true",
+  },
 ];
 
 export function getSettingDefinition(
@@ -105,6 +114,14 @@ export function coerceSettingValue(
       );
     }
     return String(num);
+  }
+  if (definition.type === "boolean") {
+    const lower = rawValue.toLowerCase().trim();
+    if (lower === "true" || lower === "1") return "true";
+    if (lower === "false" || lower === "0") return "false";
+    throw new BadRequestException(
+      `${definition.key} 必须是布尔值，收到: ${rawValue}`
+    );
   }
   return rawValue;
 }

@@ -9,12 +9,6 @@ export type ProviderConfig = {
   extraConfig: Record<string, string>;
 };
 
-export type ModelProviderSystemStatus = {
-  command: string;
-  commandAvailable: boolean;
-  configAvailable: boolean;
-};
-
 export type ModelProviderResponse = {
   modelProviderId: string;
   agentType: AgentType;
@@ -24,7 +18,6 @@ export type ModelProviderResponse = {
   isEnabled: boolean;
   /** 序列化后的 provider 配置 JSON 字符串。 */
   providerConfig: string;
-  systemStatus?: ModelProviderSystemStatus;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601 */

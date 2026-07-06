@@ -10,6 +10,7 @@ import {
   ServerIcon,
   SettingsIcon,
   SlidersHorizontal,
+  TerminalIcon,
   UsersIcon,
   UserRoundIcon,
 } from 'lucide-react';
@@ -22,6 +23,8 @@ import {
 import { useAuthStore } from '@/stores/auth-store';
 import { UsersPanel } from '@/pages/admin/user';
 import { AdminModelProvidersPanel } from '@/pages/admin/model-providers';
+import { CliStatusPanel } from '@/pages/admin/cli-status';
+import { AdminRuntimeManagementPanel } from '@/pages/admin/runtime-management';
 import { RunsPanel } from '@/pages/admin/run';
 import { WorkspacesPanel } from '@/pages/admin/workspace';
 import { WorkspaceRuntimesPanel } from '@/pages/admin/workspace-runtimes';
@@ -43,7 +46,7 @@ type UserCategory =
   | 'runtimes'
   | 'archived'
   | 'about';
-type AdminCategory = 'users' | 'model-management' | 'workspaces-overview' | 'runs' | 'workspace-runtimes' | 'system-config';
+type AdminCategory = 'users' | 'model-management' | 'workspaces-overview' | 'runs' | 'workspace-runtimes' | 'runtime-management' | 'system-config';
 type Category = UserCategory | AdminCategory;
 
 const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
@@ -51,7 +54,7 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'general', label: '通用', icon: SettingsIcon },
   { id: 'model', label: '模型配置', icon: Bot },
   { id: 'workspaces', label: '工作空间', icon: FolderIcon },
-  { id: 'runtimes', label: '我的运行环境', icon: MonitorIcon },
+  { id: 'runtimes', label: '运行环境', icon: MonitorIcon },
   { id: 'archived', label: '已归档对话', icon: Archive },
   { id: 'about', label: '关于', icon: InfoIcon },
 ];
@@ -59,6 +62,7 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
 const ADMIN_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'users', label: '用户管理', icon: UsersIcon },
   { id: 'model-management', label: '模型服务管理', icon: Bot },
+  { id: 'runtime-management', label: '运行环境管理', icon: TerminalIcon },
   { id: 'workspaces-overview', label: '工作空间管理', icon: Folders },
   { id: 'workspace-runtimes', label: 'Worker 管理', icon: ServerIcon },
   { id: 'runs', label: '运行日志', icon: Activity },
@@ -131,6 +135,9 @@ export default function SettingsPage() {
       )}
       {activeCategory === 'workspaces' && <WorkspaceSettings />}
       {activeCategory === 'runtimes' && <RuntimeSettings />}
+      {!isAdmin && activeCategory === 'runtimes' && (
+        <CliStatusPanel showHeader={false} />
+      )}
       {activeCategory === 'archived' && <ArchivedConversations />}
       {activeCategory === 'about' && <AboutSettings />}
       {isAdmin && activeCategory === 'users' && (
@@ -149,6 +156,15 @@ export default function SettingsPage() {
             description="管理 Claude 和 Codex 的全局模型服务配置"
           />
           <AdminModelProvidersPanel showHeader={false} />
+        </div>
+      )}
+      {isAdmin && activeCategory === 'runtime-management' && (
+        <div className="space-y-6">
+          <SettingsPageHeader
+            title="运行环境管理"
+            description="管理所有 Runtime（内置 + 已注册），添加机器、注销配对、CLI 路径覆盖与重新检测"
+          />
+          <AdminRuntimeManagementPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'workspaces-overview' && (

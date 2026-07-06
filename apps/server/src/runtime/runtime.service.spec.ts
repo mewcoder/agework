@@ -6,6 +6,16 @@ import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { RuntimeService } from "./runtime.service";
 
+const mockEnvConfig = {
+  claude: {
+    executablePath: "/usr/bin/claude",
+    version: "1.0",
+    authAvailable: true,
+  },
+  codex: { executablePath: null, version: null, authAvailable: false },
+  detectedAt: "2026-07-06T00:00:00.000Z",
+};
+
 function makeRow(overrides: Partial<RuntimeRow> = {}): RuntimeRow {
   return {
     id: "rt-1",
@@ -17,6 +27,8 @@ function makeRow(overrides: Partial<RuntimeRow> = {}): RuntimeRow {
     lastHeartbeatAt: null,
     createdAt: new Date("2026-07-04T00:00:00Z"),
     capabilities: null,
+    envConfig: null,
+    envConfigOverride: null,
     removedAt: null,
     ...overrides,
   };
@@ -31,11 +43,19 @@ describe("RuntimeService", () => {
   let repository: {
     create: ReturnType<typeof vi.fn>;
     listVisibleToOwner: ReturnType<typeof vi.fn>;
+    listAll: ReturnType<typeof vi.fn>;
     revokeByOwner: ReturnType<typeof vi.fn>;
     findVisibleToOwner: ReturnType<typeof vi.fn>;
+    findById: ReturnType<typeof vi.fn>;
     upsertBuiltin: ReturnType<typeof vi.fn>;
+    updateEnvConfig: ReturnType<typeof vi.fn>;
+    updateEnvConfigOverride: ReturnType<typeof vi.fn>;
   };
-  let tunnelHandler: { closeConnection: ReturnType<typeof vi.fn> };
+  let tunnelHandler: {
+    closeConnection: ReturnType<typeof vi.fn>;
+    isConnected: ReturnType<typeof vi.fn>;
+    sendRequest: ReturnType<typeof vi.fn>;
+  };
   let service: RuntimeService;
 
   beforeEach(() => {
@@ -53,15 +73,24 @@ describe("RuntimeService", () => {
       start: vi.fn(),
       stop: vi.fn(),
       destroy: vi.fn(),
+      detectEnv: vi.fn().mockResolvedValue(mockEnvConfig),
     } as unknown as LocalRuntime;
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
       listVisibleToOwner: vi.fn().mockResolvedValue([makeRow()]),
+      listAll: vi.fn().mockResolvedValue([makeRow()]),
       revokeByOwner: vi.fn().mockResolvedValue(true),
       findVisibleToOwner: vi.fn().mockResolvedValue(makeRow()),
+      findById: vi.fn().mockResolvedValue(makeRow()),
       upsertBuiltin: vi.fn().mockResolvedValue(makeRow({ source: "builtin" })),
+      updateEnvConfig: vi.fn().mockResolvedValue(true),
+      updateEnvConfigOverride: vi.fn().mockResolvedValue(true),
     };
-    tunnelHandler = { closeConnection: vi.fn() };
+    tunnelHandler = {
+      closeConnection: vi.fn(),
+      isConnected: vi.fn().mockReturnValue(false),
+      sendRequest: vi.fn(),
+    };
     service = new RuntimeService(
       configService as ConfigService,
       localRuntime,
@@ -112,7 +141,7 @@ describe("RuntimeService", () => {
     });
   });
 
-  it("onApplicationBootstrap upserts a builtin row per allowed runtimeType", async () => {
+  it("onApplicationBootstrap upserts a builtin row per allowed runtimeType and detects envConfig", async () => {
     await service.onApplicationBootstrap();
     expect(repository.upsertBuiltin).toHaveBeenCalledTimes(3);
     expect(repository.upsertBuiltin).toHaveBeenCalledWith(
@@ -129,6 +158,43 @@ describe("RuntimeService", () => {
         capabilities: { isolationScopes: ["user", "workspace"] },
       })
     );
+    // builtin runtime 的 envConfig 也应被检测并写入
+    expect(repository.updateEnvConfig).toHaveBeenCalledTimes(3);
+    expect(repository.updateEnvConfig).toHaveBeenCalledWith(
+      "builtin-local",
+      expect.objectContaining({ claude: expect.any(Object) })
+    );
+  });
+
+  it("detectEnv for builtin runtime uses local detection", async () => {
+    const result = await service.detectEnv("builtin-local");
+    expect(result.envConfig).not.toBeNull();
+    expect(repository.updateEnvConfig).toHaveBeenCalledWith(
+      "builtin-local",
+      expect.objectContaining({ claude: expect.any(Object) })
+    );
+    // 不应该走隧道
+    expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
+  });
+
+  it("detectEnv for registered runtime uses tunnel when connected", async () => {
+    tunnelHandler.isConnected.mockReturnValue(true);
+    const mockEnvConfig = {
+      claude: { executablePath: "/bin/claude", version: "2.0", authAvailable: true },
+      codex: { executablePath: null, version: null, authAvailable: false },
+      detectedAt: "2026-07-06T01:00:00.000Z",
+    };
+    tunnelHandler.sendRequest.mockResolvedValue({ envConfig: mockEnvConfig });
+
+    const result = await service.detectEnv("rt-1");
+    expect(result.envConfig).toEqual(mockEnvConfig);
+    expect(repository.updateEnvConfig).toHaveBeenCalledWith("rt-1", mockEnvConfig);
+  });
+
+  it("detectEnv for disconnected registered runtime returns null", async () => {
+    tunnelHandler.isConnected.mockReturnValue(false);
+    const result = await service.detectEnv("rt-1");
+    expect(result.envConfig).toBeNull();
   });
 
   it("create stores only the sha256 of the pairing token and returns the plaintext once", async () => {
@@ -161,10 +227,19 @@ describe("RuntimeService", () => {
         runtimeType: null,
         status: "offline",
         capabilities: null,
+        envConfig: null,
+        envConfigOverride: null,
+        envStatus: null,
         lastHeartbeatAt: null,
         createdAt: "2026-07-04T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("listAll maps rows to response shape", async () => {
+    const { list } = await service.listAll();
+    expect(list).toHaveLength(1);
+    expect(list[0].id).toBe("rt-1");
   });
 
   it("delete revokes the row but does not touch the live tunnel connection", async () => {

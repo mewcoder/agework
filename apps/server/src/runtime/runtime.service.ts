@@ -6,9 +6,15 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
+import { type AgentType } from "@agework/shared";
 import type { RuntimeSpec } from "@agework/shared/protocol";
 import type {
   CreateRuntimeResponse,
+  DetectEnvResponse,
+  RuntimeEnvConfig,
+  RuntimeEnvConfigOverride,
+  AgentEnvStatus,
+  RuntimeEnvStatus,
   RuntimeResponse,
 } from "@agework/shared/api";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
@@ -36,12 +42,16 @@ export class RuntimeService implements OnApplicationBootstrap {
     private readonly tunnelHandler: RuntimeTunnelHandler
   ) {}
 
-  /** 启动时按部署允许的 runtimeType upsert 对应的 builtin Runtime 行(id 固定,幂等)。 */
+  /** 启动时按部署允许的 runtimeType upsert 对应的 builtin Runtime 行(id 固定,幂等),
+   *  并通过 LocalRuntime 检测本机 CLI 环境写入 envConfig。 */
   async onApplicationBootstrap(): Promise<void> {
     for (const runtimeType of this.configService.getAllowedRuntimeTypes()) {
       await this.upsertBuiltin(runtimeType, {
         isolationScopes: builtinIsolationScopes(runtimeType),
       });
+      const id = builtinRuntimeId(runtimeType);
+      const envConfig = await this.localRuntime.detectEnv();
+      await this.repository.updateEnvConfig(id, envConfig);
     }
     this.logger.log(
       `builtin runtimes ready: ${this.configService.getAllowedRuntimeTypes().join(", ")}`
@@ -125,6 +135,12 @@ export class RuntimeService implements OnApplicationBootstrap {
     return { list: rows.map(toRuntimeResponse) };
   }
 
+  /** admin: 列出全部 Runtime(builtin + 所有用户的 registered),不含已注销。 */
+  async listAll(): Promise<{ list: RuntimeResponse[] }> {
+    const rows = await this.repository.listAll();
+    return { list: rows.map(toRuntimeResponse) };
+  }
+
   /**
    * 查询 Runtime 是否存在且对该用户可见(自己的 Registered 或全局 builtin,且未注销);
    * 返回 null 表示不存在/不可见/已注销。供上层入口(如创建 workspace 时校验目标 runtime)
@@ -147,9 +163,80 @@ export class RuntimeService implements OnApplicationBootstrap {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
   }
+
+  /**
+   * 管理员覆盖 runtime 的 envConfig（per-agent）。空字符串 = 清除该 agent 的覆盖。
+   * 不查 runtime 是否存在——admin 接口，不存在时 updateMany count=0 自然报 404。
+   */
+  async updateEnvConfigOverride(
+    id: string,
+    agentType: AgentType,
+    executablePath: string
+  ): Promise<void> {
+    const current = await this.repository.findById(id);
+    if (!current) {
+      throw new NotFoundException(`runtime not found: ${id}`);
+    }
+    const override = mergeOverride(
+      current.envConfigOverride as RuntimeEnvConfigOverride | null,
+      agentType,
+      executablePath
+    );
+    const updated = await this.repository.updateEnvConfigOverride(id, override);
+    if (!updated) {
+      throw new NotFoundException(`runtime not found: ${id}`);
+    }
+  }
+
+  /**
+   * 管理员触发 runtime 重新检测 CLI 环境。
+   * - builtin runtime: LocalRuntime 进程内检测。
+   * - registered runtime: 通过隧道发 detect-env RPC,manager 重检后返回新 envConfig。
+   *   runtime 未连接时返回 null。
+   */
+  async detectEnv(id: string): Promise<DetectEnvResponse> {
+    if (!this.tunnelHandler.isConnected(id) && !isBuiltinRuntimeId(id)) {
+      return { envConfig: null };
+    }
+    try {
+      const envConfig = await this.runtimeFor(id).detectEnv();
+      await this.repository.updateEnvConfig(id, envConfig);
+      return { envConfig };
+    } catch (err) {
+      this.logger.warn(
+        `detect-env for runtime ${id} failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      return { envConfig: null };
+    }
+  }
+
+  /**
+   * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
+   * 供 RunLauncher 对 local 类型提取 CLI 路径写入 RunConfig。
+   */
+  async getResolvedCliPaths(
+    id: string
+  ): Promise<{ claude: string | null; codex: string | null } | null> {
+    const row = await this.repository.findById(id);
+    if (!row) return null;
+    const envConfig = row.envConfig as RuntimeEnvConfig | null;
+    const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
+    return {
+      claude: resolveAgentPath(
+        override?.claude?.executablePath,
+        envConfig?.claude.executablePath ?? null
+      ),
+      codex: resolveAgentPath(
+        override?.codex?.executablePath,
+        envConfig?.codex.executablePath ?? null
+      ),
+    };
+  }
 }
 
 function toRuntimeResponse(row: RuntimeRow): RuntimeResponse {
+  const envConfig = row.envConfig as RuntimeEnvConfig | null;
+  const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
   return {
     id: row.id,
     name: row.name,
@@ -159,8 +246,37 @@ function toRuntimeResponse(row: RuntimeRow): RuntimeResponse {
     status: row.status === "online" ? "online" : "offline",
     capabilities:
       (row.capabilities as RuntimeResponse["capabilities"] | null) ?? null,
+    envConfig,
+    envConfigOverride: override,
+    envStatus: envConfig ? computeEnvStatus(envConfig, override) : null,
     lastHeartbeatAt: row.lastHeartbeatAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** override + detected 合并出展示层 envStatus（见 ADR-0002）。 */
+function computeEnvStatus(
+  detected: RuntimeEnvConfig,
+  override: RuntimeEnvConfigOverride | null
+): RuntimeResponse["envStatus"] {
+  return {
+    claude: mergeAgent(detected.claude, override?.claude?.executablePath ?? null),
+    codex: mergeAgent(detected.codex, override?.codex?.executablePath ?? null),
+    detectedAt: detected.detectedAt,
+  };
+}
+
+function mergeAgent(
+  detected: RuntimeEnvConfig["claude"],
+  overridePath: string | null
+): AgentEnvStatus {
+  const resolvedPath = overridePath ?? detected.executablePath;
+  return {
+    resolvedPath,
+    source: overridePath ? "custom" : "system",
+    detectedPath: detected.executablePath,
+    version: detected.version,
+    authAvailable: detected.authAvailable,
   };
 }
 
@@ -177,4 +293,27 @@ function isPrismaUniqueError(err: unknown): boolean {
     "code" in err &&
     (err as { code?: unknown }).code === "P2002"
   );
+}
+
+/** per-agent 合并 override：空字符串 = 清除该 agent 的覆盖。 */
+function mergeOverride(
+  current: RuntimeEnvConfigOverride | null,
+  agentType: AgentType,
+  executablePath: string
+): RuntimeEnvConfigOverride {
+  const result: RuntimeEnvConfigOverride = { ...(current ?? {}) };
+  const key = agentType as "claude" | "codex";
+  if (!executablePath) {
+    delete result[key];
+  } else {
+    result[key] = { executablePath };
+  }
+  return result;
+}
+
+function resolveAgentPath(
+  overridePath: string | undefined,
+  detectedPath: string | null
+): string | null {
+  return overridePath ?? detectedPath ?? null;
 }

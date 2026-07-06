@@ -8,6 +8,7 @@ import { RunDriver } from "../driver/run-driver";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
+import { RuntimeService } from "../../runtime/runtime.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import type { RuntimeSpec } from "@agework/shared/protocol";
@@ -190,7 +191,8 @@ describe("RunLauncher", () => {
       mockExecutor as RunDriver,
       mockConversations as ConversationService,
       mockRunEvents,
-      mockConfigService as ConfigService
+      mockConfigService as ConfigService,
+      { getResolvedCliPaths: vi.fn().mockResolvedValue(null) } as unknown as RuntimeService
     );
   });
 

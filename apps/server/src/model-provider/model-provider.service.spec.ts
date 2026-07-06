@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModelProviderService } from "./model-provider.service";
-import { getSystemStatus } from "./agent-cli-status";
-
-vi.mock("./agent-cli-status", () => ({
-  getSystemStatus: vi.fn(),
-}));
 
 function createService(overrides: Record<string, unknown> = {}) {
   const repo = {
@@ -116,57 +111,6 @@ describe("ModelProviderService", () => {
         extraConfig: {},
       })
     );
-  });
-
-  it("attaches systemStatus for system-scoped providers only", async () => {
-    vi.mocked(getSystemStatus).mockReturnValue({
-      command: "claude",
-      commandAvailable: true,
-      configAvailable: true,
-    });
-
-    const { service } = createService({
-      findManyByAgent: vi.fn().mockResolvedValue([
-        {
-          id: "system:claude",
-          agentType: "claude",
-          scope: "system",
-          userId: null,
-          name: "系统环境",
-          isEnabled: false,
-          baseUrl: "",
-          apiKey: "",
-          models: [],
-          extraConfig: {},
-          createdAt: new Date("2026-06-13T09:19:50.022Z"),
-          updatedAt: new Date("2026-06-13T09:20:29.205Z"),
-        },
-        {
-          id: "mp-1",
-          agentType: "claude",
-          scope: "global",
-          userId: null,
-          name: "custom",
-          isEnabled: true,
-          baseUrl: "https://example.com",
-          apiKey: "sk-test",
-          models: [],
-          extraConfig: {},
-          createdAt: new Date("2026-06-13T09:19:50.022Z"),
-          updatedAt: new Date("2026-06-13T09:20:29.205Z"),
-        },
-      ]),
-    });
-
-    const result = await service.listForAdmin("claude");
-
-    expect(getSystemStatus).toHaveBeenCalledWith("claude");
-    expect(result.list.find((p) => p.modelProviderId === "system:claude")?.systemStatus).toEqual({
-      command: "claude",
-      commandAvailable: true,
-      configAvailable: true,
-    });
-    expect(result.list.find((p) => p.modelProviderId === "mp-1")?.systemStatus).toBeUndefined();
   });
 
   it("resolves an enabled system provider from database state", async () => {

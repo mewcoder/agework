@@ -6,7 +6,9 @@ import {
   type RuntimeLaunchContext,
   type RuntimeInstanceRef,
 } from "@agework/providers";
+import type { RuntimeEnvConfig } from "@agework/shared/api";
 import { ConfigService } from "../../config/config.service";
+import { detectEnvConfig } from "../cli/cli-resolver";
 import type { Runtime } from "../runtime.types";
 import { toRuntimeConfig } from "./runtime-config";
 
@@ -39,5 +41,10 @@ export class LocalRuntime implements Runtime {
 
   destroy(ref: RuntimeInstanceRef): Promise<void> | void {
     return this.resolveProvider(ref.runtimeType).destroy(ref);
+  }
+
+  /** builtin runtime 运行在本机进程内,直接本地检测 CLI 环境。 */
+  detectEnv(): Promise<RuntimeEnvConfig> {
+    return Promise.resolve(detectEnvConfig());
   }
 }

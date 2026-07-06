@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toAgentRunInput } from "./index";
 
 // Mock execSync before importing resolveCliPaths so the module-level

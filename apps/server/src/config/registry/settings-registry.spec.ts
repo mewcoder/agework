@@ -63,7 +63,7 @@ describe("SETTINGS_REGISTRY", () => {
   it("each entry has required fields", () => {
     for (const def of SETTINGS_REGISTRY) {
       expect(def.key).toBeTruthy();
-      expect(["string", "number"]).toContain(def.type);
+      expect(["string", "number", "boolean"]).toContain(def.type);
       expect(def.label).toBeTruthy();
       expect(def.description).toBeTruthy();
       expect(def.defaultValue).toBeTruthy();

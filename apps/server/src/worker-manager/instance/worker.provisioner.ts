@@ -250,6 +250,14 @@ export class WorkerProvisioner {
     if (runConfig.workerLogFilePath) {
       env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
     }
+    // local runtime 从 envConfig 提取的 CLI 路径传播到 worker env。
+    // worker 侧 resolveCliPaths 读 env 优先，见 ADR-0004。
+    if (runConfig.claudeExecutablePath) {
+      env.AGEWORK_CLAUDE_CLI_PATH = runConfig.claudeExecutablePath;
+    }
+    if (runConfig.codexExecutablePath) {
+      env.AGEWORK_CODEX_CLI_PATH = runConfig.codexExecutablePath;
+    }
     return env;
   }
 }

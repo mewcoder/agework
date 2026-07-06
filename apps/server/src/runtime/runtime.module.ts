@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 
 import { RuntimeService } from "./runtime.service";
 import { RuntimeController } from "./runtime.controller";
+import { AdminRuntimeController } from "./admin/admin-runtime.controller";
 import { RuntimeRepository } from "./runtime.repository";
 import { LocalRuntime } from "./local/local-runtime";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
@@ -21,7 +22,7 @@ import { RuntimeLivenessWatchdog } from "./gateway/runtime-liveness.watchdog";
     RuntimeTunnelHandler,
     RuntimeLivenessWatchdog,
   ],
-  controllers: [RuntimeController],
+  controllers: [RuntimeController, AdminRuntimeController],
   exports: [RuntimeService],
 })
 export class RuntimeModule {}

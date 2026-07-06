@@ -2,6 +2,7 @@ import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
 } from "@agework/providers";
+import type { RuntimeEnvConfig } from "@agework/shared/api";
 import type { RuntimeType } from "../config/config.service";
 
 const BUILTIN_RUNTIME_ID_PREFIX = "builtin-";
@@ -19,7 +20,7 @@ export function isBuiltinRuntimeId(runtimeId: string): boolean {
 }
 
 /**
- * server 与执行侧的唯一控制面边界:起/停/毁 worker 载体。
+ * server 与执行侧的唯一控制面边界:起/停/毁 worker 载体 + CLI 环境检测。
  * 两个实现:`LocalRuntime`(Managed,in-process)/ `RemoteRuntime`(Registered,隧道 RPC)。
  * worker 的 event/command 不走此接口——worker 出站直连 server 事件端点(worker-manager 数据面)。
  */
@@ -35,4 +36,7 @@ export interface Runtime {
   stop(ref: RuntimeInstanceRef): Promise<void> | void;
   /** owner 永久消失:删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> | void;
+  /** 检测本机 CLI 环境(路径/版本/认证)。
+   *  LocalRuntime 直接调本地检测;RemoteRuntime 通过隧道发 detect-env RPC 给远程 manager。 */
+  detectEnv(): Promise<RuntimeEnvConfig>;
 }

@@ -11,11 +11,13 @@ import {
   rpcSuccess,
 } from "@agework/shared/protocol/rpc";
 import { AGEWORK_VERSION } from "@agework/shared";
+import type { RuntimeEnvConfig } from "@agework/shared/api";
 import {
   resolveRegisteredRuntimeConfig,
   type RegisteredRuntimeConfig,
   type RuntimeType,
 } from "../config.js";
+import { detectEnvConfig } from "../cli/cli-resolver.js";
 import { Launcher } from "./launcher.js";
 import { LiveCarrierStore } from "./registry.js";
 
@@ -92,6 +94,7 @@ export class TunnelClient {
     });
     this.ws = ws;
     ws.on("open", () => {
+      const envConfig = detectEnvConfig();
       const register: RuntimeTunnelRegisterMessage = {
         type: "register",
         runtimeType: this.options.config.runtimeType,
@@ -99,6 +102,7 @@ export class TunnelClient {
           isolationScopes: ISOLATION_SCOPES[this.options.config.runtimeType],
         },
         version: AGEWORK_VERSION,
+        envConfig,
       };
       ws.send(JSON.stringify(register));
     });
@@ -157,7 +161,7 @@ export class TunnelClient {
 
   private dispatch(
     request: RuntimeTunnelRpcRequest
-  ): Promise<{ runtimeInstanceId: string } | void> {
+  ): Promise<{ runtimeInstanceId: string } | { envConfig: RuntimeEnvConfig } | void> {
     const dispatcher = this.options.dispatcher;
     switch (request.method) {
       case "runtime.launch":
@@ -166,6 +170,8 @@ export class TunnelClient {
         return dispatcher.stop(request.params);
       case "runtime.destroy":
         return dispatcher.destroy(request.params);
+      case "runtime.detect-env":
+        return Promise.resolve({ envConfig: detectEnvConfig() });
     }
   }
 

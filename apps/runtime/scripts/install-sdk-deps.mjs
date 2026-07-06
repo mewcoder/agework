@@ -18,5 +18,6 @@ copyFileSync(join(runtimeRoot, "package.docker.json"), join(distDir, "package.js
 execFileSync("npm", ["install", "--omit=dev", "--no-package-lock"], {
   cwd: distDir,
   stdio: "inherit",
+  shell: true,
 });
 console.log(`installed sdk deps → ${distDir}/node_modules`);
