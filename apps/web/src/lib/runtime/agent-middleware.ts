@@ -20,40 +20,13 @@ import {
   clearPendingInitializeTitle,
   setPendingInitializeTitle,
 } from "@/lib/runtime/thread-list-adapter";
+import {
+  setConversationRunStatus,
+  upsertConversationAtFront,
+} from "@/lib/conversations-cache";
 
 type Aui = ReturnType<typeof useAui>;
 type QC = ReturnType<typeof useQueryClient>;
-type ConversationsCache = { conversations: Conversation[] };
-
-function updateRegularConversationCaches(
-  qc: QC,
-  updater: (old: ConversationsCache | undefined) => ConversationsCache | undefined,
-) {
-  for (const [queryKey, old] of qc.getQueriesData<ConversationsCache>({
-    queryKey: ["conversations"],
-  })) {
-    if (queryKey[1] === "archived") continue;
-    qc.setQueryData<ConversationsCache>(queryKey, updater(old));
-  }
-}
-
-function setConversationRunStatus(
-  qc: QC,
-  conversationId: string,
-  runStatus: Conversation["runStatus"],
-) {
-  updateRegularConversationCaches(qc, (old) => {
-    if (!old) return old;
-    return {
-      ...old,
-      conversations: old.conversations.map((conversation) =>
-        conversation.conversationId === conversationId
-          ? { ...conversation, runStatus }
-          : conversation,
-      ),
-    };
-  });
-}
 
 /**
  * 创建 agent 中间件：处理新会话初始化、运行设置注入、线程列表刷新。
@@ -93,30 +66,18 @@ export function createAgentMiddleware(
 
         if (isNewConversation && fallbackTitle && workspaceId) {
           const now = new Date().toISOString();
-          updateRegularConversationCaches(
-            qc,
-            (old) => {
-              const newConv = {
-                conversationId: remoteId,
-                title: fallbackTitle,
-                workspaceId,
-                agentType,
-                runStatus: "running" as const,
-                pendingUserAction: null,
-                status: "regular" as const,
-                createdAt: now,
-                updatedAt: now,
-              } satisfies Conversation;
-              if (!old) return { conversations: [newConv] };
-              const filtered = old.conversations.filter(
-                (c) => c.conversationId !== remoteId,
-              );
-              return {
-                ...old,
-                conversations: [newConv, ...filtered],
-              };
-            },
-          );
+          const newConv = {
+            conversationId: remoteId,
+            title: fallbackTitle,
+            workspaceId,
+            agentType,
+            runStatus: "running" as const,
+            pendingUserAction: null,
+            status: "regular" as const,
+            createdAt: now,
+            updatedAt: now,
+          } satisfies Conversation;
+          upsertConversationAtFront(qc, newConv);
         } else {
           setConversationRunStatus(qc, remoteId, "running");
         }

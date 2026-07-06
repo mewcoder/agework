@@ -29,6 +29,7 @@ import { ConversationListItem } from "./conversation-list-item";
 import { ConversationListMenu } from "./conversation-list-menu";
 import { WorkspaceDialog } from "@/components/workspace-dialog";
 import { loadSelectedWorkspaceId, useSelectionStore } from "@/stores/selection-store";
+import { mergeConversationStatusIfNewer } from "@/lib/conversations-cache";
 
 const EMPTY_CONVERSATIONS: Conversation[] = [];
 
@@ -74,28 +75,9 @@ export function ConversationList() {
   useEffect(() => {
     const statuses = runStatusesData?.statuses;
     if (!statuses?.length) return;
-    queryClient.setQueriesData<{ conversations: Conversation[] }>(
-      { queryKey: ["conversations"] },
-      (old) => {
-        if (!old) return old;
-        const statusById = new Map(
-          statuses.map((status) => [status.conversationId, status]),
-        );
-        return {
-          ...old,
-          conversations: old.conversations.map((conversation) => {
-            const status = statusById.get(conversation.conversationId);
-            if (!status || status.updatedAt <= conversation.updatedAt) return conversation;
-            return {
-              ...conversation,
-              runStatus: status.runStatus,
-              pendingUserAction: status.pendingUserAction,
-              updatedAt: status.updatedAt,
-            };
-          }),
-        };
-      },
-    );
+    for (const status of statuses) {
+      mergeConversationStatusIfNewer(queryClient, status.conversationId, status);
+    }
   }, [queryClient, runStatusesData]);
 
   useConversationRunStatusMonitor(conversations, activeConversationId);

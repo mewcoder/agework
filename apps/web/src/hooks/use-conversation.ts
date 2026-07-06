@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi, type Conversation } from '@/api/conversations';
 import { useRuntimeUiStore } from '@/stores/runtime-ui-store';
+import { setConversationRunStatus } from '@/lib/conversations-cache';
 export type { Conversation } from '@/api/conversations';
 export type { ConversationSearchHit } from '@/api/conversations';
 
@@ -95,21 +96,6 @@ export function useConversationSearch(q: string, limit = 20) {
   });
 }
 
-function markConversationRunIdleInCache(
-  old: { conversations: Conversation[] } | undefined,
-  conversationId: string,
-) {
-  if (!old) return old;
-  return {
-    ...old,
-    conversations: old.conversations.map((conversation) =>
-      conversation.conversationId === conversationId
-        ? { ...conversation, runStatus: 'idle' as const }
-        : conversation,
-    ),
-  };
-}
-
 export function useStopConversationRun() {
   const qc = useQueryClient();
   return useMutation({
@@ -123,10 +109,7 @@ export function useStopConversationRun() {
       useRuntimeUiStore.getState().clearConversationCancelled(id);
     },
     onSuccess: (_data, id) => {
-      qc.setQueriesData<{ conversations: Conversation[] }>(
-        { queryKey: ['conversations'] },
-        (old) => markConversationRunIdleInCache(old, id),
-      );
+      setConversationRunStatus(qc, id, 'idle');
       qc.invalidateQueries({ queryKey: ['conversations'] });
       window.setTimeout(() => {
         qc.invalidateQueries({ queryKey: ['conversations'] });
