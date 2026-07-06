@@ -19,10 +19,4 @@ export class WorkerUpstreamRegistry {
       ? this.receiver.sendEvent(runId, message)
       : Promise.resolve();
   }
-
-  notifyWorkerLost(runId: string, reason: string): Promise<void> {
-    return this.receiver
-      ? this.receiver.notifyWorkerLost(runId, reason)
-      : Promise.resolve();
-  }
 }

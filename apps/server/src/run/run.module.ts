@@ -10,6 +10,7 @@ import { RunFinalizationStore } from "./status/run-finalization.store";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunStartupService } from "./startup/run-startup.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
+import { WorkerLostListener } from "./upstream/worker-lost.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { RunDriver } from "./driver/run-driver";
@@ -48,6 +49,7 @@ import { RuntimeModule } from "../runtime/runtime.module";
     WorkerAgUiEventHandler,
     RunStartupService,
     RunWorkspaceListener,
+    WorkerLostListener,
   ],
   exports: [RunService],
 })

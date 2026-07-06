@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { WorkerLivenessSweeper } from "./worker-liveness.sweeper";
+import { WORKER_LOST_EVENT, WorkerLostEvent } from "../worker-manager.events";
 
 function makeDeps(
   overrides: {
@@ -26,8 +27,8 @@ function makeDeps(
   const provisioner = {
     stop: vi.fn().mockResolvedValue(undefined),
   };
-  const upstream = {
-    notifyWorkerLost: vi.fn().mockResolvedValue(undefined),
+  const events = {
+    emit: vi.fn(),
   };
   const ownerRunStore = {
     registerRun: vi.fn(),
@@ -39,7 +40,7 @@ function makeDeps(
     configService,
     registry,
     provisioner,
-    upstream,
+    events,
     ownerRunStore,
   };
 }
@@ -50,7 +51,7 @@ function makeSweeper(deps: ReturnType<typeof makeDeps>) {
     deps.configService as never,
     deps.registry as never,
     deps.provisioner as never,
-    deps.upstream as never,
+    deps.events as never,
     deps.ownerRunStore as never
   );
 }
@@ -171,7 +172,7 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     return sweeper;
   }
 
-  it("notifies every in-flight run registered for the stale owner", async () => {
+  it("emits a WorkerLostEvent for every in-flight run registered for the stale owner", async () => {
     const deps = makeDeps({ stale: ["owner-1"] });
     deps.registry.findActiveByOwnerId.mockResolvedValue(
       activeRow({ ownerId: "owner-1" })
@@ -180,13 +181,13 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
     await triggerSweep(deps);
 
-    expect(deps.upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-1",
-      "worker heartbeat timeout"
+    expect(deps.events.emit).toHaveBeenCalledWith(
+      WORKER_LOST_EVENT,
+      new WorkerLostEvent("run-1", "worker heartbeat timeout")
     );
   });
 
-  it("full flow terminates every in-flight run, tears down the instance via the provisioner, and clears the liveness entry", async () => {
+  it("full flow emits a WorkerLostEvent for every in-flight run, tears down the instance via the provisioner, and clears the liveness entry", async () => {
     const deps = makeDeps({ stale: ["owner-4"] });
     deps.registry.findActiveByOwnerId.mockResolvedValue(
       activeRow({ ownerId: "owner-4", instanceId: "container-4" })
@@ -195,13 +196,13 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
     await triggerSweep(deps);
 
-    expect(deps.upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-4a",
-      "worker heartbeat timeout"
+    expect(deps.events.emit).toHaveBeenCalledWith(
+      WORKER_LOST_EVENT,
+      new WorkerLostEvent("run-4a", "worker heartbeat timeout")
     );
-    expect(deps.upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-4b",
-      "worker heartbeat timeout"
+    expect(deps.events.emit).toHaveBeenCalledWith(
+      WORKER_LOST_EVENT,
+      new WorkerLostEvent("run-4b", "worker heartbeat timeout")
     );
     expect(deps.provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "docker",
@@ -238,28 +239,8 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
     await triggerSweep(deps);
 
-    expect(deps.upstream.notifyWorkerLost).not.toHaveBeenCalled();
+    expect(deps.events.emit).not.toHaveBeenCalled();
     expect(deps.provisioner.stop).not.toHaveBeenCalled();
     expect(deps.livenessStore.remove).not.toHaveBeenCalled();
-  });
-
-  it("swallows a notifyWorkerLost rejection and still tears down the instance", async () => {
-    const deps = makeDeps({ stale: ["owner-6"] });
-    deps.registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-6", instanceId: "container-6" })
-    );
-    deps.ownerRunStore.runIdsForOwner.mockReturnValue(["run-6"]);
-    deps.upstream.notifyWorkerLost.mockRejectedValue(
-      new Error("run already gone")
-    );
-
-    await triggerSweep(deps);
-
-    expect(deps.provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "docker",
-      ownerId: "owner-6",
-      runtimeInstanceId: "container-6",
-      isolationScope: "workspace",
-    });
   });
 });

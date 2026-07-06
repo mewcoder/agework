@@ -1,5 +1,6 @@
 import { Injectable, Module } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
@@ -83,7 +84,12 @@ async function createRunsTestingModule(
     failInterruptedRuns: vi.fn().mockResolvedValue(undefined),
   };
   const module = await Test.createTestingModule({
-    imports: [ConfigModule, PrismaModule, ...(runImports ?? [])],
+    imports: [
+      ConfigModule,
+      PrismaModule,
+      EventEmitterModule.forRoot(),
+      ...(runImports ?? []),
+    ],
   })
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())

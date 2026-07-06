@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useNavigate, useParams } from '@tanstack/react-router';
 import {
   Activity,
   Archive,
@@ -79,6 +79,12 @@ const ADMIN_NAV_GROUPS: SettingsNavGroup<Category>[] = [
   },
 ];
 
+const ALL_CATEGORIES = [...USER_NAV_ITEMS, ...ADMIN_NAV_ITEMS].map((i) => i.id);
+
+function isCategory(value: string): value is Category {
+  return (ALL_CATEGORIES as string[]).includes(value);
+}
+
 function navSections(isAdmin: boolean): SettingsNavSection<Category>[] {
   if (!isAdmin) {
     return [{ groups: USER_NAV_GROUPS, hideGroupLabels: true }];
@@ -103,11 +109,15 @@ function navSections(isAdmin: boolean): SettingsNavSection<Category>[] {
 }
 
 export default function SettingsPage() {
-  const [category, setCategory] = useState<Category>('account');
+  const { category: rawCategory } = useParams({ from: '/authenticated/settings/$category' });
+  const navigate = useNavigate();
   const { user, authRequired } = useAuthStore();
   const isAdmin = checkIsAdmin(user?.role);
   // 开发免登录时无法在界面修改密码，不应锁定到账号页
   const lockedToAccount = authRequired && user?.mustChangePassword === true;
+
+  // URL 里的 category 只是字符串，做一次校验/兜底
+  const category = isCategory(rawCategory) ? rawCategory : 'account';
   const activeCategory = lockedToAccount ? 'account' : category;
 
   return (
@@ -115,7 +125,8 @@ export default function SettingsPage() {
       activeCategory={activeCategory}
       navSections={navSections(lockedToAccount ? false : isAdmin)}
       onCategoryChange={(next) => {
-        if (!lockedToAccount) setCategory(next);
+        if (lockedToAccount) return;
+        navigate({ to: '/settings/$category', params: { category: next } });
       }}
     >
       {activeCategory === 'account' && <AccountSettings />}

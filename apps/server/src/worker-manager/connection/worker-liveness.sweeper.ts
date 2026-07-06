@@ -4,23 +4,25 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { isRuntimeType, type RuntimeInstanceRef } from "@agework/providers";
 import { ConfigService } from "../../config/config.service";
 import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { WorkerLivenessStore } from "./worker-liveness.store";
-import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
 import { WorkerProvisioner } from "../instance/worker.provisioner";
 import { OwnerRunStore } from "../instance/owner-run.store";
+import { WORKER_LOST_EVENT, WorkerLostEvent } from "../worker-manager.events";
 
 /**
  * 定时扫描 WorkerLivenessStore,把超过心跳超时阈值没见到 poll 的 owner 判定为
  * unhealthy 并 fence 掉它名下的 worker。超时即判死,不做"确认死亡"(卡死但进程
- * 没退出正是本机制要抓的场景)。直接依赖 registry/provisioner/upstream/
- * ownerRunStore 这些下层 internal provider 自己把 fence 动作做完,不反过来依赖
- * WorkerManagerService——与同样做心跳判死的 RuntimeLivenessWatchdog(直接依赖
- * RuntimeRepository,不依赖 RuntimeService)保持一致的写法。
+ * 没退出正是本机制要抓的场景)。直接依赖 registry/provisioner/ownerRunStore 这些
+ * 下层 internal provider 自己把 fence 动作做完,不反过来依赖 WorkerManagerService
+ * ——与同样做心跳判死的 RuntimeLivenessWatchdog(直接依赖 RuntimeRepository,不
+ * 依赖 RuntimeService)保持一致的写法。终结 run 这一步只是通知"worker 丢了"这个
+ * 既成事实,不需要结果,发 WorkerLostEvent 即可,不必是跨模块 Port 调用。
  */
 @Injectable()
 export class WorkerLivenessSweeper
@@ -34,7 +36,7 @@ export class WorkerLivenessSweeper
     private readonly configService: ConfigService,
     private readonly registry: WorkerRegistryRepository,
     private readonly provisioner: WorkerProvisioner,
-    private readonly upstream: WorkerUpstreamRegistry,
+    private readonly events: EventEmitter2,
     private readonly ownerRunStore: OwnerRunStore
   ) {}
 
@@ -79,9 +81,7 @@ export class WorkerLivenessSweeper
 
     const runIds = this.ownerRunStore.runIdsForOwner(ownerId);
     for (const runId of runIds) {
-      await this.upstream
-        .notifyWorkerLost(runId, reason)
-        .catch(swallow(this.logger, `notify worker lost for run ${runId}`));
+      this.events.emit(WORKER_LOST_EVENT, new WorkerLostEvent(runId, reason));
     }
 
     await this.stopWorkerByOwnerId(ownerId);

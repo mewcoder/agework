@@ -138,6 +138,34 @@ const indexRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedRoute,
   path: "/settings",
+  component: Outlet,
+});
+
+// 裸 /settings 自动重定向到默认子页 /settings/account
+// 用 index route 承接，避免把无条件 redirect 写在父路由 beforeLoad 里导致命中
+// /settings/$category 时父路由 beforeLoad 仍执行而陷入无限重定向。
+const settingsIndexRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/",
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/$category", params: { category: "account" } });
+  },
+});
+
+const settingsCategoryRoute = createRoute({
+  getParentRoute: () => settingsRoute,
+  path: "/$category",
+  beforeLoad: ({ params }) => {
+    // 保留原来"改密码前锁死在账号页"的行为：从组件里挪到路由层
+    const { authRequired, user } = useAuthStore.getState();
+    const lockedToAccount = authRequired && user?.mustChangePassword === true;
+    // 注意：这个分支目前理论上很难触发，因为 authenticatedRoute 的 beforeLoad
+    // 已经在 mustChangePassword 为 true 时把人重定向去 /login 了；保留只是为了
+    // 不丢失原有防御性行为（比如登录后 session 状态才变化的时间差）。
+    if (lockedToAccount && params.category !== "account") {
+      throw redirect({ to: "/settings/$category", params: { category: "account" } });
+    }
+  },
   component: lazy(() => import("@/pages/settings")),
 });
 
@@ -175,7 +203,7 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authenticatedRoute.addChildren([
     workbenchRuntimeRoute.addChildren([indexRoute, conversationRoute]),
-    settingsRoute,
+    settingsRoute.addChildren([settingsIndexRoute, settingsCategoryRoute]),
   ]),
   notFoundRoute,
 ]);
