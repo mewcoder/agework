@@ -19,7 +19,6 @@ import { AdminModelProviderController } from "../model-provider/admin/admin-mode
 import { ModelProviderController } from "../model-provider/model-provider.controller";
 import { AdminRunController } from "../run/admin/admin-run.controller";
 import { AdminWorkerController } from "../worker-manager/admin/admin-worker.controller";
-import { SystemController } from "../system/system.controller";
 import { AdminUserController } from "../user/admin/admin-user.controller";
 import { WorkerCommandController } from "../worker-manager/command.controller";
 import { WorkerRunController } from "../worker-manager/worker-run.controller";
@@ -48,7 +47,6 @@ const CONTROLLERS = [
   ModelProviderController,
   AdminRunController,
   AdminWorkerController,
-  SystemController,
   AdminUserController,
   WorkerCommandController,
   WorkerRunController,
@@ -63,7 +61,6 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
   "POST auth/refresh",
   "POST auth/logout",
   "GET auth/config",
-  "GET system/about",
 ]);
 
 const RAW_RESPONSE_ALLOWLIST = ["worker/owners/*", "worker/runs/*"];

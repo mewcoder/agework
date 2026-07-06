@@ -5,7 +5,6 @@ import {
   Bot,
   FolderIcon,
   Folders,
-  InfoIcon,
   MonitorIcon,
   ServerIcon,
   SettingsIcon,
@@ -35,7 +34,6 @@ import { ModelProvider } from '@/pages/settings/model-provider';
 import { ArchivedConversations } from '@/pages/settings/archived-conversation';
 import { WorkspaceSettings } from '@/pages/settings/workspace';
 import { RuntimeSettings } from '@/pages/settings/runtime';
-import { AboutSettings } from '@/pages/settings/about';
 import { isAdmin as checkIsAdmin } from '@/utils/auth';
 
 type UserCategory =
@@ -44,8 +42,7 @@ type UserCategory =
   | 'model'
   | 'workspaces'
   | 'runtimes'
-  | 'archived'
-  | 'about';
+  | 'archived';
 type AdminCategory = 'users' | 'model-management' | 'workspaces-overview' | 'runs' | 'workspace-runtimes' | 'runtime-management' | 'system-config';
 type Category = UserCategory | AdminCategory;
 
@@ -56,7 +53,6 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'workspaces', label: '工作空间', icon: FolderIcon },
   { id: 'runtimes', label: '运行环境', icon: MonitorIcon },
   { id: 'archived', label: '已归档对话', icon: Archive },
-  { id: 'about', label: '关于', icon: InfoIcon },
 ];
 
 const ADMIN_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
@@ -139,7 +135,6 @@ export default function SettingsPage() {
         <CliStatusPanel showHeader={false} />
       )}
       {activeCategory === 'archived' && <ArchivedConversations />}
-      {activeCategory === 'about' && <AboutSettings />}
       {isAdmin && activeCategory === 'users' && (
         <div className="space-y-6">
           <SettingsPageHeader
@@ -162,7 +157,7 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <SettingsPageHeader
             title="运行环境管理"
-            description="管理所有 Runtime（内置 + 已注册），添加机器、注销配对、CLI 路径覆盖与重新检测"
+            description="管理运行环境及 Agent CLI"
           />
           <AdminRuntimeManagementPanel showHeader={false} />
         </div>
