@@ -3,6 +3,7 @@ import type {
   CreateRuntimeRequest,
   CreateRuntimeResponse,
   DetectEnvResponse,
+  InstallCliRequest,
   RuntimeResponse,
   UpdateEnvConfigOverrideRequest,
 } from '@agework/shared/api';
@@ -29,4 +30,8 @@ export const runtimesApi = {
   /** admin: 触发 runtime 重新检测本机 CLI 环境。 */
   detectEnv: (id: string) =>
     apiPost<DetectEnvResponse>('/api/v1/admin/runtimes/detect-env', { id }),
+
+  /** admin: 一键安装 runtime 独立 CLI（仅支持 local runtime）。 */
+  installCli: (body: InstallCliRequest) =>
+    apiPost<DetectEnvResponse>('/api/v1/admin/runtimes/install-cli', body),
 };

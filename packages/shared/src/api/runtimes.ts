@@ -101,3 +101,11 @@ export type DetectEnvResponse = {
   /** 重检后的 envConfig；runtime 未连接时为 null。 */
   envConfig: RuntimeEnvConfig | null;
 };
+
+/** admin 一键安装 runtime 独立 CLI 的请求 body：per-agent，仅支持 local runtime。 */
+export type InstallCliRequest = {
+  /** 目标 runtime id。 */
+  id: string;
+  /** 指定要安装的 agent。 */
+  agentType: AgentType;
+};

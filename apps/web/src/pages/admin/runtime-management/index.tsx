@@ -26,6 +26,7 @@ import {
   useAdminRuntimes,
   useDetectEnv,
   useUpdateEnvConfigOverride,
+  useInstallCli,
   type CreateRuntimeResponse,
   type Runtime,
 } from '@/hooks/use-runtime';
@@ -125,11 +126,19 @@ function OverrideEditor({
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(currentOverride ?? '');
-  const mutation = useUpdateEnvConfigOverride();
+  const overrideMutation = useUpdateEnvConfigOverride();
+  const installMutation = useInstallCli();
 
   const handleSave = () => {
-    mutation.mutate(
+    overrideMutation.mutate(
       { id: runtimeId, agentType, executablePath: value.trim() },
+      { onSuccess: () => setOpen(false) },
+    );
+  };
+
+  const handleInstall = () => {
+    installMutation.mutate(
+      { id: runtimeId, agentType },
       { onSuccess: () => setOpen(false) },
     );
   };
@@ -138,7 +147,10 @@ function OverrideEditor({
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (next) setValue(currentOverride ?? '');
+        if (next) {
+          setValue(currentOverride ?? '');
+          installMutation.reset();
+        }
         setOpen(next);
       }}
     >
@@ -154,35 +166,56 @@ function OverrideEditor({
       >
         <PencilIcon className="size-3.5" />
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 space-y-2">
-        <p className="text-xs text-muted-foreground">
-          自定义可执行文件路径，留空清除覆盖
-        </p>
-        <Input
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="如 /usr/local/bin/claude"
-          className="h-8 text-xs"
-          autoFocus
-        />
-        <div className="flex justify-end gap-1">
+      <PopoverContent align="end" className="w-80 space-y-3">
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">
+            自定义可执行文件路径，留空清除覆盖
+          </p>
+          <Input
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder="如 /usr/local/bin/claude"
+            className="h-8 text-xs"
+            autoFocus
+          />
+          <div className="flex justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={() => setOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              size="sm"
+              className="h-7"
+              disabled={overrideMutation.isPending}
+              onClick={handleSave}
+            >
+              保存
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t pt-3">
+          <p className="text-xs text-muted-foreground">
+            或一键装到本机专属目录
+          </p>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
             className="h-7"
-            onClick={() => setOpen(false)}
+            disabled={installMutation.isPending}
+            onClick={handleInstall}
           >
-            取消
-          </Button>
-          <Button
-            size="sm"
-            className="h-7"
-            disabled={mutation.isPending}
-            onClick={handleSave}
-          >
-            保存
+            {installMutation.isPending ? '安装中…' : '安装'}
           </Button>
         </div>
+        {installMutation.isError && (
+          <p className="text-xs text-destructive">
+            {errorMessage(installMutation.error, '安装失败')}
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );

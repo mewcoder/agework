@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runtimesApi } from '@/api/runtimes';
-import type { CreateRuntimeRequest, UpdateEnvConfigOverrideRequest } from '@agework/shared/api';
+import type {
+  CreateRuntimeRequest,
+  InstallCliRequest,
+  UpdateEnvConfigOverrideRequest,
+} from '@agework/shared/api';
 export type { Runtime, CreateRuntimeResponse } from '@/api/runtimes';
 
 export function useRuntimes() {
@@ -43,7 +47,7 @@ export function useUpdateEnvConfigOverride() {
   return useMutation({
     mutationFn: (data: UpdateEnvConfigOverrideRequest) =>
       runtimesApi.updateEnvConfigOverride(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
   });
 }
 
@@ -52,6 +56,16 @@ export function useDetectEnv() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => runtimesApi.detectEnv(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
+  });
+}
+
+/** admin: 一键安装 runtime 独立 CLI（仅支持 local runtime）。 */
+export function useInstallCli() {
+  const qc = useQueryClient();
+  return useMutation({
+    meta: { suppressGlobalError: true },
+    mutationFn: (data: InstallCliRequest) => runtimesApi.installCli(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
   });
 }
