@@ -9,6 +9,16 @@ import {
 } from "./claude-agent.adapter";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 
+const mockQuery = vi.fn();
+vi.mock("@anthropic-ai/claude-agent-sdk", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@anthropic-ai/claude-agent-sdk")>();
+  return {
+    ...actual,
+    query: (...args: unknown[]) => mockQuery(...args),
+  };
+});
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -399,5 +409,138 @@ describe("ClaudeAgentAdapter 始终允许", () => {
 
     expect(r.behavior).toBe("allow");
     expect((r as { updatedPermissions?: unknown[] }).updatedPermissions).toBeUndefined();
+  });
+});
+
+// ── query hooks (extraQueryOptions / onBeforeQuery / wrapMessageStream / onStreamError) ──
+
+function makeHookAdapter(opts?: { trace?: (event: unknown) => void }) {
+  return new ClaudeAgentAdapter(opts ?? {}) as unknown as {
+    extraQueryOptions(
+      input: { threadId?: string; runId?: string; forwardedProps?: unknown },
+      options: Record<string, unknown>,
+      subscriber: unknown,
+    ): { canUseTool?: unknown; thinking?: unknown };
+    onBeforeQuery(prompt: string, options: unknown, input: unknown): void;
+    wrapMessageStream(
+      stream: AsyncIterable<unknown>,
+      input: unknown,
+    ): AsyncIterable<unknown>;
+    onStreamError(error: unknown, input: unknown): void;
+  };
+}
+
+describe("ClaudeAgentAdapter query hooks", () => {
+  it("extraQueryOptions 注入 canUseTool 和 claudeThinkingMode 对应的 thinking 选项", () => {
+    const adapter = makeHookAdapter();
+    const result = adapter.extraQueryOptions(
+      { threadId: "t1", forwardedProps: { claudeThinkingMode: "adaptive" } },
+      {},
+      { next: vi.fn() },
+    );
+    expect(typeof result.canUseTool).toBe("function");
+    expect(result.thinking).toEqual({ type: "adaptive" });
+  });
+
+  it("onBeforeQuery 调用 emitTrace('sdk.claude.input', ...)", () => {
+    const trace = vi.fn();
+    const adapter = makeHookAdapter({ trace });
+    adapter.onBeforeQuery("hello", { model: "x" }, { threadId: "t1", runId: "r1" });
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "sdk.claude.input",
+        payload: { method: "query", arguments: { prompt: "hello", options: { model: "x" } } },
+        runId: "r1",
+        threadId: "t1",
+      }),
+    );
+  });
+
+  it("wrapMessageStream 对每条消息调用 emitTrace('sdk.claude.output', ...)，并原样透传消息", async () => {
+    const trace = vi.fn();
+    const adapter = makeHookAdapter({ trace });
+    const source = (async function* () {
+      yield { type: "system" };
+      yield { type: "result" };
+    })();
+
+    const wrapped = adapter.wrapMessageStream(source, { threadId: "t1", runId: "r1" });
+    const received: unknown[] = [];
+    for await (const msg of wrapped) received.push(msg);
+
+    expect(received).toEqual([{ type: "system" }, { type: "result" }]);
+    expect(trace).toHaveBeenCalledTimes(2);
+    expect(trace).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ name: "sdk.claude.output", payload: { type: "system" } }),
+    );
+  });
+
+  it("onStreamError 调用 emitTrace('sdk.claude.error', ...)", () => {
+    const trace = vi.fn();
+    const adapter = makeHookAdapter({ trace });
+    const error = new Error("boom");
+
+    adapter.onStreamError(error, { threadId: "t1", runId: "r1" });
+
+    expect(trace).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "sdk.claude.error", payload: error, runId: "r1", threadId: "t1" }),
+    );
+  });
+});
+
+describe("ClaudeAgentAdapter run() 端到端", () => {
+  beforeEach(() => {
+    mockQuery.mockReset();
+  });
+
+  it("session resume 注入、hook 注入的 query options、tracing 三者都经由 base 的 run() 生效", async () => {
+    const trace = vi.fn();
+    const adapter = new ClaudeAgentAdapter({ trace });
+
+    mockQuery.mockReturnValue({
+      [Symbol.asyncIterator]: () => {
+        let done = false;
+        return {
+          next: async () => {
+            if (done) return { value: undefined, done: true };
+            done = true;
+            return {
+              value: { type: "result", result: "hi", is_error: false },
+              done: false,
+            };
+          },
+        };
+      },
+      interrupt: vi.fn(),
+    });
+
+    const events: { type: string }[] = [];
+    await new Promise<void>((resolve, reject) => {
+      adapter
+        .run({
+          threadId: "t-e2e",
+          runId: "r-e2e",
+          messages: [{ id: "m1", role: "user", content: "hello" }],
+          tools: [],
+          context: [],
+        } as never)
+        .subscribe({
+          next: (e) => events.push(e as { type: string }),
+          error: reject,
+          complete: resolve,
+        });
+    });
+
+    expect(mockQuery).toHaveBeenCalledTimes(1);
+    const callArgs = mockQuery.mock.calls[0][0] as {
+      prompt: string;
+      options: { canUseTool?: unknown };
+    };
+    expect(callArgs.prompt).toBe("hello");
+    expect(typeof callArgs.options.canUseTool).toBe("function");
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({ name: "sdk.claude.input" }));
+    expect(trace).toHaveBeenCalledWith(expect.objectContaining({ name: "sdk.claude.output" }));
+    expect(events.some((e) => e.type === EventType.RUN_FINISHED)).toBe(true);
   });
 });

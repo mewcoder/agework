@@ -221,13 +221,18 @@ export class ClaudeAgentAdapter extends AbstractAgent {
           );
         }
 
+        const queryOptions: Options = {
+          ...options,
+          model: options.model, // SDK picks default if omitted
+          ...(abortController ? { abortController } : {}),
+          ...this.extraQueryOptions(runInput, options, subscriber),
+        };
+
+        this.onBeforeQuery(userMessage, queryOptions, runInput);
+
         queryStream = query({
           prompt: userMessage,
-          options: {
-            ...options,
-            model: options.model, // SDK picks default if omitted
-            ...(abortController ? { abortController } : {}),
-          },
+          options: queryOptions,
         });
       } catch (error) {
         if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
@@ -237,9 +242,11 @@ export class ClaudeAgentAdapter extends AbstractAgent {
       }
 
       this.activeQueries.set(threadId, queryStream);
+      const messageStream = this.wrapMessageStream(queryStream, runInput);
 
-      this.translateStream(runInput, queryStream, subscriber)
+      this.translateStream(runInput, messageStream, subscriber)
         .catch((error) => {
+          this.onStreamError(error, runInput);
           subscriber.error(error);
         })
         .finally(() => {
@@ -250,6 +257,45 @@ export class ClaudeAgentAdapter extends AbstractAgent {
         });
     });
   }
+
+  /**
+   * Extension point: extra Claude SDK query options layered on top of the
+   * base options (e.g. `canUseTool`, `thinking`). Default: none.
+   */
+  protected extraQueryOptions(
+    _input: RunAgentInput,
+    _options: Options,
+    _subscriber: Subscriber<ProcessedEvent>,
+  ): Partial<Options> {
+    return {};
+  }
+
+  /**
+   * Extension point: side effect right before the SDK query is created
+   * (e.g. tracing the outgoing request). Default: no-op.
+   */
+  protected onBeforeQuery(
+    _prompt: string,
+    _options: Options,
+    _input: RunAgentInput,
+  ): void {}
+
+  /**
+   * Extension point: wrap the SDK message stream before it reaches
+   * `translateStream` (e.g. tracing each incoming message). Default: passthrough.
+   */
+  protected wrapMessageStream(
+    stream: AsyncIterable<unknown>,
+    _input: RunAgentInput,
+  ): AsyncIterable<unknown> {
+    return stream;
+  }
+
+  /**
+   * Extension point: side effect when `translateStream` rejects, before the
+   * error is forwarded to the subscriber (e.g. tracing). Default: no-op.
+   */
+  protected onStreamError(_error: unknown, _input: RunAgentInput): void {}
 
   private async translateStream(
     input: RunAgentInput,

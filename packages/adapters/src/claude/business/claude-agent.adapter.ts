@@ -3,13 +3,15 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { EventType } from "@ag-ui/client";
 import { generateId } from "@agework/shared";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  Options,
   ThinkingConfig,
   PermissionResult,
   PermissionUpdate,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { Subscriber } from "rxjs";
 import { ClaudeAgentAdapter as AgUiClaudeAgentAdapter } from "../base";
+import type { ProcessedEvent } from "../base";
 import type { AgentTraceSink } from "@agework/shared/protocol";
 import { pickSafeEnv } from "./safe-env";
 
@@ -67,20 +69,6 @@ export type AgentPendingActionSink = (event: {
   threadId: string;
   pendingAction: AgentPendingAction;
 }) => void | Promise<void>;
-type ClaudeAdapterInternals = {
-  headers?: Record<string, string>;
-  activeQueries: Map<string, { interrupt?: () => Promise<void> }>;
-  sessions: Map<
-    string,
-    { sessionId: string; active: boolean; lastUsed: number }
-  >;
-  translateStream(
-    input: ClaudeRunInput,
-    messageStream: AsyncIterable<unknown>,
-    subscriber: unknown
-  ): Promise<void>;
-};
-
 export type ClaudeAdapterConfig = {
   apiKey?: string;
   model?: string;
@@ -177,154 +165,119 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
     this.pendingActionUpdates.set(threadId, next);
   }
 
-  override run(
+  protected override extraQueryOptions(
+    input: ClaudeRunInput,
+    _options: Options,
+    subscriber: Subscriber<ProcessedEvent>
+  ): Partial<Options> {
+    const threadId = input.threadId ?? "default";
+    const runId = typeof input.runId === "string" ? input.runId : undefined;
+
+    return {
+      ...claudeThinkingOption(input),
+      canUseTool: async (
+        toolName: string,
+        toolInput: Record<string, unknown>,
+        opts: {
+          signal: AbortSignal;
+          suggestions?: PermissionUpdate[];
+          blockedPath?: string;
+          decisionReason?: string;
+          toolUseID?: string;
+          agentID?: string;
+          title?: string;
+          displayName?: string;
+          description?: string;
+        }
+      ): Promise<PermissionResult> => {
+        if (toolName !== "AskUserQuestion") {
+          return this.requestToolPermission({
+            threadId,
+            runId,
+            toolName,
+            toolInput,
+            options: opts,
+            subscriber,
+          });
+        }
+        // Supersede any existing pending question for this thread
+        const existing = pendingQuestions.get(threadId);
+        if (existing) {
+          pendingQuestions.delete(threadId);
+          existing.rejectWithoutCleanup(
+            new Error("Superseded by new question")
+          );
+        }
+        return new Promise<PermissionResult>((resolve, reject) => {
+          const resolvePending = (result: PermissionResult) => {
+            this.emitPendingAction(threadId, null);
+            resolve(result);
+          };
+          const rejectPending = (error: Error) => {
+            this.emitPendingAction(threadId, null);
+            reject(error);
+          };
+          const pending: PendingQuestion = {
+            questions: (toolInput.questions as unknown[]) ?? [],
+            resolveAnswers: (answers) =>
+              resolvePending({
+                behavior: "allow",
+                updatedInput: { questions: toolInput.questions, answers },
+              }),
+            reject: rejectPending,
+            rejectWithoutCleanup: reject,
+          };
+          pendingQuestions.set(threadId, pending);
+          this.emitPendingAction(threadId, "question");
+          opts.signal.addEventListener(
+            "abort",
+            () => {
+              if (pendingQuestions.get(threadId) === pending) {
+                pendingQuestions.delete(threadId);
+                rejectPending(new Error("Aborted"));
+              } else {
+                reject(new Error("Aborted"));
+              }
+            },
+            { once: true }
+          );
+        });
+      },
+    };
+  }
+
+  protected override onBeforeQuery(
+    prompt: string,
+    options: Options,
     input: ClaudeRunInput
-  ): ReturnType<AgUiClaudeAgentAdapter["run"]> {
-    const ObservableCtor = super.run(input).constructor as new (
-      subscribe: (subscriber: unknown) => void
-    ) => ReturnType<AgUiClaudeAgentAdapter["run"]>;
+  ): void {
+    const threadId = input.threadId ?? "default";
+    const runId = typeof input.runId === "string" ? input.runId : undefined;
+    this.emitTrace(
+      "sdk.claude.input",
+      { method: "query", arguments: { prompt, options } },
+      { runId, threadId }
+    );
+  }
 
-    return new ObservableCtor((subscriber) => {
-      const internals = this as unknown as ClaudeAdapterInternals;
-      if (internals.headers && Object.keys(internals.headers).length > 0) {
-        logger.debug(
-          "headers set but not forwarded (Claude Agent SDK does not support per-request HTTP headers)"
-        );
-      }
-
-      const threadId = input.threadId ?? "default";
-      this.beginSessionUse(threadId);
-      const runId = typeof input.runId === "string" ? input.runId : undefined;
-      const trace = (name: string, payload?: unknown) => {
-        this.emitTrace(name, payload, { runId, threadId });
-      };
-      let runInput = input;
-      const sessionEntry = internals.sessions.get(threadId);
-      if (sessionEntry) {
-        runInput = {
-          ...input,
-          forwardedProps: {
-            ...(input.forwardedProps ?? {}),
-            resume: sessionEntry.sessionId,
-          },
-        };
-        sessionEntry.active = true;
-      }
-
-      let queryStream: ReturnType<typeof query>;
-      try {
-        const prompt = extractLastUserMessage(runInput);
-        const options = this.buildOptions(runInput);
-        const queryOptions = {
-          ...options,
-          ...claudeThinkingOption(runInput),
-          model: options.model,
-          canUseTool: async (
-            toolName: string,
-            toolInput: Record<string, unknown>,
-            opts: {
-              signal: AbortSignal;
-              suggestions?: PermissionUpdate[];
-              blockedPath?: string;
-              decisionReason?: string;
-              toolUseID?: string;
-              agentID?: string;
-              title?: string;
-              displayName?: string;
-              description?: string;
-            }
-          ): Promise<PermissionResult> => {
-            if (toolName !== "AskUserQuestion") {
-              return this.requestToolPermission({
-                threadId,
-                runId,
-                toolName,
-                toolInput,
-                options: opts,
-                subscriber,
-              });
-            }
-            // Supersede any existing pending question for this thread
-            const existing = pendingQuestions.get(threadId);
-            if (existing) {
-              pendingQuestions.delete(threadId);
-              existing.rejectWithoutCleanup(
-                new Error("Superseded by new question")
-              );
-            }
-            return new Promise<PermissionResult>((resolve, reject) => {
-              const resolvePending = (result: PermissionResult) => {
-                this.emitPendingAction(threadId, null);
-                resolve(result);
-              };
-              const rejectPending = (error: Error) => {
-                this.emitPendingAction(threadId, null);
-                reject(error);
-              };
-              const pending: PendingQuestion = {
-                questions: (toolInput.questions as unknown[]) ?? [],
-                resolveAnswers: (answers) =>
-                  resolvePending({
-                    behavior: "allow",
-                    updatedInput: { questions: toolInput.questions, answers },
-                  }),
-                reject: rejectPending,
-                rejectWithoutCleanup: reject,
-              };
-              pendingQuestions.set(threadId, pending);
-              this.emitPendingAction(threadId, "question");
-              opts.signal.addEventListener(
-                "abort",
-                () => {
-                  if (pendingQuestions.get(threadId) === pending) {
-                    pendingQuestions.delete(threadId);
-                    rejectPending(new Error("Aborted"));
-                  } else {
-                    reject(new Error("Aborted"));
-                  }
-                },
-                { once: true }
-              );
-            });
-          },
-        };
-        trace("sdk.claude.input", {
-          method: "query",
-          arguments: {
-            prompt,
-            options: queryOptions,
-          },
-        });
-
-        queryStream = query({
-          prompt,
-          options: queryOptions,
-        });
-      } catch (error) {
-        this.endSessionUse(threadId);
-        (subscriber as { error(error: unknown): void }).error(error);
-        return;
-      }
-      internals.activeQueries.set(threadId, queryStream);
-
-      internals
-        .translateStream(
-          runInput,
-          traceAsyncIterable(queryStream, (message) => {
-            trace("sdk.claude.output", message);
-          }),
-          subscriber
-        )
-        .catch((error) => {
-          trace("sdk.claude.error", error);
-          (subscriber as { error(error: unknown): void }).error(error);
-        })
-        .finally(() => {
-          if (internals.activeQueries.get(threadId) === queryStream) {
-            internals.activeQueries.delete(threadId);
-          }
-        });
+  protected override wrapMessageStream(
+    stream: AsyncIterable<unknown>,
+    input: ClaudeRunInput
+  ): AsyncIterable<unknown> {
+    const threadId = input.threadId ?? "default";
+    const runId = typeof input.runId === "string" ? input.runId : undefined;
+    return traceAsyncIterable(stream, (message) => {
+      this.emitTrace("sdk.claude.output", message, { runId, threadId });
     });
+  }
+
+  protected override onStreamError(
+    error: unknown,
+    input: ClaudeRunInput
+  ): void {
+    const threadId = input.threadId ?? "default";
+    const runId = typeof input.runId === "string" ? input.runId : undefined;
+    this.emitTrace("sdk.claude.error", error, { runId, threadId });
   }
 
   private requestToolPermission(input: {
@@ -627,26 +580,4 @@ async function* traceAsyncIterable<T>(
     trace(value);
     yield value;
   }
-}
-
-function extractLastUserMessage(input: {
-  messages?: Array<{ content?: unknown }>;
-}): string {
-  const messages = input.messages ?? [];
-  const lastMessage = messages[messages.length - 1];
-  const content = lastMessage?.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) {
-    for (const block of content) {
-      if (
-        block &&
-        typeof block === "object" &&
-        "text" in block &&
-        typeof block.text === "string"
-      ) {
-        return block.text;
-      }
-    }
-  }
-  return "";
 }
