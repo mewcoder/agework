@@ -1,7 +1,3 @@
-import {
-  CheckCircle2Icon,
-  XCircleIcon,
-} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import {
   SettingsSection,
@@ -10,7 +6,6 @@ import {
 import { useRuntimes, type Runtime } from '@/hooks/use-runtime';
 import type { AgentEnvStatus } from '@agework/shared/api';
 import type { AgentType } from '@agework/shared';
-import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/utils/format';
 
 function runtimeTypeLabel(runtimeType: string | null) {
@@ -65,21 +60,6 @@ function ReadOnlyAgentItem({
           )}
           {status?.version && (
             <span className="text-xs">v{status.version}</span>
-          )}
-          {status && (
-            <span
-              className={cn(
-                'flex items-center gap-1 text-xs',
-                status.authAvailable ? 'text-green-600' : 'text-destructive',
-              )}
-            >
-              {status.authAvailable ? (
-                <CheckCircle2Icon className="size-3" />
-              ) : (
-                <XCircleIcon className="size-3" />
-              )}
-              {status.authAvailable ? '已认证' : '未认证'}
-            </span>
           )}
         </div>
       }

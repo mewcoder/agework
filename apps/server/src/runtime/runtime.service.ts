@@ -276,7 +276,6 @@ function mergeAgent(
     source: overridePath ? "custom" : "system",
     detectedPath: detected.executablePath,
     version: detected.version,
-    authAvailable: detected.authAvailable,
   };
 }
 

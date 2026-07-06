@@ -1,15 +1,12 @@
 /**
  * CliResolver：runtime manager 侧的 agent CLI 检测能力。
- * 检测本机 agent CLI 的路径/版本/来源/认证状态，注册时随 register 消息上报给 server。
- * 参考 claudian 的 findClaudeCLIPath + agent-cli-status.ts 的认证检测逻辑。
+ * 检测本机 agent CLI 的路径/版本/来源，注册时随 register 消息上报给 server。
+ * 参考 claudian 的 findClaudeCLIPath 模式。
  */
 
 import { spawnSync, execSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { AgentDetectedEnv, RuntimeEnvConfig } from "@agework/shared/api";
-import { claudeKnownLocations, codexKnownLocations } from "./known-locations.js";
+import { claudeKnownLocations, codexKnownLocations } from "./cli-known-paths.js";
 
 /**
  * 检测本机 agent CLI 环境，返回完整的 envConfig（claude + codex）。
@@ -26,8 +23,7 @@ export function detectEnvConfig(): RuntimeEnvConfig {
 function detectAgent(agentType: "claude" | "codex"): AgentDetectedEnv {
   const executablePath = resolveCliPath(agentType);
   const version = executablePath ? getVersion(executablePath) : null;
-  const authAvailable = checkAuth(agentType);
-  return { executablePath, version, authAvailable };
+  return { executablePath, version };
 }
 
 /** PATH 查找 + 已知位置搜索，返回第一个找到的路径。 */
@@ -81,29 +77,4 @@ function getVersion(executablePath: string): string | null {
   } catch {
     return null;
   }
-}
-
-/** 检查本机是否有可用的 agent 认证配置。 */
-function checkAuth(agentType: "claude" | "codex"): boolean {
-  const home = homedir();
-
-  if (agentType === "claude") {
-    const configDir =
-      process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude");
-    return (
-      !!process.env.ANTHROPIC_AUTH_TOKEN ||
-      !!process.env.ANTHROPIC_API_KEY ||
-      !!process.env.CLAUDE_CODE_OAUTH_TOKEN ||
-      existsSync(join(home, ".claude.json")) ||
-      existsSync(join(configDir, ".credentials.json")) ||
-      existsSync(join(configDir, "settings.json"))
-    );
-  }
-
-  return (
-    !!process.env.OPENAI_API_KEY ||
-    !!process.env.CODEX_API_KEY ||
-    existsSync(join(home, ".codex", "auth.json")) ||
-    existsSync(join(home, ".codex", "config.toml"))
-  );
 }

@@ -11,8 +11,6 @@ export type AgentDetectedEnv = {
   executablePath: string | null;
   /** CLI --version 输出；取不到为 null。 */
   version: string | null;
-  /** 本机是否有可用认证（~/.claude.json / 环境变量等）。 */
-  authAvailable: boolean;
 };
 
 /** 一个 Runtime 上报的完整环境配置——每个 agent 一条。 */
@@ -42,8 +40,6 @@ export type AgentEnvStatus = {
   detectedPath: string | null;
  /** CLI --version 输出。 */
   version: string | null;
-  /** 本机是否有可用认证。 */
-  authAvailable: boolean;
 };
 
 /** Runtime 展示层 env 状态（claude + codex 各一条派生结果）。 */
