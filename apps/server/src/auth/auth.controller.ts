@@ -14,7 +14,7 @@ import { AuthService } from "./auth.service";
 import { ConfigService } from "../config/config.service";
 import { Public } from "./decorators/public.decorator";
 import { CurrentUser } from "./decorators/current-user.decorator";
-import type { JwtUser } from "./decorators/current-user.decorator";
+import type { JwtUser } from "./auth.types";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";

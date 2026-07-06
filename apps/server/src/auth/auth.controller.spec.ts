@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { AuthController } from "./auth.controller";
 import type { AuthService } from "./auth.service";
 import type { ConfigService } from "../config/config.service";
-import type { JwtUser } from "./decorators/current-user.decorator";
+import type { JwtUser } from "./auth.types";
 
 function makeController(overrides?: { auth?: Partial<AuthService> }) {
   const session = { token: "jwt", refreshToken: "rt", user: { id: "1" } };

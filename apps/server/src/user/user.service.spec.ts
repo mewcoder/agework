@@ -1,5 +1,5 @@
 import { UserService } from "./user.service";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import type { PasswordHasherService } from "./credential/password-hasher.service";
 import type { UserRepository, UserRecord } from "./user.repository";
 

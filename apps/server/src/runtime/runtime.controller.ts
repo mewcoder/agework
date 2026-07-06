@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
 import { Roles } from "../auth/decorators/roles.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import { RuntimeService } from "./runtime.service";
 import { CreateRuntimeDto } from "./dto/create-runtime.dto";
 import { RuntimeIdDto } from "./dto/runtime-id.dto";

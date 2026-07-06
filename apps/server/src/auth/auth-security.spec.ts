@@ -3,7 +3,7 @@ import { JwtService } from "@nestjs/jwt";
 import type { ExecutionContext } from "@nestjs/common";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import type { JwtUser } from "./decorators/current-user.decorator";
+import type { JwtUser } from "./auth.types";
 import type { SessionService } from "./session/session.service";
 import { ConfigService } from "../config/config.service";
 import type { UserService } from "../user/user.service";

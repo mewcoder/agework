@@ -9,7 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { ConfigService } from "../../config/config.service";
 import { extractBearerToken } from "../../common/extract-bearer-token";
 import { IS_PUBLIC_KEY } from "../decorators/public.decorator";
-import type { JwtUser } from "../decorators/current-user.decorator";
+import type { JwtUser } from "../auth.types";
 import { UserService } from "../../user/user.service";
 
 type RequestWithUser = {

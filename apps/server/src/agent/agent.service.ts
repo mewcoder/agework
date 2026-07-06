@@ -6,7 +6,7 @@ import type {
   CustomAgentProviderConfig,
 } from "@agework/shared/protocol";
 import { ConversationService } from "../conversation/conversation.service";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import { RunService } from "../run/run.service";
 import { WorkspaceService } from "../workspace/workspace.service";
 import { safeLogJson } from "../common/logging";

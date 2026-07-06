@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { AdminUserController } from "./admin-user.controller";
 import type { UserService } from "../user.service";
-import type { JwtUser } from "../../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../../auth/auth.types";
 
 function makeController(overrides?: { users?: Partial<UserService> }) {
   const users = {

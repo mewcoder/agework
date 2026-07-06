@@ -6,7 +6,7 @@ import { RunService } from "../run/run.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { WorkspaceService } from "../workspace/workspace.service";
 import type { Response } from "express";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import type { AgentRunRequestDto as AgentRunRequestBody } from "./dto/agent-run.dto";
 
 describe("AgentService", () => {

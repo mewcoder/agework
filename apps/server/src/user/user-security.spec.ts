@@ -3,7 +3,7 @@ import { UserRepository } from "./user.repository";
 import { PasswordHasherService } from "./credential/password-hasher.service";
 import { SUPER_ADMIN_USERNAME } from "./credential/user-credential";
 import { LoginFailedException } from "./credential/login-failed.exception";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import type { PrismaService } from "../prisma/prisma.service";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;

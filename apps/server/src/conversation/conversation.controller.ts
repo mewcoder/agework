@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import type { JwtUser } from "../auth/decorators/current-user.decorator";
+import type { JwtUser } from "../auth/auth.types";
 import { ConversationService } from "./conversation.service";
 import { UpdateConversationDto } from "./dto/update-conversation.dto";
 import { ConversationIdDto } from "./dto/conversation-id.dto";

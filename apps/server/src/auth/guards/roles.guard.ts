@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { ROLES_KEY } from "../decorators/roles.decorator";
-import type { JwtUser } from "../decorators/current-user.decorator";
+import type { JwtUser } from "../auth.types";
 
 type RequestWithUser = {
   user?: JwtUser;

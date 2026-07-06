@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
-import type { JwtUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
+import type { JwtUser } from "../../auth/auth.types";
 import { pageWindow } from "../../common/dto/pagination-query.dto";
 import { CreateUserDto } from "../dto/create-user.dto";
 import { UpdateUserDto } from "../dto/update-user.dto";
