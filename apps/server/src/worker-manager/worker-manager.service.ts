@@ -30,8 +30,7 @@ import { WorkerProvisioner } from "./instance/worker.provisioner";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
-import { safeLogJson } from "../common/logging";
-import { swallow } from "../common/swallow";
+import { OwnerRunStore } from "./instance/owner-run.store";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /**
@@ -44,12 +43,6 @@ import { AGEWORK_VERSION } from "@agework/shared";
 export class WorkerManagerService {
   private readonly logger = new Logger(WorkerManagerService.name);
 
-  // owner → 其名下 in-flight runId 的索引,供 fenceOwner 终结用。必须放在这个
-  // facade 层而不是 provisioner 里:resolveInstance/releaseInstanceForRun/
-  // cleanupRun 是 local 与 sandbox 两条路径都会经过的地方,索引维护收在这里。
-  private readonly ownerRunIds = new Map<string, Set<string>>();
-  private readonly runOwner = new Map<string, string>();
-
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
     private readonly upstream: WorkerUpstreamRegistry,
@@ -58,7 +51,8 @@ export class WorkerManagerService {
     private readonly runtimeService: RuntimeService,
     private readonly provisioner: WorkerProvisioner,
     private readonly handshakeStore: WorkerHandshakeStore,
-    private readonly livenessStore: WorkerLivenessStore
+    private readonly livenessStore: WorkerLivenessStore,
+    private readonly ownerRunStore: OwnerRunStore
   ) {}
 
   /**
@@ -130,7 +124,7 @@ export class WorkerManagerService {
 
   /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
-    this.unregisterRun(runId);
+    this.ownerRunStore.unregisterRun(runId);
     this.commandDispatcher.cleanupRun(runId);
   }
 
@@ -173,7 +167,10 @@ export class WorkerManagerService {
   resolveInstance(
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
-    this.registerRun(input.runConfig.runId, input.runtimeTarget.ownerId);
+    this.ownerRunStore.registerRun(
+      input.runConfig.runId,
+      input.runtimeTarget.ownerId
+    );
     return this.provisioner.acquireInstanceForRun(input);
   }
 
@@ -182,82 +179,7 @@ export class WorkerManagerService {
    * 这里只清 owner→runId 的 fence 索引,不再触发任何实例侧动作。
    */
   releaseInstanceForRun(runId: string): void {
-    this.unregisterRun(runId);
-  }
-
-  /**
-   * 停掉指定 owner 的 worker(owner 仍在):从 registry 取出该 owner 当前活跃行
-   * (权威来源),按行内容构造 ref 交给 provisioner.stop(保留载体)。找不到活跃行
-   * 说明已经被别的路径清理过,no-op。
-   */
-  private async stopOwner(ownerId: string): Promise<void> {
-    const row = await this.registry.findActiveByOwnerId(ownerId);
-    if (!row) return;
-    if (!isRuntimeType(row.runtimeType)) return;
-    const ref: RuntimeInstanceRef = {
-      runtimeType: row.runtimeType,
-      ownerId: row.ownerId,
-      runtimeInstanceId: row.instanceId,
-      isolationScope: row.isolationScope,
-      targetRuntimeId: row.runtimeId,
-    };
-    await this.provisioner.stop(ref);
-  }
-
-  // ── 心跳 fence:watchdog 判定某 owner 超时未见心跳后调用的唯一入口 ──────────
-
-  /**
-   * fence 一个 unhealthy 的 owner:超时即判死,不做"确认死亡"(卡死但进程没退出
-   * 正是本机制要抓的场景)。物理停止载体是幂等操作,对已经死透的容器/进程重复
-   * 调用无害。找不到活跃行说明该 owner 已经被别的路径清理过,直接 return。
-   */
-  async fenceOwner(ownerId: string, reason: string): Promise<void> {
-    const active = await this.registry.findActiveByOwnerId(ownerId);
-    if (!active) return;
-
-    const runIds = this.runIdsForOwner(ownerId);
-    for (const runId of runIds) {
-      await this.upstream
-        .notifyWorkerLost(runId, reason)
-        .catch(swallow(this.logger, `notify worker lost for run ${runId}`));
-    }
-
-    await this.stopOwner(ownerId);
-    this.livenessStore.remove(ownerId);
-
-    this.logger.warn(
-      `fenced unhealthy owner ${safeLogJson({
-        ownerId,
-        reason,
-        terminatedRuns: runIds.length,
-      })}`
-    );
-  }
-
-  private registerRun(runId: string, ownerId: string): void {
-    this.runOwner.set(runId, ownerId);
-    let runIds = this.ownerRunIds.get(ownerId);
-    if (!runIds) {
-      runIds = new Set();
-      this.ownerRunIds.set(ownerId, runIds);
-    }
-    runIds.add(runId);
-  }
-
-  private unregisterRun(runId: string): void {
-    const ownerId = this.runOwner.get(runId);
-    if (!ownerId) return;
-    this.runOwner.delete(runId);
-    const runIds = this.ownerRunIds.get(ownerId);
-    if (!runIds) return;
-    runIds.delete(runId);
-    if (runIds.size === 0) {
-      this.ownerRunIds.delete(ownerId);
-    }
-  }
-
-  private runIdsForOwner(ownerId: string): string[] {
-    return Array.from(this.ownerRunIds.get(ownerId) ?? []);
+    this.ownerRunStore.unregisterRun(runId);
   }
 
   // ── admin:runtime policy / stats / resources(原 RuntimeService,随 WorkerRegistry

@@ -41,6 +41,11 @@ function makeService() {
     remove: vi.fn(),
     listStale: vi.fn(),
   };
+  const ownerRunStore = {
+    registerRun: vi.fn(),
+    unregisterRun: vi.fn(),
+    runIdsForOwner: vi.fn(),
+  };
   const service = new WorkerManagerService(
     endpointHandler as unknown as WorkerEndpointHandler,
     upstream as unknown as WorkerUpstreamRegistry,
@@ -49,7 +54,8 @@ function makeService() {
     runtimeService as never,
     provisioner as never,
     {} as never,
-    livenessStore as never
+    livenessStore as never,
+    ownerRunStore as never
   );
   return {
     service,
@@ -59,6 +65,7 @@ function makeService() {
     provisioner,
     runtimeService,
     livenessStore,
+    ownerRunStore,
   };
 }
 
@@ -214,6 +221,7 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
       {} as any
     );
   });
@@ -245,6 +253,7 @@ describe("WorkerManagerService runtime policy", () => {
       runtimeService as never,
       {} as never,
       {} as never,
+      {} as never,
       {} as never
     );
     return { service, runtimeService };
@@ -271,6 +280,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       registry as never,
       {} as never,
       provisioner as never,
+      {} as never,
       {} as never,
       {} as never
     );
@@ -349,6 +359,11 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       acquireInstanceForRun: vi.fn(),
       stop: vi.fn(),
     };
+    const ownerRunStore = {
+      registerRun: vi.fn(),
+      unregisterRun: vi.fn(),
+      runIdsForOwner: vi.fn(),
+    };
     const service = new WorkerManagerService(
       {} as never,
       {} as never,
@@ -357,13 +372,14 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       {} as never,
       provisioner as never,
       {} as never,
-      {} as never
+      {} as never,
+      ownerRunStore as never
     );
-    return { service, provisioner };
+    return { service, provisioner, ownerRunStore };
   }
 
-  it("resolveInstance forwards local placements to the provisioner", async () => {
-    const { service, provisioner } = makeService();
+  it("resolveInstance forwards local placements to the provisioner and registers the run in the owner index", async () => {
+    const { service, provisioner, ownerRunStore } = makeService();
     const input = {
       runtimeTarget: { runtimeType: "local", ownerId: "ws-1" },
       runConfig: { runId: "run-1" },
@@ -378,10 +394,11 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       runtimeInstanceId: "1:token",
     });
     expect(provisioner.acquireInstanceForRun).toHaveBeenCalledWith(input);
+    expect(ownerRunStore.registerRun).toHaveBeenCalledWith("run-1", "ws-1");
   });
 
-  it("resolveInstance forwards sandbox placements to the provisioner", async () => {
-    const { service, provisioner } = makeService();
+  it("resolveInstance forwards sandbox placements to the provisioner and registers the run in the owner index", async () => {
+    const { service, provisioner, ownerRunStore } = makeService();
     const input = {
       runtimeTarget: { runtimeType: "docker", ownerId: "ws-2" },
       runConfig: { runId: "run-2" },
@@ -396,11 +413,13 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       runtimeInstanceId: "container-1",
     });
     expect(provisioner.acquireInstanceForRun).toHaveBeenCalledWith(input);
+    expect(ownerRunStore.registerRun).toHaveBeenCalledWith("run-2", "ws-2");
   });
 
-  it("releaseInstanceForRun only clears the fence index (no reclaim/instance-side action)", () => {
-    const { service, provisioner } = makeService();
+  it("releaseInstanceForRun only clears the owner index (no reclaim/instance-side action)", () => {
+    const { service, provisioner, ownerRunStore } = makeService();
     service.releaseInstanceForRun("run-1");
+    expect(ownerRunStore.unregisterRun).toHaveBeenCalledWith("run-1");
     expect(provisioner.acquireInstanceForRun).not.toHaveBeenCalled();
     expect(provisioner.stop).not.toHaveBeenCalled();
   });
@@ -417,6 +436,7 @@ describe("WorkerManagerService.registerWorker", () => {
       {} as never,
       {} as never,
       handshakeStore as never,
+      {} as never,
       {} as never
     );
     return { service, handshakeStore };
@@ -443,209 +463,5 @@ describe("WorkerManagerService.registerWorker", () => {
     await expect(
       service.registerWorker("owner-1", { startToken: "wrong-token" })
     ).rejects.toThrow(/no pending launch handshake/);
-  });
-});
-
-describe("WorkerManagerService — owner→run index and fenceOwner", () => {
-  function makeService() {
-    const registry = {
-      findActiveByOwnerId: vi.fn(),
-    };
-    const upstream = {
-      notifyWorkerLost: vi.fn().mockResolvedValue(undefined),
-    };
-    const commandDispatcher = {
-      cleanupRun: vi.fn(),
-      cleanupByOwnerId: vi.fn(),
-    };
-    const provisioner = {
-      acquireInstanceForRun: vi.fn(),
-      stop: vi.fn().mockResolvedValue(undefined),
-    };
-    const livenessStore = {
-      remove: vi.fn(),
-    };
-    const service = new WorkerManagerService(
-      {} as never,
-      upstream as never,
-      commandDispatcher as never,
-      registry as never,
-      {} as never,
-      provisioner as never,
-      {} as never,
-      livenessStore as never
-    );
-    return {
-      service,
-      registry,
-      upstream,
-      commandDispatcher,
-      provisioner,
-      livenessStore,
-    };
-  }
-
-  function acquireInput(runId: string, ownerId: string) {
-    return {
-      runtimeTarget: { runtimeType: "docker", ownerId },
-      runConfig: { runId },
-    } as never;
-  }
-
-  function activeRow(overrides: Record<string, unknown> = {}) {
-    return {
-      startToken: "token",
-      runtimeType: "docker",
-      ownerId: "owner-1",
-      instanceId: "container-1",
-      isolationScope: "workspace",
-      ...overrides,
-    };
-  }
-
-  it("fenceOwner terminates the run registered via resolveInstance", async () => {
-    const { service, registry, upstream, provisioner } = makeService();
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      runtimeInstanceId: "container-1",
-    });
-    await service.resolveInstance(acquireInput("run-1", "owner-1"));
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-1" })
-    );
-
-    await service.fenceOwner("owner-1", "heartbeat timeout");
-
-    expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-1",
-      "heartbeat timeout"
-    );
-  });
-
-  it("releaseInstanceForRun clears the index so a later fenceOwner does not re-terminate the run", async () => {
-    const { service, registry, upstream, provisioner } = makeService();
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      runtimeInstanceId: "container-2",
-    });
-    await service.resolveInstance(acquireInput("run-2", "owner-2"));
-    service.releaseInstanceForRun("run-2");
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-2" })
-    );
-
-    await service.fenceOwner("owner-2", "heartbeat timeout");
-
-    expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
-  });
-
-  it("cleanupRun clears the index so a later fenceOwner does not terminate the run", async () => {
-    const { service, registry, upstream, provisioner, commandDispatcher } =
-      makeService();
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      runtimeInstanceId: "container-3",
-    });
-    await service.resolveInstance(acquireInput("run-3", "owner-3"));
-
-    service.cleanupRun("run-3");
-
-    expect(commandDispatcher.cleanupRun).toHaveBeenCalledWith("run-3");
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-3" })
-    );
-
-    await service.fenceOwner("owner-3", "heartbeat timeout");
-
-    expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
-  });
-
-  it("fenceOwner: full flow terminates every in-flight run, tears down the instance via the provisioner, and clears the liveness entry", async () => {
-    const { service, registry, upstream, provisioner, livenessStore } =
-      makeService();
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      runtimeInstanceId: "container-4",
-    });
-    await service.resolveInstance(acquireInput("run-4a", "owner-4"));
-    await service.resolveInstance(acquireInput("run-4b", "owner-4"));
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-4", instanceId: "container-4" })
-    );
-
-    await service.fenceOwner("owner-4", "heartbeat timeout");
-
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledWith("owner-4");
-    expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-4a",
-      "heartbeat timeout"
-    );
-    expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
-      "run-4b",
-      "heartbeat timeout"
-    );
-    expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "docker",
-      ownerId: "owner-4",
-      runtimeInstanceId: "container-4",
-      isolationScope: "workspace",
-    });
-    expect(livenessStore.remove).toHaveBeenCalledWith("owner-4");
-  });
-
-  it("fenceOwner builds the teardown ref from the active row's runtimeType (local)", async () => {
-    const { service, registry, provisioner } = makeService();
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({
-        ownerId: "owner-5",
-        runtimeType: "local",
-        instanceId: "4242:token",
-      })
-    );
-
-    await service.fenceOwner("owner-5", "heartbeat timeout");
-
-    expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "local",
-      ownerId: "owner-5",
-      runtimeInstanceId: "4242:token",
-      isolationScope: "workspace",
-    });
-  });
-
-  it("fenceOwner no-ops when the owner has no active registry row", async () => {
-    const { service, registry, upstream, provisioner, livenessStore } =
-      makeService();
-    registry.findActiveByOwnerId.mockResolvedValue(null);
-
-    await service.fenceOwner("owner-gone", "heartbeat timeout");
-
-    expect(upstream.notifyWorkerLost).not.toHaveBeenCalled();
-    expect(provisioner.stop).not.toHaveBeenCalled();
-    expect(livenessStore.remove).not.toHaveBeenCalled();
-  });
-
-  it("fenceOwner swallows a notifyWorkerLost rejection and still tears down the instance", async () => {
-    const { service, registry, upstream, provisioner } = makeService();
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      runtimeInstanceId: "container-6",
-    });
-    await service.resolveInstance(acquireInput("run-6", "owner-6"));
-    upstream.notifyWorkerLost.mockRejectedValue(new Error("run already gone"));
-    registry.findActiveByOwnerId.mockResolvedValue(
-      activeRow({ ownerId: "owner-6", instanceId: "container-6" })
-    );
-
-    await expect(
-      service.fenceOwner("owner-6", "heartbeat timeout")
-    ).resolves.toBeUndefined();
-
-    expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "docker",
-      ownerId: "owner-6",
-      runtimeInstanceId: "container-6",
-      isolationScope: "workspace",
-    });
   });
 });

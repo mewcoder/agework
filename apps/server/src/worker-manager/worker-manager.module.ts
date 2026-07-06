@@ -17,7 +17,8 @@ import { AdminWorkerController } from "./admin/admin-worker.controller";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
-import { WorkerLivenessWatchdog } from "./connection/worker-liveness.watchdog";
+import { WorkerLivenessSweeper } from "./connection/worker-liveness.sweeper";
+import { OwnerRunStore } from "./instance/owner-run.store";
 
 /**
  * worker-manager:API ↔ worker 进程之间的通信边界(配置下发、命令下发、上行事件),
@@ -52,7 +53,8 @@ import { WorkerLivenessWatchdog } from "./connection/worker-liveness.watchdog";
     WorkerLifecycleHandler,
     WorkerLifecycleListener,
     WorkerLivenessStore,
-    WorkerLivenessWatchdog,
+    WorkerLivenessSweeper,
+    OwnerRunStore,
     WorkerManagerService,
   ],
   exports: [WorkerManagerService],
