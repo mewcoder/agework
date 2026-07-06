@@ -51,12 +51,11 @@ export const ConversationListItem = memo(function ConversationListItem({
   const isActive = conversation.conversationId === activeConversationId;
   const isPending = conversation.pendingUserAction === "question";
   const isRunning = conversation.runStatus === "running" && !isPending;
-  const hasCompletedRun = useRuntimeUiStore((s) =>
-    s.completedRunConversationIds.has(conversation.conversationId),
+  const runResult = useRuntimeUiStore(
+    (s) => s.runResultByConversation[conversation.conversationId],
   );
-  const hasFailedRun =
-    useRuntimeUiStore((s) => s.failedRunConversationIds.has(conversation.conversationId)) ||
-    conversation.runStatus === "error";
+  const hasCompletedRun = runResult === "complete";
+  const hasFailedRun = runResult === "failed" || conversation.runStatus === "error";
   const statusDot = isPending
     ? {
         label: "待处理",

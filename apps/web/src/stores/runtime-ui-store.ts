@@ -25,8 +25,8 @@ interface RuntimeUiStore {
   cancelledConversations: Set<ConversationId>;
   userSteeredMessageIdsByConversation: Record<ConversationId, Set<string>>;
   pendingRunInterruptReasonsByConversation: Record<ConversationId, IncompleteMessageReason | undefined>;
-  completedRunConversationIds: Set<ConversationId>;
-  failedRunConversationIds: Set<ConversationId>;
+  /** 一次 run 结束后的结果；'complete'/'failed' 互斥，结构上不会同时成立。 */
+  runResultByConversation: Record<ConversationId, 'complete' | 'failed' | undefined>;
   queuedUserInputsByConversation: Record<ConversationId, QueuedUserInput[]>;
   /** 刷新后回答了 pending question，需要重新 resume 接上 SSE 流的 conversation 集合 */
   pendingQuestionRepliedConversations: Set<ConversationId>;
@@ -54,8 +54,7 @@ export const useRuntimeUiStore = create<RuntimeUiStore>((set) => ({
   cancelledConversations: new Set(),
   userSteeredMessageIdsByConversation: {},
   pendingRunInterruptReasonsByConversation: {},
-  completedRunConversationIds: new Set(),
-  failedRunConversationIds: new Set(),
+  runResultByConversation: {},
   queuedUserInputsByConversation: {},
   pendingQuestionRepliedConversations: new Set(),
   setIsAssistantInGap: (inGap) => set({ isAssistantInGap: inGap }),
@@ -124,47 +123,34 @@ export const useRuntimeUiStore = create<RuntimeUiStore>((set) => ({
   },
   markConversationRunComplete: (conversationId) => {
     set((state) => {
-      if (state.completedRunConversationIds.has(conversationId) && !state.failedRunConversationIds.has(conversationId)) {
-        return state;
-      }
-      const next = new Set(state.completedRunConversationIds);
-      const failed = new Set(state.failedRunConversationIds);
-      next.add(conversationId);
-      failed.delete(conversationId);
-      return { completedRunConversationIds: next, failedRunConversationIds: failed };
+      if (state.runResultByConversation[conversationId] === 'complete') return state;
+      return {
+        runResultByConversation: { ...state.runResultByConversation, [conversationId]: 'complete' },
+      };
     });
   },
   markConversationRunFailed: (conversationId) => {
     set((state) => {
-      if (state.failedRunConversationIds.has(conversationId) && !state.completedRunConversationIds.has(conversationId)) {
-        return state;
-      }
-      const completed = new Set(state.completedRunConversationIds);
-      const failed = new Set(state.failedRunConversationIds);
-      completed.delete(conversationId);
-      failed.add(conversationId);
-      return { completedRunConversationIds: completed, failedRunConversationIds: failed };
+      if (state.runResultByConversation[conversationId] === 'failed') return state;
+      return {
+        runResultByConversation: { ...state.runResultByConversation, [conversationId]: 'failed' },
+      };
     });
   },
   clearConversationRunFinished: (conversationId) => {
     set((state) => {
-      if (!state.completedRunConversationIds.has(conversationId) && !state.failedRunConversationIds.has(conversationId)) {
-        return state;
-      }
-      const completed = new Set(state.completedRunConversationIds);
-      const failed = new Set(state.failedRunConversationIds);
-      completed.delete(conversationId);
-      failed.delete(conversationId);
-      return { completedRunConversationIds: completed, failedRunConversationIds: failed };
+      if (state.runResultByConversation[conversationId] === undefined) return state;
+      const next = { ...state.runResultByConversation };
+      delete next[conversationId];
+      return { runResultByConversation: next };
     });
   },
   clearRunStatusForConversation: (conversationId) => {
     set((state) => {
-      const completed = new Set(state.completedRunConversationIds);
-      const failed = new Set(state.failedRunConversationIds);
-      completed.delete(conversationId);
-      failed.delete(conversationId);
-      return { completedRunConversationIds: completed, failedRunConversationIds: failed };
+      if (state.runResultByConversation[conversationId] === undefined) return state;
+      const next = { ...state.runResultByConversation };
+      delete next[conversationId];
+      return { runResultByConversation: next };
     });
   },
   enqueueUserInput: (conversationId, text) => {

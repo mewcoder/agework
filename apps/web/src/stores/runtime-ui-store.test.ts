@@ -7,8 +7,7 @@ beforeEach(() => {
     cancelledConversations: new Set(),
     userSteeredMessageIdsByConversation: {},
     pendingRunInterruptReasonsByConversation: {},
-    completedRunConversationIds: new Set(),
-    failedRunConversationIds: new Set(),
+    runResultByConversation: {},
   });
 });
 
@@ -17,8 +16,7 @@ describe('useRuntimeUiStore', () => {
     expect(useRuntimeUiStore.getState().isAssistantInGap).toBe(false);
     expect(useRuntimeUiStore.getState().cancelledConversations.size).toBe(0);
     expect(Object.keys(useRuntimeUiStore.getState().userSteeredMessageIdsByConversation)).toHaveLength(0);
-    expect(useRuntimeUiStore.getState().completedRunConversationIds.size).toBe(0);
-    expect(useRuntimeUiStore.getState().failedRunConversationIds.size).toBe(0);
+    expect(Object.keys(useRuntimeUiStore.getState().runResultByConversation)).toHaveLength(0);
   });
 
   it('setIsAssistantInGap 切换状态', () => {
@@ -77,53 +75,51 @@ describe('useRuntimeUiStore', () => {
     });
   });
 
-  describe('completedRunConversationIds', () => {
+  describe('runResultByConversation - complete', () => {
     it('markConversationRunComplete 标记完成', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-1')).toBe(true);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBe('complete');
     });
 
     it('已完成的会话重复标记不改变状态引用', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
-      const set1 = useRuntimeUiStore.getState().completedRunConversationIds;
+      const map1 = useRuntimeUiStore.getState().runResultByConversation;
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
-      const set2 = useRuntimeUiStore.getState().completedRunConversationIds;
+      const map2 = useRuntimeUiStore.getState().runResultByConversation;
 
-      expect(set2).toBe(set1);
+      expect(map2).toBe(map1);
     });
   });
 
-  describe('failedRunConversationIds', () => {
+  describe('runResultByConversation - failed', () => {
     it('markConversationRunFailed 标记失败', () => {
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-1')).toBe(true);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBe('failed');
     });
 
     it('已失败的会话重复标记不改变状态引用', () => {
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
-      const set1 = useRuntimeUiStore.getState().failedRunConversationIds;
+      const map1 = useRuntimeUiStore.getState().runResultByConversation;
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
-      const set2 = useRuntimeUiStore.getState().failedRunConversationIds;
+      const map2 = useRuntimeUiStore.getState().runResultByConversation;
 
-      expect(set2).toBe(set1);
+      expect(map2).toBe(map1);
     });
   });
 
   describe('completed / failed 互斥', () => {
-    it('标记完成后标记失败，completed 清除 failed 添加', () => {
+    it('标记完成后标记失败，结果覆盖为 failed', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
 
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-1')).toBe(false);
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-1')).toBe(true);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBe('failed');
     });
 
-    it('标记失败后标记完成，failed 清除 completed 添加', () => {
+    it('标记失败后标记完成，结果覆盖为 complete', () => {
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
 
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-1')).toBe(false);
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-1')).toBe(true);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBe('complete');
     });
   });
 
@@ -132,37 +128,35 @@ describe('useRuntimeUiStore', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
       useRuntimeUiStore.getState().clearConversationRunFinished('conv-1');
 
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-1')).toBe(false);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBeUndefined();
     });
 
     it('清除失败状态的会话', () => {
       useRuntimeUiStore.getState().markConversationRunFailed('conv-1');
       useRuntimeUiStore.getState().clearConversationRunFinished('conv-1');
 
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-1')).toBe(false);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBeUndefined();
     });
 
     it('已清除的会话再清理不改变状态引用', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
       useRuntimeUiStore.getState().clearConversationRunFinished('conv-1');
-      const completed1 = useRuntimeUiStore.getState().completedRunConversationIds;
+      const map1 = useRuntimeUiStore.getState().runResultByConversation;
       useRuntimeUiStore.getState().clearConversationRunFinished('conv-1');
-      const completed2 = useRuntimeUiStore.getState().completedRunConversationIds;
+      const map2 = useRuntimeUiStore.getState().runResultByConversation;
 
-      expect(completed2).toBe(completed1);
+      expect(map2).toBe(map1);
     });
   });
 
   describe('clearRunStatusForConversation', () => {
-    it('无条件清除 completed 和 failed', () => {
+    it('无条件清除指定会话的运行结果，不影响其他会话', () => {
       useRuntimeUiStore.getState().markConversationRunComplete('conv-1');
       useRuntimeUiStore.getState().markConversationRunFailed('conv-2');
       useRuntimeUiStore.getState().clearRunStatusForConversation('conv-1');
 
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-1')).toBe(false);
-      expect(useRuntimeUiStore.getState().completedRunConversationIds.has('conv-2')).toBe(false);
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-1')).toBe(false);
-      expect(useRuntimeUiStore.getState().failedRunConversationIds.has('conv-2')).toBe(true);
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-1']).toBeUndefined();
+      expect(useRuntimeUiStore.getState().runResultByConversation['conv-2']).toBe('failed');
     });
   });
 });
