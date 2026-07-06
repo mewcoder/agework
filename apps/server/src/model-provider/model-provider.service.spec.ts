@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { ModelProviderService } from "./model-provider.service";
-import { getSystemStatus } from "./agent-cli-probe";
+import { getSystemStatus } from "./agent-cli-status";
 
-vi.mock("./agent-cli-probe", () => ({
+vi.mock("./agent-cli-status", () => ({
   getSystemStatus: vi.fn(),
 }));
 
@@ -118,7 +118,7 @@ describe("ModelProviderService", () => {
     );
   });
 
-  it("attaches systemStatus from the probe for system-scoped providers only", async () => {
+  it("attaches systemStatus for system-scoped providers only", async () => {
     vi.mocked(getSystemStatus).mockReturnValue({
       command: "claude",
       commandAvailable: true,

@@ -15,7 +15,7 @@ import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
 import { getLLMClient } from "../common/llm";
 import { ModelProviderRepository } from "./model-provider.repository";
-import { getSystemStatus, type SystemStatus } from "./agent-cli-probe";
+import { getSystemStatus, type SystemStatus } from "./agent-cli-status";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
 const SYSTEM_PREFIX = "system:";

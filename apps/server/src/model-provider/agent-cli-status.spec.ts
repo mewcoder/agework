@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "fs";
 import { join } from "path";
-import { getSystemStatus } from "./agent-cli-probe";
+import { getSystemStatus } from "./agent-cli-status";
 
 vi.mock("node:child_process", () => ({
   spawnSync: vi.fn(),
