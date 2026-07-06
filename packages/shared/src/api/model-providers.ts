@@ -56,15 +56,4 @@ export type ModelProviderTestResponse = {
   error?: string;
 };
 
-export type SystemEnvVar = { name: string; isSet: boolean; preview: string };
-export type SystemConfigFile = {
-  path: string;
-  exists: boolean;
-  description: string;
-};
-export type ModelProviderSystemInfoResponse = {
-  envVars: SystemEnvVar[];
-  configFiles: SystemConfigFile[];
-};
-
 export type ModelProviderListResponse = ListResponse<ModelProviderResponse>;

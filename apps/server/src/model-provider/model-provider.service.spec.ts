@@ -1,15 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { spawnSync } from "node:child_process";
-import { existsSync } from "fs";
-import { join } from "path";
 import { ModelProviderService } from "./model-provider.service";
+import { getSystemStatus } from "./agent-cli-probe";
 
-vi.mock("node:child_process", () => ({
-  spawnSync: vi.fn(),
-}));
-
-vi.mock("fs", () => ({
-  existsSync: vi.fn(),
+vi.mock("./agent-cli-probe", () => ({
+  getSystemStatus: vi.fn(),
 }));
 
 function createService(overrides: Record<string, unknown> = {}) {
@@ -31,9 +25,6 @@ function createService(overrides: Record<string, unknown> = {}) {
 }
 
 describe("ModelProviderService", () => {
-  const mockSpawnSync = vi.mocked(spawnSync);
-  const mockExistsSync = vi.mocked(existsSync);
-
   it("desensitizes apiKey for listEnabled (non-admin) responses", async () => {
     const { service } = createService({
       findManyByAgent: vi.fn().mockResolvedValue([
@@ -127,142 +118,55 @@ describe("ModelProviderService", () => {
     );
   });
 
-  it("includes system status for system providers", async () => {
-    const originalAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
-    process.env.ANTHROPIC_AUTH_TOKEN = "sk-test";
-    mockSpawnSync.mockReturnValue({ status: 0 } as never);
-    mockExistsSync.mockReturnValue(false);
+  it("attaches systemStatus from the probe for system-scoped providers only", async () => {
+    vi.mocked(getSystemStatus).mockReturnValue({
+      command: "claude",
+      commandAvailable: true,
+      configAvailable: true,
+    });
 
-    try {
-      const { service } = createService({
-        findManyByAgent: vi.fn().mockResolvedValue([
-          {
-            id: "system:claude",
-            agentType: "claude",
-            scope: "system",
-            userId: null,
-            name: "系统环境",
-            isEnabled: false,
-            baseUrl: "",
-            apiKey: "",
-            models: [],
-            extraConfig: {},
-            createdAt: new Date("2026-06-13T09:19:50.022Z"),
-            updatedAt: new Date("2026-06-13T09:20:29.205Z"),
-          },
-        ]),
-      });
+    const { service } = createService({
+      findManyByAgent: vi.fn().mockResolvedValue([
+        {
+          id: "system:claude",
+          agentType: "claude",
+          scope: "system",
+          userId: null,
+          name: "系统环境",
+          isEnabled: false,
+          baseUrl: "",
+          apiKey: "",
+          models: [],
+          extraConfig: {},
+          createdAt: new Date("2026-06-13T09:19:50.022Z"),
+          updatedAt: new Date("2026-06-13T09:20:29.205Z"),
+        },
+        {
+          id: "mp-1",
+          agentType: "claude",
+          scope: "global",
+          userId: null,
+          name: "custom",
+          isEnabled: true,
+          baseUrl: "https://example.com",
+          apiKey: "sk-test",
+          models: [],
+          extraConfig: {},
+          createdAt: new Date("2026-06-13T09:19:50.022Z"),
+          updatedAt: new Date("2026-06-13T09:20:29.205Z"),
+        },
+      ]),
+    });
 
-      const result = await service.listForAdmin("claude");
+    const result = await service.listForAdmin("claude");
 
-      expect(result.list[0]?.systemStatus).toEqual({
-        command: "claude",
-        commandAvailable: true,
-        configAvailable: true,
-      });
-      expect(mockSpawnSync).toHaveBeenCalledWith("claude", ["--version"], {
-        stdio: "ignore",
-        timeout: 1500,
-      });
-    } finally {
-      if (originalAnthropicAuthToken === undefined) {
-        delete process.env.ANTHROPIC_AUTH_TOKEN;
-      } else {
-        process.env.ANTHROPIC_AUTH_TOKEN = originalAnthropicAuthToken;
-      }
-    }
-  });
-
-  it("treats Claude Code credentials under CLAUDE_CONFIG_DIR as system config", async () => {
-    const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
-    const originalAnthropicAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
-    const originalAnthropicApiKey = process.env.ANTHROPIC_API_KEY;
-    const originalClaudeCodeOauthToken = process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    delete process.env.ANTHROPIC_AUTH_TOKEN;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-    process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
-    mockSpawnSync.mockReturnValue({ status: 0 } as never);
-    const credentialsPath = join("/custom/claude", ".credentials.json");
-    mockExistsSync.mockImplementation(
-      (path) => String(path) === credentialsPath
-    );
-
-    try {
-      const { service } = createService({
-        findManyByAgent: vi.fn().mockResolvedValue([
-          {
-            id: "system:claude",
-            agentType: "claude",
-            scope: "system",
-            userId: null,
-            name: "系统环境",
-            isEnabled: false,
-            baseUrl: "",
-            apiKey: "",
-            models: [],
-            extraConfig: {},
-            createdAt: new Date("2026-06-13T09:19:50.022Z"),
-            updatedAt: new Date("2026-06-13T09:20:29.205Z"),
-          },
-        ]),
-      });
-
-      const result = await service.listForAdmin("claude");
-
-      expect(result.list[0]?.systemStatus?.configAvailable).toBe(true);
-      expect(mockExistsSync).toHaveBeenCalledWith(credentialsPath);
-    } finally {
-      if (originalClaudeConfigDir === undefined) {
-        delete process.env.CLAUDE_CONFIG_DIR;
-      } else {
-        process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
-      }
-      if (originalAnthropicAuthToken === undefined) {
-        delete process.env.ANTHROPIC_AUTH_TOKEN;
-      } else {
-        process.env.ANTHROPIC_AUTH_TOKEN = originalAnthropicAuthToken;
-      }
-      if (originalAnthropicApiKey === undefined) {
-        delete process.env.ANTHROPIC_API_KEY;
-      } else {
-        process.env.ANTHROPIC_API_KEY = originalAnthropicApiKey;
-      }
-      if (originalClaudeCodeOauthToken === undefined) {
-        delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
-      } else {
-        process.env.CLAUDE_CODE_OAUTH_TOKEN = originalClaudeCodeOauthToken;
-      }
-    }
-  });
-
-  it("reports Claude Code account credential files in system info", () => {
-    const originalClaudeConfigDir = process.env.CLAUDE_CONFIG_DIR;
-    process.env.CLAUDE_CONFIG_DIR = "/custom/claude";
-    const credentialsPath = join("/custom/claude", ".credentials.json");
-    mockExistsSync.mockImplementation(
-      (path) => String(path) === credentialsPath
-    );
-
-    try {
-      const { service } = createService();
-
-      expect(service.getSystemInfo("claude").configFiles).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            path: credentialsPath,
-            exists: true,
-            description: "账号登录认证文件",
-          }),
-        ])
-      );
-    } finally {
-      if (originalClaudeConfigDir === undefined) {
-        delete process.env.CLAUDE_CONFIG_DIR;
-      } else {
-        process.env.CLAUDE_CONFIG_DIR = originalClaudeConfigDir;
-      }
-    }
+    expect(getSystemStatus).toHaveBeenCalledWith("claude");
+    expect(result.list.find((p) => p.modelProviderId === "system:claude")?.systemStatus).toEqual({
+      command: "claude",
+      commandAvailable: true,
+      configAvailable: true,
+    });
+    expect(result.list.find((p) => p.modelProviderId === "mp-1")?.systemStatus).toBeUndefined();
   });
 
   it("resolves an enabled system provider from database state", async () => {

@@ -4,10 +4,6 @@ import {
   NotFoundException,
   OnModuleInit,
 } from "@nestjs/common";
-import { spawnSync } from "node:child_process";
-import { existsSync } from "fs";
-import { homedir } from "os";
-import { join } from "path";
 import {
   AGENT_TYPES,
   generateId,
@@ -19,6 +15,7 @@ import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
 import { getLLMClient } from "../common/llm";
 import { ModelProviderRepository } from "./model-provider.repository";
+import { getSystemStatus, type SystemStatus } from "./agent-cli-probe";
 
 // system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
 const SYSTEM_PREFIX = "system:";
@@ -30,11 +27,6 @@ type ModelProviderScope = "system" | "global" | "user";
 type ResolvedModelProvider =
   | { source: "system" }
   | { source: "custom"; providerConfig: ProviderConfig };
-type SystemStatus = {
-  command: string;
-  commandAvailable: boolean;
-  configAvailable: boolean;
-};
 type ProviderConfigColumns = {
   baseUrl: string;
   apiKey: string;
@@ -94,35 +86,6 @@ function serializeProviderConfig(
 ): string {
   const config = toProviderConfig(row);
   return JSON.stringify(desensitize ? { ...config, apiKey: "" } : config);
-}
-
-function isCommandAvailable(command: string): boolean {
-  const result = spawnSync(command, ["--version"], {
-    stdio: "ignore",
-    timeout: 1500,
-  });
-  return !result.error && result.status === 0;
-}
-
-function claudeConfigDir(home: string): string {
-  return process.env.CLAUDE_CONFIG_DIR?.trim() || join(home, ".claude");
-}
-
-function hasClaudeAuthEnv(): boolean {
-  return (
-    !!process.env.ANTHROPIC_AUTH_TOKEN ||
-    !!process.env.ANTHROPIC_API_KEY ||
-    !!process.env.CLAUDE_CODE_OAUTH_TOKEN
-  );
-}
-
-function hasClaudeConfigFiles(home: string): boolean {
-  const configDir = claudeConfigDir(home);
-  return (
-    existsSync(join(home, ".claude.json")) ||
-    existsSync(join(configDir, ".credentials.json")) ||
-    existsSync(join(configDir, "settings.json"))
-  );
 }
 
 @Injectable()
@@ -200,34 +163,12 @@ export class ModelProviderService implements OnModuleInit {
         {
           ...p,
           systemStatus: isSystemModelProviderId(p.id)
-            ? this.getSystemStatus(p.agentType)
+            ? getSystemStatus(p.agentType)
             : undefined,
         },
         desensitize
       )
     );
-  }
-
-  private getSystemStatus(agentType: string): SystemStatus {
-    const home = homedir();
-
-    if (agentType === "claude") {
-      return {
-        command: "claude",
-        commandAvailable: isCommandAvailable("claude"),
-        configAvailable: hasClaudeAuthEnv() || hasClaudeConfigFiles(home),
-      };
-    }
-
-    return {
-      command: "codex",
-      commandAvailable: isCommandAvailable("codex"),
-      configAvailable:
-        !!process.env.OPENAI_API_KEY ||
-        !!process.env.CODEX_API_KEY ||
-        existsSync(join(home, ".codex", "auth.json")) ||
-        existsSync(join(home, ".codex", "config.toml")),
-    };
   }
 
   /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。 */
@@ -350,75 +291,6 @@ export class ModelProviderService implements OnModuleInit {
     if (modelProvider.isEnabled)
       throw new BadRequestException("启用中的模型服务不可删除，请先停用");
     await this.repo.delete(modelProviderId);
-  }
-
-  /** 返回指定 agent 类型系统环境的诊断信息（相关环境变量是否设置、配置文件是否存在），供 admin 排查系统模型服务可用性使用。 */
-  getSystemInfo(agent: string) {
-    const agentType = this.resolveAgentType(agent);
-    const home = homedir();
-
-    const envVar = (name: string) => {
-      const val = process.env[name];
-      return {
-        name,
-        isSet: !!val,
-        preview: val ? val.slice(0, 8) + "..." : "",
-      };
-    };
-
-    if (agentType === "claude") {
-      const configPath = join(home, ".claude.json");
-      const configDir = claudeConfigDir(home);
-
-      return {
-        envVars: [
-          envVar("ANTHROPIC_API_KEY"),
-          envVar("ANTHROPIC_AUTH_TOKEN"),
-          envVar("ANTHROPIC_BASE_URL"),
-          envVar("ANTHROPIC_MODEL"),
-          envVar("CLAUDE_CODE_OAUTH_TOKEN"),
-          envVar("CLAUDE_CONFIG_DIR"),
-          envVar("CLAUDE_SECURESTORAGE_CONFIG_DIR"),
-        ],
-        configFiles: [
-          {
-            path: configPath,
-            exists: existsSync(configPath),
-            description: "主配置文件",
-          },
-          {
-            path: join(configDir, ".credentials.json"),
-            exists: existsSync(join(configDir, ".credentials.json")),
-            description: "账号登录认证文件",
-          },
-          {
-            path: join(configDir, "settings.json"),
-            exists: existsSync(join(configDir, "settings.json")),
-            description: "设置文件",
-          },
-        ],
-      };
-    }
-
-    // Codex
-    const authPath = join(home, ".codex", "auth.json");
-    const configToml = join(home, ".codex", "config.toml");
-
-    return {
-      envVars: [envVar("OPENAI_API_KEY"), envVar("CODEX_API_KEY")],
-      configFiles: [
-        {
-          path: authPath,
-          exists: existsSync(authPath),
-          description: "认证文件",
-        },
-        {
-          path: configToml,
-          exists: existsSync(configToml),
-          description: "主配置文件",
-        },
-      ],
-    };
   }
 
   /** 对一个自定义模型服务发起一次最小生成请求，探测连通性/鉴权是否可用；系统环境不支持连通性测试。 */

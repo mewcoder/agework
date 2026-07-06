@@ -12,11 +12,6 @@ export class ModelProviderController {
     return this.modelProviderService.listEnabled(query.agentType);
   }
 
-  @Get("system-info")
-  systemInfo(@Query() query: ModelProviderAgentQueryDto) {
-    return this.modelProviderService.getSystemInfo(query.agentType);
-  }
-
   @Post("ping")
   ping(@Body() body: ModelProviderIdDto) {
     return this.modelProviderService.ping(body.id);

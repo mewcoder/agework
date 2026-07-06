@@ -218,7 +218,6 @@ describe("external API route convention", () => {
   it("uses ping/remove and admin split for model providers", () => {
     expect(controllerPath(ModelProviderController)).toBe("model-providers");
     expectRoute(ModelProviderController, "list", "get", "list");
-    expectRoute(ModelProviderController, "systemInfo", "get", "system-info");
     expectRoute(ModelProviderController, "ping", "post", "ping");
 
     expect(controllerPath(AdminModelProviderController)).toBe(
