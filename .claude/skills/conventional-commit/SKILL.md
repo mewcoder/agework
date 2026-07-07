@@ -65,3 +65,5 @@ Determine scope from changed file paths:
 - If changes span multiple types, use the dominant type
 - If unsure about scope, omit it rather than guess
 - Always show the message before committing — never auto-commit silently
+- Commit author must be the user only; do not include AI assistant co-author info (no `Co-authored-by` trailers)
+- Commit message must be entirely in English; no Chinese characters allowed
