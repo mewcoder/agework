@@ -40,11 +40,11 @@ function resolveCliPath(agentType: "claude" | "codex"): string | null {
 
 function findInPath(name: string): string | null {
   try {
-    // Windows: `where` 查找所有匹配（.exe, .cmd, .ps1, 无扩展名等），取第一个
+    // Windows: `where name.exe` 只找真正的 native binary，排除 npm shim (.cmd)
     // Unix: `which` 只查可执行文件
     const cmd =
       process.platform === "win32"
-        ? `where ${name} 2>nul`
+        ? `where ${name}.exe 2>nul`
         : `which ${name} 2>/dev/null`;
     const result = execSync(cmd, {
       encoding: "utf-8",
