@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { runtimesApi } from '@/api/runtimes';
 import type {
+  CreateRuntimeDirectoryRequest,
   CreateRuntimeRequest,
   InstallCliRequest,
   UpdateEnvConfigOverrideRequest,
@@ -67,5 +68,27 @@ export function useInstallCli() {
     meta: { suppressGlobalError: true },
     mutationFn: (data: InstallCliRequest) => runtimesApi.installCli(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
+  });
+}
+
+/** 列出 runtime 上 path 下的子目录（不含文件），供目录浏览弹层用。 */
+export function useRuntimeDirectory(
+  runtimeId: string | undefined,
+  path: string | undefined,
+  enabled: boolean
+) {
+  return useQuery({
+    queryKey: ['runtime-directory', runtimeId, path ?? null],
+    queryFn: () => runtimesApi.listDirectory({ runtimeId: runtimeId!, path }),
+    enabled: enabled && !!runtimeId,
+  });
+}
+
+/** 在 runtime 上新建目录,供目录浏览弹层用。 */
+export function useCreateRuntimeDirectory() {
+  return useMutation({
+    meta: { suppressGlobalError: true },
+    mutationFn: (body: CreateRuntimeDirectoryRequest) =>
+      runtimesApi.createDirectory(body),
   });
 }

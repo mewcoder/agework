@@ -74,6 +74,12 @@ describe("RuntimeService", () => {
       stop: vi.fn(),
       destroy: vi.fn(),
       detectEnv: vi.fn().mockResolvedValue(mockEnvConfig),
+      listDirectory: vi
+        .fn()
+        .mockResolvedValue({ path: "/home/agework", entries: ["/home/agework/foo"] }),
+      createDirectory: vi
+        .fn()
+        .mockResolvedValue({ path: "/home/agework/new" }),
     } as unknown as LocalRuntime;
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
@@ -265,5 +271,61 @@ describe("RuntimeService", () => {
     repository.findVisibleToOwner.mockResolvedValueOnce(null);
     const result = await service.getOwned("u-1", "rt-x");
     expect(result).toBeNull();
+  });
+
+  it("listDirectory for builtin runtime delegates to LocalRuntime and maps entries to list", async () => {
+    const result = await service.listDirectory("u-1", "builtin-local", "/home/agework");
+    expect(localRuntime.listDirectory).toHaveBeenCalledWith("/home/agework");
+    expect(result).toEqual({
+      path: "/home/agework",
+      list: ["/home/agework/foo"],
+    });
+  });
+
+  it("listDirectory throws NotFoundException when the runtime is not visible to the user", async () => {
+    repository.findVisibleToOwner.mockResolvedValueOnce(null);
+    await expect(
+      service.listDirectory("u-1", "rt-x", undefined)
+    ).rejects.toThrow("runtime not found");
+  });
+
+  it("listDirectory for a disconnected registered runtime throws BadRequestException", async () => {
+    tunnelHandler.isConnected.mockReturnValue(false);
+    await expect(
+      service.listDirectory("u-1", "rt-1", undefined)
+    ).rejects.toThrow("is not connected");
+  });
+
+  it("listDirectory wraps underlying filesystem errors as BadRequestException", async () => {
+    (localRuntime.listDirectory as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("目录不存在或不可访问")
+    );
+    await expect(
+      service.listDirectory("u-1", "builtin-local", "/no/such/dir")
+    ).rejects.toThrow("目录不存在或不可访问");
+  });
+
+  it("createDirectory for builtin runtime delegates to LocalRuntime", async () => {
+    const result = await service.createDirectory(
+      "u-1",
+      "builtin-local",
+      "/home/agework/new"
+    );
+    expect(localRuntime.createDirectory).toHaveBeenCalledWith(
+      "/home/agework/new"
+    );
+    expect(result).toEqual({ path: "/home/agework/new" });
+  });
+
+  it("createDirectory for registered runtime delegates to RemoteRuntime over the tunnel", async () => {
+    tunnelHandler.isConnected.mockReturnValue(true);
+    tunnelHandler.sendRequest.mockResolvedValue({ path: "/data/new" });
+    const result = await service.createDirectory("u-1", "rt-1", "/data/new");
+    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
+      "rt-1",
+      expect.objectContaining({ method: "runtime.create-dir" }),
+      expect.any(Number)
+    );
+    expect(result).toEqual({ path: "/data/new" });
   });
 });

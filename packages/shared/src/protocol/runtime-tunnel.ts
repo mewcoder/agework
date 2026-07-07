@@ -72,18 +72,31 @@ export type RuntimeInstanceRefRpcParams = {
 /** server → manager：触发重新检测本机 agent CLI 环境并上报结果。 */
 export type RuntimeDetectEnvRpcParams = Record<string, never>;
 
+/** server → manager：列出 path 下的子目录（不含文件）。path 省略时列出 manager 本机的用户主目录。 */
+export type RuntimeListDirRpcParams = { path?: string };
+
+/** server → manager：在 path 下新建一个目录（含父级）。 */
+export type RuntimeCreateDirRpcParams = { path: string };
+
 export type RuntimeTunnelRpcRequest =
   | RpcRequest<"runtime.launch", RuntimeLaunchRpcParams>
   | RpcRequest<"runtime.stop", RuntimeInstanceRefRpcParams>
   | RpcRequest<"runtime.destroy", RuntimeInstanceRefRpcParams>
-  | RpcRequest<"runtime.detect-env", RuntimeDetectEnvRpcParams>;
+  | RpcRequest<"runtime.detect-env", RuntimeDetectEnvRpcParams>
+  | RpcRequest<"runtime.list-dir", RuntimeListDirRpcParams>
+  | RpcRequest<"runtime.create-dir", RuntimeCreateDirRpcParams>;
 
 export type RuntimeLaunchRpcResult = { runtimeInstanceId: string };
 export type RuntimeDetectEnvRpcResult = { envConfig: RuntimeEnvConfig };
+/** entries 为完整绝对路径(不是裸名字):拼接、排序均由 manager 端做好,server 直接展示。 */
+export type RuntimeListDirRpcResult = { path: string; entries: string[] };
+export type RuntimeCreateDirRpcResult = { path: string };
 
 export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeLaunchRpcResult>
   | RpcResponse<RuntimeDetectEnvRpcResult>
+  | RpcResponse<RuntimeListDirRpcResult>
+  | RpcResponse<RuntimeCreateDirRpcResult>
   | RpcResponse<null>;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,

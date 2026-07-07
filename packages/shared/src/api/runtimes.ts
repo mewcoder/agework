@@ -109,3 +109,30 @@ export type InstallCliRequest = {
   /** 指定要安装的 agent。 */
   agentType: AgentType;
 };
+
+/** GET /api/v1/runtimes/directories/list 的查询参数。 */
+export type ListRuntimeDirectoryRequest = {
+  /** 目标 runtime id。 */
+  runtimeId: string;
+  /** 省略时列出该 runtime 所在机器的用户主目录。 */
+  path?: string;
+};
+
+/** 目录浏览响应:path 为浏览到的绝对路径,list 为其下子目录的完整绝对路径(不含文件)。 */
+export type RuntimeDirectoryResponse = {
+  path: string;
+  list: string[];
+};
+
+/** POST /api/v1/runtimes/directories/create 的请求 body。 */
+export type CreateRuntimeDirectoryRequest = {
+  /** 目标 runtime id。 */
+  runtimeId: string;
+  /** 要新建的目录绝对路径。 */
+  path: string;
+};
+
+/** 新建目录响应,path 为新建目录的绝对路径。 */
+export type CreateRuntimeDirectoryResponse = {
+  path: string;
+};

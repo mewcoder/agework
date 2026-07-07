@@ -31,6 +31,7 @@ import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
 import { useRuntimes } from "@/hooks/use-runtime";
 import type { Runtime } from "@/hooks/use-runtime";
+import { DirectoryBrowserDialog } from "@/components/directory-browser-dialog";
 
 interface WorkspaceDialogProps {
   open: boolean;
@@ -212,6 +213,7 @@ function WorkspaceDialogForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [directoryPickerError, setDirectoryPickerError] = useState<string | null>(null);
   const [customUpdatePending, setCustomUpdatePending] = useState(false);
+  const [browserOpen, setBrowserOpen] = useState(false);
 
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
@@ -367,9 +369,6 @@ function WorkspaceDialogForm({
 
   function getRootPathDescription() {
     if (directoryPickerError) return directoryPickerError;
-    if (!hasNativeDirectoryPicker()) {
-      return "浏览器不支持选择目录，请手动输入绝对路径";
-    }
     return "选择或输入 API 服务器可访问的绝对路径";
   }
 
@@ -392,6 +391,21 @@ function WorkspaceDialogForm({
     !!rootPathValue.trim() &&
     (selectedRuntime?.runtimeType === "local" ||
       selectedRuntimeIsolationScopes.includes(isolationScope));
+  /** managed 场景下,当前 runtimeType 对应的 builtin runtime(浏览目录接口按 runtime 维度调用,
+   *  builtin 也有固定的 runtime id)。 */
+  const builtinRuntime = runtimes.find(
+    (r) => r.source === "builtin" && r.runtimeType === runtimeType
+  );
+  const browserRuntimeId =
+    placementMode === "registered" ? runtimeId : builtinRuntime?.id;
+  const browserDisabled =
+    placementMode === "registered" && selectedRuntime?.status !== "online";
+
+  function handleBrowseSelect(path: string) {
+    setDirectoryPickerError(null);
+    form.setValue("rootPath", path);
+    form.trigger("rootPath");
+  }
 
   useEffect(() => {
     if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "local") {
@@ -613,23 +627,35 @@ function WorkspaceDialogForm({
                     <FieldLabel htmlFor="workspace-remote-root-path">
                       目录
                     </FieldLabel>
-                    <Input
-                      {...field}
-                      id="workspace-remote-root-path"
-                      aria-invalid={fieldState.invalid}
-                      placeholder="该运行环境上的绝对路径"
-                      autoComplete="off"
-                      onBlur={() => {
-                        const normalized = normalizeFilesystemPath(
-                          field.value ?? ""
-                        );
-                        if (normalized !== field.value) {
-                          field.onChange(normalized);
-                        }
-                      }}
-                    />
+                    <div className="flex items-center gap-2">
+                      <Input
+                        {...field}
+                        id="workspace-remote-root-path"
+                        aria-invalid={fieldState.invalid}
+                        placeholder="该运行环境上的绝对路径"
+                        autoComplete="off"
+                        onBlur={() => {
+                          const normalized = normalizeFilesystemPath(
+                            field.value ?? ""
+                          );
+                          if (normalized !== field.value) {
+                            field.onChange(normalized);
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={browserDisabled}
+                        onClick={() => setBrowserOpen(true)}
+                      >
+                        浏览
+                      </Button>
+                    </div>
                     <FieldDescription>
-                      暂不支持远程浏览目录,请手动填写该运行环境上已存在的绝对路径
+                      {browserDisabled
+                        ? "该运行环境未连接,暂时无法浏览,请手动填写绝对路径"
+                        : "选择或填写该运行环境上的绝对路径"}
                     </FieldDescription>
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
@@ -787,37 +813,47 @@ function WorkspaceDialogForm({
                       const showPicker = hasNativeDirectoryPicker();
                       return (
                       <Field data-invalid={fieldState.invalid} className="mt-2">
-                        <div className="relative">
-                          <Input
-                            {...field}
-                            id="workspace-root-path"
-                            aria-invalid={fieldState.invalid}
-                            placeholder={detectPathHint()}
-                            autoComplete="off"
-                            className={showPicker ? "pr-10" : ""}
-                            onChange={(event) => {
-                              setDirectoryPickerError(null);
-                              field.onChange(event);
-                            }}
-                            onBlur={() => {
-                              const normalized = normalizeFilesystemPath(field.value ?? "");
-                              if (normalized !== field.value) {
-                                field.onChange(normalized);
-                              }
-                            }}
-                          />
-                          {showPicker && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
-                              aria-label="选择目录"
-                              onClick={() => handleSelectDirectory(field.onChange)}
-                            >
-                              <FolderOpenIcon className="size-4" />
-                            </Button>
-                          )}
+                        <div className="flex items-center gap-2">
+                          <div className="relative flex-1">
+                            <Input
+                              {...field}
+                              id="workspace-root-path"
+                              aria-invalid={fieldState.invalid}
+                              placeholder={detectPathHint()}
+                              autoComplete="off"
+                              className={showPicker ? "pr-10" : ""}
+                              onChange={(event) => {
+                                setDirectoryPickerError(null);
+                                field.onChange(event);
+                              }}
+                              onBlur={() => {
+                                const normalized = normalizeFilesystemPath(field.value ?? "");
+                                if (normalized !== field.value) {
+                                  field.onChange(normalized);
+                                }
+                              }}
+                            />
+                            {showPicker && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
+                                aria-label="选择目录"
+                                onClick={() => handleSelectDirectory(field.onChange)}
+                              >
+                                <FolderOpenIcon className="size-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={!browserRuntimeId}
+                            onClick={() => setBrowserOpen(true)}
+                          >
+                            浏览
+                          </Button>
                         </div>
                         <FieldDescription>
                           {getRootPathDescription()}
@@ -921,6 +957,13 @@ function WorkspaceDialogForm({
             : (submitLabel ?? (isEdit ? "保存" : "创建"))}
         </Button>
       </DialogFooter>
+
+      <DirectoryBrowserDialog
+        open={browserOpen}
+        onOpenChange={setBrowserOpen}
+        runtimeId={browserRuntimeId}
+        onSelect={handleBrowseSelect}
+      />
     </>
   );
 }

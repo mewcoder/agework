@@ -107,6 +107,10 @@ export type {
   RuntimeLaunchRpcResult,
   RuntimeDetectEnvRpcParams,
   RuntimeDetectEnvRpcResult,
+  RuntimeListDirRpcParams,
+  RuntimeListDirRpcResult,
+  RuntimeCreateDirRpcParams,
+  RuntimeCreateDirRpcResult,
   RuntimeTunnelRpcResponse,
 } from "./runtime-tunnel";
 

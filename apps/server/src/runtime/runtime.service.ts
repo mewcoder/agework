@@ -10,12 +10,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type { RuntimeSpec } from "@agework/shared/protocol";
 import type {
+  CreateRuntimeDirectoryResponse,
   CreateRuntimeResponse,
   DetectEnvResponse,
+  RuntimeDirectoryResponse,
   RuntimeEnvConfig,
   RuntimeEnvConfigOverride,
   AgentEnvStatus,
-  RuntimeEnvStatus,
   RuntimeResponse,
 } from "@agework/shared/api";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
@@ -231,6 +232,57 @@ export class RuntimeService implements OnApplicationBootstrap {
         `detect-env for runtime ${id} failed: ${err instanceof Error ? err.message : String(err)}`
       );
       return { envConfig: null };
+    }
+  }
+
+  /**
+   * 列出该用户可见的 runtime 上 path 下的子目录(不含文件)。
+   * runtime 不可见/不存在抛 NotFoundException;registered runtime 未连接抛
+   * BadRequestException(前端应已用 status 提前禁用入口,这里是兜底)。
+   */
+  async listDirectory(
+    ownerId: string,
+    id: string,
+    path?: string
+  ): Promise<RuntimeDirectoryResponse> {
+    await this.assertRuntimeReachable(ownerId, id);
+    try {
+      const result = await this.runtimeFor(id).listDirectory(path);
+      return { path: result.path, list: result.entries };
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  /** 在该用户可见的 runtime 上新建目录,返回新建目录的绝对路径。规则同 listDirectory。 */
+  async createDirectory(
+    ownerId: string,
+    id: string,
+    path: string
+  ): Promise<CreateRuntimeDirectoryResponse> {
+    await this.assertRuntimeReachable(ownerId, id);
+    try {
+      return await this.runtimeFor(id).createDirectory(path);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  /** 校验 runtime 对该用户可见,且(registered 时)隧道在线,否则抛异常。 */
+  private async assertRuntimeReachable(
+    ownerId: string,
+    id: string
+  ): Promise<void> {
+    const owned = await this.getOwned(ownerId, id);
+    if (!owned) {
+      throw new NotFoundException(`runtime not found: ${id}`);
+    }
+    if (!isBuiltinRuntimeId(id) && !this.tunnelHandler.isConnected(id)) {
+      throw new BadRequestException(`runtime ${id} is not connected`);
     }
   }
 

@@ -1,9 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { JSON_RPC_VERSION } from "@agework/shared/protocol/rpc";
 import type {
+  RuntimeCreateDirRpcParams,
+  RuntimeCreateDirRpcResult,
   RuntimeInstanceRefRpcParams,
   RuntimeLaunchRpcParams,
   RuntimeLaunchRpcResult,
+  RuntimeListDirRpcParams,
+  RuntimeListDirRpcResult,
   RuntimeTunnelRpcRequest,
 } from "@agework/shared/protocol";
 import type { RuntimeEnvConfig } from "@agework/shared/api";
@@ -67,6 +71,28 @@ export class RemoteRuntime implements Runtime {
       this.launchTimeoutMs
     );
     return result.envConfig;
+  }
+
+  /** 通过隧道发 list-dir RPC,列出远程机器上 path 下的子目录。 */
+  async listDirectory(
+    path?: string
+  ): Promise<{ path: string; entries: string[] }> {
+    const params: RuntimeListDirRpcParams = { path };
+    return this.tunnel.sendRequest<RuntimeListDirRpcResult>(
+      this.runtimeId,
+      this.request("runtime.list-dir", params),
+      this.launchTimeoutMs
+    );
+  }
+
+  /** 通过隧道发 create-dir RPC,在远程机器上新建目录。 */
+  async createDirectory(path: string): Promise<{ path: string }> {
+    const params: RuntimeCreateDirRpcParams = { path };
+    return this.tunnel.sendRequest<RuntimeCreateDirRpcResult>(
+      this.runtimeId,
+      this.request("runtime.create-dir", params),
+      this.launchTimeoutMs
+    );
   }
 
   private async sendInstanceAction(

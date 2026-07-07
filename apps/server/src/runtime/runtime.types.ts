@@ -39,4 +39,8 @@ export interface Runtime {
   /** 检测本机 CLI 环境(路径/版本/认证)。
    *  LocalRuntime 直接调本地检测;RemoteRuntime 通过隧道发 detect-env RPC 给远程 manager。 */
   detectEnv(): Promise<RuntimeEnvConfig>;
+  /** 列出 path 下的子目录(不含文件)。path 省略时列出该 runtime 所在机器的用户主目录。 */
+  listDirectory(path?: string): Promise<{ path: string; entries: string[] }>;
+  /** 在 path 下新建目录(含父级),返回新建目录的绝对路径。 */
+  createDirectory(path: string): Promise<{ path: string }>;
 }

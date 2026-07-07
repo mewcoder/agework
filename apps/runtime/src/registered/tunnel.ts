@@ -18,6 +18,7 @@ import {
   type RuntimeType,
 } from "../config.js";
 import { detectEnvConfig } from "../cli/cli-resolver.js";
+import { createDirectory, listDirectory } from "../filesystem/directory-browser.js";
 import { Launcher } from "./launcher.js";
 import { LiveCarrierStore } from "./registry.js";
 
@@ -159,9 +160,15 @@ export class TunnelClient {
     });
   }
 
-  private dispatch(
+  private async dispatch(
     request: RuntimeTunnelRpcRequest
-  ): Promise<{ runtimeInstanceId: string } | { envConfig: RuntimeEnvConfig } | void> {
+  ): Promise<
+    | { runtimeInstanceId: string }
+    | { envConfig: RuntimeEnvConfig }
+    | { path: string; entries: string[] }
+    | { path: string }
+    | void
+  > {
     const dispatcher = this.options.dispatcher;
     switch (request.method) {
       case "runtime.launch":
@@ -172,6 +179,10 @@ export class TunnelClient {
         return dispatcher.destroy(request.params);
       case "runtime.detect-env":
         return Promise.resolve({ envConfig: detectEnvConfig() });
+      case "runtime.list-dir":
+        return Promise.resolve(listDirectory(request.params.path));
+      case "runtime.create-dir":
+        return Promise.resolve(createDirectory(request.params.path));
     }
   }
 
