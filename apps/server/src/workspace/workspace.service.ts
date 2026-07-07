@@ -19,7 +19,7 @@ import {
   REMOTE_DIRECTORY_SOURCE,
   WorkspaceDirectoryHandler,
 } from "./directory/workspace-directory.handler";
-import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
+import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeService } from "../runtime/runtime.service";
 import type { RuntimeType, IsolationScope } from "../config/config.service";
 

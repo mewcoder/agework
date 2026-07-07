@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizePath, joinPaths, resolveApiBasePath } from "./path.util";
+import { normalizePath, joinPaths, resolveApiBasePath } from "./api-path";
 
 describe("normalizePath", () => {
   it("returns empty string for undefined/empty/root-only values", () => {

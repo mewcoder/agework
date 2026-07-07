@@ -5,7 +5,7 @@ import type {
 } from "@agework/shared/protocol";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventService, compactData } from "./run-event.service";
-import { RunSeqStore } from "./seq/run-seq.store";
+import { RunEventSeqStore } from "./seq/run-event-seq.store";
 
 type StoredRunEventInput = Partial<RecordRunEventInput> & { runSeq: number };
 
@@ -267,7 +267,7 @@ describe("RunEventService append", () => {
         makeRunEventRecord(input)
       ),
     };
-    const seqStore = new RunSeqStore(repository as never);
+    const seqStore = new RunEventSeqStore(repository as never);
     const service = new RunEventService(repository as never, seqStore);
 
     const records = await Promise.all(
@@ -298,7 +298,7 @@ describe("RunEventService append", () => {
         return makeRunEventRecord(input);
       }),
     };
-    const seqStore = new RunSeqStore(repository as never);
+    const seqStore = new RunEventSeqStore(repository as never);
     const service = new RunEventService(repository as never, seqStore);
 
     const first = await service.append(makeEvent({ eventKey: "event-key-1" }));
@@ -319,7 +319,7 @@ describe("RunEventService append", () => {
         makeRunEventRecord(input)
       ),
     };
-    const seqStore = new RunSeqStore(repository as never);
+    const seqStore = new RunEventSeqStore(repository as never);
     const service = new RunEventService(repository as never, seqStore);
 
     const beforeForget = await service.append(makeEvent());

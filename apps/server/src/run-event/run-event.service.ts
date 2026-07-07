@@ -12,7 +12,7 @@ import type {
 } from "@agework/shared/protocol";
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRepository } from "./run-event.repository";
-import { RunSeqStore } from "./seq/run-seq.store";
+import { RunEventSeqStore } from "./seq/run-event-seq.store";
 
 type RunEventBase = {
   runId: string;
@@ -35,7 +35,7 @@ export class RunEventService {
 
   constructor(
     private readonly repository: RunEventRepository,
-    private readonly seqStore: RunSeqStore
+    private readonly seqStore: RunEventSeqStore
   ) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
@@ -44,7 +44,7 @@ export class RunEventService {
   }
 
   /**
-   * 持久化一条结构化 run event：委托 RunSeqStore 按 runId 串行分配单调 runSeq，
+   * 持久化一条结构化 run event：委托 RunEventSeqStore 按 runId 串行分配单调 runSeq，
    * 再落库；`eventKey` 冲突时幂等返回已存在的记录。
    */
   append(event: RecordRunEventInput): Promise<RunEventRecord> {
@@ -67,7 +67,7 @@ export class RunEventService {
     });
   }
 
-  /** run 终态 cleanup：丢弃该 run 缓存的 seq 游标（委托 RunSeqStore）。 */
+  /** run 终态 cleanup：丢弃该 run 缓存的 seq 游标（委托 RunEventSeqStore）。 */
   forgetRun(runId: string): void {
     this.seqStore.forget(runId);
   }

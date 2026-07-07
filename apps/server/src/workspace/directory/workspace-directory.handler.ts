@@ -15,7 +15,7 @@ import {
   type RuntimeType,
 } from "../../config/config.service";
 import { WorkspaceRepository } from "../workspace.repository";
-import { WorkspaceRuntimePolicy } from "../runtime/workspace-runtime.policy";
+import { WorkspaceRuntimePolicy } from "../placement/workspace-runtime.policy";
 
 const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 export const MANAGED_DIRECTORY_SOURCE = "managed";

@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventService } from "./run-event.service";
-import { RunSeqStore } from "./seq/run-seq.store";
+import { RunEventSeqStore } from "./seq/run-event-seq.store";
 
 /**
  * Run event ledger / diagnostics boundary.
@@ -12,7 +12,7 @@ import { RunSeqStore } from "./seq/run-seq.store";
  * 原始 trace 文件写入。
  */
 @Module({
-  providers: [RunEventRepository, RunEventService, RunSeqStore],
+  providers: [RunEventRepository, RunEventService, RunEventSeqStore],
   exports: [RunEventService],
 })
 export class RunEventModule {}

@@ -12,7 +12,7 @@ import { ConversationModule } from "./conversation/conversation.module";
 import { ModelProviderModule } from "./model-provider/model-provider.module";
 import { SystemModule } from "./system/system.module";
 import { UserModule } from "./user/user.module";
-import { normalizePath, resolveApiBasePath } from "./common/path.util";
+import { normalizePath, resolveApiBasePath } from "./common/api-path";
 import { getApiContext, isServeFrontendEnabled } from "./config/config.service";
 
 const appContext = normalizePath(getApiContext());

@@ -9,7 +9,7 @@ import { RuntimeRepository } from "../runtime.repository";
 
 /**
  * Runtime 级判死:定时把 online 但心跳超时的 Runtime 行标记 offline。
- * 与 worker 级判死(WorkerLivenessWatchdog,fence owner)分层——Runtime 掉线
+ * 与 worker 级判死(WorkerLivenessSweeper,fence owner)分层——Runtime 掉线
  * 影响的是"这台机器还能不能接 launch";其上 worker 的判死仍走 worker 心跳。
  * 超时即判死,不做"确认死亡"。
  */

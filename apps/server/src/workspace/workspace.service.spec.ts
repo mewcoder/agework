@@ -16,7 +16,7 @@ import { WorkspaceService } from "./workspace.service";
 import type { WorkspaceCreateInput } from "./workspace.repository";
 import type { ConversationService } from "../conversation/conversation.service";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
-import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
+import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,

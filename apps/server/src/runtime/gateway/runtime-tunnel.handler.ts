@@ -21,7 +21,7 @@ import {
   type RpcResponse,
 } from "@agework/shared/protocol/rpc";
 import { getApiContext, ConfigService } from "../../config/config.service";
-import { resolveApiBasePath } from "../../common/path.util";
+import { resolveApiBasePath } from "../../common/api-path";
 import { RuntimeRepository } from "../runtime.repository";
 import { AGEWORK_VERSION } from "@agework/shared";
 

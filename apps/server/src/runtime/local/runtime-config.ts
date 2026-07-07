@@ -4,7 +4,7 @@ import type { RuntimeConfig } from "@agework/providers";
 import { ConfigService } from "../../config/config.service";
 import { DEFAULT_RUNTIME_IMAGE } from "../../config/registry/defaults";
 import { EnvKey } from "../../config/registry/env-key";
-import { resolveApiBasePath } from "../../common/path.util";
+import { resolveApiBasePath } from "../../common/api-path";
 
 /**
  * Managed local provider fork 的 agework-runtime 产物入口(纯 JS bundle,ESM,`.mjs`)。

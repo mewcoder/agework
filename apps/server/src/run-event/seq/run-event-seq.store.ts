@@ -10,7 +10,7 @@ import { RunEventRepository } from "../run-event.repository";
  * 把分配迁入 RunEventRepository/DB。
  */
 @Injectable()
-export class RunSeqStore {
+export class RunEventSeqStore {
   private readonly runSeqCounters = new Map<string, number>();
   private readonly runLocks = new Map<string, Promise<unknown>>();
 

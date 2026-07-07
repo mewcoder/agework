@@ -4,7 +4,7 @@ import { WorkspaceController } from "./workspace.controller";
 import { WorkspaceService } from "./workspace.service";
 import { WorkspaceRepository } from "./workspace.repository";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
-import { WorkspaceRuntimePolicy } from "./runtime/workspace-runtime.policy";
+import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { ConversationModule } from "../conversation/conversation.module";
 import { RuntimeModule } from "../runtime/runtime.module";
 

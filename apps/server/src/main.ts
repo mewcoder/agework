@@ -9,7 +9,7 @@ import { securityHeaders } from "./common/security-headers";
 import { requestIdMiddleware } from "./common/request-id";
 import { ResponseInterceptor } from "./common/interceptors/response.interceptor";
 import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
-import { resolveApiBasePath } from "./common/path.util";
+import { resolveApiBasePath } from "./common/api-path";
 import { ConfigService, getApiContext } from "./config/config.service";
 import { resolveNestLogLevels } from "./common/logging";
 
