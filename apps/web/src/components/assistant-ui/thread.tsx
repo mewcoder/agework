@@ -307,7 +307,7 @@ export function Thread() {
     // 短暂延迟让后端处理 reply（worker resolve + emitPendingAction(null) + run 变 running）。
     const timer = setTimeout(() => {
       void (async () => {
-        // 没刷新页面时，原始 /conversations/agent/run 的 SSE 连接仍然存活，worker resolve 后的
+        // 没刷新页面时，原始 /agent/run 的 SSE 连接仍然存活，worker resolve 后的
         // 续接事件会通过它正常到达——不需要、也不能再手动 resumeRun，否则会和正在
         // 进行的原始 run 同时各建一条助手消息，出现两个"正在处理"。
         if (!needsManualResumeReconnect(aui.thread().getState().isRunning)) {
@@ -363,7 +363,7 @@ export function Thread() {
             stream: async function* () {
               const res = await fetch(
                 apiUrl(
-                  `/api/v1/conversations/agent/resume?id=${selectedConversationId}`
+                  `/api/v1/agent/resume?id=${selectedConversationId}`
                 ),
                 {
                   headers: {

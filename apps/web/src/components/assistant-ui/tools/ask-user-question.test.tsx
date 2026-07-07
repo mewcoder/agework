@@ -113,7 +113,7 @@ describe("AskUserQuestionUI 权限提交", () => {
 
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/conversations/agent/reply",
+        "/api/v1/agent/reply",
         {
           id: "conv-1",
           answers: { "允许 Claude 使用 Read？": PERMISSION_ALLOW_LABEL },
@@ -129,7 +129,7 @@ describe("AskUserQuestionUI 权限提交", () => {
 
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/conversations/agent/reply",
+        "/api/v1/agent/reply",
         {
           id: "conv-1",
           answers: { "允许 Claude 使用 Read？": PERMISSION_DENY_LABEL },
@@ -247,7 +247,7 @@ describe("AskUserQuestionUI 始终允许按钮", () => {
 
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/conversations/agent/reply",
+        "/api/v1/agent/reply",
         {
           id: "conv-1",
           answers: { "允许 Claude 使用 Write？": PERMISSION_ALWAYS_ALLOW_LABEL },

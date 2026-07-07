@@ -65,10 +65,7 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
 
 const RAW_RESPONSE_ALLOWLIST = ["worker/owners/*", "worker/runs/*"];
 
-const RAW_RES_ROUTE_ALLOWLIST = [
-  "POST conversations/agent/run",
-  "GET conversations/agent/resume",
-];
+const RAW_RES_ROUTE_ALLOWLIST = ["POST agent/run", "GET agent/resume"];
 
 const PASSTHROUGH_RES_ROUTE_ALLOWLIST = [
   "POST auth/login",
@@ -244,13 +241,13 @@ describe("external API route convention", () => {
   });
 
   it("uses body ids instead of path ids for agent controls", () => {
-    expect(controllerPath(AgentController)).toBe("conversations");
-    expectRoute(AgentController, "create", "post", "create");
-    expectRoute(AgentController, "agentOptions", "get", "agent/options");
-    expectRoute(AgentController, "runAgent", "post", "agent/run");
-    expectRoute(AgentController, "resumeAgent", "get", "agent/resume");
-    expectRoute(AgentController, "replyAgent", "post", "agent/reply");
-    expectRoute(AgentController, "stopAgent", "post", "agent/stop");
+    expect(controllerPath(AgentController)).toBe("agent");
+    expectRoute(AgentController, "create", "post", "create-conversation");
+    expectRoute(AgentController, "agentOptions", "get", "options");
+    expectRoute(AgentController, "runAgent", "post", "run");
+    expectRoute(AgentController, "resumeAgent", "get", "resume");
+    expectRoute(AgentController, "replyAgent", "post", "reply");
+    expectRoute(AgentController, "stopAgent", "post", "stop");
   });
 
   it("keeps admin routes under the admin prefix", () => {

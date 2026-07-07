@@ -28,7 +28,7 @@ export const conversationsApi = {
   },
 
   create: async (body: CreateConversationRequest) => {
-    const conversation = await apiPost<ConversationResponse>('/api/v1/conversations/create', body);
+    const conversation = await apiPost<ConversationResponse>('/api/v1/agent/create-conversation', body);
     return conversation;
   },
 
@@ -59,13 +59,13 @@ export const conversationsApi = {
     apiPost('/api/v1/conversations/clear-archived'),
 
   stopRun: (conversationId: string) =>
-    apiPost('/api/v1/conversations/agent/stop', { id: conversationId }),
+    apiPost('/api/v1/agent/stop', { id: conversationId }),
 
   submitQuestionAnswer: (
     conversationId: string,
     answers: SubmitQuestionAnswerRequest['answers'],
   ) =>
-    apiPost('/api/v1/conversations/agent/reply', {
+    apiPost('/api/v1/agent/reply', {
       id: conversationId,
       answers,
     }),

@@ -49,7 +49,7 @@ class AgentRunForwardedPropsConstraint implements ValidatorConstraintInterface {
 }
 
 /**
- * POST /conversations/agent/run request body.
+ * POST /agent/run request body.
  *
  * `forwardedProps` intentionally stays a plain object: it carries adapter-specific
  * per-run settings, so global whitelist must not strip its extra keys.

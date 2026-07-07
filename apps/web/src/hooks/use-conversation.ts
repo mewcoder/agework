@@ -31,14 +31,6 @@ export function useConversationRunStatuses(conversationIds: string[]) {
   });
 }
 
-export function useCreateConversation() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (workspaceId: string) => conversationsApi.create({ workspaceId }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
-  });
-}
-
 export function useRenameConversation() {
   const qc = useQueryClient();
   return useMutation({

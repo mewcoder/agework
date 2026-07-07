@@ -67,7 +67,7 @@ describe('conversationsApi', () => {
 
       await conversationsApi.create(body);
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/conversations/create', body);
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/agent/create-conversation', body);
     });
   });
 
@@ -136,7 +136,7 @@ describe('conversationsApi', () => {
       await conversationsApi.stopRun('conv-1');
 
       expect(mockApiPost).toHaveBeenCalledWith(
-        '/api/v1/conversations/agent/stop',
+        '/api/v1/agent/stop',
         { id: 'conv-1' },
       );
     });
@@ -148,7 +148,7 @@ describe('conversationsApi', () => {
       await conversationsApi.submitQuestionAnswer('conv-1', answers);
 
       expect(mockApiPost).toHaveBeenCalledWith(
-        '/api/v1/conversations/agent/reply',
+        '/api/v1/agent/reply',
         { id: 'conv-1', answers },
       );
     });
