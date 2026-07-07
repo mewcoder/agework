@@ -2,8 +2,9 @@ import { Injectable } from "@nestjs/common";
 
 /**
  * 纯内存的 owner 心跳追踪:只认识"上次被看见的时间",不认识 poll/WS 等具体信号
- * 来源——当前唯一的 touch() 调用点是 WorkerManagerService.pollCommands(长轮询
- * 本身就是心跳),为将来 WS 场景留的接缝也是同一个 touch() 入口。
+ * 来源——touch() 调用点是 WorkerManagerService.pollCommands(长轮询本身就是心跳)
+ * 和 postEvent(上报事件也是活着的证据),为将来 WS 场景留的接缝也是同一个 touch()
+ * 入口。
  *
  * listStale 只看已经存在的条目,不主动假设"没见过 = 早就该判死"——一个 ownerId
  * 在从未被 touch() 过之前不会出现在 listStale 的结果里。这个不变式同时兜住两种

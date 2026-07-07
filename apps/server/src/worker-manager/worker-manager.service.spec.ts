@@ -44,7 +44,8 @@ function makeService() {
   const ownerRunStore = {
     registerRun: vi.fn(),
     unregisterRun: vi.fn(),
-    runIdsForOwner: vi.fn(),
+    listRunIdsByOwnerId: vi.fn(),
+    findOwnerIdByRunId: vi.fn(),
   };
   const service = new WorkerManagerService(
     endpointHandler as unknown as WorkerEndpointHandler,
@@ -109,6 +110,29 @@ describe("WorkerManagerService — facade routing", () => {
     expect(endpointHandler.postEvent).toHaveBeenCalledWith("run-1", {
       body: true,
     });
+  });
+
+  it("postEvent touches the liveness store for the run's owner (reporting also proves it's alive)", async () => {
+    const { service, endpointHandler, livenessStore, ownerRunStore } =
+      makeService();
+    endpointHandler.postEvent.mockResolvedValue({ ok: true });
+    ownerRunStore.findOwnerIdByRunId.mockReturnValue("owner-1");
+
+    await service.postEvent("run-1", { body: true });
+
+    expect(ownerRunStore.findOwnerIdByRunId).toHaveBeenCalledWith("run-1");
+    expect(livenessStore.touch).toHaveBeenCalledWith("owner-1");
+  });
+
+  it("postEvent skips the liveness touch when the run has no known owner", async () => {
+    const { service, endpointHandler, livenessStore, ownerRunStore } =
+      makeService();
+    endpointHandler.postEvent.mockResolvedValue({ ok: true });
+    ownerRunStore.findOwnerIdByRunId.mockReturnValue(undefined);
+
+    await service.postEvent("run-1", { body: true });
+
+    expect(livenessStore.touch).not.toHaveBeenCalled();
   });
 
   it("routes openSession to the command dispatcher with passthrough params", () => {
@@ -362,7 +386,7 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
     const ownerRunStore = {
       registerRun: vi.fn(),
       unregisterRun: vi.fn(),
-      runIdsForOwner: vi.fn(),
+      listRunIdsByOwnerId: vi.fn(),
     };
     const service = new WorkerManagerService(
       {} as never,

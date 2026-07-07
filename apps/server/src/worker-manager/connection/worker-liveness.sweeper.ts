@@ -85,7 +85,7 @@ export class WorkerLivenessSweeper
       return;
     }
 
-    const runIds = this.ownerRunStore.runIdsForOwner(ownerId);
+    const runIds = this.ownerRunStore.listRunIdsByOwnerId(ownerId);
     for (const runId of runIds) {
       this.events.emit(WORKER_LOST_EVENT, new WorkerLostEvent(runId, reason));
     }

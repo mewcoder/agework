@@ -33,7 +33,7 @@ function makeDeps(
   const ownerRunStore = {
     registerRun: vi.fn(),
     unregisterRun: vi.fn(),
-    runIdsForOwner: vi.fn().mockReturnValue([]),
+    listRunIdsByOwnerId: vi.fn().mockReturnValue([]),
   };
   return {
     livenessStore,
@@ -177,7 +177,7 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     deps.registry.findActiveByOwnerId.mockResolvedValue(
       activeRow({ ownerId: "owner-1" })
     );
-    deps.ownerRunStore.runIdsForOwner.mockReturnValue(["run-1"]);
+    deps.ownerRunStore.listRunIdsByOwnerId.mockReturnValue(["run-1"]);
 
     await triggerSweep(deps);
 
@@ -192,7 +192,10 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     deps.registry.findActiveByOwnerId.mockResolvedValue(
       activeRow({ ownerId: "owner-4", instanceId: "container-4" })
     );
-    deps.ownerRunStore.runIdsForOwner.mockReturnValue(["run-4a", "run-4b"]);
+    deps.ownerRunStore.listRunIdsByOwnerId.mockReturnValue([
+      "run-4a",
+      "run-4b",
+    ]);
 
     await triggerSweep(deps);
 

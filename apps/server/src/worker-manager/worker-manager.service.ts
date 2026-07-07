@@ -73,8 +73,15 @@ export class WorkerManagerService {
     return this.endpointHandler.getRunConfig(runId);
   }
 
-  /** 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。 */
+  /**
+   * 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。
+   * 事件上报本身也是"worker 活着"的证据，顺带 touch 一次该 owner 的心跳——否则一个
+   * 正在正常汇报进度的 worker，只要恰好没赶上 pollCommands 的节奏，也会被
+   * WorkerLivenessSweeper 误判成心跳超时并 fence 掉。
+   */
   async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
+    const ownerId = this.ownerRunStore.findOwnerIdByRunId(runId);
+    if (ownerId) this.livenessStore.touch(ownerId);
     return this.endpointHandler.postEvent(runId, body);
   }
 

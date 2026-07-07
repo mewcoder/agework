@@ -34,7 +34,11 @@ export class OwnerRunStore {
     }
   }
 
-  runIdsForOwner(ownerId: string): string[] {
+  listRunIdsByOwnerId(ownerId: string): string[] {
     return Array.from(this.ownerRunIds.get(ownerId) ?? []);
+  }
+
+  findOwnerIdByRunId(runId: string): string | undefined {
+    return this.runOwner.get(runId);
   }
 }
