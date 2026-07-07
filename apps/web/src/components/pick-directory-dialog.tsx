@@ -9,7 +9,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FieldError } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DirectoryPicker,
   basename as pathBasename,
@@ -20,6 +27,7 @@ import { useCreateWorkspace } from "@/hooks/use-workspace";
 import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
 import { runtimesApi } from "@/api/runtimes";
+import type { WorkspaceRuntimeType } from "@agework/shared/api";
 
 interface PickDirectoryDialogProps {
   open: boolean;
@@ -27,8 +35,21 @@ interface PickDirectoryDialogProps {
   onCreated?: (workspaceId: string) => void;
 }
 
+function runtimeTypeLabel(type: WorkspaceRuntimeType | null) {
+  switch (type) {
+    case "local":
+      return "本地";
+    case "docker":
+      return "Docker";
+    case "opensandbox":
+      return "OpenSandbox";
+    default:
+      return "未知";
+  }
+}
+
 /**
- * 「选择文件目录」弹窗——快速创建工作空间的捷径。
+ * 「选择本地文件夹」弹窗——快速创建工作空间的捷径。
  *
  * 内含 omnigent 风格的 DirectoryPicker 面板，
  * 选中目录后自动用目录名作为工作空间名称创建。
@@ -39,45 +60,62 @@ export function PickDirectoryDialog({
   onCreated,
 }: PickDirectoryDialogProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [runtimeOverrideId, setRuntimeOverrideId] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   const createWorkspace = useCreateWorkspace();
   const { data: runtimes = [] } = useRuntimes();
   const createDirMutation = useCreateRuntimeDirectory();
 
-  const localRuntimeId = useMemo(
-    () =>
-      runtimes.find((r) => r.source === "builtin" && r.runtimeType === "local")
-        ?.id,
+  // builtin runtime 都跑在 server 所在这台机器上,「选择本地文件夹」只在这些之间选,
+  // 不含已配对的远程机器(那台机器上的目录不属于"本地")。
+  const builtinRuntimes = useMemo(
+    () => runtimes.filter((r) => r.source === "builtin"),
     [runtimes]
   );
 
+  const defaultRuntimeId =
+    (builtinRuntimes.find((r) => r.runtimeType === "local") ??
+      builtinRuntimes[0])?.id;
+  const selectedRuntimeId = runtimeOverrideId ?? defaultRuntimeId;
+
+  const selectedRuntime = builtinRuntimes.find(
+    (r) => r.id === selectedRuntimeId
+  );
+
+  function handleRuntimeChange(runtimeId: string | null) {
+    if (!runtimeId) return;
+    setRuntimeOverrideId(runtimeId);
+    setSelectedPath(null);
+  }
+
   // 注入 DirectoryPicker 的目录列表函数
   const listDirectories = useMemo(() => {
-    if (!localRuntimeId) return undefined;
+    if (!selectedRuntimeId) return undefined;
     return async (dir: string | undefined): Promise<DirectoryListing> => {
       const res = await runtimesApi.listDirectory({
-        runtimeId: localRuntimeId,
+        runtimeId: selectedRuntimeId,
         path: dir,
       });
       return { path: res.path, list: res.list };
     };
-  }, [localRuntimeId]);
+  }, [selectedRuntimeId]);
 
   // 注入 DirectoryPicker 的新建目录函数
   const createDirectory = useMemo(() => {
-    if (!localRuntimeId) return undefined;
+    if (!selectedRuntimeId) return undefined;
     return async (path: string): Promise<string> => {
       const res = await createDirMutation.mutateAsync({
-        runtimeId: localRuntimeId,
+        runtimeId: selectedRuntimeId,
         path,
       });
       return res.path;
     };
-  }, [localRuntimeId, createDirMutation]);
+  }, [selectedRuntimeId, createDirMutation]);
 
   function reset() {
     setSelectedPath(null);
+    setRuntimeOverrideId(undefined);
     setError(null);
     createWorkspace.reset();
   }
@@ -92,14 +130,20 @@ export function PickDirectoryDialog({
   }
 
   async function handleConfirm() {
-    if (!selectedPath) return;
+    if (!selectedPath || !selectedRuntime?.runtimeType) return;
     setError(null);
 
     const rootPath = normalizeFilesystemPath(selectedPath);
     const name = pathBasename(rootPath) || rootPath;
+    const runtimeType = selectedRuntime.runtimeType as WorkspaceRuntimeType;
 
     createWorkspace.mutate(
-      { name, rootPath },
+      {
+        name,
+        rootPath,
+        runtimeType,
+        isolationScope: runtimeType !== "local" ? "workspace" : undefined,
+      },
       {
         onSuccess: (workspace) => {
           onOpenChange(false);
@@ -116,11 +160,32 @@ export function PickDirectoryDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-lg gap-3">
         <DialogHeader>
-          <DialogTitle>选择文件目录</DialogTitle>
+          <DialogTitle>选择本地文件夹</DialogTitle>
           <DialogDescription>
             浏览并选择一个目录作为工作空间，名称自动取目录名
           </DialogDescription>
         </DialogHeader>
+
+        {builtinRuntimes.length > 1 && (
+          <Field>
+            <FieldLabel htmlFor="pick-directory-runtime">运行环境</FieldLabel>
+            <Select value={selectedRuntimeId} onValueChange={handleRuntimeChange}>
+              <SelectTrigger id="pick-directory-runtime" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {builtinRuntimes.map((runtime) => (
+                  <SelectItem key={runtime.id} value={runtime.id}>
+                    {runtime.name}
+                    <span className="text-xs text-muted-foreground">
+                      {runtimeTypeLabel(runtime.runtimeType as WorkspaceRuntimeType | null)}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
 
         {listDirectories ? (
           <DirectoryPicker

@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Folder, FolderDot, FolderOpen, FolderPlus } from "lucide-react";
+import { Folder, FolderDot, FolderOpen, Plus } from "lucide-react";
 import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAgentChatContext } from "@/components/agent-chat-context";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -59,8 +59,8 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
     : null;
   const items: WorkspaceItem[] = [
     ...workspaceItems,
-    { value: PICK_DIRECTORY_VALUE, label: "选择文件目录" },
     { value: NEW_PROJECT_VALUE, label: "添加工作空间" },
+    { value: PICK_DIRECTORY_VALUE, label: "选择本地文件夹" },
   ];
 
   useEffect(() => {
@@ -141,6 +141,20 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
           <ComboboxEmpty>未找到项目</ComboboxEmpty>
           <ComboboxList>
             {(item: WorkspaceItem) => {
+              if (item.value === NEW_PROJECT_VALUE) {
+                return (
+                  <Fragment key={item.value}>
+                    <ComboboxSeparator />
+                    <ComboboxItem
+                      value={item}
+                      className="text-muted-foreground"
+                    >
+                      <Plus className="size-4" />
+                      {item.label}
+                    </ComboboxItem>
+                  </Fragment>
+                );
+              }
               if (item.value === PICK_DIRECTORY_VALUE) {
                 return (
                   <ComboboxItem
@@ -151,20 +165,6 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
                     <FolderOpen className="size-4" />
                     {item.label}
                   </ComboboxItem>
-                );
-              }
-              if (item.value === NEW_PROJECT_VALUE) {
-                return (
-                  <Fragment key={item.value}>
-                    <ComboboxSeparator />
-                    <ComboboxItem
-                      value={item}
-                      className="text-muted-foreground"
-                    >
-                      <FolderPlus className="size-4" />
-                      {item.label}
-                    </ComboboxItem>
-                  </Fragment>
                 );
               }
               return (

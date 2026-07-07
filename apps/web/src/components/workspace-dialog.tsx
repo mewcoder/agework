@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
-import { FolderOpenIcon } from "lucide-react";
 import { FormDialog } from "@/components/form-dialog";
 import { DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -16,6 +15,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { Workspace } from "@/hooks/use-workspace";
 import {
   useCreateWorkspace,
@@ -62,26 +68,6 @@ function defaultWorkspaceName(): string {
   return `工作空间${mm}${dd}`;
 }
 
-function detectPathHint(): string {
-  if (typeof navigator === "undefined") return "/Users/name/code/project";
-  return navigator.platform?.toLowerCase().startsWith("win")
-    ? "C:\\Users\\name\\code\\project"
-    : "/Users/name/code/project";
-}
-
-function hasNativeDirectoryPicker(): boolean {
-  if (typeof window === "undefined") return false;
-  const win = window as DirectoryPickerWindow;
-  return !!win.agework?.selectDirectory;
-}
-
-type DirectoryPickerWindow = Window & {
-  showDirectoryPicker?: () => Promise<{ name?: string }>;
-  agework?: {
-    selectDirectory?: () => Promise<string | undefined>;
-  };
-};
-
 const workspaceDialogFormSchema = z
   .object({
     name: z
@@ -103,7 +89,6 @@ const workspaceDialogFormSchema = z
       )
       .optional(),
     useGit: z.boolean(),
-    useCustomPath: z.boolean(),
     placementMode: z.enum(PLACEMENT_MODES),
     runtimeType: z.enum(RUNTIME_TYPES),
     isolationScope: z.enum(ISOLATION_SCOPES),
@@ -134,24 +119,6 @@ const workspaceDialogFormSchema = z
         code: "custom",
         path: ["gitUrl"],
         message: "请输入 Git 地址",
-      });
-    }
-    if (values.useCustomPath && !values.rootPath?.trim()) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["rootPath"],
-        message: "请选择目录",
-      });
-    }
-    if (
-      values.useCustomPath &&
-      values.runtimeType !== "local" &&
-      values.isolationScope !== "workspace"
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["isolationScope"],
-        message: "沙箱指定本地目录时必须选择工作空间独立",
       });
     }
   });
@@ -209,7 +176,6 @@ function WorkspaceDialogForm({
 }) {
   const isEdit = !!workspace;
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [directoryPickerError, setDirectoryPickerError] = useState<string | null>(null);
   const [customUpdatePending, setCustomUpdatePending] = useState(false);
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
@@ -222,7 +188,6 @@ function WorkspaceDialogForm({
       name: workspace?.name ?? defaultWorkspaceName(),
       description: workspace?.description ?? "",
       useGit: false,
-      useCustomPath: false,
       placementMode: "managed",
       runtimeType: "local",
       isolationScope: "user",
@@ -308,9 +273,6 @@ function WorkspaceDialogForm({
     }
 
     const gitUrl = values.useGit ? values.gitUrl?.trim() : undefined;
-    const rootPath = values.useCustomPath
-      ? normalizeFilesystemPath(values.rootPath ?? "")
-      : undefined;
     const runtimeType = values.runtimeType;
     const isolationScope =
       runtimeType !== "local" ? values.isolationScope : undefined;
@@ -319,7 +281,6 @@ function WorkspaceDialogForm({
         name,
         description: description || undefined,
         gitUrl,
-        rootPath,
         runtimeType,
         isolationScope,
       },
@@ -334,45 +295,10 @@ function WorkspaceDialogForm({
     );
   }
 
-  async function handleSelectDirectory(onChange: (path: string) => void) {
-    const pickerWindow = window as DirectoryPickerWindow;
-    const nativePath = await pickerWindow.agework?.selectDirectory?.();
-    if (nativePath) {
-      setDirectoryPickerError(null);
-      onChange(nativePath);
-      form.trigger("rootPath");
-      return;
-    }
-
-    if (pickerWindow.showDirectoryPicker) {
-      try {
-        const directory = await pickerWindow.showDirectoryPicker();
-        setDirectoryPickerError(
-          directory.name
-            ? `已选择「${directory.name}」，浏览器无法获取绝对路径，请手动输入`
-            : "浏览器无法获取绝对路径，请手动输入",
-        );
-      } catch (error) {
-        if ((error as DOMException).name !== "AbortError") {
-          setDirectoryPickerError("无法选择目录，请手动输入绝对路径");
-        }
-      }
-      return;
-    }
-
-    setDirectoryPickerError("当前环境不支持目录选择，请手动输入绝对路径");
-  }
-
-  function getRootPathDescription() {
-    if (directoryPickerError) return directoryPickerError;
-    return "选择或输入 API 服务器可访问的绝对路径";
-  }
-
   const isPending =
     createWorkspace.isPending || renameWorkspace.isPending || customUpdatePending;
   const nameValue = form.watch("name") ?? "";
   const useGit = form.watch("useGit");
-  const useCustomPath = form.watch("useCustomPath");
   const placementMode = form.watch("placementMode");
   const runtimeType = form.watch("runtimeType");
   const isolationScope = form.watch("isolationScope");
@@ -419,14 +345,6 @@ function WorkspaceDialogForm({
     runtimeType === "local" ||
     (capabilities &&
       allowedIsolationScopes.includes(isolationScope));
-  const canShowLocalDirectoryOption = canOfferLocalDirectory(
-    runtimeType,
-    allowedIsolationScopes
-  );
-  const isLocalDirectorySelectionValid = supportsLocalDirectory(
-    runtimeType,
-    isolationScope
-  );
 
   // 通过 formId 关联 FormDialog 的 submit 按钮；
   // disabled 条件通过在 form 外面设置 FormDialog 的 submitDisabled prop 传递。
@@ -454,27 +372,6 @@ function WorkspaceDialogForm({
                   placeholder="输入名称"
                   autoComplete="off"
                   autoFocus
-                />
-                {fieldState.invalid && (
-                  <FieldError errors={[fieldState.error]} />
-                )}
-              </Field>
-            )}
-          />
-
-          <Controller
-            name="description"
-            control={form.control}
-            render={({ field, fieldState }) => (
-              <Field data-invalid={fieldState.invalid}>
-                <FieldLabel htmlFor="workspace-description">描述</FieldLabel>
-                <Input
-                  {...field}
-                  id="workspace-description"
-                  aria-invalid={fieldState.invalid}
-                  maxLength={PROJECT_DESCRIPTION_MAX_LENGTH}
-                  placeholder="输入描述（可选）"
-                  autoComplete="off"
                 />
                 {fieldState.invalid && (
                   <FieldError errors={[fieldState.error]} />
@@ -533,34 +430,35 @@ function WorkspaceDialogForm({
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>
                     <FieldLabel>选择机器</FieldLabel>
-                    <ToggleGroup
-                      variant="segment"
-                      spacing={0}
-                      value={field.value ? [field.value] : []}
-                      onValueChange={(value) => {
-                        const v = value[0];
+                    <Select
+                      value={field.value}
+                      onValueChange={(v) => {
                         if (!v) return;
                         field.onChange(v);
                       }}
-                      className="grid w-full grid-cols-1"
                     >
-                      {registeredRuntimes.map((runtime) => (
-                        <ToggleGroupItem
-                          key={runtime.id}
-                          value={runtime.id}
-                          className="w-full justify-between"
-                        >
-                          <span>{runtime.name}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {runtimeTypeLabel(
-                              runtime.runtimeType as WorkspaceRuntimeType
-                            )}
-                            {" · "}
-                            {runtime.status === "online" ? "在线" : "离线"}
-                          </span>
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择机器" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {registeredRuntimes.map((runtime) => (
+                          <SelectItem
+                            key={runtime.id}
+                            value={runtime.id}
+                            className="w-full justify-between"
+                          >
+                            <span>{runtime.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {runtimeTypeLabel(
+                                runtime.runtimeType as WorkspaceRuntimeType
+                              )}
+                              {" · "}
+                              {runtime.status === "online" ? "在线" : "离线"}
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
                     )}
@@ -650,46 +548,32 @@ function WorkspaceDialogForm({
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
                       <FieldLabel>运行环境</FieldLabel>
-                      <ToggleGroup
-                        variant="segment"
-                        spacing={0}
-                        value={field.value ? [field.value] : []}
-                        onValueChange={(value) => {
-                          const v = value[0];
+                      <Select
+                        value={field.value}
+                        onValueChange={(v) => {
                           if (!v || !isWorkspaceRuntimeType(v)) return;
-                          const next = resolveRuntimeTypeChange({
+                          const nextScope = resolveIsolationScopeForRuntimeType({
                             runtimeType: v,
                             currentScope: form.getValues("isolationScope"),
-                            useCustomPath: form.getValues("useCustomPath"),
                             allowedScopes: allowedIsolationScopes,
                             defaultScope:
                               capabilities?.isolationScope ?? "user",
                           });
                           field.onChange(v);
-                          form.setValue(
-                            "isolationScope",
-                            next.isolationScope
-                          );
-                          if (!next.useCustomPath) {
-                            form.setValue("useCustomPath", false);
-                          }
+                          form.setValue("isolationScope", nextScope);
                         }}
-                        className={
-                          allowedRuntimeTypes.length === 3
-                            ? "grid w-full grid-cols-3"
-                            : "grid w-full grid-cols-2"
-                        }
                       >
-                        {allowedRuntimeTypes.map((type) => (
-                          <ToggleGroupItem
-                            key={type}
-                            value={type}
-                            className="w-full"
-                          >
-                            {runtimeTypeLabel(type)}
-                          </ToggleGroupItem>
-                        ))}
-                      </ToggleGroup>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {allowedRuntimeTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {runtimeTypeLabel(type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       {fieldState.invalid && (
                         <FieldError errors={[fieldState.error]} />
                       )}
@@ -713,12 +597,6 @@ function WorkspaceDialogForm({
                           const v = value[0];
                           if (!v || !isIsolationScope(v)) return;
                           field.onChange(v);
-                          if (
-                            v !== "workspace" &&
-                            form.getValues("useCustomPath")
-                          ) {
-                            form.setValue("useCustomPath", false);
-                          }
                         }}
                         className="grid w-full grid-cols-2"
                       >
@@ -744,99 +622,7 @@ function WorkspaceDialogForm({
               )}
 
               <Field>
-                {canShowLocalDirectoryOption && (
                 <div className="flex items-center gap-2">
-                  <Controller
-                    name="useCustomPath"
-                    control={form.control}
-                    render={({ field: cb }) => (
-                      <>
-                        <Checkbox
-                          id="use-custom-path"
-                          checked={cb.value}
-                          onCheckedChange={(checked) => {
-                            const nextChecked = !!checked;
-                            cb.onChange(nextChecked);
-                            if (nextChecked) {
-                              form.setValue("useGit", false);
-                              const nextScope =
-                                runtimeType !== "local" &&
-                                allowedIsolationScopes.includes("workspace")
-                                  ? "workspace"
-                                  : undefined;
-                              if (nextScope) {
-                                form.setValue("isolationScope", nextScope);
-                              }
-                            }
-                          }}
-                        />
-                        <label
-                          htmlFor="use-custom-path"
-                          className="text-sm cursor-pointer"
-                        >
-                          指定本地目录
-                        </label>
-                      </>
-                    )}
-                  />
-                </div>
-                )}
-
-                {useCustomPath && (
-                  <Controller
-                    name="rootPath"
-                    control={form.control}
-                    render={({ field, fieldState }) => {
-                      const showPicker = hasNativeDirectoryPicker();
-                      return (
-                      <Field data-invalid={fieldState.invalid} className="mt-2">
-                        <div className="flex items-center gap-2">
-                          <div className="relative flex-1">
-                            <Input
-                              {...field}
-                              id="workspace-root-path"
-                              aria-invalid={fieldState.invalid}
-                              placeholder={detectPathHint()}
-                              autoComplete="off"
-                              className={showPicker ? "pr-10" : ""}
-                              onChange={(event) => {
-                                setDirectoryPickerError(null);
-                                field.onChange(event);
-                              }}
-                              onBlur={() => {
-                                const normalized = normalizeFilesystemPath(field.value ?? "");
-                                if (normalized !== field.value) {
-                                  field.onChange(normalized);
-                                }
-                              }}
-                            />
-                            {showPicker && (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="absolute right-1 top-1/2 size-7 -translate-y-1/2 text-muted-foreground"
-                                aria-label="选择目录"
-                                onClick={() => handleSelectDirectory(field.onChange)}
-                              >
-                                <FolderOpenIcon className="size-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-                        <FieldDescription>
-                          {getRootPathDescription()}
-                        </FieldDescription>
-                        {fieldState.invalid && (
-                          <FieldError errors={[fieldState.error]} />
-                        )}
-                      </Field>
-                      );
-                    }}
-                  />
-                )}
-
-                <div className="mt-3 flex items-center gap-2">
                   <Controller
                     name="useGit"
                     control={form.control}
@@ -845,10 +631,7 @@ function WorkspaceDialogForm({
                         <Checkbox
                           id="use-git"
                           checked={cb.value}
-                          onCheckedChange={(checked) => {
-                            cb.onChange(!!checked);
-                            if (checked) form.setValue("useCustomPath", false);
-                          }}
+                          onCheckedChange={(checked) => cb.onChange(!!checked)}
                         />
                         <label
                           htmlFor="use-git"
@@ -913,10 +696,7 @@ function WorkspaceDialogForm({
             isPending ||
             (placementMode === "registered"
               ? !canSubmitRegistered
-              : !canSubmitRuntimeType ||
-                !canSubmitIsolationScope ||
-                (useCustomPath &&
-                  (!isLocalDirectorySelectionValid || !rootPathValue.trim())))
+              : !canSubmitRuntimeType || !canSubmitIsolationScope)
           }
         >
           {isPending
@@ -962,54 +742,21 @@ function getIsolationScopeDescription(scope: WorkspaceIsolationScope) {
     : "工作空间级沙箱会为该工作空间单独隔离环境，适合需要独立状态的项目。";
 }
 
-function supportsLocalDirectory(
-  runtimeType: WorkspaceRuntimeType,
-  isolationScope?: WorkspaceIsolationScope
-) {
-  return runtimeType === "local" || isolationScope === "workspace";
-}
-
-function canOfferLocalDirectory(
-  runtimeType: WorkspaceRuntimeType,
-  allowedScopes: WorkspaceIsolationScope[]
-) {
-  return runtimeType === "local" || allowedScopes.includes("workspace");
-}
-
-function resolveRuntimeTypeChange({
+function resolveIsolationScopeForRuntimeType({
   runtimeType,
   currentScope,
-  useCustomPath,
   allowedScopes,
   defaultScope,
 }: {
   runtimeType: WorkspaceRuntimeType;
   currentScope: WorkspaceIsolationScope;
-  useCustomPath: boolean;
   allowedScopes: WorkspaceIsolationScope[];
   defaultScope: WorkspaceIsolationScope;
-}): {
-  isolationScope: WorkspaceIsolationScope;
-  useCustomPath: boolean;
-} {
-  if (runtimeType === "local") {
-    return { isolationScope: "user", useCustomPath };
-  }
+}): WorkspaceIsolationScope {
+  if (runtimeType === "local") return "user";
 
   const fallbackScope = allowedScopes.includes(defaultScope)
     ? defaultScope
     : (allowedScopes[0] ?? "user");
-  const isolationScope = allowedScopes.includes(currentScope)
-    ? currentScope
-    : fallbackScope;
-
-  if (!useCustomPath) {
-    return { isolationScope, useCustomPath };
-  }
-
-  if (allowedScopes.includes("workspace")) {
-    return { isolationScope: "workspace", useCustomPath };
-  }
-
-  return { isolationScope, useCustomPath: false };
+  return allowedScopes.includes(currentScope) ? currentScope : fallbackScope;
 }

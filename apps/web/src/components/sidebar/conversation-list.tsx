@@ -110,9 +110,19 @@ export function ConversationList() {
     [conversations],
   );
 
+  // 选目录/建表单那一刻后端已经建好 workspace,但用户还没真正聊天;
+  // 侧边栏只展示已经有对话的工作空间。
+  const workspacesWithConversations = useMemo(
+    () =>
+      workspaces.filter(
+        (workspace) => (conversationsByWorkspace.get(workspace.id)?.length ?? 0) > 0,
+      ),
+    [workspaces, conversationsByWorkspace],
+  );
+
   // 工作空间视图下，按活跃时间排序时项目按其内最新 conversation 的 updatedAt 排序
   const sortedWorkspaces = useMemo(() => {
-    if (viewMode !== "grouped" || groupedSort !== "active") return workspaces;
+    if (viewMode !== "grouped" || groupedSort !== "active") return workspacesWithConversations;
     const workspaceLatestTime = new Map<string, number>();
     for (const conversation of regularConversations) {
       const t = Date.parse(conversation.updatedAt);
@@ -120,12 +130,12 @@ export function ConversationList() {
       const current = workspaceLatestTime.get(conversation.workspaceId) ?? 0;
       if (t > current) workspaceLatestTime.set(conversation.workspaceId, t);
     }
-    return [...workspaces].sort((a, b) => {
+    return [...workspacesWithConversations].sort((a, b) => {
       const aTime = workspaceLatestTime.get(a.id) ?? 0;
       const bTime = workspaceLatestTime.get(b.id) ?? 0;
       return bTime - aTime;
     });
-  }, [workspaces, regularConversations, groupedSort, viewMode]);
+  }, [workspacesWithConversations, regularConversations, groupedSort, viewMode]);
 
   const workspaceIds = useMemo(
     () => sortedWorkspaces.map((workspace) => workspace.id),
@@ -281,6 +291,11 @@ export function ConversationList() {
                   </SidebarMenuItem>
                 )}
               </SidebarMenu>
+            ) : sortedWorkspaces.length === 0 ? (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 py-16 text-muted-foreground">
+                <FolderOpen className="size-5 opacity-30" />
+                <p className="text-sm">{labels.sidebar.emptyWorkspace}</p>
+              </div>
             ) : (
               <SidebarMenu className="gap-1">
                 {sortedWorkspaces.map((workspace) => (
