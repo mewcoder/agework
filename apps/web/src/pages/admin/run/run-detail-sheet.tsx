@@ -27,6 +27,7 @@ import {
 import { formatDurationMs, formatInteger, formatRunDuration } from "./run-format";
 import { RunEventTimeline } from "./run-event-timeline";
 import { ToolCallProcessView } from "./run-tool-call";
+import { RunRawEventsView } from "./run-raw-events-view";
 
 export function RunDetailSheet({
   runId,
@@ -279,12 +280,16 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
         <TabsList variant="line" className="shrink-0">
           <TabsTrigger value="timeline">事件</TabsTrigger>
           <TabsTrigger value="tools">工具调用</TabsTrigger>
+          <TabsTrigger value="raw">原始事件</TabsTrigger>
         </TabsList>
         <TabsContent value="timeline" className="flex min-h-0 flex-1 flex-col">
           <RunEventTimeline key={run.id} runId={run.id} />
         </TabsContent>
         <TabsContent value="tools" className="flex min-h-0 flex-1 flex-col">
           <ToolCallProcessView key={run.id} runId={run.id} />
+        </TabsContent>
+        <TabsContent value="raw" className="flex min-h-0 flex-1 flex-col">
+          <RunRawEventsView key={run.id} runId={run.id} />
         </TabsContent>
       </Tabs>
     </div>

@@ -45,9 +45,13 @@ export class RawJsonlReader {
     const channels = channel?.length
       ? channel
       : (["sdk.raw", "agui.event"] as RawJsonlChannel[]);
+    // 多个 channel 各自是文件内写入顺序（等价按时间递增），但 flatMap 只是把整份
+    // channel 文件依次拼接，不是按时间合并；必须显式按 ts 排序才是一条真正的
+    // 跨 channel 时间线。
     const lines = channels
       .flatMap((c) => this.readChannel(conversationId, c))
-      .filter((line) => line.runId === runId);
+      .filter((line) => line.runId === runId)
+      .sort((a, b) => a.ts.localeCompare(b.ts));
 
     return {
       list: lines.slice(skip, skip + take),

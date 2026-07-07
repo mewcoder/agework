@@ -43,8 +43,13 @@
 
 - `RawJsonlReader`（`run-event/raw/raw-jsonl-reader.ts`，internal provider，不 export）：按 conversationId 定位 jsonl 文件，线性扫描 + 按 runId/channel 过滤 + 分页；单行 JSON 解析失败跳过不中断。
 - `RunEventService.listRawForAdmin()` 薄转发；`RunRepository.findConversationId()` 补的 runId→conversationId 查询；`RunService.listRawEventsForAdmin()` 编排（run 无 conversation 时返回空列表，不是错误）。
+- **修过一个真 bug（2026-07-07）**：多 channel 合并最初是 `channels.flatMap(c => readChannel(c))`——只是把每个 channel 整份文件依次拼接（先全部 sdk.raw，再全部 agui.event），不是按时间合并成一条真正的时间线。补了 `.sort((a, b) => a.ts.localeCompare(b.ts))`，并在 `raw-jsonl-reader.spec.ts` 加了一条显式的跨 channel 交叉排序用例（避免下次改动又退化成"看起来对、其实只是巧合"）。
 - 路由：`GET /api/v1/admin/runs/raw-events/list?runId=...`（`AdminRunController.listRawEvents` + `AdminRunRawEventsQueryDto`）。
-- **前端已接（2026-07-07）**：`run-event-timeline.tsx` 每条事件旁加"原始流水"按钮，打开新文件 `RunRawEventsDialog`；对话框拉取该 run 全部 raw/agui 行，本地按关键字子串过滤，预填该事件最具体的关联 id（toolCallId/messageId/commandId/permissionRequestId/targetId）。共享类型 `AdminRunRawEvent*` 加在 `packages/shared/src/api/runs.ts`。用 Playwright 手工跑通：造两行 sdk.raw + 一行 agui.event 的合成 jsonl，时间线正确显示"原始流水"按钮、对话框渲染 3 行、按关键字过滤能从 3 行收窄到 1 行，控制台无报错。
+- **前端已接（2026-07-07，最终定稿版：`run-detail-sheet.tsx` 第三个 tab）**：迭代了三版。
+  1. 最初每条事件旁一个"查看原始日志"按钮、点击预填该事件关联 id 自动 narrow——用户反馈体验差（某些 id 如 commandId 根本不出现在原始日志里，narrow 完是空的）。
+  2. 改成顶部工具栏一个入口 + `Dialog` 弹窗，全量展示 + 手动搜索框——用户反馈"还不如看完整时间线"，且弹窗内滚动实际不生效（`scrollHeight === clientHeight`，内容被 `overflow-hidden` 硬裁掉，翻不到后面的行）。
+  3. **最终版**：接受用户建议，去掉 `Dialog`，改成跟"事件"“工具调用”平级的**第三个 tab**"原始事件"（新文件 `run-raw-events-view.tsx`，导出 `RunRawEventsView`，删除 `run-raw-events-dialog.tsx`）。挪进 `Tabs`/`TabsContent` 后 `ScrollArea + flex-1 + min-h-0` 这套写法才真正生效（`ToolCallProcessView` 早就是这么写、且工作正常的证据在先——问题出在 `Dialog` 的 `max-height` 不是"确定高度"，flex 子元素撑不满，Tabs 容器则是确定高度上下文）。每行日志默认收起只显示 `source`/`name`/时间戳 + "展开"按钮，点了才渲染完整 JSON（避免一次性渲染 32 条大 JSON 拖垮布局）。数据不分 channel，`sdk.raw` 和 `agui.event` 按时间顺序混排，标签区分来源。
+  共享类型 `AdminRunRawEvent*` 加在 `packages/shared/src/api/runs.ts`。用 Playwright 反复验证：直接量 `scrollHeight`/`clientHeight` 和真实 `scrollTop` 变化确认滚动生效（而不是只看截图），控制台全程无报错。
 - **§0 原计划提到的"remote runtime 不覆盖"是过时假设**：核实后当前只有 `local/docker/opensandbox` 三种 runtimeType，没有 remote；docker/opensandbox 场景 trace 文件本就 bind mount 回宿主机，接口对现有全部 runtimeType 都可用，未加任何"不可用"分支。
 
 测试：`raw-jsonl-reader.spec.ts`（新增，临时目录真实文件 I/O）、`run.repository.spec.ts`、`run.service.spec.ts`、`admin-run.controller.spec.ts` 补了对应用例；前端无单测，靠上面的 Playwright 手工验证。

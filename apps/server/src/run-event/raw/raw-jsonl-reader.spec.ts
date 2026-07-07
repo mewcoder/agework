@@ -74,6 +74,41 @@ describe("RawJsonlReader", () => {
     ]);
   });
 
+  it("interleaves lines across channels by timestamp, not by channel order", () => {
+    writeFileSync(
+      join(logDir, "conversation-1.raw.jsonl"),
+      JSON.stringify({
+        ts: "2026-07-07T00:00:02.000Z",
+        source: "sdk.raw",
+        name: "later-raw",
+        runId: "run-1",
+      }) + "\n"
+    );
+    writeFileSync(
+      join(logDir, "conversation-1.agui.jsonl"),
+      JSON.stringify({
+        ts: "2026-07-07T00:00:01.000Z",
+        source: "agui.event",
+        name: "earlier-agui",
+        runId: "run-1",
+      }) + "\n"
+    );
+
+    const result = reader.listForAdmin({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      take: 10,
+      skip: 0,
+    });
+
+    // channels 参数默认顺序是 [sdk.raw, agui.event]，如果只是拼接文件而不按 ts
+    // 排序，"later-raw" 会排在 "earlier-agui" 前面——这里验证的正是排序生效。
+    expect(result.list.map((line) => line.name)).toEqual([
+      "earlier-agui",
+      "later-raw",
+    ]);
+  });
+
   it("filters by a single channel when requested", () => {
     writeFileSync(
       join(logDir, "conversation-1.raw.jsonl"),
