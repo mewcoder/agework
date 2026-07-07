@@ -93,6 +93,10 @@ export class WorkerEventService
 
   /** worker 心跳超时被 fence 掉时终结其名下 in-flight run,复用 notifyWorkerError 的终态判断。 */
   async notifyWorkerLost(runId: string, reason: string): Promise<void> {
+    this.recordRunEvent(
+      this.runEvents.workerStatusChanged({ runId, status: "lost", reason }),
+      `record worker lost for run ${runId}`
+    );
     await this.notifyWorkerError(runId, reason);
   }
 

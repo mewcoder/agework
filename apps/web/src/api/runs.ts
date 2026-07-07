@@ -7,6 +7,9 @@ import type {
   AdminRunEventResponse,
   AdminRunListQuery,
   AdminRunListResponse,
+  AdminRunRawEventListQuery,
+  AdminRunRawEventListResponse,
+  AdminRunRawEventResponse,
   AdminRunResponse,
 } from "@agework/shared/api";
 
@@ -16,6 +19,8 @@ export type { AdminRunDetailResponse as AdminRunDetail };
 export type { AdminRunEventResponse as AdminRunEvent };
 export type { AdminRunEventListQuery };
 export type { AdminRunListResponse };
+export type { AdminRunRawEventResponse as AdminRunRawEvent };
+export type { AdminRunRawEventListQuery };
 
 export const runsApi = {
   adminList: (params: AdminRunListQuery) => {
@@ -49,6 +54,16 @@ export const runsApi = {
     if (params.pageSize) query.set("pageSize", String(params.pageSize));
     return apiGet<AdminRunEventListResponse>(
       `/api/v1/admin/runs/events/list?${query.toString()}`
+    );
+  },
+  adminRawEvents: (params: AdminRunRawEventListQuery) => {
+    const query = new URLSearchParams();
+    query.set("runId", params.runId);
+    if (params.channel?.length) query.set("channel", params.channel.join(","));
+    if (params.pageNo) query.set("pageNo", String(params.pageNo));
+    if (params.pageSize) query.set("pageSize", String(params.pageSize));
+    return apiGet<AdminRunRawEventListResponse>(
+      `/api/v1/admin/runs/raw-events/list?${query.toString()}`
     );
   },
 };

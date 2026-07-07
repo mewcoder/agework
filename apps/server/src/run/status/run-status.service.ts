@@ -70,6 +70,13 @@ export class RunStatusService {
       this.finalization.beginFinalizing(runId);
     }
     this.recordStatusEvent(runId, payload);
+    if (effect.persistenceAction === "markRequiresAction") {
+      this.runEvents
+        .append(this.runEvents.permissionRequested({ runId }))
+        .catch(
+          swallow(this.logger, `record permission requested for run ${runId}`)
+        );
+    }
 
     try {
       const handle = this.liveRuns.get(runId);
@@ -205,6 +212,9 @@ export class RunStatusService {
   ): Promise<void> {
     await this.updateConversationTerminalStatus(runId, effect, handle);
     try {
+      if (effect.terminalMessageComplete !== true) {
+        this.recordMessageFailed(runId, effect, handle);
+      }
       handle.saveRun(
         effect.terminalMessageComplete === true,
         handle.stopReason ?? effect.terminalIncompleteReason
@@ -213,6 +223,27 @@ export class RunStatusService {
     } finally {
       this.liveRuns.unregister(runId);
     }
+  }
+
+  /** run 终态但当前 assistant 消息未完成(error/cancelled)时,记录 message.failed。 */
+  private recordMessageFailed(
+    runId: string,
+    effect: RunStatusEffect,
+    handle: LiveRunHandle
+  ): void {
+    const { messageId } = handle.aggregator.build(
+      false,
+      handle.stopReason ?? effect.terminalIncompleteReason
+    );
+    const event = this.runEvents.messageFailed({
+      runId,
+      messageId,
+      reason: effect.terminalIncompleteReason,
+    });
+    if (!event) return;
+    this.runEvents
+      .append(event)
+      .catch(swallow(this.logger, `record message failed for run ${runId}`));
   }
 
   private async updateConversationTerminalStatus(

@@ -164,7 +164,7 @@ describe("RunLauncher", () => {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
       persistConversationMessage: vi.fn().mockResolvedValue(undefined),
     };
-    mockRunEvents = new RunEventService({} as never, {} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockConfigService = {

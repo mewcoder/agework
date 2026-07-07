@@ -68,7 +68,7 @@ describe("compactData", () => {
 });
 
 describe("RunEventService events", () => {
-  const service = new RunEventService({} as never, {} as never);
+  const service = new RunEventService({} as never, {} as never, {} as never);
 
   it("builds run.created events", () => {
     expect(
@@ -102,6 +102,59 @@ describe("RunEventService events", () => {
     expect(service.toolStarted({ runId: "run-1" })).toBeUndefined();
     expect(service.toolCompleted({ runId: "run-1" })).toBeUndefined();
     expect(service.toolFailed({ runId: "run-1" })).toBeUndefined();
+    expect(service.messageFailed({ runId: "run-1" })).toBeUndefined();
+  });
+
+  it("builds message.failed events keyed by messageId", () => {
+    expect(
+      service.messageFailed({
+        runId: "run-1",
+        messageId: "msg-1",
+        reason: "error",
+      })
+    ).toMatchObject({
+      eventKey: "message:msg-1:failed",
+      type: "message.failed",
+      origin: "platform",
+      targetType: "message",
+      targetId: "msg-1",
+      chainId: "msg-1",
+      refs: { messageId: "msg-1" },
+      data: { reason: "error" },
+    });
+  });
+
+  it("builds permission.requested and permission.resolved events chained by runId", () => {
+    expect(service.permissionRequested({ runId: "run-1" })).toMatchObject({
+      type: "permission.requested",
+      origin: "worker",
+      targetType: "permission_request",
+      targetId: "run-1",
+      chainId: "run-1",
+    });
+    expect(service.permissionResolved({ runId: "run-1" })).toMatchObject({
+      type: "permission.resolved",
+      origin: "platform",
+      targetType: "permission_request",
+      targetId: "run-1",
+      chainId: "run-1",
+    });
+  });
+
+  it("builds worker.status_changed events", () => {
+    expect(
+      service.workerStatusChanged({
+        runId: "run-1",
+        status: "lost",
+        reason: "worker heartbeat timeout",
+      })
+    ).toMatchObject({
+      type: "worker.status_changed",
+      origin: "platform",
+      targetType: "worker",
+      chainId: "run-1",
+      data: { status: "lost", reason: "worker heartbeat timeout" },
+    });
   });
 
   it("builds command and tool events", () => {
@@ -131,7 +184,7 @@ describe("RunEventService events", () => {
 });
 
 describe("RunEventService normalizers", () => {
-  const service = new RunEventService({} as never, {} as never);
+  const service = new RunEventService({} as never, {} as never, {} as never);
 
   it("normalizes run status payloads", () => {
     expect(
@@ -268,7 +321,11 @@ describe("RunEventService append", () => {
       ),
     };
     const seqStore = new RunEventSeqStore(repository as never);
-    const service = new RunEventService(repository as never, seqStore);
+    const service = new RunEventService(
+      repository as never,
+      seqStore,
+      {} as never
+    );
 
     const records = await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
@@ -299,7 +356,11 @@ describe("RunEventService append", () => {
       }),
     };
     const seqStore = new RunEventSeqStore(repository as never);
-    const service = new RunEventService(repository as never, seqStore);
+    const service = new RunEventService(
+      repository as never,
+      seqStore,
+      {} as never
+    );
 
     const first = await service.append(makeEvent({ eventKey: "event-key-1" }));
     const duplicate = await service.append(
@@ -320,7 +381,11 @@ describe("RunEventService append", () => {
       ),
     };
     const seqStore = new RunEventSeqStore(repository as never);
-    const service = new RunEventService(repository as never, seqStore);
+    const service = new RunEventService(
+      repository as never,
+      seqStore,
+      {} as never
+    );
 
     const beforeForget = await service.append(makeEvent());
     service.forgetRun("run-1");

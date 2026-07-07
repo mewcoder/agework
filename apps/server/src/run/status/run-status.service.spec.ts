@@ -40,7 +40,9 @@ function makeHandle(overrides: Partial<LiveRunHandle> = {}): LiveRunHandle {
       conversationId: "conversation-1",
     },
     stream: new RunStream(makeRes()),
-    aggregator: { build: vi.fn() } as never,
+    aggregator: {
+      build: vi.fn().mockReturnValue({ messageId: undefined }),
+    } as never,
     conversationId: "conversation-1",
     runId: "run-1",
     workspaceId: "ws-1",
@@ -83,6 +85,15 @@ function makeSubject(input?: {
       type: "run.status_changed",
       data: eventInput,
     })),
+    permissionRequested: vi.fn((eventInput: Record<string, unknown>) => ({
+      runId: eventInput.runId,
+      type: "permission.requested",
+    })),
+    messageFailed: vi.fn((eventInput: { messageId?: string }) =>
+      eventInput.messageId
+        ? { runId: "run-1", type: "message.failed" }
+        : undefined
+    ),
     forgetRun: vi.fn(),
   };
   return {
@@ -125,15 +136,36 @@ describe("RunStatusService", () => {
     );
   });
 
+  it("records permission.requested when entering requires_action", async () => {
+    const { handler, registry, runEvents } = makeSubject();
+    const handle = makeHandle();
+    registry.register("run-1", handle);
+
+    await handler.apply({
+      runId: "run-1",
+      payload: { status: "requires_action", pendingAction: "question" },
+      effect: runStatusEffect("requires_action"),
+    });
+
+    expect(runEvents.permissionRequested).toHaveBeenCalledWith({
+      runId: "run-1",
+    });
+  });
+
   it("applies error terminal effects and closes the SSE response", async () => {
     const registry = new LiveRunRegistry(makeConfig());
     const unregister = vi.spyOn(registry, "unregister");
-    const { handler, runRepository, runConversation } = makeSubject({
+    const { handler, runRepository, runConversation, runEvents } = makeSubject({
       activeRun: { id: "run-1" },
       registry,
     });
     const res = makeRes();
-    const handle = makeHandle({ stream: new RunStream(res) });
+    const handle = makeHandle({
+      stream: new RunStream(res),
+      aggregator: {
+        build: vi.fn().mockReturnValue({ messageId: "msg-1" }),
+      } as never,
+    });
     registry.register("run-1", handle);
 
     await handler.apply({
@@ -153,6 +185,11 @@ describe("RunStatusService", () => {
     );
     expect(res.end).toHaveBeenCalled();
     expect(unregister).toHaveBeenCalledWith("run-1");
+    expect(runEvents.messageFailed).toHaveBeenCalledWith({
+      runId: "run-1",
+      messageId: "msg-1",
+      reason: "error",
+    });
   });
 
   it("does not overwrite conversation status when a newer run is active", async () => {

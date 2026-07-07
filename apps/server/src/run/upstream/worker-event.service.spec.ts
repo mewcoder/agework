@@ -60,7 +60,7 @@ describe("WorkerEventService", () => {
       persistConversationMessage: vi.fn().mockResolvedValue(undefined),
       activateConversation: vi.fn().mockResolvedValue(true),
     };
-    mockRunEvents = new RunEventService({} as never, {} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockExecutor = {
@@ -183,6 +183,15 @@ describe("WorkerEventService", () => {
     expect(notifyWorkerError).toHaveBeenCalledWith(
       "run-1",
       "worker heartbeat timeout"
+    );
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "worker.status_changed",
+        data: expect.objectContaining({
+          status: "lost",
+          reason: "worker heartbeat timeout",
+        }),
+      })
     );
   });
 

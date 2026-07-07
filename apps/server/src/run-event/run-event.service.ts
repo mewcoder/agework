@@ -13,6 +13,7 @@ import type {
 import { errorLogFields, safeLogJson } from "../common/logging";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventSeqStore } from "./seq/run-event-seq.store";
+import { RawJsonlReader } from "./raw/raw-jsonl-reader";
 
 type RunEventBase = {
   runId: string;
@@ -35,12 +36,18 @@ export class RunEventService {
 
   constructor(
     private readonly repository: RunEventRepository,
-    private readonly seqStore: RunEventSeqStore
+    private readonly seqStore: RunEventSeqStore,
+    private readonly rawJsonlReader: RawJsonlReader
   ) {}
 
   /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
   listForAdmin(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
     return this.repository.listAdminEvents(params);
+  }
+
+  /** 管理端：按 run 查询本地 raw/agui JSONL 流水（读路径，委托 RawJsonlReader）。 */
+  listRawForAdmin(params: Parameters<RawJsonlReader["listForAdmin"]>[0]) {
+    return this.rawJsonlReader.listForAdmin(params);
   }
 
   /**
@@ -320,6 +327,70 @@ export class RunEventService {
       targetId: input.messageId,
       chainId: input.messageId,
       refs: { messageId: input.messageId },
+    };
+  }
+
+  /** 构建 message.failed 事件：assistant 消息未完成 run 即终止(error/cancelled)；缺少 messageId 时不产生事件。 */
+  messageFailed(input: {
+    runId: string;
+    messageId?: string;
+    reason?: string;
+  }): RecordRunEventInput | undefined {
+    if (!input.messageId) return undefined;
+    return {
+      runId: input.runId,
+      eventKey: `message:${input.messageId}:failed`,
+      type: "message.failed",
+      origin: "platform",
+      targetType: "message",
+      targetId: input.messageId,
+      chainId: input.messageId,
+      refs: { messageId: input.messageId },
+      summary: input.reason,
+      data: compactData({ reason: input.reason }),
+    };
+  }
+
+  /** 构建 permission.requested 事件：run 进入 requires_action,等待用户审批/回答。 */
+  permissionRequested(input: { runId: string }): RecordRunEventInput {
+    return {
+      runId: input.runId,
+      type: "permission.requested",
+      origin: "worker",
+      targetType: "permission_request",
+      targetId: input.runId,
+      chainId: input.runId,
+      summary: "Waiting for user response",
+    };
+  }
+
+  /** 构建 permission.resolved 事件：用户提交审批/回答,平台已接收。 */
+  permissionResolved(input: { runId: string }): RecordRunEventInput {
+    return {
+      runId: input.runId,
+      type: "permission.resolved",
+      origin: "platform",
+      targetType: "permission_request",
+      targetId: input.runId,
+      chainId: input.runId,
+      summary: "User responded",
+    };
+  }
+
+  /** 构建 worker.status_changed 事件：记录 worker 侧状态变化(如心跳超时被 fence)。 */
+  workerStatusChanged(input: {
+    runId: string;
+    status: string;
+    reason?: string;
+  }): RecordRunEventInput {
+    return {
+      runId: input.runId,
+      type: "worker.status_changed",
+      origin: "platform",
+      targetType: "worker",
+      chainId: input.runId,
+      summary: input.reason,
+      data: compactData({ status: input.status, reason: input.reason }),
     };
   }
 

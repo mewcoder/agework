@@ -115,6 +115,27 @@ export type AdminRunEventListQuery = {
 export type AdminRunEventListResponse =
   PaginatedListResponse<AdminRunEventResponse>;
 
+/** worker 侧 TraceLogWriter 写入的本地 raw/agui JSONL 流水，只读诊断用。 */
+export type AdminRunRawEventChannel = "sdk.raw" | "agui.event";
+
+export type AdminRunRawEventResponse = {
+  ts: string;
+  source: string;
+  name: string;
+  runId?: string;
+  [key: string]: unknown;
+};
+
+export type AdminRunRawEventListQuery = {
+  runId: string;
+  channel?: AdminRunRawEventChannel[];
+  pageNo?: number;
+  pageSize?: number;
+};
+
+export type AdminRunRawEventListResponse =
+  PaginatedListResponse<AdminRunRawEventResponse>;
+
 export type WorkerInstanceIdRequest = { id: string };
 
 export type WorkerInstanceStatus =

@@ -252,6 +252,28 @@ describe("RunRepository", () => {
     expect(run?.id).toBe("run-1");
   });
 
+  it("finds the conversationId for a run", async () => {
+    const findUnique = vi
+      .fn()
+      .mockResolvedValue({ conversationId: "conversation-1" });
+    const service = new RunRepository({ run: { findUnique } } as never);
+
+    const conversationId = await service.findConversationId("run-1");
+
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      select: { conversationId: true },
+    });
+    expect(conversationId).toBe("conversation-1");
+  });
+
+  it("returns null when the run does not exist", async () => {
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const service = new RunRepository({ run: { findUnique } } as never);
+
+    expect(await service.findConversationId("missing")).toBeNull();
+  });
+
   it("lists active run conversation ids for a workspace (deduped)", async () => {
     const findMany = vi
       .fn()

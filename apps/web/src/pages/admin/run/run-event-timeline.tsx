@@ -27,6 +27,7 @@ import {
   eventSeverityVariant,
   type EventSeverity,
 } from "./run-event";
+import { RunRawEventsDialog } from "./run-raw-events-dialog";
 
 const EVENT_ORIGIN_OPTIONS = [
   { value: "platform", label: "platform" },
@@ -44,6 +45,7 @@ export function RunEventTimeline({ runId }: { runId: string }) {
   const [eventTypes, setEventTypes] = useState<string[]>([]);
   const [eventTypeMenuOpen, setEventTypeMenuOpen] = useState(false);
   const [draftEventTypes, setDraftEventTypes] = useState<string[]>([]);
+  const [rawEventsFilter, setRawEventsFilter] = useState<string | null>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading, isError } = useQuery({
@@ -235,7 +237,10 @@ export function RunEventTimeline({ runId }: { runId: string }) {
                 ref={virtualizer.measureElement}
                 data-index={virtualItem.index}
               >
-                <RunEventRow event={filteredEvents[virtualItem.index]!} />
+                <RunEventRow
+                  event={filteredEvents[virtualItem.index]!}
+                  onViewRaw={setRawEventsFilter}
+                />
               </li>
             ))}
           </ol>
@@ -247,11 +252,26 @@ export function RunEventTimeline({ runId }: { runId: string }) {
           ? `共 ${allEvents.length} 条`
           : `筛选出 ${filteredEvents.length} / 共 ${allEvents.length} 条`}
       </div>
+
+      <RunRawEventsDialog
+        runId={runId}
+        open={rawEventsFilter !== null}
+        initialFilter={rawEventsFilter ?? undefined}
+        onOpenChange={(open) => {
+          if (!open) setRawEventsFilter(null);
+        }}
+      />
     </div>
   );
 }
 
-function RunEventRow({ event }: { event: AdminRunEvent }) {
+function RunEventRow({
+  event,
+  onViewRaw,
+}: {
+  event: AdminRunEvent;
+  onViewRaw: (filter: string) => void;
+}) {
   const [showDetails, setShowDetails] = useState(false);
   const hasData = event.data !== null && event.data !== undefined;
   const hasRefs = event.refs !== null && event.refs !== undefined;
@@ -259,6 +279,14 @@ function RunEventRow({ event }: { event: AdminRunEvent }) {
   const severity: EventSeverity = eventSeverity(event);
   const isError = severity === "error";
   const isWarn = severity === "warn";
+  // 优先用最具体的关联 id 作为原始流水的过滤关键字；都没有就退到 targetId。
+  const rawFilterKey =
+    event.refs?.toolCallId ??
+    event.refs?.messageId ??
+    event.refs?.commandId ??
+    event.refs?.permissionRequestId ??
+    event.targetId ??
+    "";
 
   return (
     <div
@@ -304,17 +332,28 @@ function RunEventRow({ event }: { event: AdminRunEvent }) {
                 {event.targetType}:{event.targetId}
               </Badge>
             )}
-            {hasDetails && (
+            <div className="ml-auto flex items-center gap-1">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="ml-auto h-6 px-2"
-                onClick={() => setShowDetails((prev) => !prev)}
+                className="h-6 px-2"
+                onClick={() => onViewRaw(rawFilterKey)}
               >
-                {showDetails ? "收起" : "展开"}
+                原始流水
               </Button>
-            )}
+              {hasDetails && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2"
+                  onClick={() => setShowDetails((prev) => !prev)}
+                >
+                  {showDetails ? "收起" : "展开"}
+                </Button>
+              )}
+            </div>
           </div>
           {/* 第二行：时间 + summary 预览。 */}
           <div className="mt-1 flex h-5 min-w-0 items-center gap-2">

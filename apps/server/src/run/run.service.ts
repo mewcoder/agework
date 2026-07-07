@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
+import { swallow } from "../common/swallow";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunDriver } from "./driver/run-driver";
@@ -67,6 +68,25 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /**
+   * 管理端：按 run 查询本地 raw/agui JSONL 流水。run 没有对应 conversation 时
+   * 返回空列表(不是错误,只是从未 trace 过或已被清理)。
+   */
+  async listRawEventsForAdmin(params: {
+    runId: string;
+    channel?: Parameters<RunEventService["listRawForAdmin"]>[0]["channel"];
+    take: number;
+    skip: number;
+  }) {
+    const conversationId = await this.runRepository.findConversationId(
+      params.runId
+    );
+    if (!conversationId) {
+      return { list: [], total: 0, pageNo: 1, pageSize: params.take };
+    }
+    return this.runEvents.listRawForAdmin({ ...params, conversationId });
+  }
+
+  /**
    * workspace 删除级联：停止该 workspace 下所有活跃 run（best-effort，逐个吞错）。
    * 由 RunWorkspaceListener 监听 WORKSPACE_DELETED 触发。
    */
@@ -118,6 +138,12 @@ export class RunService implements OnApplicationBootstrap {
       conversationId,
       answers: answers ?? {},
     });
+    const runId = handle.runtimeHandle.runId;
+    this.runEvents
+      .append(this.runEvents.permissionResolved({ runId }))
+      .catch(
+        swallow(this.logger, `record permission resolved for run ${runId}`)
+      );
   }
 
   /**

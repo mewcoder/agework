@@ -290,11 +290,12 @@ export class ConfigService implements OnModuleInit {
 
   /**
    * agent event trace 开关与单文件上限：仅控制 raw/agui 大 payload 是否落 JSONL 文件，
-   * 不影响 RunEvent 索引记录。enabled 接受 1/true/yes/on（大小写不敏感）。
+   * 不影响 RunEvent 索引记录。默认开启（排查问题需要事后可查），单文件大小由
+   * maxFileMb 兜底；显式设为 0/false/no/off 才关闭。
    */
   getAgentEventTraceConfig(): { enabled: boolean; maxFileMb: number } {
     const raw = this.getEnv(EnvKey.AGENT_EVENT_TRACE_ENABLED)?.toLowerCase();
-    const enabled = raw ? ["1", "true", "yes", "on"].includes(raw) : false;
+    const enabled = raw ? !["0", "false", "no", "off"].includes(raw) : true;
     const parsed = Number(this.getEnv(EnvKey.AGENT_EVENT_TRACE_MAX_FILE_MB));
     const maxFileMb =
       Number.isFinite(parsed) && parsed > 0

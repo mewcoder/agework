@@ -3,6 +3,7 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RunService } from "../run.service";
 import { pageWindow } from "../../common/dto/pagination-query.dto";
 import { AdminRunEventsQueryDto } from "./admin-run-events-query.dto";
+import { AdminRunRawEventsQueryDto } from "./admin-run-raw-events-query.dto";
 import { AdminRunListQueryDto } from "./admin-run-list-query.dto";
 import { RunIdDto } from "./run-id.dto";
 
@@ -41,6 +42,20 @@ export class AdminRunController {
       refValue: query.refValue,
       fromRunSeq: query.fromRunSeq,
       toRunSeq: query.toRunSeq,
+      take,
+      skip,
+    });
+  }
+
+  @Get("raw-events/list")
+  listRawEvents(@Query() query: AdminRunRawEventsQueryDto) {
+    const { take, skip } = pageWindow(query, {
+      defaultPageSize: 100,
+      maxPageSize: 5000,
+    });
+    return this.runService.listRawEventsForAdmin({
+      runId: query.runId,
+      channel: query.channel,
       take,
       skip,
     });

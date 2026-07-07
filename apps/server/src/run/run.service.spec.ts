@@ -25,6 +25,7 @@ describe("RunService", () => {
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
       markCancelling: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
+      findConversationId: vi.fn().mockResolvedValue(null),
     };
     mockLiveRunRegistry = {
       get: vi.fn().mockReturnValue(undefined),
@@ -33,7 +34,7 @@ describe("RunService", () => {
       sendCommand: vi.fn(),
       cancel: vi.fn(),
     };
-    mockRunEvents = new RunEventService({} as never, {} as never);
+    mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     mockRunStatusService = {
       markCancelRequested: vi.fn().mockResolvedValue(undefined),
@@ -131,6 +132,53 @@ describe("RunService", () => {
           answers: { decision: "yes" },
         })
       );
+      expect(mockRunEvents.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          runId: "run-1",
+          type: "permission.resolved",
+        })
+      );
+    });
+  });
+
+  describe("listRawEventsForAdmin()", () => {
+    it("returns an empty page when the run has no conversation", async () => {
+      mockRunRepository.findConversationId = vi.fn().mockResolvedValue(null);
+
+      const result = await service.listRawEventsForAdmin({
+        runId: "run-1",
+        take: 10,
+        skip: 0,
+      });
+
+      expect(result).toEqual({ list: [], total: 0, pageNo: 1, pageSize: 10 });
+    });
+
+    it("resolves conversationId then delegates to RunEventService", async () => {
+      mockRunRepository.findConversationId = vi
+        .fn()
+        .mockResolvedValue("conversation-1");
+      const listRawForAdmin = vi
+        .spyOn(mockRunEvents, "listRawForAdmin")
+        .mockReturnValue({ list: [], total: 0, pageNo: 1, pageSize: 10 });
+
+      await service.listRawEventsForAdmin({
+        runId: "run-1",
+        channel: ["sdk.raw"],
+        take: 10,
+        skip: 0,
+      });
+
+      expect(mockRunRepository.findConversationId).toHaveBeenCalledWith(
+        "run-1"
+      );
+      expect(listRawForAdmin).toHaveBeenCalledWith({
+        runId: "run-1",
+        channel: ["sdk.raw"],
+        take: 10,
+        skip: 0,
+        conversationId: "conversation-1",
+      });
     });
   });
 

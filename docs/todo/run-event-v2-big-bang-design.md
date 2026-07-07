@@ -6,6 +6,62 @@
 
 ---
 
+## 0. 落地进度与剩余计划（2026-07-07 盘点，交接看这里）
+
+设计主体已在 6-7 月的重构中落地，本节是对照代码的销账表 + 剩余工作计划。下文 §1-§19 是原始设计，**与本节冲突时以本节为准**（差异见 0.3）。
+
+### 0.1 已落地（不再重复做）
+
+| 设计章节 | 现状 |
+| --- | --- |
+| §5 Prisma schema v2 | 已落地，`apps/server/prisma/schema.prisma` `RunEvent` 与设计逐字段一致（runSeq/eventKey/type/origin/target/chain/refs + 全部索引） |
+| §6 TypeScript 类型 | 已落地，`packages/shared/src/protocol`（`RecordRunEventInput`/`RunEventRefs`/`RunEventRecord` 等） |
+| §10.2 runSeq 分配 | 已落地，`run-event/seq/run-event-seq.store.ts` per-run 串行 + 内存计数器 + DB max 回退 |
+| §5.3 eventKey 幂等 | 已落地，`run-event.repository.ts` `insertOrGetByEventKey`（P2002 幂等返回） |
+| §11 Processor 拆分 | 已落地：`WorkerEventService`（seq 闸门+分发）、`RunStatusService`、`WorkerAgUiEventHandler`、`WorkerSeqStore`。命名与设计不同（无 `RunEventRecorder`/`StateUpdater` 后缀），职责边界一致，不再 rename |
+| §8 事件 type（大部分） | 已落地：run.created / run.status_changed / runtime.status_changed / message.accepted/started/completed / tool.started/completed/failed / command.sent/handled/failed/result / system.issue（builder 全在 `run-event.service.ts`） |
+| §9 Raw JSONL 写入 | **已存在**（worker 侧）：`packages/worker/src/logging/trace.ts` `TraceLogWriter` 写 sdk.raw 全量 + AG-UI 全量 JSONL，带 envelope/脱敏/单文件上限；路径 `{conversationId}.raw.jsonl`/`{conversationId}.agui.jsonl`，落在 `runtimeLogDir`（sandbox 场景 bind mount 到宿主机，`docker-runtime.provider.ts`；local 场景本就是宿主机目录），容器销毁文件仍在 |
+| §15.1 Admin RunEvent list | 已落地，`run-event.repository.ts` `listAdminEvents`（type/typePrefix/origin/target/chain/refs/runSeq range 过滤） |
+| §16 时间线 UI（基础） | 已落地，`apps/web/src/pages/admin/run/run-event-timeline.tsx` |
+
+### 0.2 剩余工作
+
+**决策项：trace 默认开关 — 已定案，2026-07-07 落地。** `getAgentEventTraceConfig()` 默认改为开启，靠 `maxFileMb` 上限兜底磁盘；env 设为 `false`/`0`/`no`/`off` 才关闭。
+
+**Phase A：补审计事件 — 已完成，2026-07-07。**
+
+| 事件 | emit 点 | 备注 |
+| --- | --- | --- |
+| `permission.requested` | `run-status.service.ts apply()`，`effect.persistenceAction === "markRequiresAction"` 时 | 无独立 `permissionRequestId`（域内本无该概念）；用 `chainId=runId` 串联，符合"单 run 同一时刻只有一个 pending action"的现状不变量 |
+| `permission.resolved` | `RunService.reply()`，下发 `approval_resolved` 命令后 | 未记录具体 answers 内容（避免把用户自由文本答案写进审计 data） |
+| `message.failed` | `run-status.service.ts applyTerminalEffects()`，`effect.terminalMessageComplete !== true` 且 `handle.aggregator.build().messageId` 有值时 | 用真实存在的 in-flight messageId 信号，没有就不产生事件（不是每次 error/cancelled 都有未完成消息） |
+| `worker.status_changed` | `WorkerEventService.notifyWorkerLost()` | 只做心跳超时 fence 这一个信号；"worker ready" 与 runtime.status_changed(ready) 重复，未重复记录 |
+
+落地文件：`run-event.service.ts`（4 个新 builder）、`run-status.service.ts`、`run.service.ts`、`worker-event.service.ts`、`config.service.ts`（trace 默认开）。测试：`run-event.service.spec.ts`、`run-status.service.spec.ts`、`run.service.spec.ts`、`worker-event.service.spec.ts` 均补了对应用例。
+
+**Phase B：raw 数据可查 — 已完成，2026-07-07。**
+
+- `RawJsonlReader`（`run-event/raw/raw-jsonl-reader.ts`，internal provider，不 export）：按 conversationId 定位 jsonl 文件，线性扫描 + 按 runId/channel 过滤 + 分页；单行 JSON 解析失败跳过不中断。
+- `RunEventService.listRawForAdmin()` 薄转发；`RunRepository.findConversationId()` 补的 runId→conversationId 查询；`RunService.listRawEventsForAdmin()` 编排（run 无 conversation 时返回空列表，不是错误）。
+- 路由：`GET /api/v1/admin/runs/raw-events/list?runId=...`（`AdminRunController.listRawEvents` + `AdminRunRawEventsQueryDto`）。
+- **前端已接（2026-07-07）**：`run-event-timeline.tsx` 每条事件旁加"原始流水"按钮，打开新文件 `RunRawEventsDialog`；对话框拉取该 run 全部 raw/agui 行，本地按关键字子串过滤，预填该事件最具体的关联 id（toolCallId/messageId/commandId/permissionRequestId/targetId）。共享类型 `AdminRunRawEvent*` 加在 `packages/shared/src/api/runs.ts`。用 Playwright 手工跑通：造两行 sdk.raw + 一行 agui.event 的合成 jsonl，时间线正确显示"原始流水"按钮、对话框渲染 3 行、按关键字过滤能从 3 行收窄到 1 行，控制台无报错。
+- **§0 原计划提到的"remote runtime 不覆盖"是过时假设**：核实后当前只有 `local/docker/opensandbox` 三种 runtimeType，没有 remote；docker/opensandbox 场景 trace 文件本就 bind mount 回宿主机，接口对现有全部 runtimeType 都可用，未加任何"不可用"分支。
+
+测试：`raw-jsonl-reader.spec.ts`（新增，临时目录真实文件 I/O）、`run.repository.spec.ts`、`run.service.spec.ts`、`admin-run.controller.spec.ts` 补了对应用例；前端无单测，靠上面的 Playwright 手工验证。
+
+**Phase C：收尾 — 部分完成，`swallow → system.issue` 那条特意搁置。**
+
+- ~~关键事实落库失败从纯 swallow 改为补记 system.issue~~ **搁置，不要在没有具体触发场景前实现**：`append()` 失败后再调 `append()` 写 `system.issue` 是同一条写路径的自调用，DB 系统性故障（连接池耗尽等）时会形成"失败→补记失败→再补记"的放大而非降级；要做的话需要一条独立于 seqStore 串行分配的旁路写入（或直接判定"不重试"），这是一个需要单独确认的设计决策，不是顺手能力所及的小改动。见 [[confirm-before-refactor]]。
+- 本文档销账：本节（§0）已更新；§17 原改造清单仍描述"大爆炸"整体设想，不逐条对照勾选（那本来就是历史 6-22 版本的 checklist，销账口径以本节为准）。
+
+### 0.3 与原设计的差异定案（不按原文做）
+
+- **命名**：`control.*` 按代码现状定为 `command.*`；`RunEventRecorder`/`RawJsonlWriter`/`StateUpdater` 等设计名不落地，保留现有 `RunEventService`/`TraceLogWriter` 等实现名。
+- **Raw JSONL 形态**：保留 per-conversation 文件 + 现有 envelope，不改成 §9.3 的 per-run 目录、不加 `rawSeq`（行内 ts + runId 已够定位）、不拆 tool/runtime/system 等 channel。
+- **不做**：stream chunk 单独落盘策略调整、Raw JSONL 独立索引、remote runtime raw 拉取。
+
+---
+
 ## 1. 核心结论
 
 AgeWork 不再引入独立 `AgentEvent` 概念。事件体系统一为：

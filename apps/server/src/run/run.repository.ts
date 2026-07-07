@@ -117,6 +117,15 @@ export class RunRepository {
     return rows.map((row) => row.conversationId);
   }
 
+  /** 管理端：按 runId 查 conversationId（用于定位该 run 对应的 raw trace 文件）。 */
+  async findConversationId(runId: string): Promise<string | null> {
+    const run = await this.prisma.run.findUnique({
+      where: { id: runId },
+      select: { conversationId: true },
+    });
+    return run?.conversationId ?? null;
+  }
+
   async listAdmin(params: { status?: string; take: number; skip: number }) {
     const { status, take, skip } = params;
     const where = status ? { status } : undefined;
