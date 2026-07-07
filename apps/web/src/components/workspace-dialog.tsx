@@ -31,8 +31,6 @@ import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
 import { useRuntimes } from "@/hooks/use-runtime";
 import type { Runtime } from "@/hooks/use-runtime";
-import { DirectoryBrowserDialog } from "@/components/directory-browser-dialog";
-
 interface WorkspaceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -213,8 +211,6 @@ function WorkspaceDialogForm({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [directoryPickerError, setDirectoryPickerError] = useState<string | null>(null);
   const [customUpdatePending, setCustomUpdatePending] = useState(false);
-  const [browserOpen, setBrowserOpen] = useState(false);
-
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
   const { data: capabilities } = useWorkspaceCapabilities();
@@ -393,19 +389,8 @@ function WorkspaceDialogForm({
       selectedRuntimeIsolationScopes.includes(isolationScope));
   /** managed 场景下,当前 runtimeType 对应的 builtin runtime(浏览目录接口按 runtime 维度调用,
    *  builtin 也有固定的 runtime id)。 */
-  const builtinRuntime = runtimes.find(
-    (r) => r.source === "builtin" && r.runtimeType === runtimeType
-  );
-  const browserRuntimeId =
-    placementMode === "registered" ? runtimeId : builtinRuntime?.id;
   const browserDisabled =
     placementMode === "registered" && selectedRuntime?.status !== "online";
-
-  function handleBrowseSelect(path: string) {
-    setDirectoryPickerError(null);
-    form.setValue("rootPath", path);
-    form.trigger("rootPath");
-  }
 
   useEffect(() => {
     if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "local") {
@@ -643,14 +628,6 @@ function WorkspaceDialogForm({
                           }
                         }}
                       />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={browserDisabled}
-                        onClick={() => setBrowserOpen(true)}
-                      >
-                        浏览
-                      </Button>
                     </div>
                     <FieldDescription>
                       {browserDisabled
@@ -846,14 +823,6 @@ function WorkspaceDialogForm({
                               </Button>
                             )}
                           </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={!browserRuntimeId}
-                            onClick={() => setBrowserOpen(true)}
-                          >
-                            浏览
-                          </Button>
                         </div>
                         <FieldDescription>
                           {getRootPathDescription()}
@@ -958,12 +927,6 @@ function WorkspaceDialogForm({
         </Button>
       </DialogFooter>
 
-      <DirectoryBrowserDialog
-        open={browserOpen}
-        onOpenChange={setBrowserOpen}
-        runtimeId={browserRuntimeId}
-        onSelect={handleBrowseSelect}
-      />
     </>
   );
 }

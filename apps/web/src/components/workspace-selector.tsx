@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Folder, FolderDot, FolderPlus } from "lucide-react";
+import { Folder, FolderDot, FolderOpen, FolderPlus } from "lucide-react";
 import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAgentChatContext } from "@/components/agent-chat-context";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -20,9 +20,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { WorkspaceDialog } from "@/components/workspace-dialog";
+import { PickDirectoryDialog } from "@/components/pick-directory-dialog";
 import { cn } from "@/lib/utils";
 
 const NEW_PROJECT_VALUE = "__new__";
+const PICK_DIRECTORY_VALUE = "__pick_dir__";
 
 interface WorkspaceSelectorProps {
   attentionToken?: number;
@@ -40,6 +42,7 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
   const selectedWorkspaceId = useSelectionStore((s) => s.selectedWorkspaceId);
   const { data: workspaces = [], isSuccess } = useWorkspaces();
   const [showWorkspaceDialog, setShowWorkspaceDialog] = useState(false);
+  const [showPickDialog, setShowPickDialog] = useState(false);
   const [showAttention, setShowAttention] = useState(false);
   const selectedWorkspace = workspaces.find((workspace) => workspace.id === selectedWorkspaceId);
   const selectedWorkspaceExists =
@@ -56,7 +59,8 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
     : null;
   const items: WorkspaceItem[] = [
     ...workspaceItems,
-    { value: NEW_PROJECT_VALUE, label: "添加新项目" },
+    { value: PICK_DIRECTORY_VALUE, label: "选择文件目录" },
+    { value: NEW_PROJECT_VALUE, label: "添加工作空间" },
   ];
 
   useEffect(() => {
@@ -91,6 +95,8 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
     if (!item) return;
     if (item.value === NEW_PROJECT_VALUE) {
       setShowWorkspaceDialog(true);
+    } else if (item.value === PICK_DIRECTORY_VALUE) {
+      setShowPickDialog(true);
     } else {
       onSelectWorkspace(item.value);
     }
@@ -135,6 +141,18 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
           <ComboboxEmpty>未找到项目</ComboboxEmpty>
           <ComboboxList>
             {(item: WorkspaceItem) => {
+              if (item.value === PICK_DIRECTORY_VALUE) {
+                return (
+                  <ComboboxItem
+                    key={item.value}
+                    value={item}
+                    className="text-muted-foreground"
+                  >
+                    <FolderOpen className="size-4" />
+                    {item.label}
+                  </ComboboxItem>
+                );
+              }
               if (item.value === NEW_PROJECT_VALUE) {
                 return (
                   <Fragment key={item.value}>
@@ -167,6 +185,12 @@ export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps
         open={showWorkspaceDialog}
         onOpenChange={setShowWorkspaceDialog}
         onCreated={(workspace) => onSelectWorkspace(workspace.id)}
+      />
+
+      <PickDirectoryDialog
+        open={showPickDialog}
+        onOpenChange={setShowPickDialog}
+        onCreated={onSelectWorkspace}
       />
     </>
   );

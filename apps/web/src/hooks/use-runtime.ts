@@ -81,6 +81,8 @@ export function useRuntimeDirectory(
     queryKey: ['runtime-directory', runtimeId, path ?? null],
     queryFn: () => runtimesApi.listDirectory({ runtimeId: runtimeId!, path }),
     enabled: enabled && !!runtimeId,
+    // 导航时保留上一个目录的数据，避免闪烁
+    placeholderData: (prev) => prev,
   });
 }
 
