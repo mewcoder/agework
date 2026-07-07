@@ -19,9 +19,8 @@ import { ConversationRepository } from "./conversation.repository";
 import { TitleGenerator } from "./title/title-generator";
 import type { AssistantUserMessage } from "./conversation.types";
 import type {
-  ConversationEffectsPort,
   ConversationMessageInput,
-} from "../run/run.types";
+} from "./conversation.types";
 
 // 从 assistant-ui 消息 content(string / part 数组 / { role, content } 对象)提取纯文本。
 function extractText(content: unknown): string {
@@ -56,7 +55,7 @@ function isStoredUserMessage(
 }
 
 @Injectable()
-export class ConversationService implements ConversationEffectsPort {
+export class ConversationService {
   private readonly logger = new Logger(ConversationService.name);
 
   constructor(

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
-import type { ConversationEffectsPort } from "../run.types";
+import type { ConversationService } from "../../conversation/conversation.service";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
 function makeWorkerManager(
@@ -27,7 +27,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+    const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
@@ -36,7 +36,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversationEffects as unknown as ConversationEffectsPort,
+      mockConversationEffects as unknown as ConversationService,
       workerManager as WorkerManagerService
     );
 
@@ -76,14 +76,14 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+    const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversationEffects as unknown as ConversationEffectsPort,
+      mockConversationEffects as unknown as ConversationService,
       workerManager as WorkerManagerService
     );
 
@@ -109,7 +109,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+    const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
@@ -118,7 +118,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversationEffects as unknown as ConversationEffectsPort,
+      mockConversationEffects as unknown as ConversationService,
       workerManager as WorkerManagerService
     );
 
@@ -147,7 +147,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+    const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
@@ -156,7 +156,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversationEffects as unknown as ConversationEffectsPort,
+      mockConversationEffects as unknown as ConversationService,
       workerManager as WorkerManagerService
     );
 

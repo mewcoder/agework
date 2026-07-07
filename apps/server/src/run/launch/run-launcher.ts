@@ -1,6 +1,5 @@
 import {
   Injectable,
-  Inject,
   Logger,
   BadRequestException,
   ConflictException,
@@ -20,10 +19,9 @@ import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { RunDriver } from "../driver/run-driver";
 import {
-  CONVERSATION_EFFECTS_PORT,
-  type ConversationEffectsPort,
   type RunCliPaths,
 } from "../run.types";
+import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
@@ -68,8 +66,7 @@ export class RunLauncher {
     private readonly liveRuns: LiveRunRegistry,
     private readonly workerManager: WorkerManagerService,
     private readonly driver: RunDriver,
-    @Inject(CONVERSATION_EFFECTS_PORT)
-    private readonly conversationEffects: ConversationEffectsPort,
+    private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
   ) {}
@@ -356,7 +353,7 @@ export class RunLauncher {
   }): Promise<void> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
-    const activated = await this.conversationEffects.activateConversation(
+    const activated = await this.conversationService.activateConversation(
       conversationId,
       userId
     );
@@ -389,7 +386,7 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.conversationEffects.persistConversationMessage(conversationId, {
+    await this.conversationService.persistConversationMessage(conversationId, {
       type: "saveUserMessage",
       userMessage,
       titleContext: { agentType, modelProviderId },
@@ -410,7 +407,7 @@ export class RunLauncher {
           const snap = aggregator.build(complete, incompleteReason);
           if (snap.content.length === 0) return;
           const contentId = snap.messageId ?? runId;
-          return this.conversationEffects.persistConversationMessage(
+          return this.conversationService.persistConversationMessage(
             conversationId,
             {
               type: "upsertMessage",
@@ -440,7 +437,7 @@ export class RunLauncher {
 
   private saveSession(conversationId: string): (sessionId: string) => void {
     return (sessionId) => {
-      this.conversationEffects
+      this.conversationService
         .persistConversationMessage(conversationId, {
           type: "setAgentSessionId",
           sessionId,
@@ -493,7 +490,7 @@ export class RunLauncher {
         `record run created for run ${runId}`
       );
       if (userMessageId) {
-        await this.conversationEffects
+        await this.conversationService
           .persistConversationMessage(conversationId, {
             type: "attachMessageToRun",
             messageId: userMessageId,
@@ -594,7 +591,7 @@ export class RunLauncher {
           swallow(this.logger, `record runtime start failure for run ${runId}`)
         )
         .finally(() => this.runEvents.forgetRun(runId));
-      await this.conversationEffects
+      await this.conversationService
         .setConversationRunState(conversationId, { runStatus: "error" })
         .catch(
           swallow(

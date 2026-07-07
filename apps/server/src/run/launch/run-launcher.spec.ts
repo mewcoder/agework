@@ -5,7 +5,7 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { RunDriver } from "../driver/run-driver";
-import type { ConversationEffectsPort } from "../run.types";
+import type { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run.types";
@@ -88,7 +88,7 @@ describe("RunLauncher", () => {
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockWorkerManager: Partial<WorkerManagerService>;
   let mockExecutor: Partial<RunDriver>;
-  let mockConversationEffects: Partial<ConversationEffectsPort>;
+  let mockConversationEffects: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
@@ -185,7 +185,7 @@ describe("RunLauncher", () => {
       mockLiveRunRegistry as LiveRunRegistry,
       mockWorkerManager as WorkerManagerService,
       mockExecutor as RunDriver,
-      mockConversationEffects as ConversationEffectsPort,
+      mockConversationEffects as ConversationService,
       mockRunEvents,
       mockConfigService as ConfigService
     );

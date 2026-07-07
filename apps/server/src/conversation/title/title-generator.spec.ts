@@ -106,7 +106,7 @@ describe("TitleGenerator", () => {
 
     const title = await service.generateLLMTitle({
       agentType: "claude",
-      modelProviderId: "system:claude",
+      modelProviderId: "system",
       userText: "hello",
     });
 

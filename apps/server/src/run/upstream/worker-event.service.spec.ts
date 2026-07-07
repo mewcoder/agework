@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WorkerEventService } from "./worker-event.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import type { ConversationEffectsPort } from "../run.types";
+import type { ConversationService } from "../../conversation/conversation.service";
 import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-event/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
@@ -38,7 +38,7 @@ describe("WorkerEventService", () => {
   let workerEventsService: WorkerEventService;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
-  let mockConversations: Partial<ConversationEffectsPort>;
+  let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockExecutor: Partial<RunDriver>;
   let runStatusService: RunStatusService;
@@ -71,7 +71,7 @@ describe("WorkerEventService", () => {
     liveRuns = new LiveRunRegistry(makeConfig());
     runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
-      mockConversations as unknown as ConversationEffectsPort,
+      mockConversations as unknown as ConversationService,
       liveRuns
     );
     const aguiEvents = new WorkerAgUiEventHandler(

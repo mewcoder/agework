@@ -34,8 +34,8 @@ export class RunService implements OnApplicationBootstrap {
   ) {}
 
   /**
-   * 应用启动后触发一次性重启恢复。run 现在直接依赖 ConversationService
-   *（经 RunConversationEffects 向下写入），不再需要运行期绑定反向端口。
+   * 应用启动后触发一次性重启恢复：扫描中断的 active run，标记为 error
+   * 并通过 ConversationService 回写会话状态。
    */
   async onApplicationBootstrap(): Promise<void> {
     if (this.recoveryStarted) return;

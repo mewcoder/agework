@@ -3,7 +3,7 @@ import {
   LiveRunRegistry,
   type LiveRunHandle,
 } from "../live-run/live-run.registry";
-import type { ConversationEffectsPort } from "../run.types";
+import type { ConversationService } from "../../conversation/conversation.service";
 import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
@@ -63,7 +63,7 @@ function makeSubject(input?: {
   };
   const runConversation = {
     setConversationRunState: vi.fn().mockResolvedValue(undefined),
-  } satisfies Partial<ConversationEffectsPort>;
+  } satisfies Partial<ConversationService>;
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   return {
     runRepository,
@@ -71,7 +71,7 @@ function makeSubject(input?: {
     registry,
     handler: new RunStatusService(
       runRepository as unknown as RunRepository,
-      runConversation as unknown as ConversationEffectsPort,
+      runConversation as unknown as ConversationService,
       registry
     ),
   };

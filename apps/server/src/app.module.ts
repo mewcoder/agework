@@ -13,8 +13,6 @@ import { ModelProviderModule } from "./model-provider/model-provider.module";
 import { SystemModule } from "./system/system.module";
 import { UserModule } from "./user/user.module";
 import { normalizePath, resolveApiBasePath } from "./common/path.util";
-import { CONVERSATION_EFFECTS_PORT } from "./run/run.types";
-import { ConversationService } from "./conversation/conversation.service";
 import { getApiContext, isServeFrontendEnabled } from "./config/config.service";
 
 const appContext = normalizePath(getApiContext());
@@ -44,12 +42,6 @@ const shouldServeFrontend =
     WorkspaceModule,
     ModelProviderModule,
     SystemModule,
-  ],
-  providers: [
-    {
-      provide: CONVERSATION_EFFECTS_PORT,
-      useExisting: ConversationService,
-    },
   ],
 })
 export class AppModule {}

@@ -1,9 +1,10 @@
-import { Global, Injectable, Module } from "@nestjs/common";
+import { Injectable, Module } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
+import { ConversationService } from "../conversation/conversation.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
@@ -15,26 +16,12 @@ import { WorkerEventService } from "./upstream/worker-event.service";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunModule } from "./run.module";
 import { RunStartupService } from "./startup/run-startup.service";
-import { CONVERSATION_EFFECTS_PORT } from "./run.types";
 
-const MOCK_CONVERSATION_EFFECTS = {
+const MOCK_CONVERSATION_SERVICE = {
   activateConversation: vi.fn().mockResolvedValue(true),
   setConversationRunState: vi.fn().mockResolvedValue(undefined),
   persistConversationMessage: vi.fn().mockResolvedValue(undefined),
 };
-
-/**
- * Global module providing CONVERSATION_EFFECTS_PORT mock for RunModule DI.
- * Must be @Global() so RunModule's encapsulated providers can resolve the Symbol token.
- */
-@Global()
-@Module({
-  providers: [
-    { provide: CONVERSATION_EFFECTS_PORT, useValue: MOCK_CONVERSATION_EFFECTS },
-  ],
-  exports: [CONVERSATION_EFFECTS_PORT],
-})
-class ConversationEffectsPortModule {}
 
 @Injectable()
 class DownstreamRunConsumer {
@@ -80,7 +67,7 @@ describe("RunModule wiring", () => {
     expect(setRunEventPort).toHaveBeenCalledWith(workerEvents);
     expect(setUpstreamPort).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorPort).toHaveBeenCalledWith(workerEvents);
-    // run 自身在 onApplicationBootstrap 触发一次性重启恢复（不再依赖反向端口接线）
+    // run 自身在 onApplicationBootstrap 触发一次性重启恢复
     expect(runRecovery.failInterruptedRuns).toHaveBeenCalledTimes(1);
   });
 
@@ -108,16 +95,12 @@ async function createRunsTestingModule(
       ConfigModule,
       PrismaModule,
       EventEmitterModule.forRoot(),
-      ConversationEffectsPortModule,
       ...(runImports ?? []),
     ],
   })
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())
     .overrideProvider(PrismaService)
-    // WorkerLifecycleHandler.onApplicationBootstrap（worker-manager 模块内）在
-    // init() 时经 WorkerRegistryRepository 做重启扫尾;RuntimeService.onApplicationBootstrap
-    // 同时 upsert builtin Runtime 行——这里给对应查询空实现。
     .useValue({
       worker: {
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
@@ -130,6 +113,8 @@ async function createRunsTestingModule(
     })
     .overrideProvider(ModelProviderService)
     .useValue({})
+    .overrideProvider(ConversationService)
+    .useValue(MOCK_CONVERSATION_SERVICE)
     .overrideProvider(RunRecoveryService)
     .useValue(recovery)
     .compile();
