@@ -67,7 +67,7 @@ function ModelProviderRow({
   onDelete: () => void;
 }) {
   const testModelProvider = useTestModelProvider();
-  const isSystem = modelProvider.modelProviderId.startsWith('system:');
+  const isSystem = modelProvider.scope === 'system';
   const baseUrl = getBaseUrl(modelProvider);
   const model = getModel(modelProvider);
 

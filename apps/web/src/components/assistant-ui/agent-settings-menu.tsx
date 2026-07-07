@@ -86,10 +86,7 @@ function getModelProviderModels(providerConfig: string) {
 function isSystemModelProvider(
   modelProvider: { modelProviderId: string; scope?: string } | undefined,
 ) {
-  return (
-    modelProvider?.scope === "system" ||
-    modelProvider?.modelProviderId.startsWith("system:")
-  );
+  return modelProvider?.scope === "system";
 }
 
 // ── Agent selector ─────────────────────────────────────────────────────────

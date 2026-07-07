@@ -29,10 +29,7 @@ export function agentLabel(agentType: string) {
 }
 
 export function isSystemModelProvider(modelProvider: ModelProvider) {
-  return (
-    modelProvider.scope === "system" ||
-    modelProvider.modelProviderId.startsWith("system:")
-  );
+  return modelProvider.scope === "system";
 }
 
 function agentSortOrder(agentType: string) {

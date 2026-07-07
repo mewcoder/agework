@@ -57,7 +57,9 @@ describe("ModelProviderService", () => {
 
     const result = await service.listEnabled("claude");
 
-    expect(JSON.parse(result.list[0].providerConfig)).toEqual({
+    // list[0] is the virtual system provider, list[1] is the custom one
+    const customProvider = result.list.find((p) => p.modelProviderId === "mp-1");
+    expect(JSON.parse(customProvider!.providerConfig)).toEqual({
       baseUrl: "https://example.com/anthropic",
       apiKey: "",
       models: ["claude-test"],
@@ -95,67 +97,47 @@ describe("ModelProviderService", () => {
     });
   });
 
-  it("creates system model providers disabled by default", async () => {
-    const { repo, service } = createService();
+  it("includes virtual system provider in listEnabled when system env is enabled", async () => {
+    const { service, configService } = createService();
+    configService.isSystemEnvEnabled.mockReturnValue(true);
 
-    await service.onModuleInit();
+    const result = await service.listEnabled("claude");
 
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "system:claude",
-        agentType: "claude",
-        scope: "system",
-        name: "系统环境",
-        isEnabled: false,
-        baseUrl: "",
-        apiKey: "",
-        models: [],
-        extraConfig: {},
-      })
-    );
-    expect(repo.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "system:codex",
-        agentType: "codex",
-        scope: "system",
-        name: "系统环境",
-        isEnabled: false,
-        baseUrl: "",
-        apiKey: "",
-        models: [],
-        extraConfig: {},
-      })
-    );
+    const systemProvider = result.list.find((p) => p.modelProviderId === "system");
+    expect(systemProvider).toBeDefined();
+    expect(systemProvider!.scope).toBe("system");
+    expect(systemProvider!.name).toBe("系统环境");
+    expect(systemProvider!.isEnabled).toBe(true);
   });
 
-  it("resolves an enabled system provider from database state", async () => {
-    const { service } = createService({
-      findEnabled: vi.fn().mockResolvedValue({
-        id: "system:claude",
-        agentType: "claude",
-        scope: "system",
-        isEnabled: true,
-        baseUrl: "",
-        apiKey: "",
-        models: [],
-        extraConfig: {},
-      }),
-    });
+  it("excludes virtual system provider from listEnabled when system env is disabled", async () => {
+    const { service, configService } = createService();
+    configService.isSystemEnvEnabled.mockReturnValue(false);
+
+    const result = await service.listEnabled("claude");
+
+    const systemProvider = result.list.find((p) => p.modelProviderId === "system");
+    expect(systemProvider).toBeUndefined();
+  });
+
+  it("resolves a system provider when system env switch is enabled", async () => {
+    const { service, configService } = createService();
+    configService.isSystemEnvEnabled.mockReturnValue(true);
 
     await expect(
-      service.resolveEnabledProvider("claude", "system:claude")
+      service.resolveEnabledProvider("claude", "system")
     ).resolves.toEqual({ source: "system" });
   });
 
-  it("returns null when a system provider is not enabled in database state", async () => {
-    const { repo, service } = createService({
-      findEnabled: vi.fn().mockResolvedValue(null),
-    });
+  it("returns null for a system provider when system env switch is disabled", async () => {
+    const { service, configService, repo } = createService();
+    configService.isSystemEnvEnabled.mockReturnValue(false);
 
     await expect(
-      service.resolveEnabledProvider("claude", "system:claude")
+      service.resolveEnabledProvider("claude", "system")
     ).resolves.toBeNull();
-    expect(repo.findEnabled).toHaveBeenCalledWith("system:claude", "claude");
+    // Should NOT query the database for system providers
+    expect(repo.findEnabled).not.toHaveBeenCalled();
   });
 
   it("resolves an enabled custom provider with its saved config", async () => {
@@ -185,10 +167,18 @@ describe("ModelProviderService", () => {
     });
   });
 
+  it("rejects setEnabled for system provider", async () => {
+    const { service } = createService();
+
+    await expect(service.setEnabled("system", true)).rejects.toThrow(
+      "系统环境不可通过模型服务管理启用/停用"
+    );
+  });
+
   describe("test", () => {
     it("rejects connectivity tests for the system provider", async () => {
       const { service } = createService();
-      await expect(service.ping("system:claude")).rejects.toThrow(
+      await expect(service.ping("system")).rejects.toThrow(
         "系统环境不支持连通性测试"
       );
     });

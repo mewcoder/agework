@@ -2,14 +2,8 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
 } from "@nestjs/common";
-import {
-  AGENT_TYPES,
-  generateId,
-  isAgentType,
-  type AgentType,
-} from "@agework/shared";
+import { generateId, isAgentType, type AgentType } from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
 import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
@@ -18,9 +12,7 @@ import { getLLMClient } from "../common/llm";
 import { RuntimeService } from "../runtime/runtime.service";
 import { ModelProviderRepository } from "./model-provider.repository";
 
-// system:<agent> 是系统环境默认模型服务的固定 ID，走 agent CLI 本身的配置文件。
-const SYSTEM_PREFIX = "system:";
-const SYSTEM_MODEL_PROVIDER_NAME = "系统环境";
+const SYSTEM_MODEL_PROVIDER_ID = "system";
 const MODEL_PROVIDER_SCOPE_SYSTEM = "system";
 const MODEL_PROVIDER_SCOPE_GLOBAL = "global";
 
@@ -36,19 +28,7 @@ type ProviderConfigColumns = {
 };
 
 function isSystemModelProviderId(id: string) {
-  return id.startsWith(SYSTEM_PREFIX);
-}
-
-function systemModelProviderId(agentType: AgentType) {
-  return `${SYSTEM_PREFIX}${agentType}`;
-}
-
-function agentTypeFromSystemModelProviderId(id: string): AgentType {
-  const agentType = id.slice(SYSTEM_PREFIX.length);
-  if (!isAgentType(agentType)) {
-    throw new BadRequestException(`模型服务不可用: ${id}`);
-  }
-  return agentType;
+  return id === SYSTEM_MODEL_PROVIDER_ID;
 }
 
 function normalizeModels(models: unknown): string[] {
@@ -90,53 +70,12 @@ function serializeProviderConfig(
 }
 
 @Injectable()
-export class ModelProviderService implements OnModuleInit {
+export class ModelProviderService {
   constructor(
     private repo: ModelProviderRepository,
     private configService: ConfigService,
     private runtimeService: RuntimeService
   ) {}
-
-  async onModuleInit() {
-    await Promise.all(
-      AGENT_TYPES.map((agentType) => this.ensureSystemModelProvider(agentType))
-    );
-  }
-
-  private async ensureSystemModelProvider(agentType: AgentType) {
-    const id = systemModelProviderId(agentType);
-    const placeholder = {
-      agentType,
-      scope: MODEL_PROVIDER_SCOPE_SYSTEM,
-      userId: null,
-      name: SYSTEM_MODEL_PROVIDER_NAME,
-      baseUrl: "",
-      apiKey: "",
-      models: [] as string[],
-      extraConfig: {} as Record<string, string>,
-    };
-    const existing = await this.repo.findById(id);
-    if (existing) {
-      const matchesPlaceholder =
-        existing.agentType === agentType &&
-        existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM &&
-        existing.userId === null &&
-        existing.name === SYSTEM_MODEL_PROVIDER_NAME &&
-        existing.baseUrl === "" &&
-        existing.apiKey === "" &&
-        normalizeModels(existing.models).length === 0 &&
-        Object.keys(normalizeExtraConfig(existing.extraConfig)).length === 0;
-      if (
-        matchesPlaceholder &&
-        existing.scope === MODEL_PROVIDER_SCOPE_SYSTEM
-      ) {
-        return existing;
-      }
-      return this.repo.update(id, placeholder);
-    }
-
-    return this.repo.create({ id, ...placeholder, isEnabled: false });
-  }
 
   private validateBaseUrl(baseUrl: string) {
     try {
@@ -154,18 +93,10 @@ export class ModelProviderService implements OnModuleInit {
       resolvedAgentType,
       includeDisabled
     );
-    const sorted = [...modelProviders].sort((a, b) => {
-      const aSystem = isSystemModelProviderId(a.id);
-      const bSystem = isSystemModelProviderId(b.id);
-      if (aSystem !== bSystem) return aSystem ? -1 : 1;
-      return a.createdAt.getTime() - b.createdAt.getTime();
-    });
     // desensitize: includeDisabled=true 代表走 admin 接口（listForAdmin），不脱敏；
     // includeDisabled=false 代表 listEnabled（非 admin），脱敏。
     const desensitize = !includeDisabled;
-    return sorted.map((p) =>
-      toModelProviderDto(p, desensitize)
-    );
+    return modelProviders.map((p) => toModelProviderDto(p, desensitize));
   }
 
   /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。
@@ -173,7 +104,8 @@ export class ModelProviderService implements OnModuleInit {
    * 「系统环境」模型配置的可见性由两层 AND 决定（见 runtime 模块 CONTEXT.md）：
    * 1. admin 全局开关 SYSTEM_ENV_ENABLED
    * 2. 传入 runtimeId 时，该 runtime 的 envConfig 检测到对应 agent 的 CLI（resolvedPath != null）
-   * 未传 runtimeId 时（如设置页）只检查开关，不做 runtime 检测。 */
+   * 未传 runtimeId 时（如设置页）只检查开关，不做 runtime 检测。
+   * 系统环境不再作为数据库记录存在，开关打开时直接构造虚拟 DTO 返回。 */
   async listEnabled(agentType: string, runtimeId?: string) {
     const resolvedAgentType = this.resolveAgentType(agentType);
     const systemAvailable = await this.isSystemEnvAvailable(
@@ -187,29 +119,14 @@ export class ModelProviderService implements OnModuleInit {
       false
     );
 
-    // 开关关闭时，从结果中过滤掉系统环境（即使 DB 里 isEnabled=true 也不返回）
-    let result = systemAvailable
-      ? enabledProviders
-      : enabledProviders.filter((p) => !isSystemModelProviderId(p.id));
+    // 开关打开时，构造虚拟的系统环境 DTO 加入列表
+    const customDtos = enabledProviders.map((p) => toModelProviderDto(p, true));
 
-    // 开关打开时，主动把系统环境模型配置加入列表（不管 DB isEnabled 字段）
-    if (systemAvailable) {
-      const systemProvider = await this.repo.findById(
-        systemModelProviderId(resolvedAgentType)
-      );
-      if (systemProvider && !result.some((p) => isSystemModelProviderId(p.id))) {
-        result = [...result, systemProvider];
-      }
-    }
+    const result = systemAvailable
+      ? [buildSystemModelProviderDto(resolvedAgentType), ...customDtos]
+      : customDtos;
 
-    const sorted = [...result].sort((a, b) => {
-      const aSystem = isSystemModelProviderId(a.id);
-      const bSystem = isSystemModelProviderId(b.id);
-      if (aSystem !== bSystem) return aSystem ? -1 : 1;
-      return a.createdAt.getTime() - b.createdAt.getTime();
-    });
-
-    return { list: sorted.map((p) => toModelProviderDto(p, true)) };
+    return { list: result };
   }
 
   /** 系统环境可用性判断：admin 全局开关 AND（传入 runtimeId 时）runtime 检测到 CLI。 */
@@ -262,7 +179,7 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(modelProvider, false);
   }
 
-  /** 更新一个自定义模型服务的名称与配置；系统环境模型服务（id 以 `system:` 开头）不可更新。 */
+  /** 更新一个自定义模型服务的名称与配置；系统环境模型服务（id 为 `system`）不可更新。 */
   async update(
     modelProviderId: string,
     name: string,
@@ -292,13 +209,12 @@ export class ModelProviderService implements OnModuleInit {
     return toModelProviderDto(updated, false);
   }
 
-  /** 启用/停用一个模型服务；系统环境模型服务会先确保 placeholder 记录存在，再写入启用状态。 */
+  /** 启用/停用一个模型服务；系统环境不可通过模型服务管理启用/停用，请使用系统配置开关。 */
   async setEnabled(modelProviderId: string, isEnabled: boolean) {
     if (isSystemModelProviderId(modelProviderId)) {
-      const agentType = agentTypeFromSystemModelProviderId(modelProviderId);
-      await this.ensureSystemModelProvider(agentType);
-      const updated = await this.repo.update(modelProviderId, { isEnabled });
-      return toModelProviderDto(updated, false);
+      throw new BadRequestException(
+        "系统环境不可通过模型服务管理启用/停用，请使用系统配置开关 AGEWORK_SYSTEM_ENV_ENABLED"
+      );
     }
 
     const modelProvider = await this.repo.findById(modelProviderId);
@@ -309,21 +225,26 @@ export class ModelProviderService implements OnModuleInit {
   }
 
   /**
-   * 供 agent 模块解析运行所需的模型服务：系统/自定义都以数据库启用状态为准。
-   * 系统配置不携带 ProviderConfig；未找到/不可用返回 null，由调用方决定如何报错。
+   * 供 agent 模块解析运行所需的模型服务。
+   * 系统环境（id 为 `system`）不再查数据库，直接根据系统配置开关判断可用性。
+   * 自定义模型服务仍以数据库启用状态为准。
+   * 未找到/不可用返回 null，由调用方决定如何报错。
    */
   async resolveEnabledProvider(
     agentType: string,
     modelProviderId: string
   ): Promise<ResolvedModelProvider | null> {
+    if (isSystemModelProviderId(modelProviderId)) {
+      return this.configService.isSystemEnvEnabled()
+        ? { source: "system" }
+        : null;
+    }
+
     const modelProvider = await this.repo.findEnabled(
       modelProviderId,
       agentType
     );
     if (!modelProvider) return null;
-    if (modelProvider.scope === MODEL_PROVIDER_SCOPE_SYSTEM) {
-      return { source: "system" };
-    }
     return {
       source: "custom",
       providerConfig: toProviderConfig(modelProvider),
@@ -447,5 +368,26 @@ function toModelProviderDto(
       modelProvider.updatedAt instanceof Date
         ? modelProvider.updatedAt.toISOString()
         : modelProvider.updatedAt,
+  };
+}
+
+/** 构造虚拟的系统环境模型服务 DTO（不依赖数据库记录），开关打开时由 listEnabled 使用。 */
+function buildSystemModelProviderDto(agentType: AgentType) {
+  const emptyConfig: ProviderConfig = {
+    baseUrl: "",
+    apiKey: "",
+    models: [],
+    extraConfig: {},
+  };
+  return {
+    modelProviderId: SYSTEM_MODEL_PROVIDER_ID,
+    agentType,
+    scope: MODEL_PROVIDER_SCOPE_SYSTEM as ModelProviderScope,
+    userId: null,
+    name: "系统环境",
+    isEnabled: true,
+    providerConfig: JSON.stringify({ ...emptyConfig, apiKey: "" }),
+    createdAt: new Date(0).toISOString(),
+    updatedAt: new Date(0).toISOString(),
   };
 }
