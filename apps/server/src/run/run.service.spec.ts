@@ -4,6 +4,7 @@ import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunDriver } from "./driver/run-driver";
 import { RunEventService } from "../run-event/run-event.service";
+import { RunStatusService } from "./status/run-status.service";
 import { RunLauncher } from "./launch/run-launcher";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
@@ -14,6 +15,7 @@ describe("RunService", () => {
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockExecutor: Partial<RunDriver>;
   let mockRunEvents: RunEventService;
+  let mockRunStatusService: Partial<RunStatusService>;
   let mockRunLauncher: Partial<RunLauncher>;
   let mockWorkerManager: Partial<WorkerManagerService>;
   let mockRunRecovery: Partial<RunRecoveryService>;
@@ -33,6 +35,10 @@ describe("RunService", () => {
     };
     mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
+    mockRunStatusService = {
+      markCancelRequested: vi.fn().mockResolvedValue(undefined),
+      markCancelledWithoutHandle: vi.fn().mockResolvedValue(undefined),
+    };
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
     };
@@ -48,6 +54,7 @@ describe("RunService", () => {
       mockLiveRunRegistry as LiveRunRegistry,
       mockExecutor as RunDriver,
       mockRunEvents,
+      mockRunStatusService as RunStatusService,
       mockRunLauncher as RunLauncher,
       mockWorkerManager as WorkerManagerService,
       mockRunRecovery as RunRecoveryService
@@ -136,7 +143,9 @@ describe("RunService", () => {
 
       const hadHandle = await service.stop("conversation-1");
 
-      expect(mockRunRepository.markCancelled).toHaveBeenCalledWith("run-1");
+      expect(
+        mockRunStatusService.markCancelledWithoutHandle
+      ).toHaveBeenCalledWith("run-1");
       expect(hadHandle).toBe(false);
     });
 
@@ -157,7 +166,10 @@ describe("RunService", () => {
 
       const hadHandle = await service.stop("conversation-1");
 
-      expect(mockRunRepository.markCancelling).toHaveBeenCalledWith("run-1");
+      expect(mockRunStatusService.markCancelRequested).toHaveBeenCalledWith(
+        "run-1",
+        undefined
+      );
       expect(mockExecutor.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
       expect(hadHandle).toBe(true);
     });

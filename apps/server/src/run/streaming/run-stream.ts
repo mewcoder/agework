@@ -51,8 +51,16 @@ export class RunStream {
     this.writeData(event);
   }
 
+  /** 只把 content/status/metadata 三个字段写上 SSE:调用方可直接传
+   *  aggregator.build() 的完整快照,messageId 等持久化专用字段不上行。 */
   writeSnapshot(snapshot: RunSnapshotPayload): void {
-    this.writeData(snapshot);
+    this.writeData({
+      content: snapshot.content,
+      status: snapshot.status,
+      ...(snapshot.metadata !== undefined
+        ? { metadata: snapshot.metadata }
+        : {}),
+    });
   }
 
   writeError(input: {

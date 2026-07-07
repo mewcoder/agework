@@ -11,8 +11,8 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunDriver } from "./driver/run-driver";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
-import { swallow } from "../common/swallow";
 import { RunEventService } from "../run-event/run-event.service";
+import { RunStatusService } from "./status/run-status.service";
 import type { StartRunInput } from "./run.types";
 import { RunStream } from "./streaming/run-stream";
 import { RunLauncher } from "./launch/run-launcher";
@@ -28,6 +28,7 @@ export class RunService implements OnApplicationBootstrap {
     private readonly liveRuns: LiveRunRegistry,
     private readonly driver: RunDriver,
     private readonly runEvents: RunEventService,
+    private readonly runStatusService: RunStatusService,
     private readonly runLauncher: RunLauncher,
     private readonly workerManager: WorkerManagerService,
     private readonly runRecovery: RunRecoveryService
@@ -161,8 +162,7 @@ export class RunService implements OnApplicationBootstrap {
     handle.stream.replace(res, "snapshots");
 
     // 补发当前累积快照（resume 流的起点，含已输出的全部内容）
-    const initial = handle.aggregator.build(false, "streaming");
-    handle.stream.writeSnapshot(this.toRunResult(initial));
+    handle.stream.writeSnapshot(handle.aggregator.build(false, "streaming"));
 
     handle.stream.onClose(() => {
       // 连接断开只清引用，不取消 run（与正常 run 的 res.on close 一致）
@@ -171,18 +171,6 @@ export class RunService implements OnApplicationBootstrap {
         current.stream.detach(res);
       }
     });
-  }
-
-  private toRunResult(snap: {
-    content: unknown[];
-    status: unknown;
-    metadata?: Record<string, unknown>;
-  }): { content: unknown[]; status: unknown; metadata?: unknown } {
-    return {
-      content: snap.content,
-      status: snap.status,
-      ...(snap.metadata ? { metadata: snap.metadata } : {}),
-    };
   }
 
   /**
@@ -202,44 +190,19 @@ export class RunService implements OnApplicationBootstrap {
     if (!handle) {
       // No in-memory handle — clean up stale state
       if (activeRunRecord) {
-        await this.runRepository.markCancelled(activeRunRecord.id);
-        this.runEvents
-          .append(
-            this.runEvents.runStatusChanged({
-              runId: activeRunRecord.id,
-              origin: "platform",
-              status: "cancelled",
-              reason: "cancelled_without_handle",
-            })
-          )
-          .catch(
-            swallow(
-              this.logger,
-              `record cancel without handle for run ${activeRunRecord.id}`
-            )
-          );
+        await this.runStatusService.markCancelledWithoutHandle(
+          activeRunRecord.id
+        );
       }
       return false;
     }
     handle.stopRequested = true;
     handle.stopReason = options?.reason;
     if (activeRunRecord) {
-      await this.runRepository.markCancelling(activeRunRecord.id);
-      this.runEvents
-        .append(
-          this.runEvents.runStatusChanged({
-            runId: activeRunRecord.id,
-            origin: "platform",
-            status: "cancelling",
-            reason: options?.reason,
-          })
-        )
-        .catch(
-          swallow(
-            this.logger,
-            `record cancel request for run ${activeRunRecord.id}`
-          )
-        );
+      await this.runStatusService.markCancelRequested(
+        activeRunRecord.id,
+        options?.reason
+      );
     }
     this.driver.cancel(handle.runtimeHandle);
     if (options?.endResponse) {

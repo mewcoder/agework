@@ -15,7 +15,6 @@ import { RunService } from "./run.service";
 import { WorkerEventService } from "./upstream/worker-event.service";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunModule } from "./run.module";
-import { RunStartupService } from "./startup/run-startup.service";
 
 const MOCK_CONVERSATION_SERVICE = {
   activateConversation: vi.fn().mockResolvedValue(true),
@@ -44,7 +43,7 @@ describe("RunModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("compiles, resolves run executor tokens, and wires startup provider hooks", async () => {
+  it("compiles, resolves run executor tokens, and self-wires the reverse ports on init", async () => {
     ({ testingModule, runRecovery } = await createRunsTestingModule([
       RunModule,
     ]));
@@ -53,9 +52,6 @@ describe("RunModule wiring", () => {
     expect(runDriver).toBeInstanceOf(RunDriver);
     expect(testingModule.get(RunService)).toBeInstanceOf(RunService);
 
-    expect(testingModule.get(RunStartupService)).toBeInstanceOf(
-      RunStartupService
-    );
     const setRunEventPort = vi.spyOn(runDriver, "setRunEventPort");
     const workerManager = testingModule.get(WorkerManagerService);
     const setUpstreamPort = vi.spyOn(workerManager, "setUpstreamPort");

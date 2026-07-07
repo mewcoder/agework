@@ -144,11 +144,7 @@ export class WorkerAgUiEventHandler {
     }
     const snap = handle.aggregator.build(false, "streaming");
     if (snap.content.length === 0) return;
-    handle.stream.writeSnapshot({
-      content: snap.content,
-      status: snap.status,
-      ...(snap.metadata ? { metadata: snap.metadata } : {}),
-    });
+    handle.stream.writeSnapshot(snap);
   }
 
   private persistUsageFromRunFinished(

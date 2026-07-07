@@ -8,6 +8,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RunEventPort } from "./run-event.port";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
+import { RunEventService } from "../../run-event/run-event.service";
 import { errorLogFields, safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 
@@ -33,12 +34,15 @@ type WorkerRunState = {
 export class RunDriver {
   private readonly logger = new Logger(RunDriver.name);
   private readonly states = new Map<string, WorkerRunState>();
-  private receiver!: RunEventPort;
+  private runEventPort!: RunEventPort;
 
-  constructor(private readonly workerManager: WorkerManagerService) {}
+  constructor(
+    private readonly workerManager: WorkerManagerService,
+    private readonly runEvents: RunEventService
+  ) {}
 
-  setRunEventPort(receiver: RunEventPort): void {
-    this.receiver = receiver;
+  setRunEventPort(port: RunEventPort): void {
+    this.runEventPort = port;
   }
 
   start(input: WorkerExecutionStartInput): WorkerExecutionHandle {
@@ -142,13 +146,16 @@ export class RunDriver {
     this.workerManager.releaseInstanceForRun(handle.runId);
   }
 
+  /** 「命令已下发」是记账不是执行回流,直接落 run-event 账本,不占用反向端口。 */
   private recordCommandSent(runId: string, command: CommandPayload): void {
-    this.receiver
-      .recordCommandSent({
-        runId,
-        commandId: command.commandId,
-        commandType: command.type,
-      })
+    this.runEvents
+      .append(
+        this.runEvents.commandSent({
+          runId,
+          commandId: command.commandId,
+          commandType: command.type,
+        })
+      )
       .catch((err) =>
         this.logger.warn(
           `record command sent failed ${safeLogJson({
@@ -172,13 +179,13 @@ export class RunDriver {
   }
 
   private notifyWorkerError(runId: string, error: string): void {
-    this.receiver
+    this.runEventPort
       .notifyWorkerError(runId, error)
       .catch(swallow(this.logger, `notify worker error for run ${runId}`));
   }
 
   private notifyCancelledBeforeReady(runId: string): void {
-    this.receiver
+    this.runEventPort
       .notifyCancelledBeforeReady(runId)
       .catch(
         swallow(this.logger, `notify cancelled before ready for run ${runId}`)

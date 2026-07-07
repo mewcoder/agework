@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import type {
   RunChannelMessage,
   RunStatusPayload,
@@ -9,6 +9,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RunEventPort } from "../driver/run-event.port";
 import type { WorkerUpstreamPort } from "../../worker-manager/worker-manager.types";
+import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
@@ -18,19 +19,22 @@ import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { summarizeMessagePayload } from "./message-payload-summary";
 import {
-  decideRunStatusUpdate,
   TERMINAL_RUN_STATUSES,
   type RunStatusDecision,
 } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
-import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
+/**
+ * worker 上行事件的统一入口:seq 闸门(去重 / gap 诊断)+ 按消息类型分发。
+ * run.status 的整条处理序列(决策、落库、终态收敛与清理)由 RunStatusService
+ * 独立持有,这里只做入口守卫与转发。
+ */
 @Injectable()
 export class WorkerEventService
-  implements RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
+  implements OnModuleInit, RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
 {
   private readonly logger = new Logger(WorkerEventService.name);
 
@@ -40,9 +44,16 @@ export class WorkerEventService
     private readonly runStatusService: RunStatusService,
     private readonly driver: RunDriver,
     private readonly aguiEvents: WorkerAgUiEventHandler,
-    private readonly finalization: RunFinalizationStore,
-    private readonly seqGate: WorkerSeqStore
+    private readonly seqGate: WorkerSeqStore,
+    private readonly workerManager: WorkerManagerService
   ) {}
+
+  /** Port 自接线:本类是三个反向端口的实现者,启动期把自己注册给各下层调用方。 */
+  onModuleInit(): void {
+    this.driver.setRunEventPort(this);
+    this.workerManager.setUpstreamPort(this);
+    this.liveRuns.setTimeoutErrorPort(this);
+  }
 
   async sendEvent(
     runId: string,
@@ -90,14 +101,6 @@ export class WorkerEventService
     await this.forceCancelledStatus(runId);
   }
 
-  async recordCommandSent(input: {
-    runId: string;
-    commandId: string;
-    commandType: string;
-  }): Promise<void> {
-    await this.runEvents.append(this.runEvents.commandSent(input));
-  }
-
   async publish(message: RunChannelMessage<unknown>): Promise<void> {
     const { runId, seq } = message;
     // run.status 的 apply/ignore 决策只算这一次,通过决策的直接传给 handleRunStatus。
@@ -105,7 +108,7 @@ export class WorkerEventService
     // 迟到的状态消息不能再把它重建出来。
     let statusDecision: RunStatusDecision | undefined;
     if (message.type === "run.status") {
-      statusDecision = this.decideRunStatus(
+      statusDecision = this.runStatusService.decide(
         runId,
         message.payload as RunStatusPayload
       );
@@ -208,7 +211,7 @@ export class WorkerEventService
 
   /** run 是否已在终态处理中或已完成终态（供 provider 的 exit handler 判断是否跳过 error 发布）。 */
   isTerminalOrFinalizing(runId: string): boolean {
-    return this.finalization.isTerminalOrFinalizing(runId);
+    return this.runStatusService.isTerminalOrFinalizing(runId);
   }
 
   private async handleRunStatus(
@@ -217,51 +220,16 @@ export class WorkerEventService
     precomputedDecision?: RunStatusDecision
   ) {
     const decision =
-      precomputedDecision ?? this.decideRunStatus(runId, payload);
+      precomputedDecision ?? this.runStatusService.decide(runId, payload);
     if (decision.action === "ignore") {
       this.logIgnoredRunStatus(runId, payload);
       return;
     }
-    const effect = decision.effect;
-    const isTerminal = effect.isTerminal;
-    const statusLogLevel = isTerminal ? "log" : "debug";
-    this.logger[statusLogLevel](
-      `run status ${safeLogJson({
-        runId,
-        status: payload.status,
-        pendingAction: payload.pendingAction,
-        error: payload.error,
-      })}`
-    );
-    if (isTerminal) {
-      this.finalization.beginFinalizing(runId);
-    }
-    this.recordRunStatus(runId, payload);
-
-    try {
-      const handle = this.liveRuns.get(runId);
-
-      // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
-      // 必须在 saveRun/stream write 等可能抛异常的操作之前设置，
-      // 否则异常会跳过记录，导致终态 guard 失效。
-      if (isTerminal) {
-        this.finalization.markCompleted(runId);
-      }
-
-      await this.runStatusService.apply({
-        runId,
-        payload,
-        effect,
-        handle,
-      });
-    } finally {
-      if (isTerminal) {
-        this.finalization.endFinalizing(runId);
-        this.seqGate.forget(runId);
-        this.aguiEvents.clearRun(runId);
-        this.runEvents.forgetRun(runId);
-      }
-    }
+    await this.runStatusService.apply({
+      runId,
+      payload,
+      effect: decision.effect,
+    });
   }
 
   private recordSeqGap(input: {
@@ -273,13 +241,6 @@ export class WorkerEventService
     this.recordRunEvent(
       this.runEvents.fromWorkerSeqGap(input),
       `record worker seq gap for run ${input.runId}`
-    );
-  }
-
-  private recordRunStatus(runId: string, payload: RunStatusPayload): void {
-    this.recordRunEvent(
-      this.runEvents.fromRunStatusPayload(runId, payload),
-      `record run status event for run ${runId}`
     );
   }
 
@@ -316,16 +277,6 @@ export class WorkerEventService
   ): void {
     if (!event) return;
     this.runEvents.append(event).catch(swallow(this.logger, context));
-  }
-
-  private decideRunStatus(
-    runId: string,
-    payload: RunStatusPayload
-  ): RunStatusDecision {
-    return decideRunStatusUpdate({
-      nextStatus: payload.status,
-      terminalOrFinalizing: this.isTerminalOrFinalizing(runId),
-    });
   }
 
   private logIgnoredRunStatus(runId: string, payload: RunStatusPayload): void {

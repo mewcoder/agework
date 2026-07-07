@@ -6,6 +6,7 @@ import type {
 } from "@agework/shared/protocol";
 import { RunDriver } from "./run-driver";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
+import { RunEventService } from "../../run-event/run-event.service";
 
 function makeWorkerManager() {
   return {
@@ -14,6 +15,17 @@ function makeWorkerManager() {
     openSession: vi.fn(),
     sendCommand: vi.fn(),
     cleanupRun: vi.fn(),
+  };
+}
+
+function makeRunEvents() {
+  return {
+    append: vi.fn().mockResolvedValue(undefined),
+    commandSent: vi.fn((input: Record<string, unknown>) => ({
+      runId: input.runId,
+      type: "command.sent",
+      data: input,
+    })),
   };
 }
 
@@ -53,24 +65,25 @@ describe.each(["local", "sandbox"] as const)(
   "RunDriver (%s)",
   (runtimeType) => {
     let workerManager: ReturnType<typeof makeWorkerManager>;
+    let runEvents: ReturnType<typeof makeRunEvents>;
     let executor: RunDriver;
-    let receiver: {
-      recordCommandSent: ReturnType<typeof vi.fn>;
+    let runEventPort: {
       notifyWorkerError: ReturnType<typeof vi.fn>;
       notifyCancelledBeforeReady: ReturnType<typeof vi.fn>;
     };
 
     beforeEach(() => {
       workerManager = makeWorkerManager();
+      runEvents = makeRunEvents();
       executor = new RunDriver(
-        workerManager as unknown as WorkerManagerService
+        workerManager as unknown as WorkerManagerService,
+        runEvents as unknown as RunEventService
       );
-      receiver = {
-        recordCommandSent: vi.fn().mockResolvedValue(undefined),
+      runEventPort = {
         notifyWorkerError: vi.fn().mockResolvedValue(undefined),
         notifyCancelledBeforeReady: vi.fn().mockResolvedValue(undefined),
       };
-      executor.setRunEventPort(receiver as never);
+      executor.setRunEventPort(runEventPort as never);
     });
 
     it("calls resolveInstance and opens the session once the instance is ready", async () => {
@@ -98,6 +111,13 @@ describe.each(["local", "sandbox"] as const)(
         "run-1",
         expect.objectContaining({ type: "user_message" })
       );
+      // 命令下发记账直接落 run-event 账本,不再经反向端口
+      expect(runEvents.commandSent).toHaveBeenCalledWith(
+        expect.objectContaining({ runId: "run-1", commandType: "user_message" })
+      );
+      expect(runEvents.append).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "command.sent" })
+      );
     });
 
     it("notifies worker error when resolveInstance settles as error", async () => {
@@ -110,7 +130,10 @@ describe.each(["local", "sandbox"] as const)(
       await Promise.resolve();
       await Promise.resolve();
 
-      expect(receiver.notifyWorkerError).toHaveBeenCalledWith("run-1", "boom");
+      expect(runEventPort.notifyWorkerError).toHaveBeenCalledWith(
+        "run-1",
+        "boom"
+      );
     });
 
     it("releases the instance through releaseInstanceForRun on cleanup", () => {

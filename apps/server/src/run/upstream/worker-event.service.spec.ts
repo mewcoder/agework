@@ -69,25 +69,29 @@ describe("WorkerEventService", () => {
     };
 
     liveRuns = new LiveRunRegistry(makeConfig());
-    runStatusService = new RunStatusService(
-      mockRunRepository as RunRepository,
-      mockConversations as unknown as ConversationService,
-      liveRuns
-    );
     const aguiEvents = new WorkerAgUiEventHandler(
       mockRunRepository as RunRepository,
       liveRuns,
       mockRunEvents
     );
     seqGate = new WorkerSeqStore();
+    runStatusService = new RunStatusService(
+      mockRunRepository as RunRepository,
+      mockConversations as unknown as ConversationService,
+      liveRuns,
+      new RunFinalizationStore(),
+      seqGate,
+      aguiEvents,
+      mockRunEvents
+    );
     workerEventsService = new WorkerEventService(
       liveRuns,
       mockRunEvents,
       runStatusService,
       mockExecutor as RunDriver,
       aguiEvents,
-      new RunFinalizationStore(),
-      seqGate
+      seqGate,
+      { setUpstreamPort: vi.fn() } as never
     );
   });
 
@@ -193,18 +197,6 @@ describe("WorkerEventService", () => {
     await workerEventsService.notifyCancelledBeforeReady("run-1");
 
     expect(forceCancelledStatus).toHaveBeenCalledWith("run-1");
-  });
-
-  it("recordCommandSent records via run event service", async () => {
-    await workerEventsService.recordCommandSent({
-      runId: "run-1",
-      commandId: "cmd-1",
-      commandType: "cancel",
-    });
-
-    expect(mockRunEvents.append).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "command.sent" })
-    );
   });
 
   it("should deduplicate messages by seq", async () => {
@@ -375,21 +367,37 @@ describe("WorkerEventService", () => {
   });
 
   it("keeps the terminal guard when status application fails mid-finalization", async () => {
-    vi.spyOn(runStatusService, "apply").mockRejectedValueOnce(
-      new Error("db down")
-    );
+    liveRuns.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeType: "local",
+        runtimeInstanceId: "1:token",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: { handle: vi.fn(), build: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(() => {
+        throw new Error("save failed");
+      }),
+    });
 
     await expect(
       workerEventsService.publish({
         runId: "run-1",
         seq: 1,
         type: "run.status" as const,
-        payload: { status: "error" as const, error: "boom" },
+        payload: { status: "finished" as const },
         ts: new Date().toISOString(),
       })
-    ).rejects.toThrow("db down");
+    ).rejects.toThrow("save failed");
 
-    // markCompleted 必须先于可能抛异常的 apply:守卫已生效,后续 force 不再重复终态
+    // markCompleted 必须先于可能抛异常的收尾动作:守卫已生效,内存态已清理,
+    // 后续 force 不再重复终态
     expect(workerEventsService.isTerminalOrFinalizing("run-1")).toBe(true);
     expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
 

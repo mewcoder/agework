@@ -8,7 +8,6 @@ import { WorkerSeqStore } from "./upstream/worker-seq.store";
 import { RunStatusService } from "./status/run-status.service";
 import { RunFinalizationStore } from "./status/run-finalization.store";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
-import { RunStartupService } from "./startup/run-startup.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { WorkerLostListener } from "./upstream/worker-lost.listener";
 import { RunService } from "./run.service";
@@ -46,7 +45,6 @@ import { ConversationModule } from "../conversation/conversation.module";
     RunLauncher,
     RunDriver,
     WorkerAgUiEventHandler,
-    RunStartupService,
     RunWorkspaceListener,
     WorkerLostListener,
   ],
