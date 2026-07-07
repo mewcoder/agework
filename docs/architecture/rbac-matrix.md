@@ -29,7 +29,7 @@
 
 ## 归属是怎么落地的（实现锚点）
 
-- **workspaces**：用户接口 `list/update/delete` 走 `ownerWhere(userId) = { userId }`；跨用户管理用 `updateAny/listAll`，挂在 `workspaces/admin/` 的 `@Roles("admin")` controller 上。
+- **workspaces**：用户接口 `list/update/delete` 走 `ownerWhere(userId) = { userId }`；跨用户管理用 `updateAny/listAll`，挂在 `workspace/admin/` 的 `@Roles("admin")` controller 上。
 - **conversations**：所有按 id 的读写都带 `workspace: { userId, deletedAt: null }`（`workspaceOwnerWhere`），别人的 `conversationId` 命不中 → 404 / 空列表。
 - **runs**：没有独立的用户接口，全部经 `conversations/agent` 端点；每个操作先 `conversationService.findOne(userId, …)` 做归属闸门，别人的对话抛 NotFound，`RunService` 不会被调用。
 - **run 历史 / 消息**：经 `conversation.listMessages(userId, …)`，先校验归属再返回，未归属返回 `[]`。
@@ -44,5 +44,5 @@
 
 - `user/user.service.spec.ts` — admin 不能重置 admin/super_admin 密码；super_admin 也不能通过 API 重置 super_admin。
 - `conversation/conversation.service.spec.ts` — `findOne/delete/archive/unarchive/listMessages` 按 owner 过滤，未归属 404 / 空。
-- `conversation/agent/agent.service.spec.ts` — `reply/stop/resume` 在归属校验失败时不触达 `RunService`。
-- `workspaces/workspace.service.spec.ts` — `update/delete` 按 owner 过滤，未归属 404 且不写库。
+- `agent/agent.service.spec.ts` — `reply/stop/resume` 在归属校验失败时不触达 `RunService`。
+- `workspace/workspace.service.spec.ts` — `update/delete` 按 owner 过滤，未归属 404 且不写库。

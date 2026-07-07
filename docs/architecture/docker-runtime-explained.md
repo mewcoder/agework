@@ -14,21 +14,16 @@
 所以需要把 agent 关进一个隔离的"小盒子"里干活，这个盒子就是**容器（container）**，
 由 Docker 来造。
 
-项目里有两种运行时类型，由环境变量 `AGEWORK_RUNTIME_ALLOWED_TYPES` 控制（逗号分隔，如 `local,sandbox`）：
+项目里有三种平级的运行时类型，由环境变量 `AGEWORK_RUNTIME_ALLOWED_TYPES` 放行（逗号分隔，
+如 `local,docker`；不设时默认只允许 `local`，列表第一项为创建时的默认类型）：
 
 | 运行时类型 | 说明 | 需要 Docker？ |
 |---|---|---|
 | **local** | 不隔离，直接在主机上跑 agent。开发图省事用，桌面客户端默认用这种 | 不需要 |
-| **sandbox** | 在容器里跑 agent，隔离宿主机。sandbox 内部有多种引擎可选 | 取决于引擎 |
+| **docker** | 在容器里跑 agent，直接调用 Docker API 造盒子、管理盒子生命周期 | 需要 |
+| **opensandbox** | 在容器里跑 agent，用阿里的 OpenSandbox 套件更安全地造盒子、管理盒子生命周期 | 需要 |
 
-sandbox 类型下，由 `AGEWORK_SANDBOX_ENGINE` 环境变量选择具体引擎：
-
-| 引擎 | 说明 |
-|---|---|
-| **docker** | 直接调用 Docker API 造盒子 |
-| **opensandbox** | 用阿里的 OpenSandbox 套件来更安全地造盒子、管理盒子生命周期 |
-
-sandbox 模式下不管用哪种引擎，都需要一个"装好了 agent 运行环境的镜像"——这就是 `agework/worker`。
+`docker` 和 `opensandbox` 都需要一个"装好了 agent 运行环境的镜像"——这就是 `agework/worker`。
 
 ## 2. 核心概念速查表
 
@@ -43,7 +38,7 @@ sandbox 模式下不管用哪种引擎，都需要一个"装好了 agent 运行�
 
 ## 3. 逐个文件讲解
 
-### 3.1 `apps/worker/Dockerfile` —— 造 worker 镜像的菜谱
+### 3.1 `apps/runtime/Dockerfile` —— 造 worker 镜像的菜谱
 
 这张菜谱分两段：第一段（`builder`）从 `node:22-slim` 开始 → 把整个 monorepo 代码复制进去 →
 用 pnpm 装依赖 → 用 esbuild 把 worker 自己和它依赖的 `@agework/shared`、`@agework/adapters`
@@ -56,9 +51,9 @@ bypassPermissions）→ 最后用 `node dist/main.js` 启动 worker，不再需�
 后面 docker / opensandbox 模式造的每个"盒子"，都是用这个镜像启动的。
 
 > 注意：因为依赖 monorepo 内的工作区包，构建上下文（context）必须是仓库根目录，
-> 不能只用 `apps/worker` 目录构建：
+> 不能只用 `apps/runtime` 目录构建：
 > ```bash
-> docker build -t agework/worker:latest -f apps/worker/Dockerfile .
+> docker build -t agework/worker:latest -f apps/runtime/Dockerfile .
 > ```
 
 ### 3.2 `infra/opensandbox/docker-compose.yml` —— 把 OpenSandbox 服务器跑起来的配置单
@@ -128,7 +123,7 @@ allowed_host_paths = ["/Users/mew/.agework/workspaces"]
 
 这里的 `execd`、`egress` 是 **OpenSandbox 自带的"零件"镜像**，不是本项目构建的——
 OpenSandbox server 运行时会自动从 Docker Hub 按需拉取。你只需要关心
-`agework/worker` 这一个镜像，由 `apps/worker/Dockerfile` 构建。
+`agework/worker` 这一个镜像，由 `apps/runtime/Dockerfile` 构建。
 
 镜像版本号（`v1.0.18`、`v1.1.0`）需要和实际拉取/已缓存的镜像版本对应，
 若手动清理过本地镜像，首次创建盒子时会按这里指定的版本重新拉取。
@@ -145,7 +140,7 @@ OpenSandbox server   ← infra/opensandbox/docker-compose.yml 启动，
    │                     按 infra/opensandbox/config.toml 的规矩工作
    │  用 agework/worker 镜像造盒子
    ▼
-worker 容器（盒子）   ← apps/worker/Dockerfile 构建出的镜像
+worker 容器（盒子）   ← apps/runtime/Dockerfile 构建出的镜像
    │  agent 在这个盒子里执行命令、改文件
    ▼
 挂载了 ~/.agework/workspaces，能读写用户的工作目录
@@ -174,7 +169,7 @@ worker 容器（盒子）   ← apps/worker/Dockerfile 构建出的镜像
 
 | 镜像/文件 | 来源 | 是否本项目构建/维护 |
 |---|---|---|
-| `agework/worker:latest` | `apps/worker/Dockerfile` | ✅ 本项目构建 |
+| `agework/worker:latest` | `apps/runtime/Dockerfile` | ✅ 本项目构建 |
 | `opensandbox/server:latest` | 阿里官方发布 | ❌ 直接拉取使用 |
 | `opensandbox/execd:v1.0.18`、`opensandbox/egress:v1.1.0` | 阿里官方发布，OpenSandbox server 按需自动拉取 | ❌ 不需要手动管理 |
 

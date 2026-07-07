@@ -1,8 +1,8 @@
 # OpenSandbox 本地开发环境
 
-记录 `RUNTIME_PROVIDER=opensandbox` 时涉及的文件、启动方式和常见报错排查。设计背景见
-`docs/superpowers/specs/2026-06-12-opensandbox-provider-design.md` 和
-`docs/superpowers/specs/2026-06-14-opensandbox-setup-consolidation-design.md`。
+记录使用 OpenSandbox 运行时（runtime type `opensandbox`，需将 `opensandbox` 加入
+`AGEWORK_RUNTIME_ALLOWED_TYPES`）时涉及的文件、启动方式和常见报错排查。历史设计文档见
+`docs/archive/superpowers/specs/`。
 
 ## 相关文件
 
@@ -15,11 +15,11 @@
   - `pullRuntimeImages()`：从 `config.toml` 读取并拉取 `execd`/`egress` 镜像
   - `composeUp/Down/Logs/Restart()`：操作 `infra/opensandbox/docker-compose.yml`
   - `waitForHealth()` / `healthCheck()`：健康检查
-  - `isWorkerImageStale()`：比较 worker 镜像构建时间与 `apps/worker`/`packages/shared`/
-    `packages/adapters` 源码 mtime
+  - `isWorkerImageStale()`：比较 worker 镜像构建时间与 `apps/runtime`/`packages/worker`/
+    `packages/shared`/`packages/adapters` 源码 mtime
 - `scripts/init.mjs`（`pnpm boot` / `pnpm init:*`）— 选择 `opensandbox` 时复用
   `opensandbox.mjs` 完成镜像构建、镜像拉取、启动容器、等待健康检查
-- `apps/server/src/runtime/providers/opensandbox-runtime-provider.ts` — 后端 RuntimeProvider 实现
+- `packages/providers/src/opensandbox/opensandbox-runtime.provider.ts` — OpenSandbox RuntimeProvider 实现
 - `apps/server/.env` 中的 `OPENSANDBOX_*`（DOMAIN/PROTOCOL/API_KEY/IMAGE/...）
 
 ## 常用命令
@@ -32,7 +32,7 @@ pnpm opensandbox:health  # 健康检查（GET /health）
 pnpm opensandbox:rebuild # 重新构建 worker 镜像并重启 opensandbox-server
 ```
 
-修改 `apps/worker`、`packages/shared`、`packages/adapters` 源码后，再次执行
+修改 `apps/runtime`、`packages/worker`、`packages/shared`、`packages/adapters` 源码后，再次执行
 `pnpm opensandbox:up` 会提示 worker 镜像是否过期；过期时执行 `pnpm opensandbox:rebuild`
 重新构建并让新 sandbox 使用新镜像。
 

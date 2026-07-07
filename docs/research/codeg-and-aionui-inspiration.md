@@ -7,7 +7,7 @@
 > 2. **多 Agent 支持** — Codeg 的"父 agent 通过 MCP 委派子 agent"和 AionUi 的"Leader-Teammate Team Mode"是两种范式
 > 3. **AgeWork 暂未实现的功能** — 把两项目的能力清单逐项拆解，每条都给出 AgeWork 可借鉴的最小可实施版本
 >
-> 与已有 `aionui-inspiration.md` / `codeg-and-aionui-inspiration.md` 互补——前者是单一项目总览，本报告是**主题导向**的横向深度对比。
+> 本报告是**主题导向**的横向深度对比（codeg × AionUi 双项目并置），而非单一项目总览。
 
 ---
 
