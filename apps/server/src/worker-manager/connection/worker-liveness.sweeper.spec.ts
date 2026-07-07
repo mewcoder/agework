@@ -233,7 +233,7 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     });
   });
 
-  it("no-ops when the owner has no active registry row", async () => {
+  it("cleans up the stale liveness entry when the owner has no active registry row", async () => {
     const deps = makeDeps({ stale: ["owner-gone"] });
     deps.registry.findActiveByOwnerId.mockResolvedValue(null);
 
@@ -241,6 +241,7 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
     expect(deps.events.emit).not.toHaveBeenCalled();
     expect(deps.provisioner.stop).not.toHaveBeenCalled();
-    expect(deps.livenessStore.remove).not.toHaveBeenCalled();
+    // liveness 条目必须被兜底回收,否则每个 sweep 周期都会白查一次 DB
+    expect(deps.livenessStore.remove).toHaveBeenCalledWith("owner-gone");
   });
 });

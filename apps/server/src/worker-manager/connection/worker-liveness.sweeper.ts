@@ -70,14 +70,20 @@ export class WorkerLivenessSweeper
   /**
    * fence 掉某 owner 名下 unhealthy 的 worker:超时即判死,不做"确认死亡"(卡死但
    * 进程没退出正是本机制要抓的场景)。物理停止载体是幂等操作,对已经死透的容器/
-   * 进程重复调用无害。找不到活跃行说明该 owner 已经被别的路径清理过,直接 return。
+   * 进程重复调用无害。找不到活跃行说明该 owner 已经被别的路径清理过,回收残留的
+   * liveness 条目后 return。
    */
   private async fenceWorkerByOwnerId(
     ownerId: string,
     reason: string
   ): Promise<void> {
     const active = await this.registry.findActiveByOwnerId(ownerId);
-    if (!active) return;
+    if (!active) {
+      // owner 已被别的路径清理(local 进程退出 / 手动停),liveness 条目是残留,
+      // 这里是唯一的兜底回收点:不清掉会每个 sweep 周期都命中 listStale 白查一次 DB
+      this.livenessStore.remove(ownerId);
+      return;
+    }
 
     const runIds = this.ownerRunStore.runIdsForOwner(ownerId);
     for (const runId of runIds) {
