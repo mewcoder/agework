@@ -33,7 +33,7 @@ import { PaginationBar } from "@/components/pagination-bar";
 import { STATUS_OPTIONS, statusLabel, statusVariant } from "./run-status";
 import { RunDetailSheet } from "./run-detail-sheet";
 
-export function RunsPanel({ showHeader = true }: { showHeader?: boolean }) {
+export function RunPanel({ showHeader = true }: { showHeader?: boolean }) {
   const [status, setStatus] = useState<RunStatus | "all">("all");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const { pageNo, pageSize, goPrev, goNext, setPageNo } = usePagination();

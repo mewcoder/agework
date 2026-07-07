@@ -322,8 +322,8 @@ function RuntimeSection({
 
 // ── 主面板 ────────────────────────────────────────────────────────────
 
-/** Admin「运行环境管理」：Runtime 列表 + create/delete + CLI 路径覆盖/重检。 */
-export function AdminRuntimeManagementPanel({
+/** Admin「运行环境」：Runtime 列表 + create/delete + CLI 路径覆盖/重检。 */
+export function RuntimePanel({
   showHeader = true,
 }: {
   showHeader?: boolean;

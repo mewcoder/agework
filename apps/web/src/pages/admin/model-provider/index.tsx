@@ -31,11 +31,11 @@ import {
   getModel,
 } from "@/utils/model-provider";
 import {
-  AdminModelProviderActions,
+  ModelProviderActions,
   ModelProviderValue,
-} from "./admin-model-provider-row";
+} from "./model-provider-row";
 
-export function AdminModelProvidersPanel({
+export function ModelProviderPanel({
   showHeader = true,
 }: {
   showHeader?: boolean;
@@ -181,7 +181,7 @@ export function AdminModelProvidersPanel({
         const setEnabledMutation = setEnabledMutationFor(modelProvider.agentType);
 
         return (
-          <AdminModelProviderActions
+          <ModelProviderActions
             modelProvider={modelProvider}
             isTogglingEnabled={setEnabledMutation.isPending}
             onToggleEnabled={() =>

@@ -79,7 +79,7 @@ function SettingRow({ item }: { item: SettingListItem }) {
           <Button
             size="icon"
             variant="ghost"
-            className="h-8 w-8 text-muted-foreground"
+            className="h-8 w-8"
             onClick={handleCancel}
             disabled={isPending}
           >
@@ -131,7 +131,7 @@ function SettingRow({ item }: { item: SettingListItem }) {
   );
 }
 
-export function SystemSettingsPanel({ showHeader = true }: { showHeader?: boolean }) {
+export function SystemConfigPanel({ showHeader = true }: { showHeader?: boolean }) {
   const { data, isLoading } = useAdminSettings();
 
   return (

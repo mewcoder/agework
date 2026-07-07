@@ -20,14 +20,14 @@ import {
   type SettingsNavSection,
 } from '@/components/settings/settings-panel';
 import { useAuthStore } from '@/stores/auth-store';
-import { UsersPanel } from '@/pages/admin/user';
-import { AdminModelProvidersPanel } from '@/pages/admin/model-providers';
+import { UserPanel } from '@/pages/admin/user';
+import { ModelProviderPanel } from '@/pages/admin/model-provider';
 import { CliStatusPanel } from '@/pages/admin/cli-status';
-import { AdminRuntimeManagementPanel } from '@/pages/admin/runtime-management';
-import { RunsPanel } from '@/pages/admin/run';
-import { WorkspacesPanel } from '@/pages/admin/workspace';
-import { WorkspaceRuntimesPanel } from '@/pages/admin/workspace-runtimes';
-import { SystemSettingsPanel } from '@/pages/admin/system-settings';
+import { RuntimePanel } from '@/pages/admin/runtime';
+import { RunPanel } from '@/pages/admin/run';
+import { WorkspacePanel } from '@/pages/admin/workspace';
+import { WorkerPanel } from '@/pages/admin/worker';
+import { SystemConfigPanel } from '@/pages/admin/system-config';
 import { AccountSettings } from '@/pages/settings/account';
 import { GeneralSettings } from '@/pages/settings/general';
 import { ModelProvider } from '@/pages/settings/model-provider';
@@ -170,7 +170,7 @@ export default function SettingsPage() {
             title="用户管理"
             description="管理系统用户账号与权限"
           />
-          <UsersPanel showHeader={false} />
+          <UserPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'model-providers' && (
@@ -179,7 +179,7 @@ export default function SettingsPage() {
             title="模型服务管理"
             description="管理 Claude 和 Codex 的全局模型服务配置"
           />
-          <AdminModelProvidersPanel showHeader={false} />
+          <ModelProviderPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'runtime-management' && (
@@ -188,7 +188,7 @@ export default function SettingsPage() {
             title="运行环境管理"
             description="管理运行环境及 Agent CLI"
           />
-          <AdminRuntimeManagementPanel showHeader={false} />
+          <RuntimePanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'workspaces-overview' && (
@@ -197,7 +197,7 @@ export default function SettingsPage() {
             title="工作空间管理"
             description="查看和管理所有用户的工作空间"
           />
-          <WorkspacesPanel showHeader={false} />
+          <WorkspacePanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'runs' && (
@@ -206,7 +206,7 @@ export default function SettingsPage() {
             title="运行日志"
             description="查看所有用户的 Agent 运行日志"
           />
-          <RunsPanel showHeader={false} />
+          <RunPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'workers' && (
@@ -215,7 +215,7 @@ export default function SettingsPage() {
             title="Worker 管理"
             description="查看和管理各用户 / 工作空间下常驻的 Worker"
           />
-          <WorkspaceRuntimesPanel showHeader={false} />
+          <WorkerPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'system-config' && (
@@ -224,7 +224,7 @@ export default function SettingsPage() {
             title="系统配置"
             description="管理可在线调整的运行时配置参数"
           />
-          <SystemSettingsPanel showHeader={false} />
+          <SystemConfigPanel showHeader={false} />
         </div>
       )}
     </SettingsPanel>

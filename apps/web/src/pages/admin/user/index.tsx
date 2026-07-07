@@ -62,7 +62,7 @@ function canManage(currentRole: string | undefined, target: User) {
   return target.role === "user";
 }
 
-export function UsersPanel({
+export function UserPanel({
   showHeader = true,
 }: {
   showHeader?: boolean;

@@ -11,7 +11,7 @@ import { usePagination } from "@/hooks/use-pagination";
 import { PaginationBar } from "@/components/pagination-bar";
 import { formatDateTime } from "@/utils/format";
 
-export function WorkspacesPanel({
+export function WorkspacePanel({
   showHeader = true,
 }: {
   showHeader?: boolean;

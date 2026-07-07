@@ -39,7 +39,7 @@ function statusVariant(status: string) {
   return "outline" as const;
 }
 
-export function WorkspaceRuntimesPanel({ showHeader = true }: { showHeader?: boolean }) {
+export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
   const [status, setStatus] = useState<string>("all");
   const [stoppingId, setStoppingId] = useState<string | null>(null);
   const stopDialog = useBooleanConfirmDelete();

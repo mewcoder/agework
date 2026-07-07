@@ -46,7 +46,7 @@ export function ModelProviderValue({
   );
 }
 
-export function AdminModelProviderActions({
+export function ModelProviderActions({
   modelProvider,
   onToggleEnabled,
   onEdit,
