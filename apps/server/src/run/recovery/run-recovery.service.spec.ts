@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
-import { ConversationService } from "../../conversation/conversation.service";
+import type { ConversationEffectsPort } from "../run.types";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
 function makeWorkerManager(
@@ -27,8 +27,8 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversations: Partial<ConversationService> = {
-      setRunStatus: vi.fn().mockResolvedValue(undefined),
+    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
@@ -36,7 +36,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversations as ConversationService,
+      mockConversationEffects as unknown as ConversationEffectsPort,
       workerManager as WorkerManagerService
     );
 
@@ -59,10 +59,9 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       "run-1",
       "服务重启导致运行中断"
     );
-    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
-      "conversation-1",
-      "error"
-    );
+    expect(
+      mockConversationEffects.setConversationRunState
+    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 
   it("skips sending a cancel command when a run has no persisted runtimeInstanceId", async () => {
@@ -77,14 +76,14 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversations: Partial<ConversationService> = {
-      setRunStatus: vi.fn().mockResolvedValue(undefined),
+    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversations as ConversationService,
+      mockConversationEffects as unknown as ConversationEffectsPort,
       workerManager as WorkerManagerService
     );
 
@@ -110,8 +109,8 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversations: Partial<ConversationService> = {
-      setRunStatus: vi.fn().mockResolvedValue(undefined),
+    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
@@ -119,7 +118,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversations as ConversationService,
+      mockConversationEffects as unknown as ConversationEffectsPort,
       workerManager as WorkerManagerService
     );
 
@@ -148,8 +147,8 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       ]),
       markError: vi.fn().mockResolvedValue(undefined),
     };
-    const mockConversations: Partial<ConversationService> = {
-      setRunStatus: vi.fn().mockResolvedValue(undefined),
+    const mockConversationEffects: Partial<ConversationEffectsPort> = {
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
     const workerManager = makeWorkerManager({
       findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
@@ -157,7 +156,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
-      mockConversations as ConversationService,
+      mockConversationEffects as unknown as ConversationEffectsPort,
       workerManager as WorkerManagerService
     );
 

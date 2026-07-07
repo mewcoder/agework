@@ -8,6 +8,7 @@ import type {
 import { ConversationService } from "../conversation/conversation.service";
 import type { JwtUser } from "../auth/auth.types";
 import { RunService } from "../run/run.service";
+import type { RunCliPaths } from "../run/run.types";
 import { WorkspaceService } from "../workspace/workspace.service";
 import { safeLogJson } from "../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
@@ -17,6 +18,7 @@ import {
   getAgentOptionsByType,
 } from "./options/agent-options";
 import { ModelProviderService } from "../model-provider/model-provider.service";
+import { RuntimeService } from "../runtime/runtime.service";
 
 type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
 
@@ -33,7 +35,8 @@ export class AgentService {
     private readonly conversationService: ConversationService,
     private readonly runService: RunService,
     private readonly modelProviderService: ModelProviderService,
-    private readonly workspaceService: WorkspaceService
+    private readonly workspaceService: WorkspaceService,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /** 返回各 agent 类型的入口可选项(权限模式等),供前端入口展示。 */
@@ -154,6 +157,18 @@ export class AgentService {
         err instanceof Error ? err.message : String(err)
       );
     }
+    // Resolve CLI paths for local runtime (parameter feeding: RunModule should not depend on RuntimeModule)
+    let cliPaths: RunCliPaths | undefined;
+    if (workspace.runtimeType === "local") {
+      const resolved = await this.runtimeService.getResolvedCliPaths(
+        workspace.runtimeId
+      );
+      if (resolved) {
+        cliPaths = {};
+        if (resolved.claude) cliPaths.claude = resolved.claude;
+        if (resolved.codex) cliPaths.codex = resolved.codex;
+      }
+    }
 
     await this.runService.start({
       runId,
@@ -167,6 +182,7 @@ export class AgentService {
       userMessageId,
       res,
       interruptReason,
+      cliPaths,
     });
   }
 

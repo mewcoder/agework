@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Inject,
   Logger,
   BadRequestException,
   ConflictException,
@@ -18,7 +19,11 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { RunDriver } from "../driver/run-driver";
-import { ConversationService } from "../../conversation/conversation.service";
+import {
+  CONVERSATION_EFFECTS_PORT,
+  type ConversationEffectsPort,
+  type RunCliPaths,
+} from "../run.types";
 import {
   AssistantMessageAggregator,
   type IncompleteMessageReason,
@@ -34,7 +39,6 @@ import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { safePathPart } from "../../common/safe-path";
 import { RunStream } from "../streaming/run-stream";
-import { RuntimeService } from "../../runtime/runtime.service";
 
 type SaveRun = (
   complete: boolean,
@@ -64,10 +68,10 @@ export class RunLauncher {
     private readonly liveRuns: LiveRunRegistry,
     private readonly workerManager: WorkerManagerService,
     private readonly driver: RunDriver,
-    private readonly conversations: ConversationService,
+    @Inject(CONVERSATION_EFFECTS_PORT)
+    private readonly conversationEffects: ConversationEffectsPort,
     private readonly runEvents: RunEventService,
-    private readonly configService: ConfigService,
-    private readonly runtimeService: RuntimeService
+    private readonly configService: ConfigService
   ) {}
 
   /** 启动一次 run：从 placement 解析到 live handle 注册的完整出站准备链路。 */
@@ -94,15 +98,15 @@ export class RunLauncher {
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
       runtimeTarget.runtimeType !== "local" ? runtimeTarget.sandbox : undefined;
-    const runConfig = await this.makeRunConfig({
+    const runConfig = this.makeRunConfig({
       agentProviderConfig,
       placement: runtimeTarget,
       workspaceId: workspace.workspaceId,
       runId,
       conversationId,
       input: runInput,
-      targetRuntimeId,
       runtimeType,
+      cliPaths: input.cliPaths,
     });
     const stream = new RunStream(res);
 
@@ -260,16 +264,16 @@ export class RunLauncher {
     }
   }
 
-  private async makeRunConfig(params: {
+  private makeRunConfig(params: {
     agentProviderConfig: AgentProviderConfig;
     placement: RuntimeSpec;
     workspaceId: string;
     runId: string;
     conversationId: string;
     input: unknown;
-    targetRuntimeId: string;
     runtimeType: string;
-  }): Promise<RunConfig> {
+    cliPaths?: RunCliPaths;
+  }): RunConfig {
     const {
       agentProviderConfig,
       placement,
@@ -277,22 +281,19 @@ export class RunLauncher {
       runId,
       conversationId,
       input,
-      targetRuntimeId,
       runtimeType,
+      cliPaths,
     } = params;
     try {
       const logPaths = this.makeLogPaths(placement, conversationId);
 
-      // local 类型从 runtime envConfig 提取 CLI 路径（override > detected）。
+      // local 类型 CLI 路径由调用方（AgentService）参数喂入，不再直接依赖 RuntimeModule。
       // container 不走此链路（镜像固定路径，经 env 注入，见 ADR-0004）。
       let claudeExecutablePath: string | undefined;
       let codexExecutablePath: string | undefined;
-      if (runtimeType === "local") {
-        const resolved = await this.runtimeService.getResolvedCliPaths(targetRuntimeId);
-        if (resolved) {
-          if (resolved.claude) claudeExecutablePath = resolved.claude;
-          if (resolved.codex) codexExecutablePath = resolved.codex;
-        }
+      if (runtimeType === "local" && cliPaths) {
+        claudeExecutablePath = cliPaths.claude;
+        codexExecutablePath = cliPaths.codex;
       }
 
       return {
@@ -355,13 +356,11 @@ export class RunLauncher {
   }): Promise<void> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
-    const activated = await this.conversations.setRunStatus(
+    const activated = await this.conversationEffects.activateConversation(
       conversationId,
-      "running"
+      userId
     );
     if (activated) return;
-
-    await this.conversations.findById(userId, conversationId);
     if (interruptReason === "user_steered") {
       await stopActiveRun(conversationId, {
         reason: "user_steered",
@@ -390,9 +389,10 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.conversations.saveUserMessage(conversationId, userMessage, {
-      agentType,
-      modelProviderId,
+    await this.conversationEffects.persistConversationMessage(conversationId, {
+      type: "saveUserMessage",
+      userMessage,
+      titleContext: { agentType, modelProviderId },
     });
   }
 
@@ -410,19 +410,25 @@ export class RunLauncher {
           const snap = aggregator.build(complete, incompleteReason);
           if (snap.content.length === 0) return;
           const contentId = snap.messageId ?? runId;
-          return this.conversations.upsertMessage(conversationId, {
-            id: runId,
-            runId,
-            parent_id: null,
-            format: "assistant-ui",
-            content: {
-              role: "assistant",
-              id: contentId,
-              content: snap.content,
-              status: snap.status,
-              ...(snap.metadata ? { metadata: snap.metadata } : {}),
-            },
-          });
+          return this.conversationEffects.persistConversationMessage(
+            conversationId,
+            {
+              type: "upsertMessage",
+              data: {
+                id: runId,
+                runId,
+                parent_id: null,
+                format: "assistant-ui",
+                content: {
+                  role: "assistant",
+                  id: contentId,
+                  content: snap.content,
+                  status: snap.status,
+                  ...(snap.metadata ? { metadata: snap.metadata } : {}),
+                },
+              },
+            }
+          );
         })
         .catch((err: unknown) => {
           this.logger.warn(
@@ -434,8 +440,11 @@ export class RunLauncher {
 
   private saveSession(conversationId: string): (sessionId: string) => void {
     return (sessionId) => {
-      this.conversations
-        .setAgentSessionId(conversationId, sessionId)
+      this.conversationEffects
+        .persistConversationMessage(conversationId, {
+          type: "setAgentSessionId",
+          sessionId,
+        })
         .catch(
           swallow(this.logger, `persist agent session for ${conversationId}`)
         );
@@ -484,8 +493,12 @@ export class RunLauncher {
         `record run created for run ${runId}`
       );
       if (userMessageId) {
-        await this.conversations
-          .attachMessageToRun(conversationId, userMessageId, runId)
+        await this.conversationEffects
+          .persistConversationMessage(conversationId, {
+            type: "attachMessageToRun",
+            messageId: userMessageId,
+            runId,
+          })
           .catch(
             swallow(
               this.logger,
@@ -581,8 +594,8 @@ export class RunLauncher {
           swallow(this.logger, `record runtime start failure for run ${runId}`)
         )
         .finally(() => this.runEvents.forgetRun(runId));
-      await this.conversations
-        .setRunStatus(conversationId, "error")
+      await this.conversationEffects
+        .setConversationRunState(conversationId, { runStatus: "error" })
         .catch(
           swallow(
             this.logger,

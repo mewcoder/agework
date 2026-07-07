@@ -3,7 +3,7 @@ import {
   LiveRunRegistry,
   type LiveRunHandle,
 } from "../live-run/live-run.registry";
-import { ConversationService } from "../../conversation/conversation.service";
+import type { ConversationEffectsPort } from "../run.types";
 import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
@@ -62,9 +62,8 @@ function makeSubject(input?: {
       .mockResolvedValue(input?.activeRun ?? null),
   };
   const runConversation = {
-    setPendingUserAction: vi.fn().mockResolvedValue(undefined),
-    setRunStatus: vi.fn().mockResolvedValue(undefined),
-  };
+    setConversationRunState: vi.fn().mockResolvedValue(undefined),
+  } satisfies Partial<ConversationEffectsPort>;
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   return {
     runRepository,
@@ -72,7 +71,7 @@ function makeSubject(input?: {
     registry,
     handler: new RunStatusService(
       runRepository as unknown as RunRepository,
-      runConversation as unknown as ConversationService,
+      runConversation as unknown as ConversationEffectsPort,
       registry
     ),
   };
@@ -92,9 +91,9 @@ describe("RunStatusService", () => {
 
     expect(runRepository.markRequiresAction).toHaveBeenCalledWith("run-1");
     expect(handle.saveRun).toHaveBeenCalledWith(false);
-    expect(runConversation.setPendingUserAction).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
       "conversation-1",
-      "question"
+      { pendingUserAction: "question" }
     );
   });
 
@@ -116,9 +115,9 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markError).toHaveBeenCalledWith("run-1", "boom");
-    expect(runConversation.setRunStatus).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
       "conversation-1",
-      "error"
+      { runStatus: "error" }
     );
     expect(handle.saveRun).toHaveBeenCalledWith(false, "error");
     expect(res.write).toHaveBeenCalledWith(
@@ -141,7 +140,7 @@ describe("RunStatusService", () => {
       handle,
     });
 
-    expect(runConversation.setRunStatus).not.toHaveBeenCalled();
+    expect(runConversation.setConversationRunState).not.toHaveBeenCalled();
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 

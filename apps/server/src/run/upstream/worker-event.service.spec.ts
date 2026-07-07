@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { WorkerEventService } from "./worker-event.service";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { ConversationService } from "../../conversation/conversation.service";
+import type { ConversationEffectsPort } from "../run.types";
 import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-event/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
@@ -38,7 +38,7 @@ describe("WorkerEventService", () => {
   let workerEventsService: WorkerEventService;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
-  let mockConversations: Partial<ConversationService>;
+  let mockConversations: Partial<ConversationEffectsPort>;
   let mockRunEvents: RunEventService;
   let mockExecutor: Partial<RunDriver>;
   let runStatusService: RunStatusService;
@@ -56,9 +56,9 @@ describe("WorkerEventService", () => {
     };
 
     mockConversations = {
-      setPendingUserAction: vi.fn().mockResolvedValue(undefined),
-      setRunStatus: vi.fn().mockResolvedValue(undefined),
-      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
+      persistConversationMessage: vi.fn().mockResolvedValue(undefined),
+      activateConversation: vi.fn().mockResolvedValue(true),
     };
     mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -71,7 +71,7 @@ describe("WorkerEventService", () => {
     liveRuns = new LiveRunRegistry(makeConfig());
     runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
-      mockConversations as ConversationService,
+      mockConversations as unknown as ConversationEffectsPort,
       liveRuns
     );
     const aguiEvents = new WorkerAgUiEventHandler(
@@ -438,7 +438,10 @@ describe("WorkerEventService", () => {
 
   it("persists agent.sessionId only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
+      void mockConversations.persistConversationMessage?.("conversation-1", {
+        type: "setAgentSessionId",
+        sessionId,
+      });
     });
     liveRuns.register("run-1", {
       runtimeHandle: {
@@ -472,16 +475,21 @@ describe("WorkerEventService", () => {
 
     expect(onAgentSessionId).toHaveBeenCalledTimes(1);
     expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
-    expect(mockConversations.setAgentSessionId).toHaveBeenCalledTimes(1);
-    expect(mockConversations.setAgentSessionId).toHaveBeenCalledWith(
+    expect(mockConversations.persistConversationMessage).toHaveBeenCalledTimes(
+      1
+    );
+    expect(mockConversations.persistConversationMessage).toHaveBeenCalledWith(
       "conversation-1",
-      "session-1"
+      { type: "setAgentSessionId", sessionId: "session-1" }
     );
   });
 
   it("persists system:init session_id only through the live run callback", async () => {
     const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
+      void mockConversations.persistConversationMessage?.("conversation-1", {
+        type: "setAgentSessionId",
+        sessionId,
+      });
     });
     liveRuns.register("run-1", {
       runtimeHandle: {
@@ -515,10 +523,12 @@ describe("WorkerEventService", () => {
 
     expect(onAgentSessionId).toHaveBeenCalledTimes(1);
     expect(onAgentSessionId).toHaveBeenCalledWith("session-1");
-    expect(mockConversations.setAgentSessionId).toHaveBeenCalledTimes(1);
-    expect(mockConversations.setAgentSessionId).toHaveBeenCalledWith(
+    expect(mockConversations.persistConversationMessage).toHaveBeenCalledTimes(
+      1
+    );
+    expect(mockConversations.persistConversationMessage).toHaveBeenCalledWith(
       "conversation-1",
-      "session-1"
+      { type: "setAgentSessionId", sessionId: "session-1" }
     );
   });
 

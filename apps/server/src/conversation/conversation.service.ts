@@ -18,6 +18,10 @@ import { swallow } from "../common/swallow";
 import { ConversationRepository } from "./conversation.repository";
 import { TitleGenerator } from "./title/title-generator";
 import type { AssistantUserMessage } from "./conversation.types";
+import type {
+  ConversationEffectsPort,
+  ConversationMessageInput,
+} from "../run/run.types";
 
 // 从 assistant-ui 消息 content(string / part 数组 / { role, content } 对象)提取纯文本。
 function extractText(content: unknown): string {
@@ -52,7 +56,7 @@ function isStoredUserMessage(
 }
 
 @Injectable()
-export class ConversationService {
+export class ConversationService implements ConversationEffectsPort {
   private readonly logger = new Logger(ConversationService.name);
 
   constructor(
@@ -339,6 +343,41 @@ export class ConversationService {
   }
 
   /**
+   * ConversationEffectsPort 实现:原子激活会话(setRunStatus("running")),
+   * 激活失败时校验归属(findById 抛 NotFoundException),返回是否成功激活。
+   * 调用方:`RunLauncher.claimRun`,经 Port 回流,run 模块不直接依赖本 Service。
+   */
+  async activateConversation(
+    conversationId: string,
+    userId: string
+  ): Promise<boolean> {
+    const activated = await this.setRunStatus(conversationId, "running");
+    if (activated) return true;
+    await this.findById(userId, conversationId);
+    return false;
+  }
+
+  /**
+   * ConversationEffectsPort 实现:设置会话运行终态 / 中间态(idle / error / pendingUserAction)。
+   * 调用方:`RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)、
+   * `RunLauncher`(startWorker 失败时置 error),经 Port 回流。
+   */
+  async setConversationRunState(
+    conversationId: string,
+    state: {
+      runStatus?: "idle" | "running" | "error";
+      pendingUserAction?: ConversationPendingUserAction | null;
+    }
+  ): Promise<void> {
+    if (state.pendingUserAction !== undefined) {
+      await this.setPendingUserAction(conversationId, state.pendingUserAction);
+    }
+    if (state.runStatus !== undefined) {
+      await this.setRunStatus(conversationId, state.runStatus);
+    }
+  }
+
+  /**
    * 记录待用户操作(如 `question`),用于 requires-action 场景标记会话需要用户输入。
    * 调用方:`RunStatusService`。
    */
@@ -523,6 +562,38 @@ export class ConversationService {
     }
   ) {
     await this.repo.upsertMessage(conversationId, data);
+  }
+
+  /**
+   * ConversationEffectsPort 实现:按消息类型分发到对应的落库方法。
+   * 调用方:`RunLauncher`,经 Port 回流,run 模块不直接依赖本 Service。
+   */
+  async persistConversationMessage(
+    conversationId: string,
+    message: ConversationMessageInput
+  ): Promise<void> {
+    switch (message.type) {
+      case "saveUserMessage":
+        await this.saveUserMessage(
+          conversationId,
+          message.userMessage,
+          message.titleContext
+        );
+        break;
+      case "upsertMessage":
+        await this.upsertMessage(conversationId, message.data);
+        break;
+      case "attachMessageToRun":
+        await this.attachMessageToRun(
+          conversationId,
+          message.messageId,
+          message.runId
+        );
+        break;
+      case "setAgentSessionId":
+        await this.setAgentSessionId(conversationId, message.sessionId);
+        break;
+    }
   }
 
   private normalizeMessageFormat(format: string, content: unknown) {

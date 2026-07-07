@@ -1,9 +1,12 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Inject, Logger } from "@nestjs/common";
 import type { RunStatusPayload } from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import type { LiveRunHandle } from "../live-run/live-run.registry";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { ConversationService } from "../../conversation/conversation.service";
+import {
+  CONVERSATION_EFFECTS_PORT,
+  type ConversationEffectsPort,
+} from "../run.types";
 import type {
   RunStatusEffect,
   RunStatusPersistenceAction,
@@ -16,7 +19,8 @@ export class RunStatusService {
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly conversations: ConversationService,
+    @Inject(CONVERSATION_EFFECTS_PORT)
+    private readonly conversationEffects: ConversationEffectsPort,
     private readonly liveRuns: LiveRunRegistry
   ) {}
 
@@ -36,8 +40,10 @@ export class RunStatusService {
     }
 
     if (handle && payload.pendingAction !== undefined) {
-      await this.conversations
-        .setPendingUserAction(handle.conversationId, payload.pendingAction)
+      await this.conversationEffects
+        .setConversationRunState(handle.conversationId, {
+          pendingUserAction: payload.pendingAction,
+        })
         .catch(
           swallow(
             this.logger,
@@ -130,8 +136,10 @@ export class RunStatusService {
       return;
     }
 
-    await this.conversations
-      .setRunStatus(handle.conversationId, effect.terminalConversationStatus)
+    await this.conversationEffects
+      .setConversationRunState(handle.conversationId, {
+        runStatus: effect.terminalConversationStatus,
+      })
       .catch(
         swallow(
           this.logger,

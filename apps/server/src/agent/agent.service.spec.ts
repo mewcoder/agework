@@ -5,6 +5,7 @@ import { ConversationService } from "../conversation/conversation.service";
 import { RunService } from "../run/run.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { WorkspaceService } from "../workspace/workspace.service";
+import { RuntimeService } from "../runtime/runtime.service";
 import type { Response } from "express";
 import type { JwtUser } from "../auth/auth.types";
 import type { AgentRunRequestDto as AgentRunRequestBody } from "./dto/agent-run.dto";
@@ -15,6 +16,7 @@ describe("AgentService", () => {
   let mockRunService: Partial<RunService>;
   let mockModelProviderService: Partial<ModelProviderService>;
   let mockWorkspaceService: Partial<WorkspaceService>;
+  let mockRuntimeService: Partial<RuntimeService>;
   let res: Partial<Response>;
   let user: JwtUser;
 
@@ -42,7 +44,15 @@ describe("AgentService", () => {
       getRunContext: vi.fn().mockResolvedValue({
         workspaceId: "proj-1",
         workspaceRootPath: "/tmp/ws",
+        runtimeType: "local",
+        runtimeId: "builtin-local",
         username: "mew",
+      }),
+    };
+    mockRuntimeService = {
+      getResolvedCliPaths: vi.fn().mockResolvedValue({
+        claude: "/usr/local/bin/claude",
+        codex: null,
       }),
     };
     res = {
@@ -58,7 +68,8 @@ describe("AgentService", () => {
       mockConversationService as ConversationService,
       mockRunService as RunService,
       mockModelProviderService as ModelProviderService,
-      mockWorkspaceService as WorkspaceService
+      mockWorkspaceService as WorkspaceService,
+      mockRuntimeService as RuntimeService
     );
   });
 
@@ -132,7 +143,7 @@ describe("AgentService", () => {
     expect(startArgs.modelProviderId).toBe("mc-1");
     expect(startArgs.workspace.workspaceId).toBe("proj-1");
     expect(startArgs.userMessageId).toBe("msg-1");
-    expect(startArgs.res).toBe(res);
+    expect(startArgs.cliPaths).toEqual({ claude: "/usr/local/bin/claude" });
     expect(startArgs.agentProviderConfig).toEqual(
       expect.objectContaining({ agentType: "claude", source: "system" })
     );
@@ -230,7 +241,7 @@ describe("AgentService", () => {
     );
     const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
-    expect(startArgs.interruptReason).toBe("user_steered");
+    expect(startArgs.input.interruptReason).toBe("user_steered");
   });
 
   describe("resume()", () => {

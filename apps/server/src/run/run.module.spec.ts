@@ -1,4 +1,4 @@
-import { Injectable, Module } from "@nestjs/common";
+import { Global, Injectable, Module } from "@nestjs/common";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,26 @@ import { WorkerEventService } from "./upstream/worker-event.service";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunModule } from "./run.module";
 import { RunStartupService } from "./startup/run-startup.service";
+import { CONVERSATION_EFFECTS_PORT } from "./run.types";
+
+const MOCK_CONVERSATION_EFFECTS = {
+  activateConversation: vi.fn().mockResolvedValue(true),
+  setConversationRunState: vi.fn().mockResolvedValue(undefined),
+  persistConversationMessage: vi.fn().mockResolvedValue(undefined),
+};
+
+/**
+ * Global module providing CONVERSATION_EFFECTS_PORT mock for RunModule DI.
+ * Must be @Global() so RunModule's encapsulated providers can resolve the Symbol token.
+ */
+@Global()
+@Module({
+  providers: [
+    { provide: CONVERSATION_EFFECTS_PORT, useValue: MOCK_CONVERSATION_EFFECTS },
+  ],
+  exports: [CONVERSATION_EFFECTS_PORT],
+})
+class ConversationEffectsPortModule {}
 
 @Injectable()
 class DownstreamRunConsumer {
@@ -88,6 +108,7 @@ async function createRunsTestingModule(
       ConfigModule,
       PrismaModule,
       EventEmitterModule.forRoot(),
+      ConversationEffectsPortModule,
       ...(runImports ?? []),
     ],
   })
@@ -104,6 +125,7 @@ async function createRunsTestingModule(
       },
       runtime: {
         upsert: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
     })
     .overrideProvider(ModelProviderService)
@@ -117,20 +139,20 @@ async function createRunsTestingModule(
 
 function createConfigServiceMock(): Partial<ConfigService> {
   return {
-    getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
-    getAllowedRuntimeTypes: vi.fn().mockReturnValue(["local"]),
-    getDefaultIsolationScope: vi.fn().mockReturnValue("workspace"),
-    getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
-    getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
-    getRunTimeoutSeconds: vi.fn().mockReturnValue(120),
-    getHeartbeatCheckIntervalSeconds: vi.fn().mockReturnValue(20),
-    getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(75),
-    getOpenSandboxConfig: vi.fn().mockReturnValue({
-      domain: "opensandbox.test",
-      protocol: "https",
-      apiKey: "test-key",
-      image: "agework-worker:test",
-      timeoutSeconds: 300,
+    getRunTimeoutSeconds: () => 60,
+    getLaunchTimeoutSeconds: () => 30,
+    getIdleTimeoutSeconds: () => 600,
+    getHeartbeatTimeoutSeconds: () => 60,
+    getHeartbeatCheckIntervalSeconds: () => 30,
+    getAllowedRuntimeTypes: () => ["local"],
+    getDefaultRuntimeType: () => "local",
+    getRuntimeLogDir: () => "/tmp/agework-logs/runtime",
+    getAgentEventTraceConfig: () => ({ enabled: false, maxFileMb: 5 }),
+    getOpenSandboxConfig: () => ({
+      domain: "localhost",
+      protocol: "http",
+      image: "test",
+      timeoutSeconds: 30,
       useServerProxy: false,
     }),
   };

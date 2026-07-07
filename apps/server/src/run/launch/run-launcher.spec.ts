@@ -5,10 +5,9 @@ import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { RunDriver } from "../driver/run-driver";
-import { ConversationService } from "../../conversation/conversation.service";
+import type { ConversationEffectsPort } from "../run.types";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeService } from "../../runtime/runtime.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import type { RuntimeSpec } from "@agework/shared/protocol";
@@ -89,7 +88,7 @@ describe("RunLauncher", () => {
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockWorkerManager: Partial<WorkerManagerService>;
   let mockExecutor: Partial<RunDriver>;
-  let mockConversations: Partial<ConversationService>;
+  let mockConversationEffects: Partial<ConversationEffectsPort>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
@@ -160,13 +159,10 @@ describe("RunLauncher", () => {
       cancel: vi.fn(),
       cleanup: vi.fn(),
     };
-    mockConversations = {
-      findById: vi.fn().mockResolvedValue(undefined),
-      setRunStatus: vi.fn().mockResolvedValue(true),
-      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
-      attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
-      saveUserMessage: vi.fn().mockResolvedValue(undefined),
-      upsertMessage: vi.fn().mockResolvedValue(undefined),
+    mockConversationEffects = {
+      activateConversation: vi.fn().mockResolvedValue(true),
+      setConversationRunState: vi.fn().mockResolvedValue(undefined),
+      persistConversationMessage: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -189,10 +185,9 @@ describe("RunLauncher", () => {
       mockLiveRunRegistry as LiveRunRegistry,
       mockWorkerManager as WorkerManagerService,
       mockExecutor as RunDriver,
-      mockConversations as ConversationService,
+      mockConversationEffects as ConversationEffectsPort,
       mockRunEvents,
-      mockConfigService as ConfigService,
-      { getResolvedCliPaths: vi.fn().mockResolvedValue(null) } as unknown as RuntimeService
+      mockConfigService as ConfigService
     );
   });
 
@@ -264,20 +259,29 @@ describe("RunLauncher", () => {
 
   it("marks the conversation running before starting", async () => {
     await launch();
-    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
+    expect(mockConversationEffects.activateConversation).toHaveBeenCalledWith(
       "conversation-1",
-      "running"
+      "user-1"
     );
   });
 
   it("saves the user message and triggers title generation", async () => {
-    const userMessage = { id: "msg-1", role: "user", content: "hi" } as any;
+    const userMessage = {
+      id: "msg-1",
+      role: "user",
+      content: "hi",
+    } satisfies Record<string, unknown>;
     await launch(makeStartInput({ userMessage, userMessageId: "msg-1" }));
 
-    expect(mockConversations.saveUserMessage).toHaveBeenCalledWith(
+    expect(
+      mockConversationEffects.persistConversationMessage
+    ).toHaveBeenCalledWith(
       "conversation-1",
-      userMessage,
-      { agentType: "claude", modelProviderId: "mp-1" }
+      expect.objectContaining({
+        type: "saveUserMessage",
+        userMessage,
+        titleContext: { agentType: "claude", modelProviderId: "mp-1" },
+      })
     );
   });
 
@@ -299,10 +303,15 @@ describe("RunLauncher", () => {
   it("attaches the accepted user message to the created run", async () => {
     await launch(makeStartInput({ userMessageId: "msg-1" }));
 
-    expect(mockConversations.attachMessageToRun).toHaveBeenCalledWith(
+    expect(
+      mockConversationEffects.persistConversationMessage
+    ).toHaveBeenCalledWith(
       "conversation-1",
-      "msg-1",
-      "run-1"
+      expect.objectContaining({
+        type: "attachMessageToRun",
+        messageId: "msg-1",
+        runId: "run-1",
+      })
     );
     expect(mockRunEvents.append).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -311,7 +320,6 @@ describe("RunLauncher", () => {
       })
     );
   });
-
   it("continues starting the worker when audit event recording fails", async () => {
     mockRunEvents.append = vi.fn().mockRejectedValue(new Error("SQLITE_BUSY"));
     const res = makeRes();
@@ -379,11 +387,8 @@ describe("RunLauncher", () => {
       "run-1",
       "Failed to start worker"
     );
-    expect(mockConversations.setRunStatus).toHaveBeenCalledWith(
-      "conversation-1",
-      "error"
-    );
-    await Promise.resolve();
-    expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
+    expect(
+      mockConversationEffects.setConversationRunState
+    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 });
