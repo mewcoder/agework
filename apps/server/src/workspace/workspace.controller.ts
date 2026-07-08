@@ -74,4 +74,20 @@ export class WorkspaceController {
   ) {
     return this.workspaceService.readFile(user.userId, id, path);
   }
+
+  // ── 变更查看(diff,只读,仅本地 runtime) ──
+
+  @Get("files/changes")
+  listChangedFiles(@Query("id") id: string, @CurrentUser() user: JwtUser) {
+    return this.workspaceService.listChangedFiles(user.userId, id);
+  }
+
+  @Get("files/diff")
+  readFileDiff(
+    @Query("id") id: string,
+    @Query("path") path: string,
+    @CurrentUser() user: JwtUser
+  ) {
+    return this.workspaceService.readFileDiff(user.userId, id, path);
+  }
 }

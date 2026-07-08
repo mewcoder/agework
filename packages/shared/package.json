@@ -7,7 +7,8 @@
     "./protocol": "./src/protocol/index.ts",
     "./protocol/rpc": "./src/protocol/rpc.ts",
     "./api": "./src/api/index.ts",
-    "./filesystem": "./src/filesystem/file-browser.ts"
+    "./filesystem": "./src/filesystem/file-browser.ts",
+    "./git": "./src/git.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

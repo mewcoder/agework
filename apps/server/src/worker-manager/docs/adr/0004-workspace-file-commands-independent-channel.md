@@ -18,10 +18,15 @@
 
 - 下行复用同一条物理长轮询连接(`/worker/owners/:ownerId/commands`,同一个 `WorkerCommandQueue`),
   但队列消息类型是新的 `RunChannelMessage<CommandPayload> | OwnerCommand<WorkspaceFileCommandPayload>`
-  联合——不新开连接,只是同一个信箱里多一种不含 `runId` 的信封。
-- worker 侧在 `commands.ts` 的 `run(handle)` 回调之前加一层分流:文件类命令交给常驻 worker 新增的
+  联合——不新开连接,只是同一个信箱里多一种不含 `runId` 的信封。`OwnerCommand` 与 `RunChannelMessage`
+  **共享同一个 owner 级 seq 计数器**(否则混在同一队列时 `afterSeq` 确认语义失效),并携带
+  `workspaceRoot`(执行环境内绝对路径,server 经 `resolveRuntimeSpec` 算出——user 隔离下一个常驻
+  worker 服务同用户多个 workspace,worker 没有唯一工作区根,不能靠自身 workdir 推)与 `expiresAt`。
+- worker 侧分流点在 `worker.ts` 里 `commands.run((command) => runnerManager.handle(command))` 那个
+  回调 lambda,**`commands.ts` 一行不动**:lambda 里判断命令类型,文件类命令交给常驻 worker 新增的
   `WorkspaceFileCommandHandler`(`RunnerManager` 的兄弟角色,不进 `RunnerManager.handle()`),
-  异步 fire-and-forget 处理,不 `await` 阻塞同批次其他命令。
+  以 `void fileHandler(cmd).catch(...)` fire-and-forget(立即返回,外层 `await` 秒过,不阻塞同批次
+  排在后面的 `cancel`/`interrupt`);其余命令仍走 `runnerManager.handle`。
 - 上行结果经一个新端点(`POST /worker/owners/:ownerId/file-command-results`)直接回传,由
   `worker-manager` 新增的 `WorkspaceFileCommandStore`(pending map + `withTimeout`,结构照抄
   `WorkerHandshakeStore`)按 `commandId` resolve,不落 `RunEvent`,纯内存、不持久化。
@@ -34,6 +39,20 @@
    runId。
 3. 两个方向都独立出来(而不是只改上行或只改下行),协议形状更一致,`channel.ts` 里的 run 专属类型对这个
    功能保持零侵入。
+
+## 投递语义(队列是 at-least-once)
+
+`WorkerCommandQueue.pollByOwnerId` 只删 `seq ≤ afterSeq` 的消息,worker 冷启动 `commandSeq=0`
+(`worker-http.ts`)会重放所有未确认消息。两层防线互补:
+
+- `WorkerCommands.processedCommands`(`commands.ts`,已存在的 commandId 去重 Set)挡**同一进程生命周期内**
+  的重复投递;进程重启即清空,对文件命令天然生效(白赚一层)。
+- `OwnerCommand.expiresAt`(server 入队时取 now + awaiter 超时 10s)挡**跨重启**的陈旧重放——worker
+  分流处先查过期,过期直接丢弃、不执行不回传。这正是 `processedCommands` 挡不住、对将来写命令(见
+  workspace-diff-and-versioning-design.md 的 `discard_file_change`)危险的场景:重启后重放几分钟前的
+  写操作会在用户不知情时改工作区。
+- server `file-command-results` 端点收到未知 `commandId`(pending 已超时清理)时静默返回 200——迟到
+  结果是协议正常情况,不是异常。
 
 ## Consequences
 

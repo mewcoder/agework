@@ -41,6 +41,12 @@ WorkspaceFileCommandStore 按 commandId 收敛 → HTTP 响应 → web
 
 worker 数据面(HTTP 长轮询 command 通道)本身仍是仓库里唯一能触达全部工作区形态(含沙箱、远端)的机制,下行**复用同一条物理长轮询连接**(不新开连接),只是队列里的消息类型从单一 `RunChannelMessage<CommandPayload>` 变成 `RunChannelMessage<CommandPayload> | OwnerCommand<WorkspaceFileCommandPayload>` 的联合;上行结果新开一个 owner-scoped 端点直接回传,不进 `WorkerUpstreamPort`/`WorkerEventService`/`RunEventService`。
 
+**投递语义(2026-07-07 拍板;队列是 at-least-once,worker 冷启动 afterSeq=0 会重放全部未确认消息)**:
+
+1. `OwnerCommand` 与 `RunChannelMessage` **共享同一个 owner 级 seq 计数器**——两种信封混在同一队列,`afterSeq` 确认语义才成立。
+2. `OwnerCommand` 带 `expiresAt`(server 入队时取 now + awaiter 超时 10s);worker 分流处先查,过期直接丢弃、不执行不回传。对只读命令是省资源;对将来的写命令(diff 文档 P1 `discard_file_change`)是**安全底线**——防止 worker 重启重放几分钟前的写操作。
+3. `file-command-results` 端点收到未知 `commandId`(pending 已超时清理)时静默吞掉返回 200——迟到结果是协议的正常情况,不是异常。
+
 **为什么 local / docker 也不走 server 直读**(虽然本机读得到):
 
 1. 一份实现覆盖全部形态:local / docker / opensandbox / registered 零分支;registered 也**不需要**给 runtime WS 隧道单加 file RPC。
@@ -57,7 +63,7 @@ worker 数据面(HTTP 长轮询 command 通道)本身仍是仓库里唯一能触
 
 1. `WorkspaceFileCommandHandler`(fs 操作)用 `fs/promises` 异步 API,不用 `directory-browser.ts` 那种同步风格——真正的磁盘 I/O 走 libuv 线程池,不占主线程,常规读取(哪怕读满 1MiB 文本/5MiB 图片)不会让同 owner 下其他 run 有能感知到的卡顿。
 2. 每次 fs 调用套 `AbortSignal` 超时(8s,比 server 侧 awaiter 的 10s 短,worker 能抢先把「文件系统响应超时」这个具体错误回传,而不是让 server 触发笼统超时),防止网络挂载盘等真正卡死的场景一直占着线程池槽位。
-3. `commands.ts` 的分发循环里,文件命令分支不 `await`,`void handler(command).catch(...)` 触发即走,避免拖慢同一批次里排在后面的 `cancel`/`interrupt`。
+3. 分流点在 `worker.ts` 的 `commands.run((command) => runnerManager.handle(command))` 回调 lambda 里(**`commands.ts` 一行不动**,保持通用):文件命令走 `void fileHandler(cmd).catch(...)` 触发即走,外层 `await` 秒过,不拖慢同批次排在后面的 `cancel`/`interrupt`;其余仍走 `runnerManager.handle`。分流前先查 `expiresAt` 过期即弃(见 §3 投递语义);`commands.ts` 已有的 `processedCommands` commandId 去重对文件命令天然生效(白赚一层进程内去重)。
 4. 全程严格 try/catch 到底,任何失败都转成走结果通道回传 `error`,不允许裸抛/裸 reject 冒到顶层——`packages/worker/src` 目前没有任何 `unhandledRejection`/`uncaughtException` 兜底,一次 unhandled rejection 会直接终止整个 worker 进程,连带杀掉该 owner 下所有正在跑的 run。
 
 关键点:**API 契约对前端只有一套**(见 §4),且与 runtime 形态无关;后端实现也只有一条 worker 代理路径,没有「本机直读」分支。
@@ -76,8 +82,9 @@ worker 数据面(HTTP 长轮询 command 通道)本身仍是仓库里唯一能触
 
 ```
 packages/shared/src/protocol/workspace-file-command.ts   # 新增独立协议:WorkspaceFileCommandPayload
-                                          # (list_files/read_file,无 runId)、WorkspaceFileCommandResult
-                                          # (含错误形状)、不含 runId 的 OwnerCommand 信封类型
+                                          # (list_files/read_file;携带 workspaceRoot=执行环境内绝对路径
+                                          # + 相对 path,无 runId)、WorkspaceFileCommandResult(含错误形状)、
+                                          # 不含 runId 的 OwnerCommand 信封类型(带 seq/expiresAt,见 §3)
 
 packages/worker/src/files/
 ├── workspace-file-browser.ts             # 纯函数(异步 fs/promises):列一层目录、读文件、
@@ -101,6 +108,7 @@ apps/server/src/workspace/
 
 - 归属逻辑:HTTP 契约与鉴权归 `workspace`(领域入口);文件命令下发/应答收敛归 `worker-manager`(新的独立通道,与 `command.result` 那条平行、不复用);fs 读取与全部安全校验归 worker(唯一与工作区同环境的角色)。依赖方向 workspace → worker-manager,正向,无新增反向依赖。
 - workspace → worker 寻址:`WorkerRegistryRepository.findActiveByWorkspace(workspaceId)` 已经是现成的一步查询——按 `workspaceId` 找 `WorkerWorkspaceBinding` + 关联的 `Worker` 行,`status !== "running"` 时返回 null,天然覆盖「从未启动」和「已停止」两种「运行时未启动」场景,不需要重新计算 isolation scope。`WorkerManagerService` 加一个薄的公开方法把这个查询暴露给 `workspace` 调用。
+  - 语义边界(2026-07-07 拍板):**预览可用 = 该 workspace 至少跑过一次会话且执行环境还活着**。user 隔离下,从没跑过 run 的 workspace 即使"邻居 workspace 的容器"在跑且物理上读得到(容器挂载整个用户根),也**不借用**——binding 不存在就显示「运行时未启动」。不按 isolation scope 解析 ownerId 去蹭邻居容器:那要复刻 provisioner 的 owner 推导,且可用性会随邻居活动漂移,用户无法建立心智。
 - `workspace-file-browser.ts` 的安全校验风格(相对路径、NUL/`..`/绝对路径拒绝、realpath 前缀判断)对齐 `runtime/filesystem/directory-browser.ts`,但 fs 调用本身用异步 API,不是同步——原因见 §3 worker 执行纪律。server 侧不再有任何 fs browser 文件,对 `path` 只做基本形状校验(非空串规整、无 NUL)后透传。
 - 不动 runtime module:directory-browser 服务的是「建工作空间选目录」(绝对路径、只列目录),语义不同,不合并。
 
@@ -144,7 +152,7 @@ GET /api/v1/workspaces/files/read?id=<workspaceId>&path=<relativePath>
 
 ### 4.3 鉴权、在线与超时语义
 
-- 鉴权:属主校验,复用 `WorkspaceRepository` 按 `userId + id` 查(同 `getOwnedId` 语义,`workspace.repository.ts:148`),查不到抛 404。runtime 形态不影响鉴权,也不需要读 `rootPath`(server 不下发绝对路径,见 §4.4)。
+- 鉴权:属主校验,复用 `WorkspaceRepository` 按 `userId + id` 查(同 `getOwnedId` 语义,`workspace.repository.ts:148`),查不到抛 404。校验通过后 server 用 `resolveRuntimeSpec`(纯函数,run-launcher 同源逻辑)算出该 workspace 在执行环境内的 `workspaceRoot` 放进命令 payload——见 §4.4。
 - worker 不在线(`findActiveByWorkspace` 查无 `status === "running"` 的绑定,容器已停 / 尚未有过会话都落这一支):在真正下发命令之前就短路,直接抛 `BadRequestException("运行时未启动,发起对话后即可浏览文件")`,前端整板空态展示——不浪费一次 10s 等待。
 - 应答超时:`WorkspaceFileCommandStore.waitForResult()` 外层套 `withTimeout`,默认 10s 未收到匹配 `commandId` 的结果即拒绝,server 返回超时类错误(如 504),前端预览区内联提示可重试。超时/出错分支必须显式清理 Store 里对应的 pending 条目(照抄 `worker.provisioner.ts` 里 `handshakeStore.cancel(...)` 那个 catch 分支的写法),否则 worker 迟迟不回或永久失联时会在 Store 里留下再也不会被消费的 pending Promise。
 - worker 侧 fs 调用套 `AbortSignal` 超时,取 8s(比 server 侧 10s 短),worker 能抢在 server 侧超时兜底之前,把「文件系统响应超时」这个具体错误经结果通道回传,前端拿到的提示更准确。
@@ -153,7 +161,7 @@ GET /api/v1/workspaces/files/read?id=<workspaceId>&path=<relativePath>
 
 ### 4.4 路径安全(参考 omnigent `_validate_path` / `_resolve`)
 
-命令 payload 只携带**相对路径**,worker 锚定自身工作区根目录(它启动时的 workdir)解析——server 从不下发绝对路径,天然杜绝「拿别人的根目录来读」。worker 侧 `workspace-file-browser.ts` 内集中校验,list / read 共用:
+命令 payload 携带 `workspaceRoot`(执行环境内绝对路径,server 经 `resolveRuntimeSpec` 算出)+ **相对 `path`**,worker 把安全校验锚定在下发的 root 上(2026-07-07 拍板)。不能让 worker "锚定自身 workdir"——**user 隔离下一个常驻 worker 服务同一用户的多个 workspace**(容器挂载整个用户根,`runtimePath = /home/agework/workspaces/<wsId>`,见 `runtime-spec.spec.ts:22-38`),worker 没有唯一工作区根,且无活跃 run 时(worker 重启后)连最近的 RunConfig 都没有。威胁模型不受影响:server 本来就是签发 startToken、决定挂载的可信方,worker 防的是**相对路径逃逸出给定 root**,不是防 server。worker 侧 `workspace-file-browser.ts` 内集中校验,list / read 共用:
 
 1. 拒绝含 NUL 字节、绝对路径、任何 `..` 段的输入。
 2. `join(rootPath, relativePath)` 后取 `realpath`,结果必须仍在 `realpath(rootPath)` 之下(前缀 + 分隔符判断),否则抛错——挡住 symlink 逃逸到 root 外。
@@ -169,7 +177,8 @@ GET /api/v1/workspaces/files/read?id=<workspaceId>&path=<relativePath>
   - 其他二进制 → 错误应答「二进制文件不支持预览」(不返回内容,前端展示提示 + size)。
 - result 载荷经 §3 的独立结果端点(HTTP POST)回传:文本截断后 ≤1 MiB、图片 base64 后 ≤7 MiB;已核对 `apps/server/src/config/registry/defaults.ts` 的全局 body 上限 `DEFAULT_API_BODY_LIMIT = "50mb"`(`main.ts` 全局 `useBodyParser` 应用),7 MiB 远在限内,不需要为这个端点单独调大。
 - 目录单层条目上限 1000,超出截断并置 `truncated`(懒加载一层一取,正常目录远达不到;node_modules 这类目录也不会炸)。
-- 隐藏文件(dotfile)默认返回,不做服务端过滤;树是懒加载的,`.git`、`node_modules` 不展开就没有成本。
+- 目录过滤(2026-07-07 拍板):worker `list_files` 用一个**内置固定黑名单**(`.git`、`node_modules`、`.DS_Store`,加常见构建产物 `dist`/`.next`/`target` 等)过滤掉噪音目录条目——不读 `.gitignore`(解析 gitignore 语法 + 逐条匹配 worker 侧复杂度高;diff 阶段本来就靠 git 自己认 gitignore)。固定黑名单挡掉所有项目通用噪音、实现只一个 `Set.has`;`.gitignore` 里项目自定义忽略的目录仍会显示(可接受,用户自己知道那是什么)。真正的 gitignore 感知留后续。
+- 其余隐藏文件(dotfile,如 `.env`、`.eslintrc`)默认返回,不额外过滤。
 
 ### 4.6 测试点
 
@@ -187,8 +196,8 @@ GET /api/v1/workspaces/files/read?id=<workspaceId>&path=<relativePath>
 
 ### 5.1 布局与状态
 
-- `workbench.tsx` 的 `WorkbenchContent` 内,`<Thread>` 右侧并排一个固定宽度(`w-88` 左右)的文件面板;开关状态 `useState` 放 `WorkbenchContent`,开关按钮(lucide `FolderTree` / `PanelRight` 类图标)以 prop 传给 `ChatHeader` 渲染在右侧。不建全局 store,不做拖拽调宽(后续可加)。
-- workspaceId 解析与 `chat-header.tsx:23` 同源:`conversation?.workspaceId ?? selectedWorkspaceId`;未选工作空间时不显示开关按钮。
+- 面板定位是**全局侧边栏级别的布局元素**(2026-07-07 拍板):`workbench.tsx` 的 `WorkbenchContent` 内,`<Thread>` 右侧并排一个固定宽度(`w-88` 左右)的文件面板。开关状态放全局 store(新建轻量 zustand store,localStorage 持久化——仿 `runtime-ui-store` 先例),跨会话保持;面板内容组件用 `key={workspaceId}` 强制重挂,workspace 变化时选中文件/展开目录自动归零,同 workspace 的会话间切换则不动。不做拖拽调宽(后续可加)。
+- **入口只在有会话时出现**:开关按钮(lucide `FolderTree` / `PanelRight` 类图标)放 `ChatHeader` 右侧——`ChatHeader` 本来就只在 `selectedConversationId` 存在时渲染(`workbench.tsx:43`),天然满足「没对话直接隐藏」;workspaceId 取 `conversation.workspaceId`。
 - 移动端(`useSidebar().isMobile`)本期隐藏入口;后续如需,复用同一面板组件塞进 Sheet。
 
 ### 5.2 组件结构
@@ -220,6 +229,7 @@ apps/web/src/components/workspace-file-panel/
 | 二进制 / 超限 | 提示文案 + 文件大小(后端 400 的 message 直接展示) | 无 |
 
 - shiki highlighter 单例 + 动态 `import()` 懒加载,不进首屏 chunk。扩展名→语言映射表放 `workspace-file-preview.tsx` 内(参考 AionUi `fileUtils.ts` 的映射,只保留常见几十种,未命中回退 `text`)。
+- markdown 内相对路径图片(2026-07-07 拍板):**v1 优雅降级不内联**——用 Streamdown 的 `allowedImagePrefixes` 只放行 `https://`/`http://`/`data:`(实现时核对 prop 确切行为),相对路径图片干净地不渲染而不是破图标;codeg 式「相对图片经 read_file 转 base64 内联」记为后续增强(worker 链路上是按图 N 次往返,等真实反馈)。
 - `truncated: true` 时预览顶部显示「文件过大,仅显示前 1MiB」条。
 
 ### 5.5 空态与错误态
@@ -231,10 +241,7 @@ apps/web/src/components/workspace-file-panel/
 ## 6. 后续增强(实施时再细化)
 
 - **变更推送(v3 刷新)**:omnigent 模式——worker 文件写工具完成后节流发「文件已变更」事件,server 经现有事件通道转推前端,前端只做 query 失效不做增量 patch。
-- **变更文件列表 + diff 视图(已拍板:第二阶段做,第一阶段只做树 + 只读预览)**(omnigent FlatFileList / OpenHands Changes 形态,2026-07-07 已调研三家实现):
-  - 形态:变更列表(A/M/D 徽章)+ 点开看 `{before, after}` 整文件对,累计语义(vs HEAD),**不做每轮 diff**(每轮的 patch 天然在聊天流工具事件里,互补)。
-  - 实现:worker 新增 `list_changed_files`(`git status --porcelain`,可并发 `git diff --numstat` 给列表带 +N/-N 行数,codeg 做法)/`read_file_diff`(`git show HEAD:path` + 当前全文)两命令,无状态、重启不丢、shell 改动可见;非 git 工作区 v1 显示「暂不支持变更视图」(codeg / OpenHands 同款语义;四家调研中仅 omni 做了非 git 降级)。
-  - 注意:omni 的非 git 方案(工具写前留内存快照)对 agework **不可行**——我们的 agent 是外部 CLI,worker 事后消费事件流,拦不到"写之前";非 git 若要支持,用影子 git(独立 gitdir 做基线,≈AionUi snapshot 模式),不抄 omni。
+- **变更文件列表 + diff 视图 + 版本管理(已拍板:第二阶段做,第一阶段只做树 + 只读预览)**:独立成档,见 [`workspace-diff-and-versioning-design.md`](workspace-diff-and-versioning-design.md)——git-only 累计 diff(vs HEAD)、复用本档的 owner-scoped 文件命令通道追加命令、P1 单文件恢复、P2 影子 git checkpoint(兼顾非 git 工作区),含四家(omni/OpenHands/codeg/AionUi)diff 与版本管理机制对照。
 - **worker 不在线时自动拉起**:预览请求触发 runtime ensure,需权衡冷启动时长与用户预期,v1 明确不做。
 - 以上均不改 §4 的 API 契约与 §5 的组件结构。
 

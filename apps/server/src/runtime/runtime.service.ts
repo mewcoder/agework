@@ -20,7 +20,10 @@ import type {
   RuntimeResponse,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
+import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import { ConfigService, type RuntimeType } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
@@ -310,6 +313,45 @@ export class RuntimeService implements OnApplicationBootstrap {
         err instanceof Error ? err.message : String(err)
       );
     }
+  }
+
+  // ── 变更查看直读(只支持 builtin local,server 就是文件 owner) ──────
+
+  /**
+   * builtin local runtime 变更查看:在本机 workspace 目录上直接跑 git,不经
+   * worker。rootPath 由 WorkspaceService 查出后传入(参数喂入,runtime 不反向
+   * 依赖 workspace);local 之外的运行时由 WorkspaceService 网关提前挡掉。
+   * 非 git 目录 → BadRequestException(可区分「非 git」);git 失败 → BadRequestException。
+   */
+  async listChangedFiles(
+    rootPath: string
+  ): Promise<WorkspaceChangedFilesResponse> {
+    try {
+      return await this.localRuntime.listChangedFiles(rootPath);
+    } catch (err) {
+      throw this.toChangeViewError(err);
+    }
+  }
+
+  /** builtin local runtime 单文件 diff 直读,同 listChangedFiles。 */
+  async readFileDiff(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileDiffResponse> {
+    try {
+      return await this.localRuntime.readFileDiff(rootPath, relativePath);
+    } catch (err) {
+      throw this.toChangeViewError(err);
+    }
+  }
+
+  private toChangeViewError(err: unknown): BadRequestException {
+    if (err instanceof NotGitRepositoryError) {
+      return new BadRequestException("该工作空间不是 Git 仓库,无法查看变更");
+    }
+    return new BadRequestException(
+      err instanceof Error ? err.message : String(err)
+    );
   }
 
   /** 校验 runtime 对该用户可见,且(registered 时)隧道在线,否则抛异常。 */

@@ -20,6 +20,10 @@ _Avoid_: Tenant、account
 **仅 sandbox(容器)运行时的概念**,决定容器被谁共享的粒度:`user`(该用户所有 workspace 共享一个容器)或 `workspace`(每 workspace 独占一个容器)。`local` 直接在宿主机 fork 进程、无容器,**不具隔离级别**——数据行里 local 的 `isolationScope` 是为填非空列硬塞的占位值,不代表真实隔离(展示层应识别为 `host`)。
 _Avoid_: Isolation level、裸用的 scope
 
+**Owner command**:
+不挂在任何 run 上的 owner 级命令信封(如工作空间文件命令)。与 run 命令共用同一条长轮询信箱和同一个 seq 计数器,但自带过期时间(队列 at-least-once 重放时过期即弃),结果走独立端点回传、不落 RunEvent。
+_Avoid_: 塞进 CommandPayload、file command(泛指信封时)
+
 **Worker instance**:
 worker 与其 runtime 载体 1:1 融合后的那一条记录(`WorkerInstance` 行)。local 下 runtime 与 worker 就是同一个进程。
 _Avoid_: Runtime instance

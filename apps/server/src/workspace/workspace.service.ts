@@ -34,6 +34,8 @@ import type { RuntimeType, IsolationScope } from "../config/config.service";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
@@ -244,6 +246,47 @@ export class WorkspaceService {
       size: readResult.size,
       truncated: readResult.truncated,
     };
+  }
+
+  // ── 变更查看(diff,只读,本次仅支持 builtin local runtime) ──
+
+  /**
+   * 列出工作空间相对 HEAD 的累计变更(git-only、只读)。本次仅支持 builtin local
+   * runtime:server 就是文件 owner,直接在本机目录跑 git,无 ownership 问题。
+   * docker/sandbox/registered 一律网关挡掉,返回「暂不支持」。
+   */
+  async listChangedFiles(
+    userId: string,
+    workspaceId: string
+  ): Promise<WorkspaceChangedFilesResponse> {
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+    this.assertLocalChangeViewSupported(ctx);
+    return this.runtimeService.listChangedFiles(ctx.workspaceRootPath);
+  }
+
+  /** 读取单文件的 before(HEAD)/after(当前)对比。约束同 listChangedFiles。 */
+  async readFileDiff(
+    userId: string,
+    workspaceId: string,
+    path: string
+  ): Promise<WorkspaceFileDiffResponse> {
+    if (!path) {
+      throw new BadRequestException("path is required");
+    }
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+    this.assertLocalChangeViewSupported(ctx);
+    return this.runtimeService.readFileDiff(ctx.workspaceRootPath, path);
+  }
+
+  /**
+   * 网关:只有 builtin(本机 in-process)local runtime 的工作空间才由 server
+   * 直读 git。registered local 的目录在远程机器上、docker/sandbox 有容器边界,
+   * 本次都不支持。
+   */
+  private assertLocalChangeViewSupported(ctx: WorkspaceRunContext): void {
+    if (ctx.runtimeType !== "local" || ctx.runtimeSource !== "builtin") {
+      throw new BadRequestException("当前仅支持本地运行时的变更查看");
+    }
   }
 
   /**

@@ -10,6 +10,8 @@ import type { RuntimeEnvConfig } from "@agework/shared/api";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
 import type { AgentType } from "@agework/shared";
 import {
@@ -17,6 +19,10 @@ import {
   readFile as readFileDirect,
   createFsTimeoutSignal,
 } from "@agework/shared/filesystem";
+import {
+  listChangedFiles as listChangedFilesDirect,
+  readFileDiff as readFileDiffDirect,
+} from "@agework/shared/git";
 import { ConfigService } from "../../config/config.service";
 import { detectEnvConfig } from "../cli/cli-resolver";
 import { installCli } from "../cli/cli-installer";
@@ -110,5 +116,21 @@ export class LocalRuntime implements Runtime {
       size: result.size,
       truncated: result.truncated,
     };
+  }
+
+  /**
+   * builtin local runtime 变更查看:workspace 目录在本机硬盘上,直接在其上跑
+   * git(shared/git),不经 worker。累计 vs HEAD、git-only、只读。
+   */
+  listChangedFiles(rootPath: string): Promise<WorkspaceChangedFilesResponse> {
+    return listChangedFilesDirect(rootPath);
+  }
+
+  /** builtin local runtime 单文件 diff 直读,同 listChangedFiles。 */
+  readFileDiff(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileDiffResponse> {
+    return readFileDiffDirect(rootPath, relativePath);
   }
 }
