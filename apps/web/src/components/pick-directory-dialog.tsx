@@ -165,7 +165,14 @@ export function PickDirectoryDialog({
         {builtinRuntimes.length > 1 && (
           <Field>
             <FieldLabel htmlFor="pick-directory-runtime">运行环境</FieldLabel>
-            <Select value={selectedRuntimeId} onValueChange={handleRuntimeChange}>
+            <Select
+              items={builtinRuntimes.map((runtime) => ({
+                value: runtime.id,
+                label: runtime.name,
+              }))}
+              value={selectedRuntimeId}
+              onValueChange={handleRuntimeChange}
+            >
               <SelectTrigger id="pick-directory-runtime" className="w-full">
                 <SelectValue />
               </SelectTrigger>

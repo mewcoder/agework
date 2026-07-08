@@ -480,6 +480,10 @@ function WorkspaceDialogForm({
                   <Field data-invalid={fieldState.invalid}>
                     <FieldLabel>选择机器</FieldLabel>
                     <Select
+                      items={registeredRuntimes.map((runtime) => ({
+                        value: runtime.id,
+                        label: runtime.name,
+                      }))}
                       value={field.value}
                       onValueChange={(v) => {
                         if (!v) return;
@@ -598,6 +602,10 @@ function WorkspaceDialogForm({
                     <Field data-invalid={fieldState.invalid}>
                       <FieldLabel>运行环境</FieldLabel>
                       <Select
+                        items={allowedRuntimeTypes.map((type) => ({
+                          value: type,
+                          label: runtimeTypeLabel(type),
+                        }))}
                         value={field.value}
                         onValueChange={(v) => {
                           if (!v || !isWorkspaceRuntimeType(v)) return;

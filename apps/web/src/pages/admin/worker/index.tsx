@@ -161,6 +161,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
 
       <div className="flex items-center justify-between gap-2">
         <Select
+          items={STATUS_OPTIONS}
           value={status}
           onValueChange={(value) => {
             setStatus(value ?? "all");

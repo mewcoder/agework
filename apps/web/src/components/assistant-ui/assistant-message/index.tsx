@@ -7,6 +7,9 @@ import { AskUserQuestionUI } from "@/components/assistant-ui/tools/ask-user-ques
 import { AskUserQuestionCompact } from "@/components/assistant-ui/pending-question-panel";
 import { BranchPicker } from "@/components/assistant-ui/branch-picker";
 import { getAssistantStage, type AssistantStage } from "@/components/assistant-ui/assistant-loading";
+import { AgentIcon } from "@/components/icons/agent";
+import { useConversations } from "@/hooks/use-conversation";
+import { agentLabel } from "@/utils/model-provider";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
 import { cn } from "@/lib/utils";
@@ -57,6 +60,12 @@ export const AssistantMessage = memo(function AssistantMessage() {
   // isRunning 在 resume 期间同样为 true，UI 与正常流式运行一致
   // （thinking、展开处理过程、工具显示运行中）。无需额外识别快照状态。
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
+  const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
+  const { data: conversationsData } = useConversations(undefined, "updatedAt");
+  const conversation = conversationsData?.conversations.find(
+    (c) => c.conversationId === selectedConversationId,
+  );
+  const agentType = conversation?.agentType ?? selectedAgentType;
 
   // 三方库在用户取消后会用合成 RUN_FINISHED 覆盖 status 为 complete，
   // 所以除了看 messageStatus，还要看我们自己记录的"用户点过停止"标记。
@@ -108,6 +117,13 @@ export const AssistantMessage = memo(function AssistantMessage() {
       data-role="assistant"
       className="relative animate-in duration-150 fade-in slide-in-from-bottom-1"
     >
+      <div
+        data-slot="aui_assistant-message-header"
+        className="mb-1 flex items-center gap-1.5 px-2 leading-none text-muted-foreground"
+      >
+        <AgentIcon agent={agentType} size={14} className="shrink-0 self-center" />
+        <span className="leading-none">{agentLabel(agentType)}</span>
+      </div>
       <div
         data-slot="aui_assistant-message-content"
         // [contain-intrinsic-size:auto_24px] fixes issue #4104, don't change without checking for regressions

@@ -1,16 +1,14 @@
 import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import {
   Folder,
-  ListTree,
   FileDiff,
-  RefreshCw,
   Globe,
   Terminal,
   Settings,
   X,
   MoreHorizontal,
 } from "lucide-react";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { PanelTreeRefreshToolbar } from "@/components/workspace-file-panel/panel-tree-refresh-toolbar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -160,28 +158,11 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
         <div className="flex min-h-0 flex-1 flex-col">
             {/* 折叠树图标 + 标签页 + 快捷菜单 */}
             <div className="flex h-[32px] shrink-0 items-stretch gap-1 border-b border-border/50 px-1.5">
-              <TooltipIconButton
-                tooltip={treeOpen ? "折叠文件树" : "展开文件树"}
-                side="bottom"
-                className={cn(
-                  "size-6 self-center !rounded-[6px] transition-colors",
-                  treeOpen
-                    ? "bg-accent text-muted-foreground ring-1 ring-inset ring-border"
-                    : "text-muted-foreground hover:bg-accent/50",
-                )}
-                onClick={toggleTree}
-              >
-                <ListTree className="size-4" />
-              </TooltipIconButton>
-
-              <TooltipIconButton
-                tooltip="刷新文件列表"
-                side="bottom"
-                className="size-6 self-center !rounded-[6px] text-muted-foreground"
-                onClick={refreshFiles}
-              >
-                <RefreshCw className="size-3.5" />
-              </TooltipIconButton>
+              <PanelTreeRefreshToolbar
+                treeOpen={treeOpen}
+                onToggleTree={toggleTree}
+                onRefresh={refreshFiles}
+              />
 
               {/* 标签页列表 — 水平滚动，隐藏滚动条 */}
               <div

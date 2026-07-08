@@ -596,6 +596,22 @@
   }
 }
 
+/*
+ * shiki dual-theme color switching
+ * codeToHtml with defaultColor:false outputs --shiki-light / --shiki-dark
+ * CSS variables on each span; we map them to the actual color property
+ * based on the app's .dark class.
+ */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+
+.dark .shiki,
+.dark .shiki span {
+  color: var(--shiki-dark);
+}
+
 [data-streamdown="code-block"] {
   @apply relative my-3 gap-0 overflow-hidden rounded-lg border border-border/60 bg-muted/30 p-0 shadow-none;
 }

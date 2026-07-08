@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { FolderTree, RefreshCw } from "lucide-react";
-import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -14,6 +12,7 @@ import {
 } from "@/hooks/use-workspace";
 import type { ChangedFileEntry } from "@agework/shared/api";
 import { cn } from "@/lib/utils";
+import { PanelTreeRefreshToolbar } from "./panel-tree-refresh-toolbar";
 import { ChangeStatusBadge } from "./workspace-change-status";
 import { WorkspaceFileDiffView } from "./workspace-file-diff-view";
 
@@ -80,30 +79,16 @@ export function WorkspaceChangesPanel({ workspaceId }: { workspaceId: string }) 
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶部工具条:折叠列表图标 + 标题 + 手动刷新 */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/40 px-2 py-0.5">
-        <TooltipIconButton
-          tooltip={listOpen ? "折叠变更列表" : "展开变更列表"}
-          side="bottom"
-          className="size-5"
-          onClick={() => setListOpen((v) => !v)}
-        >
-          <FolderTree
-            className={cn(
-              "size-3.5",
-              listOpen ? "text-foreground" : "text-muted-foreground",
-            )}
-          />
-        </TooltipIconButton>
-        <span className="text-[11px] font-medium text-muted-foreground">变更</span>
-        <TooltipIconButton
-          tooltip="刷新变更"
-          side="left"
-          className="ml-auto size-5"
-          onClick={refresh}
-        >
-          <RefreshCw className="size-3" />
-        </TooltipIconButton>
+      {/* 顶部工具条:复用与文件面板一致的 目录树开关 + 刷新 图标组 */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-border/40 px-1.5">
+        <PanelTreeRefreshToolbar
+          treeOpen={listOpen}
+          onToggleTree={() => setListOpen((v) => !v)}
+          onRefresh={refresh}
+          treeOpenTooltip="折叠变更列表"
+          treeClosedTooltip="展开变更列表"
+          refreshTooltip="刷新变更"
+        />
       </div>
 
       <div className="min-h-0 flex-1">

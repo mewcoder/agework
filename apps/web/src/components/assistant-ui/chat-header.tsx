@@ -1,13 +1,10 @@
-import { Folder } from "lucide-react";
+import { Folder, GitBranch } from "lucide-react";
 import { type ReactNode } from "react";
-import { AgentIcon } from "@/components/icons/agent";
-import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useConversations } from "@/hooks/use-conversation";
 import { useWorkspaces } from "@/hooks/use-workspace";
 import { formatRelativeTime } from "@/utils/format";
-import { agentLabel } from "@/utils/model-provider";
 import { cn } from "@/lib/utils";
 import { useNativeClient } from "@/hooks/use-native-client";
 
@@ -16,7 +13,6 @@ export function ChatHeader({ rightSlot }: { rightSlot?: ReactNode }) {
   const nativeClient = useNativeClient();
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
   const selectedWorkspaceId = useSelectionStore((s) => s.selectedWorkspaceId);
-  const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
   const { data: conversationsData } = useConversations(undefined, "updatedAt");
   const { data: workspaces = [] } = useWorkspaces();
 
@@ -28,8 +24,6 @@ export function ChatHeader({ rightSlot }: { rightSlot?: ReactNode }) {
     workspace?.name ?? (workspaceId ? "工作空间加载中" : "未选择工作空间");
   const conversationTitle =
     conversation?.title ?? (selectedConversationId || selectedWorkspaceId ? "新对话" : "准备开始");
-  const headerAgent = conversation?.agentType ?? selectedAgentType;
-  const headerAgentLabel = agentLabel(headerAgent);
   const updatedAt = conversation?.updatedAt ? formatRelativeTime(conversation.updatedAt) : null;
 
   function scrollToConversationTop() {
@@ -63,14 +57,15 @@ export function ChatHeader({ rightSlot }: { rightSlot?: ReactNode }) {
         >
           <Folder className="size-3 shrink-0" />
           <span className="min-w-0 truncate">{workspaceName}</span>
-          <Badge
-            variant="secondary"
-            className="h-4 rounded-full px-1.5 text-[10px] font-normal text-muted-foreground shadow-none"
-            title={headerAgentLabel}
-          >
-            <AgentIcon agent={headerAgent} size={10} />
-            {headerAgentLabel}
-          </Badge>
+          {workspace?.gitBranch && (
+            <span
+              className="flex min-w-0 shrink-0 items-center gap-1"
+              title={workspace.gitBranch}
+            >
+              <GitBranch className="size-3 shrink-0" />
+              <span className="min-w-0 truncate">{workspace.gitBranch}</span>
+            </span>
+          )}
           {updatedAt && <span>{updatedAt}</span>}
         </span>
       </div>

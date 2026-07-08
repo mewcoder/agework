@@ -106,6 +106,12 @@ export function CreateUserDialogForm({
               <Field data-invalid={fieldState.invalid}>
                 <FieldLabel htmlFor="create-user-role">角色</FieldLabel>
                 <Select
+                  items={[
+                    { value: "user", label: "普通用户" },
+                    ...(canCreateAdmin
+                      ? [{ value: "admin", label: "管理员" }]
+                      : []),
+                  ]}
                   value={field.value}
                   onValueChange={(value) => field.onChange(value)}
                 >

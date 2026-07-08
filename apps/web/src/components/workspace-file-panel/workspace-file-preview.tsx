@@ -83,6 +83,7 @@ const CodePreview = memo(function CodePreview({
           const result = hl.codeToHtml(content, {
             lang,
             themes: { light: "github-light", dark: "github-dark" },
+            defaultColor: false,
           });
           setHtml(result);
         } catch {
@@ -105,7 +106,7 @@ const CodePreview = memo(function CodePreview({
   return (
     <div className="relative h-full overflow-auto">
       {truncated && (
-        <div className="sticky top-0 z-10 bg-warning/10 px-3 py-1 text-xs text-warning-foreground border-b border-warning/20">
+        <div className="sticky top-0 z-10 bg-amber-500/10 px-3 py-1 text-xs text-amber-700 dark:text-amber-400 border-b border-amber-500/20">
           文件过大,仅显示前 1MiB
         </div>
       )}
@@ -129,7 +130,7 @@ const MarkdownPreview = memo(function MarkdownPreview({
   return (
     <div className="relative h-full overflow-auto">
       {truncated && (
-        <div className="sticky top-0 z-10 bg-warning/10 px-3 py-1 text-xs text-warning-foreground border-b border-warning/20">
+        <div className="sticky top-0 z-10 bg-amber-500/10 px-3 py-1 text-xs text-amber-700 dark:text-amber-400 border-b border-amber-500/20">
           文件过大,仅显示前 1MiB
         </div>
       )}
