@@ -137,7 +137,7 @@ export class WorkspaceService {
     return this.runtimePolicy.capabilities();
   }
 
-  // ── 文件预览(owner-scoped,经 worker 代理读,server 不做本机 fs 直读) ──
+  // ── 文件预览(ADR-0005: builtin 直读, registered 走 worker 代理) ──
 
   /** 列出一层目录(根目录时 path 为空串)。 */
   async listFiles(
@@ -145,7 +145,15 @@ export class WorkspaceService {
     workspaceId: string,
     path: string
   ): Promise<WorkspaceFileListResponse> {
-    const result = await this.executeFileCommand(userId, workspaceId, {
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+
+    // builtin runtime: server 本机直读,不经 worker(ADR-0005)
+    if (ctx.runtimeSource === "builtin") {
+      return this.runtimeService.listFiles(ctx.workspaceRootPath, path ?? "");
+    }
+
+    // registered runtime: worker 代理读(现有逻辑)
+    const result = await this.executeFileCommand(ctx, userId, workspaceId, {
       type: "list_files",
       commandId: generateId(),
       path: path ?? "",
@@ -176,7 +184,15 @@ export class WorkspaceService {
       throw new BadRequestException("path is required");
     }
 
-    const result = await this.executeFileCommand(userId, workspaceId, {
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+
+    // builtin runtime: server 本机直读,不经 worker(ADR-0005)
+    if (ctx.runtimeSource === "builtin") {
+      return this.runtimeService.readFile(ctx.workspaceRootPath, path);
+    }
+
+    // registered runtime: worker 代理读(现有逻辑)
+    const result = await this.executeFileCommand(ctx, userId, workspaceId, {
       type: "read_file",
       commandId: generateId(),
       path,
@@ -200,24 +216,32 @@ export class WorkspaceService {
   }
 
   /**
-   * 下发文件命令 → 等待 worker 回传结果(10s 超时)。
-   *
-   * 鉴权:属主校验 → 确保 worker 在线(离线则自动拉起) → 委派。
-   * 超时/出错分支显式清理 Store 里的 pending 条目(见 ADR-0004)。
+   * 属主校验 + 解析运行上下文。builtin 和 registered 分支共用。
    */
-  private async executeFileCommand(
+  private async resolveFileContext(
     userId: string,
-    workspaceId: string,
-    payload: WorkspaceFileCommandPayload
-  ): Promise<WorkspaceFileCommandResult> {
-    // 属主校验
+    workspaceId: string
+  ): Promise<WorkspaceRunContext> {
     const owned = await this.repo.getOwnedId(userId, workspaceId);
     if (!owned) {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
     }
+    return this.getRunContext(workspaceId);
+  }
 
+  /**
+   * [registered 分支] 下发文件命令 → 等待 worker 回传结果(10s 超时)。
+   *
+   * 确保 worker 在线(离线则自动拉起) → 委派。
+   * 超时/出错分支显式清理 Store 里的 pending 条目(见 ADR-0004)。
+   */
+  private async executeFileCommand(
+    ctx: WorkspaceRunContext,
+    userId: string,
+    workspaceId: string,
+    payload: WorkspaceFileCommandPayload
+  ): Promise<WorkspaceFileCommandResult> {
     // 确保 worker 在线(已在线直接返回,离线则自动拉起)
-    const ctx = await this.getRunContext(workspaceId);
     const ownerId = await this.workerManager.ensureWorkerForFilePreview({
       workspaceId,
       userId,

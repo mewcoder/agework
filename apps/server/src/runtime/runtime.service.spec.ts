@@ -80,6 +80,18 @@ describe("RuntimeService", () => {
       createDirectory: vi
         .fn()
         .mockResolvedValue({ path: "/home/agework/new" }),
+      listFiles: vi.fn().mockResolvedValue({
+        path: "src",
+        list: [{ name: "a.ts", type: "file", size: 10 }],
+        truncated: false,
+      }),
+      readFile: vi.fn().mockResolvedValue({
+        path: "a.ts",
+        encoding: "utf8",
+        content: "hello",
+        size: 5,
+        truncated: false,
+      }),
     } as unknown as LocalRuntime;
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
@@ -327,5 +339,45 @@ describe("RuntimeService", () => {
       expect.any(Number)
     );
     expect(result).toEqual({ path: "/data/new" });
+  });
+
+  // ── 文件预览直读(ADR-0005) ────────────────────────────────────
+
+  it("listFiles delegates to LocalRuntime and returns the mapped response", async () => {
+    const result = await service.listFiles("/tmp/ws", "src");
+    expect(localRuntime.listFiles).toHaveBeenCalledWith("/tmp/ws", "src");
+    expect(result).toEqual({
+      path: "src",
+      list: [{ name: "a.ts", type: "file", size: 10 }],
+      truncated: false,
+    });
+  });
+
+  it("listFiles wraps underlying errors as BadRequestException", async () => {
+    (localRuntime.listFiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("路径越界")
+    );
+    await expect(service.listFiles("/tmp/ws", "..")).rejects.toThrow("路径越界");
+  });
+
+  it("readFile delegates to LocalRuntime and returns the mapped response", async () => {
+    const result = await service.readFile("/tmp/ws", "a.ts");
+    expect(localRuntime.readFile).toHaveBeenCalledWith("/tmp/ws", "a.ts");
+    expect(result).toEqual({
+      path: "a.ts",
+      encoding: "utf8",
+      content: "hello",
+      size: 5,
+      truncated: false,
+    });
+  });
+
+  it("readFile wraps underlying errors as BadRequestException", async () => {
+    (localRuntime.readFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("二进制文件不支持预览")
+    );
+    await expect(service.readFile("/tmp/ws", "bin.dat")).rejects.toThrow(
+      "二进制文件不支持预览"
+    );
   });
 });

@@ -18,6 +18,8 @@ import type {
   RuntimeEnvConfigOverride,
   AgentEnvStatus,
   RuntimeResponse,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
 } from "@agework/shared/api";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import { ConfigService, type RuntimeType } from "../config/config.service";
@@ -265,6 +267,44 @@ export class RuntimeService implements OnApplicationBootstrap {
     await this.assertRuntimeReachable(ownerId, id);
     try {
       return await this.runtimeFor(id).createDirectory(path);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  // ── 文件预览直读(ADR-0005: builtin runtime 不经 worker) ──────────
+
+  /**
+   * builtin runtime 文件预览直读:workspace 目录在本机硬盘上(server 进程
+   * 直接读),不经 worker 代理。安全校验复用 shared/fileBrowser(与 worker
+   * 同一份代码)。registered runtime 的文件预览不走这里——由 WorkspaceService
+   * 路由到 WorkerManager 代理读(现有逻辑不变)。
+   *
+   * rootPath 由 WorkspaceService 查出后传入(参数喂入,runtime 不反向依赖
+   * workspace)。
+   */
+  async listFiles(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileListResponse> {
+    try {
+      return await this.localRuntime.listFiles(rootPath, relativePath);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+  }
+
+  /** builtin runtime 文件预览直读(ADR-0005),同 listFiles。 */
+  async readFile(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileReadResponse> {
+    try {
+      return await this.localRuntime.readFile(rootPath, relativePath);
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)

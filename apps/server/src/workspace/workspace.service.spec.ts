@@ -111,6 +111,34 @@ function makeRuntimeService(overrides: Record<string, unknown> = {}) {
       (runtimeType: string) => `builtin-${runtimeType}`
     ),
     isManaged: vi.fn((runtimeId: string) => runtimeId.startsWith("builtin-")),
+    listFiles: vi.fn().mockResolvedValue({
+      path: "src",
+      list: [{ name: "a.ts", type: "file", size: 10 }],
+      truncated: false,
+    }),
+    readFile: vi.fn().mockResolvedValue({
+      path: "a.ts",
+      encoding: "utf8",
+      content: "hello",
+      size: 5,
+      truncated: false,
+    }),
+    ...overrides,
+  };
+}
+
+function makeWorkerManager(overrides: Record<string, unknown> = {}) {
+  return {
+    ensureWorkerForFilePreview: vi.fn().mockResolvedValue("owner-1"),
+    sendFileCommand: vi.fn(),
+    waitForFileCommandResult: vi.fn().mockResolvedValue({
+      type: "list_files",
+      commandId: "cmd-1",
+      path: "src",
+      list: [{ name: "a.ts", type: "file", size: 10 }],
+      truncated: false,
+    }),
+    cancelFileCommand: vi.fn(),
     ...overrides,
   };
 }
@@ -118,7 +146,8 @@ function makeRuntimeService(overrides: Record<string, unknown> = {}) {
 function makeService(
   repo: ReturnType<typeof makeRepo>,
   config: ReturnType<typeof makeConfig>,
-  runtimeService: ReturnType<typeof makeRuntimeService> = makeRuntimeService()
+  runtimeService: ReturnType<typeof makeRuntimeService> = makeRuntimeService(),
+  workerManager: ReturnType<typeof makeWorkerManager> = makeWorkerManager()
 ) {
   const runtimePolicy = new WorkspaceRuntimePolicy(config as never);
   const directoryHandler = new WorkspaceDirectoryHandler(
@@ -133,7 +162,7 @@ function makeService(
     runtimePolicy,
     directoryHandler,
     runtimeService as never,
-    {} as never
+    workerManager as never
   );
 }
 
@@ -731,6 +760,141 @@ describe("WorkspaceService", () => {
         "intruder",
         "ws-x",
         expect.objectContaining({ name: "New name" })
+      );
+    });
+  });
+
+  // ── 文件预览路由(ADR-0005: builtin 直读 vs registered worker 代理) ──
+
+  describe("file preview routing", () => {
+    function makeBuiltinRunView() {
+      return {
+        id: "ws-1",
+        runtime: { runtimeType: "local", source: "builtin" },
+        isolationScope: "workspace",
+        runtimeId: "builtin-local",
+        directory: { rootPath: "/tmp/ws" },
+        user: { username: "mew" },
+      };
+    }
+
+    function makeRegisteredRunView() {
+      return {
+        id: "ws-1",
+        runtime: { runtimeType: "docker", source: "registered" },
+        isolationScope: "workspace",
+        runtimeId: "rt-1",
+        directory: { rootPath: "/remote/ws" },
+        user: { username: "mew" },
+      };
+    }
+
+    it("builtin listFiles routes to RuntimeService direct read, not worker", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
+      });
+      const runtimeService = makeRuntimeService();
+      const workerManager = makeWorkerManager();
+      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+
+      const result = await service.listFiles("mew", "ws-1", "src");
+
+      expect(runtimeService.listFiles).toHaveBeenCalledWith("/tmp/ws", "src");
+      expect(workerManager.ensureWorkerForFilePreview).not.toHaveBeenCalled();
+      expect(workerManager.sendFileCommand).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        path: "src",
+        list: [{ name: "a.ts", type: "file", size: 10 }],
+        truncated: false,
+      });
+    });
+
+    it("builtin readFile routes to RuntimeService direct read, not worker", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
+      });
+      const runtimeService = makeRuntimeService();
+      const workerManager = makeWorkerManager();
+      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+
+      const result = await service.readFile("mew", "ws-1", "a.ts");
+
+      expect(runtimeService.readFile).toHaveBeenCalledWith("/tmp/ws", "a.ts");
+      expect(workerManager.ensureWorkerForFilePreview).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        path: "a.ts",
+        encoding: "utf8",
+        content: "hello",
+        size: 5,
+        truncated: false,
+      });
+    });
+
+    it("registered listFiles routes to worker proxy, not RuntimeService direct read", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
+        findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
+      });
+      const runtimeService = makeRuntimeService();
+      const workerManager = makeWorkerManager();
+      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+
+      await service.listFiles("mew", "ws-1", "src");
+
+      expect(runtimeService.listFiles).not.toHaveBeenCalled();
+      expect(workerManager.ensureWorkerForFilePreview).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId: "ws-1", runtimeId: "rt-1" })
+      );
+      expect(workerManager.sendFileCommand).toHaveBeenCalled();
+    });
+
+    it("registered readFile routes to worker proxy, not RuntimeService direct read", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
+        findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
+      });
+      const runtimeService = makeRuntimeService();
+      const workerManager = makeWorkerManager({
+        waitForFileCommandResult: vi.fn().mockResolvedValue({
+          type: "read_file",
+          commandId: "cmd-1",
+          path: "a.ts",
+          encoding: "utf8",
+          content: "remote hello",
+          size: 11,
+          truncated: false,
+        }),
+      });
+      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+
+      const result = await service.readFile("mew", "ws-1", "a.ts");
+
+      expect(runtimeService.readFile).not.toHaveBeenCalled();
+      expect(workerManager.ensureWorkerForFilePreview).toHaveBeenCalled();
+      expect(result.content).toBe("remote hello");
+    });
+
+    it("404s when the workspace does not belong to the caller (builtin)", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue(null),
+      });
+      const service = makeService(repo, makeConfig());
+
+      await expect(service.listFiles("intruder", "ws-x", "")).rejects.toThrow(
+        "Workspace ws-x not found"
+      );
+    });
+
+    it("404s when the workspace does not belong to the caller (registered)", async () => {
+      const repo = makeRepo({
+        getOwnedId: vi.fn().mockResolvedValue(null),
+      });
+      const service = makeService(repo, makeConfig());
+
+      await expect(service.readFile("intruder", "ws-x", "a.ts")).rejects.toThrow(
+        "Workspace ws-x not found"
       );
     });
   });

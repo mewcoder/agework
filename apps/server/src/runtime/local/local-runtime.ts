@@ -7,7 +7,16 @@ import {
   type RuntimeInstanceRef,
 } from "@agework/providers";
 import type { RuntimeEnvConfig } from "@agework/shared/api";
+import type {
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+} from "@agework/shared/api";
 import type { AgentType } from "@agework/shared";
+import {
+  listFiles as listFilesDirect,
+  readFile as readFileDirect,
+  createFsTimeoutSignal,
+} from "@agework/shared/filesystem";
 import { ConfigService } from "../../config/config.service";
 import { detectEnvConfig } from "../cli/cli-resolver";
 import { installCli } from "../cli/cli-installer";
@@ -67,5 +76,39 @@ export class LocalRuntime implements Runtime {
   /** builtin runtime 运行在本机进程内，直接本地新建目录。 */
   createDirectory(path: string): Promise<{ path: string }> {
     return Promise.resolve(createDirectoryOnDisk(path));
+  }
+
+  /**
+   * builtin runtime 文件预览直读(ADR-0005):workspace 目录在本机硬盘上,
+   * 直接调 shared/fileBrowser 读取,不经 worker 代理。安全校验(路径越界、
+   * symlink 逃逸、二进制探测、大小截断)复用与 worker 相同的 shared 实现。
+   */
+  async listFiles(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileListResponse> {
+    const signal = createFsTimeoutSignal();
+    const result = await listFilesDirect(rootPath, relativePath, signal);
+    return {
+      path: result.path,
+      list: result.list,
+      truncated: result.truncated,
+    };
+  }
+
+  /** builtin runtime 文件预览直读(ADR-0005),同 listFiles。 */
+  async readFile(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileReadResponse> {
+    const signal = createFsTimeoutSignal();
+    const result = await readFileDirect(rootPath, relativePath, signal);
+    return {
+      path: result.path,
+      encoding: result.encoding,
+      content: result.content,
+      size: result.size,
+      truncated: result.truncated,
+    };
   }
 }

@@ -6,7 +6,8 @@
     ".": "./src/common/index.ts",
     "./protocol": "./src/protocol/index.ts",
     "./protocol/rpc": "./src/protocol/rpc.ts",
-    "./api": "./src/api/index.ts"
+    "./api": "./src/api/index.ts",
+    "./filesystem": "./src/filesystem/file-browser.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
