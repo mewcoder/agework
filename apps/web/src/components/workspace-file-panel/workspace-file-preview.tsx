@@ -1,6 +1,7 @@
 import { memo, useEffect, useState } from "react";
-import { AlertCircle, FileWarning } from "lucide-react";
+import { AlertCircle, FileWarning, Eye, Code } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { useWorkspaceFileContent } from "@/hooks/use-workspace";
 
 // ── 扩展名 → 语言映射(常见几十种,未命中回退 text) ──
@@ -159,6 +160,45 @@ function StreamdownContent({ content }: { content: string }) {
   return <Streamdown>{content}</Streamdown>;
 }
 
+// ── Markdown 预览/源码切换 ──
+
+const MarkdownPreviewWithToggle = memo(function MarkdownPreviewWithToggle({
+  path,
+  content,
+  truncated,
+}: {
+  path: string;
+  content: string;
+  truncated: boolean;
+}) {
+  const [showSource, setShowSource] = useState(false);
+
+  return (
+    <div className="relative h-full">
+      {/* 切换按钮 */}
+      <div className="absolute right-2 top-2 z-20">
+        <TooltipIconButton
+          tooltip={showSource ? "切换到预览" : "切换到源码"}
+          side="left"
+          className="size-6 bg-background/80 backdrop-blur-sm"
+          onClick={() => setShowSource((v) => !v)}
+        >
+          {showSource ? (
+            <Eye className="size-3" />
+          ) : (
+            <Code className="size-3" />
+          )}
+        </TooltipIconButton>
+      </div>
+      {showSource ? (
+        <CodePreview path={path} content={content} truncated={truncated} />
+      ) : (
+        <MarkdownPreview content={content} truncated={truncated} />
+      )}
+    </div>
+  );
+});
+
 // ── 图片预览 ──
 
 function ImagePreview({ content }: { content: string }) {
@@ -219,7 +259,13 @@ export function WorkspaceFilePreview({
   }
 
   if (isMarkdown(path) && data.encoding === "utf8") {
-    return <MarkdownPreview content={data.content} truncated={data.truncated} />;
+    return (
+      <MarkdownPreviewWithToggle
+        path={path}
+        content={data.content}
+        truncated={data.truncated}
+      />
+    );
   }
 
   if (data.encoding === "utf8") {

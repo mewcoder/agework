@@ -24,6 +24,10 @@ export type FileTreeProps = {
   level: number;
   selectedPath: string | undefined;
   onSelect: (path: string) => void;
+  /** 根节点显示名称（path === "" 时使用） */
+  rootLabel?: string;
+  /** 默认展开（根节点传 true） */
+  defaultOpen?: boolean;
 };
 
 /** 懒加载树节点:每展开一层拉一次 list。 */
@@ -33,8 +37,10 @@ export const FileTreeNode = memo(function FileTreeNode({
   level,
   selectedPath,
   onSelect,
+  rootLabel,
+  defaultOpen = false,
 }: FileTreeProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const { data, isLoading, error } = useWorkspaceFiles(
     workspaceId,
     path,
@@ -45,14 +51,14 @@ export const FileTreeNode = memo(function FileTreeNode({
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-1 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
+          "flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
           "text-foreground/80",
         )}
         style={{ paddingLeft: `${level * 12 + 4}px` }}
       >
         <ChevronRight
           className={cn(
-            "size-3 shrink-0 transition-transform",
+            "size-3.5 shrink-0 transition-transform",
             open && "rotate-90",
           )}
         />
@@ -62,7 +68,7 @@ export const FileTreeNode = memo(function FileTreeNode({
           <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
         )}
         <span className="truncate">
-          {path === "" ? "根目录" : path.split("/").pop()}
+          {path === "" ? (rootLabel ?? "根目录") : path.split("/").pop()}
         </span>
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -136,7 +142,7 @@ function FileEntryNode({
     return (
       <button
         className={cn(
-          "flex w-full items-center gap-1 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
+          "flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
           selectedPath === fullPath && "bg-accent",
         )}
         style={{ paddingLeft: `${level * 12 + 20}px` }}
@@ -153,7 +159,7 @@ function FileEntryNode({
   return (
     <button
       className={cn(
-        "flex w-full items-center gap-1 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
+        "flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
         selectedPath === fullPath && "bg-accent",
       )}
       style={{ paddingLeft: `${level * 12 + 20}px` }}

@@ -1,12 +1,17 @@
-import { useContext, useState, type ContextType } from "react";
+import { useContext, type ContextType } from "react";
 import { Outlet } from "@tanstack/react-router";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
-import { PanelRight, FolderTree } from "lucide-react";
+import { PanelRight } from "lucide-react";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ChatHeader } from "@/components/assistant-ui/chat-header";
 import { WorkbenchSidebar } from "@/components/sidebar";
-import { WorkspaceFilePanel } from "@/components/workspace-file-panel/workspace-file-panel";
+import { ChatSidePanel } from "@/components/chat-side-panel/chat-side-panel";
 import { Button } from "@/components/ui/button";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   SidebarProvider,
   SidebarInset,
@@ -15,6 +20,7 @@ import {
 } from "@/components/ui/sidebar";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useConversations } from "@/hooks/use-conversation";
+import { useChatSidePanelStore } from "@/stores/chat-side-panel-store";
 import { AgentChatRuntimeProvider } from "@/components/agent-chat-runtime-context";
 import { AgentChatRuntimeContext } from "@/components/agent-chat-runtime-context-value";
 import { cn } from "@/lib/utils";
@@ -40,7 +46,8 @@ function WorkbenchContent({
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
   const selectedWorkspaceId = useSelectionStore((s) => s.selectedWorkspaceId);
   const { data: conversationsData } = useConversations(undefined, "updatedAt");
-  const [filePanelOpen, setFilePanelOpen] = useState(false);
+  const panelOpen = useChatSidePanelStore((s) => s.panelOpen);
+  const togglePanel = useChatSidePanelStore((s) => s.togglePanel);
 
   const conversation = conversationsData?.conversations.find(
     (c) => c.conversationId === selectedConversationId,
@@ -52,31 +59,11 @@ function WorkbenchContent({
   const needsNativeCollapsedOffset = nativeClient && !isMobile && state === "collapsed";
 
   // 未选工作空间或移动端时不显示文件面板入口
-  const canShowFilePanel = !!workspaceId && !isMobile;
+  const canShowPanel = !!workspaceId && !isMobile;
+  const showPanel = panelOpen && canShowPanel && !!workspaceId;
 
   return (
     <SidebarInset className="relative min-h-0 overflow-hidden shadow-none ring-1 ring-border/60">
-      {selectedConversationId !== undefined ? (
-        <ChatHeader
-          rightSlot={
-            canShowFilePanel ? (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 no-drag"
-                onClick={() => setFilePanelOpen((v) => !v)}
-                title={filePanelOpen ? "关闭文件面板" : "打开文件面板"}
-              >
-                {filePanelOpen ? (
-                  <PanelRight className="size-3.5" />
-                ) : (
-                  <FolderTree className="size-3.5" />
-                )}
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : null}
       {showNewChatTrigger ? (
         <div
           className={cn(
@@ -89,19 +76,49 @@ function WorkbenchContent({
           <SidebarTrigger className="text-muted-foreground hover:text-foreground" />
         </div>
       ) : null}
-      <div className="flex min-h-0 flex-1">
-        <div className="min-w-0 flex-1">
-          <AssistantRuntimeProvider runtime={runtime}>
-            <Thread />
-          </AssistantRuntimeProvider>
-        </div>
-        {filePanelOpen && canShowFilePanel && workspaceId ? (
-          <WorkspaceFilePanel
-            workspaceId={workspaceId}
-            onClose={() => setFilePanelOpen(false)}
-          />
+      <ResizablePanelGroup
+        key={showPanel ? "with-panel" : "without-panel"}
+        orientation="horizontal"
+        className="flex min-h-0 flex-1"
+      >
+        {/* 聊天区（ChatHeader 在这里，不贯通到面板） */}
+        <ResizablePanel defaultSize={showPanel ? "70%" : "100%"}>
+          <div className="flex h-full flex-col">
+            {selectedConversationId !== undefined ? (
+              <ChatHeader
+                rightSlot={
+                  canShowPanel ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="no-drag"
+                      onClick={togglePanel}
+                      title={panelOpen ? "关闭侧边栏" : "打开侧边栏"}
+                    >
+                      <PanelRight className="size-3.5" />
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : null}
+            <div className="min-h-0 flex-1">
+              <AssistantRuntimeProvider runtime={runtime}>
+                <Thread />
+              </AssistantRuntimeProvider>
+            </div>
+          </div>
+        </ResizablePanel>
+
+        {/* 面板区 */}
+        {showPanel && workspaceId ? (
+          <>
+            <ResizableHandle withHandle />
+            <ResizablePanel defaultSize="30%" minSize="10%" maxSize="70%">
+              <ChatSidePanel workspaceId={workspaceId} />
+            </ResizablePanel>
+          </>
         ) : null}
-      </div>
+      </ResizablePanelGroup>
     </SidebarInset>
   );
 }
