@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import {
   ChevronRight,
-  File as FileIcon,
   Folder as FolderIcon,
   FolderOpen,
   Link2,
@@ -12,6 +11,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import { FileTypeIcon } from "@/components/icons/file-icon";
 import {
   useWorkspaceFiles,
 } from "@/hooks/use-workspace";
@@ -165,7 +165,10 @@ function FileEntryNode({
       style={{ paddingLeft: `${level * 12 + 20}px` }}
       onClick={() => onSelect(fullPath)}
     >
-      <FileIcon className="size-3.5 shrink-0 text-muted-foreground" />
+      <FileTypeIcon
+        name={entry.name}
+        className="size-3.5 shrink-0 text-muted-foreground"
+      />
       <span className="truncate">{entry.name}</span>
     </button>
   );
