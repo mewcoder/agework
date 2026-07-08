@@ -86,3 +86,40 @@ export function useRefreshWorkspaceFiles(workspaceId: string | undefined) {
     qc.invalidateQueries({ queryKey: ['workspace-file', workspaceId] });
   };
 }
+
+// ── 变更查看(diff) ──
+
+/** 列出工作区未提交变更(仅本地 git 仓库,非 local/非 git 由接口返回 400)。 */
+export function useWorkspaceChanges(
+  workspaceId: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['workspace-changes', workspaceId],
+    queryFn: () => workspacesApi.listChangedFiles(workspaceId!),
+    enabled: !!workspaceId && enabled,
+    retry: false,
+  });
+}
+
+/** 读取单个文件的 before/after 用于行级 diff(选中文件时才 enabled)。 */
+export function useWorkspaceFileDiff(
+  workspaceId: string | undefined,
+  path: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['workspace-file-diff', workspaceId, path],
+    queryFn: () => workspacesApi.readFileDiff(workspaceId!, path!),
+    enabled: !!workspaceId && !!path,
+    retry: false,
+  });
+}
+
+/** 刷新变更列表与已打开的 diff。 */
+export function useRefreshWorkspaceChanges(workspaceId: string | undefined) {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['workspace-changes', workspaceId] });
+    qc.invalidateQueries({ queryKey: ['workspace-file-diff', workspaceId] });
+  };
+}

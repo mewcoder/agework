@@ -1,7 +1,9 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import {
   Folder,
-  FolderTree,
+  ListTree,
+  FileDiff,
+  RefreshCw,
   Globe,
   Terminal,
   Settings,
@@ -15,8 +17,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { WorkspaceChangesPanel } from "@/components/workspace-file-panel/workspace-changes-panel";
 import { cn } from "@/lib/utils";
 import { useChatSidePanelStore } from "@/stores/chat-side-panel-store";
+import { useRefreshWorkspaceFiles } from "@/hooks/use-workspace";
 import { FilePanelContent } from "./file-panel-content";
 
 export type ChatSidePanelProps = {
@@ -26,6 +30,7 @@ export type ChatSidePanelProps = {
 // 功能图标列表：只有文件可点击，其他灰显占位
 const FEATURES = [
   { id: "files", label: "文件", icon: Folder, enabled: true },
+  { id: "changes", label: "变更", icon: FileDiff, enabled: true },
   { id: "browser", label: "浏览器", icon: Globe, enabled: false },
   { id: "terminal", label: "终端", icon: Terminal, enabled: false },
   { id: "config", label: "配置", icon: Settings, enabled: false },
@@ -43,9 +48,12 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
   const selectedFilePath = useChatSidePanelStore((s) => s.selectedFilePath);
   const setSelectedFilePath = useChatSidePanelStore((s) => s.setSelectedFilePath);
   const removeFileTab = useChatSidePanelStore((s) => s.removeFileTab);
+  const refreshFiles = useRefreshWorkspaceFiles(workspaceId);
 
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const tabsScrollRef = useRef<HTMLDivElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [tabsOverflow, setTabsOverflow] = useState(false);
 
   // active tab 变化时自动滚动到可见区域
   useEffect(() => {
@@ -53,6 +61,17 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
     const el = tabRefs.current.get(selectedFilePath);
     el?.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
   }, [selectedFilePath]);
+
+  // 标签溢出（scrollWidth > clientWidth）时才显示「⋯」菜单
+  useLayoutEffect(() => {
+    const el = tabsScrollRef.current;
+    if (!el) return;
+    const measure = () => setTabsOverflow(el.scrollWidth > el.clientWidth + 1);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [openFileTabs.length]);
 
   function handleSelectFromMenu(filepath: string) {
     setSelectedFilePath(filepath);
@@ -70,10 +89,10 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
           else tabRefs.current.delete(filepath);
         }}
         className={cn(
-          "group/tab flex h-full shrink-0 items-stretch border-r border-border/40 text-[11px] transition-colors first:border-l",
+          "group/tab relative flex h-[24px] shrink-0 self-center items-center rounded-[6px] text-[11px] transition-colors",
           isActive
             ? "bg-accent text-foreground"
-            : "bg-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+            : "bg-transparent text-muted-foreground hover:bg-accent/70 hover:text-foreground",
         )}
         style={{ maxWidth: TAB_MAX_WIDTH }}
         title={filepath}
@@ -87,7 +106,9 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
         </button>
         <button
           type="button"
-          className="mr-0.5 flex shrink-0 items-center p-0.5 opacity-0 transition-opacity group-hover/tab:opacity-100"
+          className={cn(
+            "absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center rounded bg-accent p-0.5 text-foreground opacity-0 transition-opacity group-hover/tab:opacity-100",
+          )}
           onClick={() => removeFileTab(filepath)}
           title="关闭标签"
         >
@@ -134,70 +155,91 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
         })}
       </div>
 
-      {/* 第二行：折叠树图标 + 标签页 + 快捷菜单 */}
-      <div className="flex h-[28px] shrink-0 items-stretch gap-1 border-b border-border/50 px-1.5">
-        <TooltipIconButton
-          tooltip={treeOpen ? "折叠文件树" : "展开文件树"}
-          side="bottom"
-          className="size-5"
-          onClick={toggleTree}
-        >
-          <FolderTree
-            className={cn(
-              "size-3.5",
-              treeOpen ? "text-foreground" : "text-muted-foreground",
-            )}
-          />
-        </TooltipIconButton>
+      {/* 文件视图 */}
+      {activeFeature === "files" && (
+        <div className="flex min-h-0 flex-1 flex-col">
+            {/* 折叠树图标 + 标签页 + 快捷菜单 */}
+            <div className="flex h-[32px] shrink-0 items-stretch gap-1 border-b border-border/50 px-1.5">
+              <TooltipIconButton
+                tooltip={treeOpen ? "折叠文件树" : "展开文件树"}
+                side="bottom"
+                className={cn(
+                  "size-6 self-center !rounded-[6px] transition-colors",
+                  treeOpen
+                    ? "bg-accent text-muted-foreground ring-1 ring-inset ring-border"
+                    : "text-muted-foreground hover:bg-accent/50",
+                )}
+                onClick={toggleTree}
+              >
+                <ListTree className="size-4" />
+              </TooltipIconButton>
 
-        {/* 标签页列表 — 水平滚动，隐藏滚动条 */}
-        <div className="flex min-w-0 flex-1 items-stretch overflow-x-auto scrollbar-hidden">
-          {openFileTabs.map((filepath) => renderTab(filepath))}
+              <TooltipIconButton
+                tooltip="刷新文件列表"
+                side="bottom"
+                className="size-6 self-center !rounded-[6px] text-muted-foreground"
+                onClick={refreshFiles}
+              >
+                <RefreshCw className="size-3.5" />
+              </TooltipIconButton>
+
+              {/* 标签页列表 — 水平滚动，隐藏滚动条 */}
+              <div
+                ref={tabsScrollRef}
+                className="flex min-w-0 flex-1 items-stretch gap-1 overflow-x-auto scrollbar-hidden"
+              >
+                {openFileTabs.map((filepath) => renderTab(filepath))}
+              </div>
+
+              {/* 快捷跳转菜单 — 仅标签溢出时显示 */}
+              {tabsOverflow && (
+                <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
+                  <DropdownMenuTrigger
+                    render={
+                      <button
+                        type="button"
+                        className="flex h-full shrink-0 items-center justify-center px-1.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                        title="所有标签"
+                      >
+                        <MoreHorizontal className="size-3.5" />
+                      </button>
+                    }
+                  />
+                  <DropdownMenuContent side="bottom" align="end" className="min-w-48 max-w-64">
+                    {openFileTabs.map((filepath) => {
+                      const filename = filepath.split("/").pop() ?? filepath;
+                      const isActive = selectedFilePath === filepath;
+                      return (
+                        <DropdownMenuItem
+                          key={filepath}
+                          className={cn(
+                            "gap-2 text-xs",
+                            isActive && "bg-accent",
+                          )}
+                          title={filepath}
+                          onClick={() => handleSelectFromMenu(filepath)}
+                        >
+                          <span className="min-w-0 flex-1 truncate">{filename}</span>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+            </div>
+
+            <div className="min-h-0 flex-1">
+              <FilePanelContent workspaceId={workspaceId} />
+            </div>
+          </div>
+        )}
+
+      {/* 变更视图 */}
+      {activeFeature === "changes" && (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <WorkspaceChangesPanel workspaceId={workspaceId} />
         </div>
-
-        {/* 快捷跳转菜单 — 始终显示所有已打开标签 */}
-        {openFileTabs.length > 0 && (
-          <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen} modal={false}>
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  className="flex h-full shrink-0 items-center justify-center px-1.5 text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-                  title="所有标签"
-                >
-                  <MoreHorizontal className="size-3.5" />
-                </button>
-              }
-            />
-            <DropdownMenuContent side="bottom" align="end" className="min-w-48 max-w-64">
-              {openFileTabs.map((filepath) => {
-                const filename = filepath.split("/").pop() ?? filepath;
-                const isActive = selectedFilePath === filepath;
-                return (
-                  <DropdownMenuItem
-                    key={filepath}
-                    className={cn(
-                      "gap-2 text-xs",
-                      isActive && "bg-accent",
-                    )}
-                    title={filepath}
-                    onClick={() => handleSelectFromMenu(filepath)}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{filename}</span>
-                  </DropdownMenuItem>
-                );
-              })}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      </div>
-
-      {/* 内容区 */}
-      <div className="min-h-0 flex-1">
-        {activeFeature === "files" && (
-          <FilePanelContent workspaceId={workspaceId} />
-        )}
-      </div>
+      )}
     </div>
   );
 }
