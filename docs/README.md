@@ -43,6 +43,7 @@
 | [todo/run-event-v2-big-bang-design.md](todo/run-event-v2-big-bang-design.md) | Phase A/B 已落地，仅 Phase C 特意搁置——活账本 |
 | [todo/auth-security-priority-plan.md](todo/auth-security-priority-plan.md) | P0/P1 完成，剩 P2-9 审计日志、P2-10 入库密钥加密 |
 | [todo/interrupt-migration-to-agui-spec.md](todo/interrupt-migration-to-agui-spec.md) | 未实现的设计稿 |
+| [todo/workspace-file-preview-design.md](todo/workspace-file-preview-design.md) | 未实现的设计稿——工作空间文件树+预览（全 runtime 统一 worker 代理读） |
 | [todo/nestjs-techniques-priority-plan.md](todo/nestjs-techniques-priority-plan.md) | 含真实未落地 P0（持久化队列、任务调度、启动期 env 校验） |
 | [todo/nestjs-fundamentals-priority-plan.md](todo/nestjs-fundamentals-priority-plan.md) | NestJS 能力菜单式参考/决策记录 |
 | [todo/nestjs-overview-priority-plan.md](todo/nestjs-overview-priority-plan.md) | 请求生命周期约定与决策记录 |
