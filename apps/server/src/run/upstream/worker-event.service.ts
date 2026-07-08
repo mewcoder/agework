@@ -27,6 +27,21 @@ import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
+/** 逐 token/chunk 触发的流式增量事件类型，量太大，不值得逐条 debug 日志。 */
+const HIGH_FREQUENCY_AGUI_EVENT_TYPES = new Set([
+  "TEXT_MESSAGE_CONTENT",
+  "TEXT_MESSAGE_CHUNK",
+]);
+
+function isHighFrequencyStreamingEvent(
+  message: RunChannelMessage<unknown>
+): boolean {
+  if (message.type !== "agui.event") return false;
+  const payloadType = (message.payload as { type?: string } | undefined)
+    ?.type;
+  return !!payloadType && HIGH_FREQUENCY_AGUI_EVENT_TYPES.has(payloadType);
+}
+
 /**
  * worker 上行事件的统一入口:seq 闸门(去重 / gap 诊断)+ 按消息类型分发。
  * run.status 的整条处理序列(决策、落库、终态收敛与清理)由 RunStatusService
@@ -59,15 +74,17 @@ export class WorkerEventService
     runId: string,
     message: RunChannelMessage<unknown>
   ): Promise<void> {
-    this.logger.debug(
-      `worker event received ${safeLogJson({
-        runId,
-        messageRunId: message.runId,
-        seq: message.seq,
-        type: message.type,
-        payload: summarizeMessagePayload(message.payload),
-      })}`
-    );
+    if (!isHighFrequencyStreamingEvent(message)) {
+      this.logger.debug(
+        `worker event received ${safeLogJson({
+          runId,
+          messageRunId: message.runId,
+          seq: message.seq,
+          type: message.type,
+          payload: summarizeMessagePayload(message.payload),
+        })}`
+      );
+    }
 
     // 先取出 handle：终态处理会 unregister，之后就拿不到 runtimeType 了。
     const handle = this.liveRuns.get(runId);
@@ -123,15 +140,17 @@ export class WorkerEventService
     }
 
     const decision = this.seqGate.accept(runId, seq);
-    this.logger.debug(
-      `publish message ${safeLogJson({
-        runId,
-        seq,
-        lastSeq: decision.lastSeq,
-        type: message.type,
-        payload: summarizeMessagePayload(message.payload),
-      })}`
-    );
+    if (!isHighFrequencyStreamingEvent(message)) {
+      this.logger.debug(
+        `publish message ${safeLogJson({
+          runId,
+          seq,
+          lastSeq: decision.lastSeq,
+          type: message.type,
+          payload: summarizeMessagePayload(message.payload),
+        })}`
+      );
+    }
 
     // Dedup: drop if seq <= lastSeq
     if (decision.action === "drop") {
