@@ -82,7 +82,7 @@ function WorkbenchContent({
         className="flex min-h-0 flex-1"
       >
         {/* 聊天区（ChatHeader 在这里，不贯通到面板） */}
-        <ResizablePanel defaultSize={showPanel ? "70%" : "100%"}>
+        <ResizablePanel defaultSize={showPanel ? "50%" : "100%"}>
           <div className="flex h-full flex-col">
             {selectedConversationId !== undefined ? (
               <ChatHeader
@@ -91,11 +91,11 @@ function WorkbenchContent({
                     <Button
                       variant="ghost"
                       size="icon-sm"
-                      className="no-drag"
+                      className="no-drag text-muted-foreground hover:text-foreground"
                       onClick={togglePanel}
                       title={panelOpen ? "关闭侧边栏" : "打开侧边栏"}
                     >
-                      <PanelRight className="size-3.5" />
+                      <PanelRight className="size-4" />
                     </Button>
                   ) : undefined
                 }
@@ -113,7 +113,7 @@ function WorkbenchContent({
         {showPanel && workspaceId ? (
           <>
             <ResizableHandle withHandle />
-            <ResizablePanel defaultSize="30%" minSize="10%" maxSize="70%">
+            <ResizablePanel defaultSize="50%" minSize="15%" maxSize="70%">
               <ChatSidePanel workspaceId={workspaceId} />
             </ResizablePanel>
           </>
