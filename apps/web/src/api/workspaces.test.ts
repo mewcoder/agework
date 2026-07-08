@@ -76,4 +76,35 @@ describe('workspacesApi', () => {
       expect(mockApiPost).toHaveBeenCalledWith('/api/v1/workspaces/remove', { id: 'ws-1' });
     });
   });
+
+  describe('listFiles', () => {
+    it('调用 files/list 端点带 id 和 path', async () => {
+      mockApiGet.mockResolvedValue({ path: 'src', list: [], truncated: false });
+      await workspacesApi.listFiles('ws-1', 'src');
+
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/workspaces/files/list?id=ws-1&path=src');
+    });
+
+    it('根目录时不带 path 参数', async () => {
+      mockApiGet.mockResolvedValue({ path: '', list: [], truncated: false });
+      await workspacesApi.listFiles('ws-1', '');
+
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/workspaces/files/list?id=ws-1');
+    });
+  });
+
+  describe('readFile', () => {
+    it('调用 files/read 端点带 id 和 path', async () => {
+      mockApiGet.mockResolvedValue({
+        path: 'src/app.ts',
+        encoding: 'utf8',
+        content: 'console.log(1)',
+        size: 14,
+        truncated: false,
+      });
+      await workspacesApi.readFile('ws-1', 'src/app.ts');
+
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/workspaces/files/read?id=ws-1&path=src%2Fapp.ts');
+    });
+  });
 });

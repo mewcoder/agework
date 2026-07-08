@@ -2,6 +2,8 @@ import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import type {
   RunChannelMessage,
   CommandPayload,
+  OwnerCommand,
+  WorkspaceFileCommandPayload,
 } from "@agework/shared/protocol";
 import { safeLogJson } from "../../common/logging";
 
@@ -28,6 +30,11 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     string,
     RunChannelMessage<CommandPayload>[]
   >();
+  /** ownerId 级文件命令队列——与 run 命令共用同一条长轮询连接但走独立协议类型(见 ADR-0004)。 */
+  private readonly ownerFileQueues = new Map<
+    string,
+    OwnerCommand<WorkspaceFileCommandPayload>[]
+  >();
   private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
   /** ownerId 级"代次"标识——懒生成，进程重启即归零重来，用于让 worker 察觉自己的 afterSeq 已过期。 */
   private readonly ownerEpochs = new Map<string, number>();
@@ -53,6 +60,39 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
         queueSize: queue.length,
       })}`
     );
+  }
+
+  /** 按 ownerId 推送文件命令(与 run 命令共用同一条长轮询连接,见 ADR-0004)。 */
+  pushFileCommand(
+    ownerId: string,
+    command: OwnerCommand<WorkspaceFileCommandPayload>
+  ): void {
+    let queue = this.ownerFileQueues.get(ownerId);
+    if (!queue) {
+      queue = [];
+      this.ownerFileQueues.set(ownerId, queue);
+    }
+    queue.push(command);
+    this.resolveOwnerWaiters(ownerId);
+    this.logger.debug(
+      `push owner file command ${safeLogJson({
+        ownerId,
+        seq: command.seq,
+        type: command.payload.type,
+        commandId: command.payload.commandId,
+        queueSize: queue.length,
+      })}`
+    );
+  }
+
+  /** 排空 ownerId 的文件命令队列(轮询时调用,一次性全部取出)。 */
+  pollFileCommands(
+    ownerId: string
+  ): OwnerCommand<WorkspaceFileCommandPayload>[] {
+    const queue = this.ownerFileQueues.get(ownerId);
+    if (!queue || queue.length === 0) return [];
+    this.ownerFileQueues.delete(ownerId);
+    return queue;
   }
 
   waitForOwnerId(
@@ -120,6 +160,7 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     }
     this.ownerWaiters.clear();
     this.ownerQueues.clear();
+    this.ownerFileQueues.clear();
     if (drained > 0) {
       this.logger.log(`drained ${drained} owner command waiter(s) on shutdown`);
     }
@@ -127,6 +168,7 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
 
   cleanupByOwnerId(ownerId: string): void {
     this.ownerQueues.delete(ownerId);
+    this.ownerFileQueues.delete(ownerId);
     const waiters = this.ownerWaiters.get(ownerId) ?? [];
     for (const waiter of waiters) {
       clearTimeout(waiter.timer);
@@ -156,10 +198,14 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     const waiters = this.ownerWaiters.get(ownerId);
     if (!waiters?.length) return;
 
+    // 文件命令到达时也要唤醒等待的 long-poll(即使没有 run 命令),
+    // 让 endpoint handler 有机会排空文件命令队列(见 ADR-0004)。
+    const hasFileCommands = (this.ownerFileQueues.get(ownerId)?.length ?? 0) > 0;
+
     const remaining: OwnerWaiter[] = [];
     for (const waiter of waiters) {
       const commands = this.pollByOwnerId(ownerId, waiter.afterSeq);
-      if (commands.length > 0) {
+      if (commands.length > 0 || hasFileCommands) {
         clearTimeout(waiter.timer);
         waiter.resolve(commands);
       } else {

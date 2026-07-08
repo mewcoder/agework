@@ -48,3 +48,41 @@ export function useDeleteWorkspace() {
     },
   });
 }
+
+// ── 文件预览 ──
+
+/** 列出一层目录(懒加载,展开时 enabled 才为 true)。 */
+export function useWorkspaceFiles(
+  workspaceId: string | undefined,
+  path: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['workspace-files', workspaceId, path],
+    queryFn: () => workspacesApi.listFiles(workspaceId!, path),
+    enabled: !!workspaceId && enabled,
+    retry: false,
+  });
+}
+
+/** 读取文件内容。 */
+export function useWorkspaceFileContent(
+  workspaceId: string | undefined,
+  path: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['workspace-file', workspaceId, path],
+    queryFn: () => workspacesApi.readFile(workspaceId!, path!),
+    enabled: !!workspaceId && !!path,
+    retry: false,
+  });
+}
+
+/** 刷新文件树和当前打开文件。 */
+export function useRefreshWorkspaceFiles(workspaceId: string | undefined) {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: ['workspace-files', workspaceId] });
+    qc.invalidateQueries({ queryKey: ['workspace-file', workspaceId] });
+  };
+}

@@ -3,8 +3,13 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { generateId } from "@agework/shared";
+import type {
+  WorkspaceFileCommandPayload,
+  WorkspaceFileCommandResult,
+} from "@agework/shared/protocol";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
 import type { WorkspaceRunContext } from "./workspace.types";
@@ -21,7 +26,13 @@ import {
 } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeService } from "../runtime/runtime.service";
+import { WorkerManagerService } from "../worker-manager/worker-manager.service";
+import { withTimeout } from "../common/with-timeout";
 import type { RuntimeType, IsolationScope } from "../config/config.service";
+import type {
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+} from "@agework/shared/api";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -47,7 +58,8 @@ export class WorkspaceService {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeService: RuntimeService
+    private readonly runtimeService: RuntimeService,
+    private readonly workerManager: WorkerManagerService
   ) {}
 
   /**
@@ -123,6 +135,121 @@ export class WorkspaceService {
    */
   getCapabilities() {
     return this.runtimePolicy.capabilities();
+  }
+
+  // ── 文件预览(owner-scoped,经 worker 代理读,server 不做本机 fs 直读) ──
+
+  /** 列出一层目录(根目录时 path 为空串)。 */
+  async listFiles(
+    userId: string,
+    workspaceId: string,
+    path: string
+  ): Promise<WorkspaceFileListResponse> {
+    const result = await this.executeFileCommand(userId, workspaceId, {
+      type: "list_files",
+      commandId: generateId(),
+      path: path ?? "",
+    });
+
+    if ("error" in result) {
+      throw new BadRequestException(result.error);
+    }
+
+    const listResult = result as Extract<
+      WorkspaceFileCommandResult,
+      { type: "list_files"; list: unknown }
+    >;
+    return {
+      path: listResult.path,
+      list: listResult.list,
+      truncated: listResult.truncated,
+    };
+  }
+
+  /** 读取文件内容(文本或图片 base64)。 */
+  async readFile(
+    userId: string,
+    workspaceId: string,
+    path: string
+  ): Promise<WorkspaceFileReadResponse> {
+    if (!path) {
+      throw new BadRequestException("path is required");
+    }
+
+    const result = await this.executeFileCommand(userId, workspaceId, {
+      type: "read_file",
+      commandId: generateId(),
+      path,
+    });
+
+    if ("error" in result) {
+      throw new BadRequestException(result.error);
+    }
+
+    const readResult = result as Extract<
+      WorkspaceFileCommandResult,
+      { type: "read_file"; encoding: "utf8" | "base64" }
+    >;
+    return {
+      path: readResult.path,
+      encoding: readResult.encoding,
+      content: readResult.content,
+      size: readResult.size,
+      truncated: readResult.truncated,
+    };
+  }
+
+  /**
+   * 下发文件命令 → 等待 worker 回传结果(10s 超时)。
+   *
+   * 鉴权:属主校验 → 解析常驻 worker → 委派。
+   * worker 不在线时直接 400,不浪费一次 10s 等待。
+   * 超时/出错分支显式清理 Store 里的 pending 条目(见 ADR-0004)。
+   */
+  private async executeFileCommand(
+    userId: string,
+    workspaceId: string,
+    payload: WorkspaceFileCommandPayload
+  ): Promise<WorkspaceFileCommandResult> {
+    // 属主校验
+    const owned = await this.repo.getOwnedId(userId, workspaceId);
+    if (!owned) {
+      throw new NotFoundException(`Workspace ${workspaceId} not found`);
+    }
+
+    // 解析常驻 worker
+    const binding = await this.workerManager.findActiveWorkerByWorkspace(
+      workspaceId
+    );
+    if (!binding) {
+      throw new BadRequestException(
+        "运行时未启动,发起对话后即可浏览文件"
+      );
+    }
+
+    const ownerId = binding.worker.ownerId;
+
+    // 下发命令
+    this.workerManager.sendFileCommand(ownerId, payload);
+
+    // 等待结果(10s 超时)
+    try {
+      return await withTimeout(
+        this.workerManager.waitForFileCommandResult(payload.commandId),
+        10_000,
+        "文件预览请求超时"
+      );
+    } catch (err) {
+      // 超时/出错分支显式清理 pending 条目
+      this.workerManager.cancelFileCommand(
+        payload.commandId,
+        err instanceof Error ? err.message : String(err)
+      );
+      if (err instanceof Error && err.message.includes("超时")) {
+        throw new ServiceUnavailableException(err.message);
+      }
+      throw err;
+    }
   }
 
   /**

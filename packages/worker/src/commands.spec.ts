@@ -28,7 +28,7 @@ function cancelCommand(commandId: string): CommandPayload {
 
 function makeClient(commands: RunChannelMessage<CommandPayload>[] = []) {
   return {
-    pollCommands: vi.fn().mockResolvedValue(commands),
+    pollCommands: vi.fn().mockResolvedValue({ commands, fileCommands: [] }),
     emit: vi.fn().mockResolvedValue(undefined),
   };
 }

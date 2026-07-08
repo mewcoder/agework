@@ -37,7 +37,7 @@ class MockChildProcess extends EventEmitter {
 function makeClient(config = makeRunConfig()) {
   return {
     fetchRunConfig: vi.fn().mockResolvedValue(config),
-    pollCommands: vi.fn().mockResolvedValue([]),
+    pollCommands: vi.fn().mockResolvedValue({ commands: [], fileCommands: [] }),
     emit: vi.fn().mockResolvedValue(undefined),
     cleanup: vi.fn(),
   };

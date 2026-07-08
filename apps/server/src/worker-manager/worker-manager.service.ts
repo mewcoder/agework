@@ -11,6 +11,9 @@ import type {
   RuntimeSpec,
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
+  OwnerCommand,
+  WorkspaceFileCommandPayload,
+  WorkspaceFileCommandResult,
 } from "@agework/shared/protocol";
 import type { AdminRunWorkerInstanceResponse } from "@agework/shared/api";
 import {
@@ -28,6 +31,7 @@ import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerProvisioner } from "./instance/worker.provisioner";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
+import { WorkspaceFileCommandStore } from "./connection/workspace-file-command.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { OwnerRunStore } from "./instance/owner-run.store";
@@ -52,7 +56,8 @@ export class WorkerManagerService {
     private readonly provisioner: WorkerProvisioner,
     private readonly handshakeStore: WorkerHandshakeStore,
     private readonly livenessStore: WorkerLivenessStore,
-    private readonly ownerRunStore: OwnerRunStore
+    private readonly ownerRunStore: OwnerRunStore,
+    private readonly fileCommandStore: WorkspaceFileCommandStore
   ) {}
 
   /**
@@ -63,7 +68,11 @@ export class WorkerManagerService {
   async pollCommands(
     ownerId: string,
     query: { afterSeq?: number; waitMs?: number }
-  ): Promise<{ messages: WorkerCommandRpcRequest[]; queueEpoch: number }> {
+  ): Promise<{
+    messages: WorkerCommandRpcRequest[];
+    fileCommands: OwnerCommand<WorkspaceFileCommandPayload>[];
+    queueEpoch: number;
+  }> {
     this.livenessStore.touch(ownerId);
     return this.endpointHandler.pollCommands(ownerId, query);
   }
@@ -127,6 +136,38 @@ export class WorkerManagerService {
   /** 向 owner 下发一条命令。 */
   sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
     this.commandDispatcher.sendCommand(ownerId, runId, command);
+  }
+
+  // ── 文件命令(owner-scoped,无 runId,见 ADR-0004) ──
+
+  /** 向 owner 下发一条文件命令。 */
+  sendFileCommand(
+    ownerId: string,
+    payload: WorkspaceFileCommandPayload
+  ): void {
+    this.commandDispatcher.sendFileCommand(ownerId, payload);
+  }
+
+  /** 等待文件命令结果(由调用方套 withTimeout)。 */
+  waitForFileCommandResult(
+    commandId: string
+  ): Promise<WorkspaceFileCommandResult> {
+    return this.fileCommandStore.waitForResult(commandId);
+  }
+
+  /** 超时/出错分支清理 pending 文件命令结果条目。 */
+  cancelFileCommand(commandId: string, reason: string): void {
+    this.fileCommandStore.cancel(commandId, reason);
+  }
+
+  /** worker 结果端点回传文件命令结果,按 commandId 收敛。 */
+  resolveFileCommandResult(result: WorkspaceFileCommandResult): boolean {
+    return this.endpointHandler.resolveFileCommandResult(result);
+  }
+
+  /** 按 workspaceId 查找 running 状态的常驻 worker(薄方法,直通 registry)。 */
+  findActiveWorkerByWorkspace(workspaceId: string) {
+    return this.registry.findActiveByWorkspace(workspaceId);
   }
 
   /** run 结束时清理该 run 在命令队列里的残留状态。 */

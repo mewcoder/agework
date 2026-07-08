@@ -95,6 +95,19 @@ export type {
   WorkerEventRpcNotification,
 } from "./rpc";
 export type {
+  ListFilesPayload,
+  ReadFilePayload,
+  WorkspaceFileCommandPayload,
+  FileEntryType,
+  FileEntry,
+  ListFilesResult,
+  ReadFileResult,
+  WorkspaceFileCommandError,
+  WorkspaceFileCommandResult,
+  OwnerCommand,
+} from "./workspace-file-command";
+export { nextOwnerCommand } from "./workspace-file-command";
+export type {
   RuntimeCapabilities,
   RuntimeTunnelClientMessage,
   RuntimeTunnelHeartbeatMessage,

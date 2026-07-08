@@ -132,7 +132,8 @@ function makeService(
     { emit: vi.fn() } as never,
     runtimePolicy,
     directoryHandler,
-    runtimeService as never
+    runtimeService as never,
+    {} as never
   );
 }
 
@@ -606,7 +607,8 @@ describe("WorkspaceService", () => {
           config as never,
           runtimePolicy
         ),
-        makeRuntimeService() as never
+        makeRuntimeService() as never,
+        {} as never
       );
 
       await service.delete(userId, workspaceId);

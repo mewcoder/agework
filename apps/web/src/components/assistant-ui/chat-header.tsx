@@ -1,4 +1,5 @@
 import { Folder } from "lucide-react";
+import { type ReactNode } from "react";
 import { AgentIcon } from "@/components/icons/agent";
 import { Badge } from "@/components/ui/badge";
 import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
@@ -10,7 +11,7 @@ import { agentLabel } from "@/utils/model-provider";
 import { cn } from "@/lib/utils";
 import { useNativeClient } from "@/hooks/use-native-client";
 
-export function ChatHeader() {
+export function ChatHeader({ rightSlot }: { rightSlot?: ReactNode }) {
   const { state, isMobile } = useSidebar();
   const nativeClient = useNativeClient();
   const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
@@ -79,6 +80,7 @@ export function ChatHeader() {
         className="-my-1 min-w-0 flex-1 self-stretch"
         onClick={scrollToConversationTop}
       />
+      {rightSlot}
     </header>
   );
 }

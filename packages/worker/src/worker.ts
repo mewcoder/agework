@@ -11,6 +11,7 @@ import { WorkerCommands } from "./commands.js";
 import { WorkerHttpTransport } from "./transport/worker-http.js";
 import { RunnerIpcTransport } from "./transport/runner-ipc.js";
 import { RunnerManager } from "./runner-manager.js";
+import { WorkspaceFileCommandHandler } from "./files/workspace-file-command.handler.js";
 import {
   errorDetails,
   setWorkerLogContext,
@@ -230,6 +231,7 @@ export async function runWorker() {
     emptyRetryDelayMs: COMMAND_EMPTY_RETRY_DELAY_MS,
   });
   const runnerManager = new RunnerManager(client, commands);
+  const fileCommandHandler = new WorkspaceFileCommandHandler(client);
   workerLog("worker started", {
     ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
   });
@@ -258,7 +260,10 @@ export async function runWorker() {
   process.once("SIGTERM", requestShutdown);
   process.once("SIGINT", requestShutdown);
 
-  await commands.run((command) => runnerManager.handle(command));
+  await commands.run(
+    (command) => runnerManager.handle(command),
+    (command) => fileCommandHandler.handle(command)
+  );
 
   async function shutdown(signal: NodeJS.Signals) {
     commands.stop();

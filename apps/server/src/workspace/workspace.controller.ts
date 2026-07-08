@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from "@nestjs/common";
+import { Body, Controller, Get, Post, Query } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../auth/auth.types";
 import { WorkspaceService } from "./workspace.service";
@@ -47,5 +47,25 @@ export class WorkspaceController {
   @Post("remove")
   remove(@Body() body: WorkspaceIdDto, @CurrentUser() user: JwtUser) {
     return this.workspaceService.delete(user.userId, body.id);
+  }
+
+  // ── 文件预览(只读,经 worker 代理读) ──
+
+  @Get("files/list")
+  listFiles(
+    @Query("id") id: string,
+    @Query("path") path: string,
+    @CurrentUser() user: JwtUser
+  ) {
+    return this.workspaceService.listFiles(user.userId, id, path ?? "");
+  }
+
+  @Get("files/read")
+  readFile(
+    @Query("id") id: string,
+    @Query("path") path: string,
+    @CurrentUser() user: JwtUser
+  ) {
+    return this.workspaceService.readFile(user.userId, id, path);
   }
 }

@@ -6,6 +6,9 @@ import type {
   UpstreamMessage,
   WorkerCommandRpcRequest,
   WorkerRegisterRequest,
+  WorkspaceFileCommandPayload,
+  WorkspaceFileCommandResult,
+  OwnerCommand,
 } from "@agework/shared/protocol";
 import {
   WORKER_OWNER_ID_HEADER,
@@ -57,7 +60,10 @@ export class WorkerHttpTransport {
     });
   }
 
-  async pollCommands(waitMs = 0): Promise<RunChannelMessage<CommandPayload>[]> {
+  async pollCommands(waitMs = 0): Promise<{
+    commands: RunChannelMessage<CommandPayload>[];
+    fileCommands: OwnerCommand<WorkspaceFileCommandPayload>[];
+  }> {
     const commandsPath = `/worker/owners/${this.ownerId}/commands`;
     const params = new URLSearchParams({ afterSeq: String(this.commandSeq) });
     if (waitMs > 0) {
@@ -74,7 +80,7 @@ export class WorkerHttpTransport {
         ...errorDetails(err),
       }, "warn");
       // 网络瞬时故障不崩溃，返回空让调用方重试
-      return [];
+      return { commands: [], fileCommands: [] };
     }
 
     if (!res.ok) {
@@ -86,7 +92,7 @@ export class WorkerHttpTransport {
         body,
       }, res.status === 401 ? "error" : "warn");
       if (this.handleFatalResponse(res, { afterSeq: this.commandSeq })) {
-        return [];
+        return { commands: [], fileCommands: [] };
       }
       if (res.status === 401) {
         workerLog("runtime access key invalid, exiting", {
@@ -94,11 +100,12 @@ export class WorkerHttpTransport {
         }, "error");
         process.exit(1);
       }
-      return [];
+      return { commands: [], fileCommands: [] };
     }
 
     const data = (await res.json()) as {
       messages?: WorkerCommandRpcRequest[];
+      fileCommands?: OwnerCommand<WorkspaceFileCommandPayload>[];
       queueEpoch?: number;
     };
 
@@ -124,12 +131,14 @@ export class WorkerHttpTransport {
     }
 
     const commands = normalizeCommandPollResponse(data);
-    if (commands.length > 0) {
+    const fileCommands = data.fileCommands ?? [];
+    if (commands.length > 0 || fileCommands.length > 0) {
       this.emptyPolls = 0;
       workerLog("command poll received commands", {
         ownerId: this.ownerId,
         afterSeq: this.commandSeq,
         count: commands.length,
+        fileCommandCount: fileCommands.length,
         commands: commands.map((command) => ({
           seq: command.seq,
           runId: command.runId,
@@ -152,7 +161,7 @@ export class WorkerHttpTransport {
         this.commandSeq = command.seq;
       }
     }
-    return commands;
+    return { commands, fileCommands };
   }
 
   async fetchRunConfig(runId: string): Promise<RunConfig> {
@@ -206,6 +215,25 @@ export class WorkerHttpTransport {
     if (!res.ok) {
       const responseBody = await safeText(res);
       throw new Error(`register failed: ${res.status} ${responseBody}`);
+    }
+  }
+
+  /** 经独立结果端点回传文件命令结果,不经 command.result/RunEvent。 */
+  async postFileCommandResult(
+    result: WorkspaceFileCommandResult
+  ): Promise<void> {
+    const url = `${this.apiBase}/worker/owners/${this.ownerId}/file-command-results`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...this.buildAuthHeaders(),
+      },
+      body: JSON.stringify(result),
+    });
+    if (!res.ok) {
+      const body = await safeText(res);
+      throw new Error(`file command result POST failed: ${res.status} ${body}`);
     }
   }
 

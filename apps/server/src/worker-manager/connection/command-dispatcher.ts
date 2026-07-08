@@ -1,8 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import {
   nextCommandMessage,
+  nextOwnerCommand,
   type CommandPayload,
   type RunConfig,
+  type WorkspaceFileCommandPayload,
 } from "@agework/shared/protocol";
 import { WorkerConfigStore } from "./worker-config.store";
 import { WorkerCommandQueue } from "./command-queue";
@@ -18,6 +20,7 @@ import { WorkerCommandQueue } from "./command-queue";
 @Injectable()
 export class WorkerCommandDispatcher {
   private readonly commandSeqs = new Map<string, number>();
+  private readonly fileCommandSeqs = new Map<string, number>();
 
   constructor(
     private readonly runConfigStore: WorkerConfigStore,
@@ -47,6 +50,19 @@ export class WorkerCommandDispatcher {
     this.commandQueue.pushByOwnerId(ownerId, message);
   }
 
+  /** 下发一条 owner-scoped 文件命令(无 runId,见 ADR-0004)。 */
+  sendFileCommand(
+    ownerId: string,
+    payload: WorkspaceFileCommandPayload
+  ): void {
+    const command = nextOwnerCommand(
+      this.fileCommandSeqs,
+      ownerId,
+      payload
+    );
+    this.commandQueue.pushFileCommand(ownerId, command);
+  }
+
   cleanupRun(runId: string): void {
     this.runConfigStore.unregister(runId);
   }
@@ -54,5 +70,6 @@ export class WorkerCommandDispatcher {
   cleanupByOwnerId(ownerId: string): void {
     this.commandQueue.cleanupByOwnerId(ownerId);
     this.commandSeqs.delete(ownerId);
+    this.fileCommandSeqs.delete(ownerId);
   }
 }

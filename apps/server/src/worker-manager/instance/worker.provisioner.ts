@@ -250,6 +250,9 @@ export class WorkerProvisioner {
     if (runConfig.workerLogFilePath) {
       env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
     }
+    // 文件预览:worker 需要知道自身工作区根目录来解析相对路径。
+    // runtimePath 是执行环境内的路径(local=hostPath, container=mountTarget)。
+    env.AGEWORK_WORKER_WORKSPACE_PATH = input.runtimeTarget.runtimePath;
     // local runtime 从 envConfig 提取的 CLI 路径传播到 worker env。
     // worker 侧 resolveCliPaths 读 env 优先，见 ADR-0004。
     if (runConfig.claudeExecutablePath) {

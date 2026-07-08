@@ -15,6 +15,8 @@ import { WorkerLifecycleHandler } from "./instance/lifecycle.handler";
 import { WorkerLifecycleListener } from "./instance/lifecycle.listener";
 import { AdminWorkerController } from "./admin/admin-worker.controller";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
+import { WorkspaceFileCommandStore } from "./connection/workspace-file-command.store";
+import { WorkspaceFileCommandController } from "./connection/workspace-file-command.controller";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { WorkerLivenessSweeper } from "./connection/worker-liveness.sweeper";
@@ -38,6 +40,7 @@ import { OwnerRunStore } from "./instance/owner-run.store";
   controllers: [
     WorkerCommandController,
     WorkerRunController,
+    WorkspaceFileCommandController,
     AdminWorkerController,
   ],
   providers: [
@@ -48,6 +51,7 @@ import { OwnerRunStore } from "./instance/owner-run.store";
     WorkerEndpointHandler,
     WorkerRegistryRepository,
     WorkerHandshakeStore,
+    WorkspaceFileCommandStore,
     WorkerTokenGuard,
     WorkerProvisioner,
     WorkerLifecycleHandler,

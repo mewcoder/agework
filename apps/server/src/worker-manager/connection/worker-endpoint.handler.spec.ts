@@ -5,6 +5,7 @@ import { WorkerCommandQueue } from "./command-queue";
 import { WorkerConfigStore } from "./worker-config.store";
 import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
+import { WorkspaceFileCommandStore } from "./workspace-file-command.store";
 
 function makeHandler(opts: {
   commandQueue?: Partial<WorkerCommandQueue>;
@@ -13,11 +14,12 @@ function makeHandler(opts: {
 }) {
   const commandQueue = {
     epochFor: vi.fn().mockReturnValue(0),
+    pollFileCommands: vi.fn().mockReturnValue([]),
     ...opts.commandQueue,
   } as WorkerCommandQueue;
   const configStore = (opts.configStore ?? {}) as WorkerConfigStore;
   const upstream = (opts.upstream ?? {}) as WorkerUpstreamRegistry;
-  return new WorkerEndpointHandler(commandQueue, configStore, upstream);
+  return new WorkerEndpointHandler(commandQueue, configStore, upstream, {} as unknown as WorkspaceFileCommandStore);
 }
 
 const commandMessage = {
@@ -55,6 +57,7 @@ describe("WorkerEndpointHandler", () => {
             meta: { runId: "run-1", seq: 1, ts: "2026-06-27T00:00:00.000Z" },
           },
         ],
+        fileCommands: [],
         queueEpoch: 1000,
       });
     });

@@ -7,6 +7,8 @@ import type {
   WorkspaceResponse,
   WorkspaceListResponse,
   UpdateWorkspaceRequest,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
 } from '@agework/shared/api';
 
 export type { WorkspaceResponse as Workspace };
@@ -35,4 +37,15 @@ export const workspacesApi = {
 
   delete: (id: string) =>
     apiPost('/api/v1/workspaces/remove', { id }),
+
+  listFiles: (id: string, path: string) => {
+    const params = new URLSearchParams({ id });
+    if (path) params.set('path', path);
+    return apiGet<WorkspaceFileListResponse>(`/api/v1/workspaces/files/list?${params.toString()}`);
+  },
+
+  readFile: (id: string, path: string) => {
+    const params = new URLSearchParams({ id, path });
+    return apiGet<WorkspaceFileReadResponse>(`/api/v1/workspaces/files/read?${params.toString()}`);
+  },
 };

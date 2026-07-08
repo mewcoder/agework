@@ -39,7 +39,7 @@ describe("WorkerHttpTransport", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new WorkerHttpTransport();
 
-    const commands = await client.pollCommands();
+    const result = await client.pollCommands();
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://api/worker/owners/ws-1/commands?afterSeq=0",
@@ -50,7 +50,7 @@ describe("WorkerHttpTransport", () => {
         },
       }
     );
-    expect(commands[0].payload).toMatchObject({
+    expect(result.commands[0].payload).toMatchObject({
       type: "user_message",
       commandId: "cmd-3",
       runId: "run-1",
@@ -88,9 +88,9 @@ describe("WorkerHttpTransport", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new WorkerHttpTransport();
 
-    const commands = await client.pollCommands();
+    const result = await client.pollCommands();
 
-    expect(commands).toEqual([
+    expect(result.commands).toEqual([
       {
         runId: "run-1",
         seq: 4,
@@ -370,9 +370,9 @@ describe("WorkerHttpTransport", () => {
       vi.stubGlobal("fetch", fetchMock);
       const client = new WorkerHttpTransport();
 
-      const commands = await client.pollCommands();
+      const result = await client.pollCommands();
 
-      expect(commands).toEqual([]);
+      expect(result.commands).toEqual([]);
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -386,9 +386,9 @@ describe("WorkerHttpTransport", () => {
 
       await client.pollCommands(); // records epoch 1000
       fetchMock.mockClear();
-      const commands = await client.pollCommands();
+      const result = await client.pollCommands();
 
-      expect(commands).toEqual([]);
+      expect(result.commands).toEqual([]);
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -440,7 +440,7 @@ describe("WorkerHttpTransport", () => {
           }),
         });
 
-      const commands = await client.pollCommands();
+      const result = await client.pollCommands();
 
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock).toHaveBeenNthCalledWith(
@@ -454,8 +454,8 @@ describe("WorkerHttpTransport", () => {
         expect.anything()
       );
       // returns the re-polled (correct, non-empty) result, not the first (stale, empty) one
-      expect(commands).toHaveLength(1);
-      expect(commands[0].payload).toMatchObject({
+      expect(result.commands).toHaveLength(1);
+      expect(result.commands[0].payload).toMatchObject({
         commandId: "cmd-1",
         runId: "run-1",
       });
@@ -475,9 +475,9 @@ describe("WorkerHttpTransport", () => {
       vi.stubGlobal("fetch", fetchMock);
       const client = new WorkerHttpTransport();
 
-      const commands = await client.pollCommands();
+      const result = await client.pollCommands();
 
-      expect(commands).toEqual([]);
+      expect(result.commands).toEqual([]);
       expect(exitSpy).toHaveBeenCalledWith(1);
     });
 

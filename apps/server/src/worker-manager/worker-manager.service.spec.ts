@@ -56,7 +56,8 @@ function makeService() {
     provisioner as never,
     {} as never,
     livenessStore as never,
-    ownerRunStore as never
+    ownerRunStore as never,
+    {} as never
   );
   return {
     service,
@@ -246,6 +247,7 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
       {} as any
     );
   });
@@ -278,6 +280,7 @@ describe("WorkerManagerService runtime policy", () => {
       {} as never,
       {} as never,
       {} as never,
+      {} as never,
       {} as never
     );
     return { service, runtimeService };
@@ -304,6 +307,7 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       registry as never,
       {} as never,
       provisioner as never,
+      {} as never,
       {} as never,
       {} as never,
       {} as never
@@ -397,7 +401,8 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       provisioner as never,
       {} as never,
       {} as never,
-      ownerRunStore as never
+      ownerRunStore as never,
+      {} as never
     );
     return { service, provisioner, ownerRunStore };
   }
@@ -460,6 +465,7 @@ describe("WorkerManagerService.registerWorker", () => {
       {} as never,
       {} as never,
       handshakeStore as never,
+      {} as never,
       {} as never,
       {} as never
     );
