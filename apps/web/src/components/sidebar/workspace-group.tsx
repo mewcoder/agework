@@ -256,6 +256,9 @@ function WorkspaceHoverDetails({ workspace }: { workspace: Workspace }) {
       {workspace.gitUrl && (
         <WorkspaceHoverRow label="Git" value={workspace.gitUrl} mono />
       )}
+      {workspace.gitBranch && (
+        <WorkspaceHoverRow label="分支" value={workspace.gitBranch} mono />
+      )}
       {workspace.description && (
         <WorkspaceHoverRow label="描述" value={workspace.description} multiline />
       )}

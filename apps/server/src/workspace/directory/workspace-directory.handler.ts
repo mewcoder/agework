@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from "@nestjs/common";
-import { spawn } from "child_process";
+import { execFileSync, spawn } from "child_process";
 import { mkdirSync, realpathSync, rmSync, statSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve } from "path";
@@ -31,7 +31,24 @@ export type WorkspaceDirectoryCreatePlan = {
     | typeof MANAGED_DIRECTORY_SOURCE
     | typeof EXTERNAL_DIRECTORY_SOURCE
     | typeof REMOTE_DIRECTORY_SOURCE;
+  /** 绑定已有本地目录时，若该目录本身是 git 仓库，读到的当前分支；否则 undefined。 */
+  detectedGitBranch?: string;
 };
+
+/** 绑定已有本地目录时探测其当前 git 分支；非 git 仓库或 detached HEAD 返回 undefined。 */
+function detectGitBranch(rootPath: string): string | undefined {
+  try {
+    const branch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: rootPath,
+      stdio: ["ignore", "pipe", "ignore"],
+    })
+      .toString()
+      .trim();
+    return branch && branch !== "HEAD" ? branch : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 function gitClone(
   gitUrl: string,
@@ -198,6 +215,7 @@ export class WorkspaceDirectoryHandler {
       rootPath,
       ownsDirectory: false,
       directorySource: EXTERNAL_DIRECTORY_SOURCE,
+      detectedGitBranch: detectGitBranch(rootPath),
     };
   }
 

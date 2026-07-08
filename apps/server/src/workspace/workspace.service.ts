@@ -361,7 +361,7 @@ export class WorkspaceService {
         id,
         name: workspaceName,
         gitUrl: workspaceGitUrl,
-        gitBranch: workspaceGitBranch,
+        gitBranch: workspaceGitBranch ?? directory.detectedGitBranch,
         description: workspaceDescription,
         userId,
         isolationScope: storedIsolationScope,

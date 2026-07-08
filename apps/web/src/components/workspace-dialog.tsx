@@ -447,17 +447,30 @@ function WorkspaceDialogForm({
           )}
 
           {isEdit ? (
-            workspace.gitUrl && (
-              <Field data-disabled>
-                <FieldLabel htmlFor="workspace-git">Git 地址</FieldLabel>
-                <Input
-                  id="workspace-git"
-                  value={workspace.gitUrl}
-                  readOnly
-                  disabled
-                />
-              </Field>
-            )
+            <>
+              {workspace.gitUrl && (
+                <Field data-disabled>
+                  <FieldLabel htmlFor="workspace-git">Git 地址</FieldLabel>
+                  <Input
+                    id="workspace-git"
+                    value={workspace.gitUrl}
+                    readOnly
+                    disabled
+                  />
+                </Field>
+              )}
+              {workspace.gitBranch && (
+                <Field data-disabled>
+                  <FieldLabel htmlFor="workspace-git-branch">分支</FieldLabel>
+                  <Input
+                    id="workspace-git-branch"
+                    value={workspace.gitBranch}
+                    readOnly
+                    disabled
+                  />
+                </Field>
+              )}
+            </>
           ) : placementMode === "registered" ? (
             <>
               <Controller
