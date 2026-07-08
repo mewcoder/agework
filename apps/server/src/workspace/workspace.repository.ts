@@ -27,6 +27,7 @@ export type WorkspaceCreateInput = {
   id: string;
   name: string;
   gitUrl?: string;
+  gitBranch?: string;
   description: string | null;
   userId: string;
   isolationScope: string;
@@ -90,6 +91,7 @@ export class WorkspaceRepository {
           id: input.id,
           name: input.name,
           gitUrl: input.gitUrl,
+          gitBranch: input.gitBranch,
           description: input.description,
           userId: input.userId,
           isolationScope: input.isolationScope,

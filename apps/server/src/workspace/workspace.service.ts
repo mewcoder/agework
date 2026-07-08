@@ -5,6 +5,8 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { generateId } from "@agework/shared";
 import type {
   WorkspaceFileCommandPayload,
@@ -36,11 +38,16 @@ import type {
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
+const GIT_LS_REMOTE_TIMEOUT_MS = 15_000;
+
+const execFileAsync = promisify(execFile);
 
 type CreateWorkspaceInput = {
   userId: string;
   name: string;
   gitUrl?: string;
+  /** 创建时选定的 git 分支;传了就在 clone 时 checkout,不传走默认分支。 */
+  gitBranch?: string;
   description?: string;
   rootPath?: string;
   runtimeType?: string;
@@ -135,6 +142,30 @@ export class WorkspaceService {
    */
   getCapabilities() {
     return this.runtimePolicy.capabilities();
+  }
+
+  /**
+   * 解析公开 git 仓库的分支列表,供创建工作空间时下拉选择。
+   * 只查远程 ref(git ls-remote),不 clone、不碰工作区文件,server 本机直接跑。
+   * 数组传参 + `--` 防注入;私有仓库 / 地址错 / 超时统一抛 400。
+   */
+  async listGitBranches(gitUrl: string): Promise<{ list: string[] }> {
+    const trimmed = gitUrl?.trim();
+    if (!trimmed) {
+      throw new BadRequestException("gitUrl is required");
+    }
+    try {
+      const { stdout } = await execFileAsync(
+        "git",
+        ["ls-remote", "--heads", "--", trimmed],
+        { timeout: GIT_LS_REMOTE_TIMEOUT_MS }
+      );
+      return { list: parseGitBranches(stdout) };
+    } catch {
+      throw new BadRequestException(
+        "无法解析该仓库分支,请确认是公开仓库且地址正确"
+      );
+    }
   }
 
   // ── 文件预览(ADR-0005: builtin 直读, registered 走 worker 代理) ──
@@ -283,6 +314,7 @@ export class WorkspaceService {
       userId,
       name,
       gitUrl,
+      gitBranch,
       description,
       rootPath: requestedRootPath,
       runtimeType: requestedRuntimeType,
@@ -292,6 +324,8 @@ export class WorkspaceService {
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
+    // 只有真的填了 git 地址,分支选择才有意义;否则忽略,gitBranch 留 null。
+    const workspaceGitBranch = workspaceGitUrl ? gitBranch?.trim() : undefined;
     const { runtimeType, isolationScope, targetRuntimeId } =
       await this.resolvePlacement({
         userId,
@@ -317,6 +351,7 @@ export class WorkspaceService {
       runtimeType,
       isolationScope,
       gitUrl: workspaceGitUrl,
+      gitBranch: workspaceGitBranch,
       requestedRootPath,
       targetRuntimeId: remoteRuntimeId,
     });
@@ -326,6 +361,7 @@ export class WorkspaceService {
         id,
         name: workspaceName,
         gitUrl: workspaceGitUrl,
+        gitBranch: workspaceGitBranch,
         description: workspaceDescription,
         userId,
         isolationScope: storedIsolationScope,
@@ -535,6 +571,18 @@ export class WorkspaceService {
     }
     return trimmed;
   }
+}
+
+/** 解析 `git ls-remote --heads` 输出:每行 `<sha>\trefs/heads/<branch>`,取出分支名。 */
+function parseGitBranches(stdout: string): string[] {
+  const prefix = "refs/heads/";
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => line.split("\t")[1] ?? "")
+    .filter((ref) => ref.startsWith(prefix))
+    .map((ref) => ref.slice(prefix.length));
 }
 
 function normalizeDirectorySource(source: string | null | undefined) {

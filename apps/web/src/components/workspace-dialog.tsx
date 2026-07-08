@@ -28,6 +28,8 @@ import {
   useRenameWorkspace,
   useWorkspaceCapabilities,
 } from "@/hooks/use-workspace";
+import { GitBranch, Loader2 } from "lucide-react";
+import { workspacesApi } from "@/api/workspaces";
 import type { UpdateWorkspaceInput } from "@/api/workspaces";
 import type {
   WorkspaceIsolationScope,
@@ -93,6 +95,7 @@ const workspaceDialogFormSchema = z
     runtimeType: z.enum(RUNTIME_TYPES),
     isolationScope: z.enum(ISOLATION_SCOPES),
     gitUrl: z.string().optional(),
+    gitBranch: z.string().optional(),
     rootPath: z.string().optional(),
     runtimeId: z.string().optional(),
   })
@@ -177,6 +180,9 @@ function WorkspaceDialogForm({
   const isEdit = !!workspace;
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [customUpdatePending, setCustomUpdatePending] = useState(false);
+  const [gitBranches, setGitBranches] = useState<string[]>([]);
+  const [gitBranchesLoading, setGitBranchesLoading] = useState(false);
+  const [gitBranchesError, setGitBranchesError] = useState<string | null>(null);
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
   const { data: capabilities } = useWorkspaceCapabilities();
@@ -192,6 +198,7 @@ function WorkspaceDialogForm({
       runtimeType: "local",
       isolationScope: "user",
       gitUrl: "",
+      gitBranch: "",
       rootPath: "",
       runtimeId: undefined,
     },
@@ -273,6 +280,8 @@ function WorkspaceDialogForm({
     }
 
     const gitUrl = values.useGit ? values.gitUrl?.trim() : undefined;
+    const gitBranch =
+      gitUrl && values.gitBranch?.trim() ? values.gitBranch.trim() : undefined;
     const runtimeType = values.runtimeType;
     const isolationScope =
       runtimeType !== "local" ? values.isolationScope : undefined;
@@ -281,6 +290,7 @@ function WorkspaceDialogForm({
         name,
         description: description || undefined,
         gitUrl,
+        gitBranch,
         runtimeType,
         isolationScope,
       },
@@ -293,6 +303,32 @@ function WorkspaceDialogForm({
           setSubmitError(errorMessage(error, "创建工作空间失败")),
       },
     );
+  }
+
+  async function loadGitBranches() {
+    const gitUrl = form.getValues("gitUrl")?.trim();
+    if (!gitUrl) return;
+    setGitBranchesLoading(true);
+    setGitBranchesError(null);
+    try {
+      const { list } = await workspacesApi.listGitBranches(gitUrl);
+      setGitBranches(list);
+    } catch (error) {
+      setGitBranches([]);
+      form.setValue("gitBranch", "");
+      setGitBranchesError(
+        errorMessage(error, "无法解析该仓库分支，请确认是公开仓库且地址正确"),
+      );
+    } finally {
+      setGitBranchesLoading(false);
+    }
+  }
+
+  /** gitUrl 改动后,清空已加载的分支列表和已选分支,避免用旧仓库的分支创建。 */
+  function resetGitBranches() {
+    setGitBranches([]);
+    setGitBranchesError(null);
+    if (form.getValues("gitBranch")) form.setValue("gitBranch", "");
   }
 
   const isPending =
@@ -645,25 +681,89 @@ function WorkspaceDialogForm({
                 </div>
 
                 {useGit && (
-                  <Controller
-                    name="gitUrl"
-                    control={form.control}
-                    render={({ field, fieldState }) => (
-                      <Field data-invalid={fieldState.invalid} className="mt-2">
-                        <Input
-                          {...field}
-                          id="workspace-git"
-                          aria-invalid={fieldState.invalid}
-                          placeholder="https://github.com/user/repo.git"
-                          autoComplete="off"
-                        />
-                        <FieldDescription>支持 HTTPS 或 SSH 地址</FieldDescription>
-                        {fieldState.invalid && (
-                          <FieldError errors={[fieldState.error]} />
-                        )}
-                      </Field>
+                  <>
+                    <Controller
+                      name="gitUrl"
+                      control={form.control}
+                      render={({ field, fieldState }) => (
+                        <Field
+                          data-invalid={fieldState.invalid}
+                          className="mt-2"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Input
+                              {...field}
+                              onChange={(event) => {
+                                field.onChange(event);
+                                resetGitBranches();
+                              }}
+                              id="workspace-git"
+                              aria-invalid={fieldState.invalid}
+                              placeholder="https://github.com/user/repo.git"
+                              autoComplete="off"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={
+                                !field.value?.trim() || gitBranchesLoading
+                              }
+                              onClick={loadGitBranches}
+                            >
+                              {gitBranchesLoading ? (
+                                <Loader2 className="animate-spin" />
+                              ) : (
+                                <GitBranch />
+                              )}
+                              加载分支
+                            </Button>
+                          </div>
+                          <FieldDescription>
+                            支持 HTTPS 或 SSH 地址
+                          </FieldDescription>
+                          {fieldState.invalid && (
+                            <FieldError errors={[fieldState.error]} />
+                          )}
+                        </Field>
+                      )}
+                    />
+
+                    {gitBranchesError && (
+                      <FieldError className="mt-2">
+                        {gitBranchesError}
+                      </FieldError>
                     )}
-                  />
+
+                    {gitBranches.length > 0 && (
+                      <Controller
+                        name="gitBranch"
+                        control={form.control}
+                        render={({ field }) => (
+                          <Field className="mt-2">
+                            <FieldLabel>分支</FieldLabel>
+                            <Select
+                              value={field.value || undefined}
+                              onValueChange={(v) => field.onChange(v)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="使用默认分支" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {gitBranches.map((branch) => (
+                                  <SelectItem key={branch} value={branch}>
+                                    {branch}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FieldDescription>
+                              不选则克隆仓库默认分支
+                            </FieldDescription>
+                          </Field>
+                        )}
+                      />
+                    )}
+                  </>
                 )}
               </Field>
             </>

@@ -20,12 +20,18 @@ export class WorkspaceController {
     return this.workspaceService.getCapabilities();
   }
 
+  @Get("git-branches/list")
+  listGitBranches(@Query("gitUrl") gitUrl: string) {
+    return this.workspaceService.listGitBranches(gitUrl);
+  }
+
   @Post("create")
   create(@Body() body: CreateWorkspaceDto, @CurrentUser() user: JwtUser) {
     return this.workspaceService.create({
       userId: user.userId,
       name: body.name,
       gitUrl: body.gitUrl,
+      gitBranch: body.gitBranch,
       description: body.description,
       rootPath: body.rootPath,
       runtimeType: body.runtimeType,

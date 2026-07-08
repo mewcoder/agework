@@ -16,6 +16,10 @@ export class CreateWorkspaceDto implements CreateWorkspaceRequest {
 
   @IsOptional()
   @IsString()
+  gitBranch?: string;
+
+  @IsOptional()
+  @IsString()
   rootPath?: string;
 
   @IsOptional()

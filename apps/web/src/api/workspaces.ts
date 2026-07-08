@@ -6,6 +6,7 @@ import type {
   WorkspaceCapabilitiesResponse,
   WorkspaceResponse,
   WorkspaceListResponse,
+  WorkspaceGitBranchListResponse,
   UpdateWorkspaceRequest,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
@@ -31,6 +32,11 @@ export const workspacesApi = {
 
   create: (body: CreateWorkspaceRequest) =>
     apiPost<WorkspaceResponse>('/api/v1/workspaces/create', body),
+
+  listGitBranches: (gitUrl: string) =>
+    apiGet<WorkspaceGitBranchListResponse>(
+      `/api/v1/workspaces/git-branches/list?gitUrl=${encodeURIComponent(gitUrl)}`,
+    ),
 
   rename: (id: string, data: UpdateWorkspaceInput) =>
     apiPost<WorkspaceResponse>('/api/v1/workspaces/update', { id, ...data }),

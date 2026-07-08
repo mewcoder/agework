@@ -73,6 +73,8 @@ model Workspace {
   id             String                  @id
   name           String
   gitUrl         String?
+  // 创建时选定的 git 分支（clone 时 checkout）；非 git / 未选时为 null。创建后只读。
+  gitBranch      String?
   description    String?
   // 创建时的一次性选择，不可改（要换 = 删了重建）。不能从 Runtime 派生——一个 Runtime
   // 的 capabilities 可以同时支持 user/workspace 两种，派生不出唯一值；也不能从 Worker

@@ -33,9 +33,16 @@ export type WorkspaceDirectoryCreatePlan = {
     | typeof REMOTE_DIRECTORY_SOURCE;
 };
 
-function gitClone(gitUrl: string, rootPath: string): Promise<void> {
+function gitClone(
+  gitUrl: string,
+  rootPath: string,
+  gitBranch?: string
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("git", ["clone", "--", gitUrl, rootPath], {
+    const args = gitBranch
+      ? ["clone", "--branch", gitBranch, "--", gitUrl, rootPath]
+      : ["clone", "--", gitUrl, rootPath];
+    const proc = spawn("git", args, {
       stdio: "pipe",
     });
     const stderr: Buffer[] = [];
@@ -85,6 +92,8 @@ export class WorkspaceDirectoryHandler {
     userId: string;
     workspaceId: string;
     gitUrl?: string;
+    /** 选定的 git 分支;传了就在 clone 时 checkout,不传走默认分支。 */
+    gitBranch?: string;
     requestedRootPath?: string;
     runtimeType: RuntimeType;
     isolationScope: IsolationScope | null;
@@ -97,8 +106,10 @@ export class WorkspaceDirectoryHandler {
     const plan = await this.resolveCreatePlan(input);
     try {
       if (plan.ownsDirectory && input.gitUrl) {
-        this.logger.log(`Cloning ${input.gitUrl} into ${plan.rootPath}`);
-        await gitClone(input.gitUrl, plan.rootPath);
+        this.logger.log(
+          `Cloning ${input.gitUrl}${input.gitBranch ? ` (branch ${input.gitBranch})` : ""} into ${plan.rootPath}`
+        );
+        await gitClone(input.gitUrl, plan.rootPath, input.gitBranch);
       } else if (plan.ownsDirectory) {
         this.logger.log(`Creating workspace directory: ${plan.rootPath}`);
         mkdirSync(plan.rootPath, { recursive: true });

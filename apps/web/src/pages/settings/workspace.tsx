@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { PencilIcon, Trash2 } from 'lucide-react';
+import { GitBranch, PencilIcon, Trash2 } from 'lucide-react';
 import { WorkspaceDialog } from '@/components/workspace-dialog';
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
 import { useConfirmDelete } from '@/hooks/use-confirm-delete';
@@ -64,12 +64,17 @@ export function WorkspaceSettings() {
       header: 'Git 信息',
       cell: ({ row }) =>
         row.original.gitUrl ? (
-          <DataTableText
-            className="max-w-[260px]"
-            title={row.original.gitUrl}
-          >
-            {row.original.gitUrl}
-          </DataTableText>
+          <div className="flex max-w-[260px] flex-col gap-0.5">
+            <DataTableText title={row.original.gitUrl}>
+              {row.original.gitUrl}
+            </DataTableText>
+            {row.original.gitBranch && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <GitBranch className="size-3 shrink-0" />
+                {row.original.gitBranch}
+              </span>
+            )}
+          </div>
         ) : (
           <DataTableEmpty />
         ),
