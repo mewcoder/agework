@@ -1,5 +1,9 @@
 import type { RunChannelMessage } from "./run-channel-message";
 import type { CommandPayload } from "./channel";
+import type {
+  OwnerCommand,
+  WorkspaceFileCommandPayload,
+} from "./workspace-file-command";
 
 export type { RunChannelMessage } from "./run-channel-message";
 
@@ -106,7 +110,27 @@ export type {
   WorkspaceFileCommandResult,
   OwnerCommand,
 } from "./workspace-file-command";
-export { nextOwnerCommand } from "./workspace-file-command";
+
+/**
+ * 构造下一个 owner-scoped 命令信封并递增 seq 计数器。
+ *
+ * 注意:本函数为运行时值导出,必须内联在本入口文件中,不可跨文件 re-export ——
+ * shared 包以源码形式被消费(exports 指向 src 源文件,无 dist),NodeNext 运行时
+ * 解析跨文件 re-export 需要显式扩展名,而磁盘上是 .ts,会导致 ERR_MODULE_NOT_FOUND。
+ */
+export function nextOwnerCommand(
+  seqs: Map<string, number>,
+  ownerId: string,
+  payload: WorkspaceFileCommandPayload
+): OwnerCommand<WorkspaceFileCommandPayload> {
+  const seq = (seqs.get(ownerId) ?? 0) + 1;
+  seqs.set(ownerId, seq);
+  return {
+    seq,
+    payload,
+    ts: new Date().toISOString(),
+  };
+}
 export type {
   RuntimeCapabilities,
   RuntimeTunnelClientMessage,

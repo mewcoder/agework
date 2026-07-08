@@ -83,17 +83,4 @@ export type OwnerCommand<T = WorkspaceFileCommandPayload> = {
   ts: string;
 };
 
-/** 构造下一个 owner-scoped 命令信封并递增 seq 计数器。 */
-export function nextOwnerCommand(
-  seqs: Map<string, number>,
-  ownerId: string,
-  payload: WorkspaceFileCommandPayload
-): OwnerCommand<WorkspaceFileCommandPayload> {
-  const seq = (seqs.get(ownerId) ?? 0) + 1;
-  seqs.set(ownerId, seq);
-  return {
-    seq,
-    payload,
-    ts: new Date().toISOString(),
-  };
-}
+// nextOwnerCommand 的运行时实现内联在 protocol/index.ts 中(原因见该文件注释)。
