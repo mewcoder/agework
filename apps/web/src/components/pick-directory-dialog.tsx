@@ -17,15 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DirectoryPicker,
-  basename as pathBasename,
-  type DirectoryListing,
-} from "@/components/directory-picker";
+import { DirectoryPicker, type DirectoryListing } from "@/components/directory-picker";
 import { useRuntimes, useCreateRuntimeDirectory } from "@/hooks/use-runtime";
 import { useCreateWorkspace } from "@/hooks/use-workspace";
 import { errorMessage } from "@/utils/error";
-import { normalizeFilesystemPath } from "@/utils/path";
+import { basename as pathBasename, normalizeFilesystemPath } from "@/utils/path";
 import { runtimesApi } from "@/api/runtimes";
 import type { WorkspaceRuntimeType } from "@agework/shared/api";
 

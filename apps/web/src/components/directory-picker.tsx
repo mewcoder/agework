@@ -6,6 +6,7 @@ import {
   EyeOffIcon,
   FolderIcon,
   FolderPlusIcon,
+  HardDriveIcon,
   HomeIcon,
   Loader2Icon,
   XIcon,
@@ -13,71 +14,27 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import {
+  basename,
+  isWindowsDriveRoot,
+  joinPath,
+  normalizeFilesystemPath,
+  parentOf,
+} from "@/utils/path";
 
 // ---------------------------------------------------------------------------
-// 路径工具（兼容 posix / windows 分隔符）
+// UI 专用路径函数（依赖 normalizeFilesystemPath，不含可复用的纯路径逻辑）
 // ---------------------------------------------------------------------------
 
-/** 从完整路径取最后一段。 */
-export function basename(path: string): string {
-  const parts = path.split(/[/\\]/).filter(Boolean);
-  return parts[parts.length - 1] ?? path;
-}
-
-/** 取父目录路径；到根目录时返回 undefined。 */
-function parentOf(path: string): string | undefined {
-  const trimmed = path.replace(/[/\\]+$/, "");
-  if (!trimmed) return undefined;
-
-  // Windows 盘符根（"C:" 或 "C:\"）没有父目录
-  if (/^[A-Za-z]:\\?$/.test(trimmed)) return undefined;
-
-  const sep = trimmed.includes("\\") && !trimmed.includes("/") ? "\\" : "/";
-  const idx = trimmed.lastIndexOf(sep);
-  if (idx <= 0) {
-    if (sep === "\\") {
-      const driveMatch = trimmed.match(/^([A-Za-z]:)/);
-      if (driveMatch) return `${driveMatch[1]}\\`;
-      return undefined;
-    }
-    return "/";
-  }
-  return trimmed.slice(0, idx);
-}
-
-/** 拼接目录路径和子目录名，沿用父目录的分隔符。 */
-function joinPath(dir: string, name: string): string {
-  const trimmedName = name.trim();
-  if (!dir) return trimmedName;
-  const sep = dir.includes("\\") && !dir.includes("/") ? "\\" : "/";
-  const base = dir.endsWith(sep) ? dir.slice(0, -1) : dir;
-  return `${base}${sep}${trimmedName}`;
-}
-
-/** 归一化用户输入的路径：trim、反斜杠转正斜杠、合并多余斜杠、去末尾斜杠。
- *  返回 null 表示输入不可用。 */
-function normalizeTypedPath(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-
-  let path = trimmed.replace(/\\/g, "/");
-  path = path.replace(/\/+/g, "/");
-
-  if (path === "/") return "/";
-  if (path.length > 1 && path.endsWith("/")) {
-    path = path.slice(0, -1);
-  }
-  return path;
-}
-
-/** 路径栏文本是否可导航（绝对路径或 ~ 前缀）。 */
+/** 路径栏文本是否可导航（绝对路径、~ 前缀或 Windows 盘符）。 */
 function isNavigablePath(path: string): boolean {
   const trimmed = path.trim();
   return (
     trimmed.startsWith("/") ||
     trimmed === "~" ||
     trimmed.startsWith("~/") ||
-    /^[A-Za-z]:[/\\]/.test(trimmed)
+    /^[A-Za-z]:[/\\]/.test(trimmed) ||
+    /^[A-Za-z]:$/.test(trimmed)
   );
 }
 
@@ -90,8 +47,13 @@ function listingFilter(
   const trimmed = pathInput.trim();
   if (!trimmed) return null;
 
-  const normalized = normalizeTypedPath(trimmed);
+  const normalized = normalizeFilesystemPath(trimmed);
   if (!normalized) return null;
+
+  const currentNorm = normalizeFilesystemPath(currentPath);
+
+  // 路径栏恰好等于当前目录路径（同步状态）——没有过滤片段
+  if (normalized === currentNorm) return null;
 
   const slash = normalized.lastIndexOf("/");
   if (slash === -1) {
@@ -102,8 +64,7 @@ function listingFilter(
   if (!partial) return null;
 
   const dirPart = normalized.slice(0, slash) || "/";
-  const currentNormalized = currentPath.replace(/\\/g, "/");
-  return dirPart === currentNormalized ? partial : null;
+  return dirPart === currentNorm ? partial : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -213,14 +174,14 @@ export function DirectoryPicker({
   }
 
   function commitPathInput() {
-    const normalized = normalizeTypedPath(pathInput);
+    const normalized = normalizeFilesystemPath(pathInput);
     userEditedRef.current = false;
     if (!normalized || !isNavigablePath(normalized)) {
       setPathInput(listing?.path ?? "");
       return;
     }
-    const currentNormalized = (listing?.path ?? "").replace(/\\/g, "/");
-    if (normalized !== currentNormalized) {
+    const currentNorm = normalizeFilesystemPath(listing?.path ?? "");
+    if (normalized !== currentNorm) {
       navigateTo(normalized);
     } else {
       setPathInput(listing?.path ?? "");
@@ -418,6 +379,7 @@ export function DirectoryPicker({
           )}
           {entries.map((entry) => {
             const name = basename(entry);
+            const isDrive = isWindowsDriveRoot(entry);
             return (
               <button
                 key={entry}
@@ -428,7 +390,11 @@ export function DirectoryPicker({
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => navigateTo(entry)}
               >
-                <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                {isDrive ? (
+                  <HardDriveIcon className="size-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <FolderIcon className="size-4 shrink-0 text-muted-foreground" />
+                )}
                 <span className="truncate">{name}</span>
               </button>
             );

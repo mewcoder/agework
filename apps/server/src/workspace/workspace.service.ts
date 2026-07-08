@@ -202,8 +202,7 @@ export class WorkspaceService {
   /**
    * 下发文件命令 → 等待 worker 回传结果(10s 超时)。
    *
-   * 鉴权:属主校验 → 解析常驻 worker → 委派。
-   * worker 不在线时直接 400,不浪费一次 10s 等待。
+   * 鉴权:属主校验 → 确保 worker 在线(离线则自动拉起) → 委派。
    * 超时/出错分支显式清理 Store 里的 pending 条目(见 ADR-0004)。
    */
   private async executeFileCommand(
@@ -217,17 +216,17 @@ export class WorkspaceService {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
     }
 
-    // 解析常驻 worker
-    const binding = await this.workerManager.findActiveWorkerByWorkspace(
-      workspaceId
-    );
-    if (!binding) {
-      throw new BadRequestException(
-        "运行时未启动,发起对话后即可浏览文件"
-      );
-    }
-
-    const ownerId = binding.worker.ownerId;
+    // 确保 worker 在线(已在线直接返回,离线则自动拉起)
+    const ctx = await this.getRunContext(workspaceId);
+    const ownerId = await this.workerManager.ensureWorkerForFilePreview({
+      workspaceId,
+      userId,
+      username: ctx.username,
+      rootPath: ctx.workspaceRootPath,
+      runtimeType: ctx.runtimeType as import("@agework/providers").RuntimeType,
+      isolationScope: ctx.isolationScope,
+      runtimeId: ctx.runtimeId,
+    });
 
     // 下发命令
     this.workerManager.sendFileCommand(ownerId, payload);

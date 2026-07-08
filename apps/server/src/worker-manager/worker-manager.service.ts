@@ -170,6 +170,22 @@ export class WorkerManagerService {
     return this.registry.findActiveByWorkspace(workspaceId);
   }
 
+  /**
+   * 文件预览用的 worker 确保:worker 已在线则直接返回 ownerId;
+   * 离线则自动拉起,等握手完成后返回。直通 provisioner。
+   */
+  ensureWorkerForFilePreview(input: {
+    workspaceId: string;
+    userId: string;
+    username: string;
+    rootPath: string;
+    runtimeType: import("@agework/providers").RuntimeType;
+    isolationScope: string;
+    runtimeId: string;
+  }): Promise<string> {
+    return this.provisioner.ensureWorkerForFilePreview(input);
+  }
+
   /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
     this.ownerRunStore.unregisterRun(runId);

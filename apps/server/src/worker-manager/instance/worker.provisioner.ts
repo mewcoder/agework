@@ -1,7 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
+import { generateId } from "@agework/shared";
 import type {
   AcquireInstanceResult,
+  RunConfig,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type {
@@ -191,6 +193,82 @@ export class WorkerProvisioner {
     return this.finalize(ref, (r) =>
       this.runtimeService.runtimeFor(requireTargetRuntimeId(r)).stop(r)
     );
+  }
+
+  /**
+   * 文件预览用的 worker 确保:worker 已在线则直接返回 ownerId;
+   * 离线则自动拉起一个(无 run 上下文),等握手完成后返回。
+   *
+   * 与 acquireInstanceForRun 的区别:不需要 runId/conversationId/agentProviderConfig——
+   * 文件预览只要求 worker 进程在线并轮询文件命令,不跑 agent。
+   * 合成 runConfig 仅满足 provisioner 内部对 workspaceId/runId 的结构需求,
+   * worker 以 runWorker() 模式启动,不会 fetchRunConfig。
+   */
+  async ensureWorkerForFilePreview(input: {
+    workspaceId: string;
+    userId: string;
+    username: string;
+    rootPath: string;
+    runtimeType: RuntimeType;
+    isolationScope: string;
+    runtimeId: string;
+  }): Promise<string> {
+    // 1. 已有 running worker 直接返回
+    const existing = await this.registry.findActiveByWorkspace(
+      input.workspaceId
+    );
+    if (existing) return existing.worker.ownerId;
+
+    // 2. 解析 RuntimeSpec(placement)
+    const runtimeSpecInput: import("@agework/providers").RuntimeSpecInput =
+      input.runtimeType === "local"
+        ? {
+            userId: input.userId,
+            workspaceId: input.workspaceId,
+            workspaceRootPath: input.rootPath,
+            userWorkspaceRootPath:
+              this.configService.getUserWorkspace(input.username),
+            runtimeLogHostPath: this.configService.getRuntimeLogDir(),
+            runtimeType: "local",
+          }
+        : {
+            userId: input.userId,
+            workspaceId: input.workspaceId,
+            workspaceRootPath: input.rootPath,
+            userWorkspaceRootPath:
+              this.configService.getUserWorkspace(input.username),
+            runtimeLogHostPath: this.configService.getRuntimeLogDir(),
+            runtimeType: input.runtimeType,
+            isolationScope:
+              input.isolationScope as import("@agework/shared/protocol").IsolationScope,
+          };
+    const runtimeTarget = this.runtimeService.resolveRuntimeSpec(
+      runtimeSpecInput
+    );
+
+    // 3. 合成最小 runConfig(仅满足 provisioner 结构需求,worker 不会 fetch 它)
+    const syntheticRunConfig: RunConfig = {
+      runId: `fp-${generateId()}`,
+      conversationId: "",
+      workspaceId: input.workspaceId,
+      runtimePath: runtimeTarget.runtimePath,
+      env: {},
+      input: null,
+      agentProviderConfig: { agentType: "claude", source: "system" },
+    };
+
+    // 4. 经 acquireInstanceForRun 走正常启动/复用流程
+    const result = await this.acquireInstanceForRun({
+      runtimeTarget,
+      runConfig: syntheticRunConfig,
+      targetRuntimeId: input.runtimeId,
+    });
+
+    if (result.outcome === "error") {
+      throw new Error(`运行时启动失败: ${result.error}`);
+    }
+
+    return runtimeTarget.ownerId;
   }
 
   /** owner 永久消失(删 workspace / user):删除载体。 */
