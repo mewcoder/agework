@@ -1,6 +1,6 @@
 import type { ListResponse, PaginatedListResponse } from "../common";
 
-export type WorkspaceRuntimeType = "local" | "docker" | "opensandbox";
+export type WorkspaceRuntimeType = "native" | "docker" | "opensandbox";
 export type WorkspaceIsolationScope = "user" | "workspace";
 export type WorkspaceDirectorySource = "managed" | "external" | "remote";
 

@@ -70,10 +70,10 @@ describe("Launcher", () => {
 
   beforeEach(() => {
     fakeDocker = makeFakeProvider("docker");
-    fakeLocal = makeFakeProvider("local");
+    fakeLocal = makeFakeProvider("native");
     fakes.clear();
     fakes.set("docker", fakeDocker);
-    fakes.set("local", fakeLocal);
+    fakes.set("native", fakeLocal);
     registry = new LiveCarrierStore();
   });
 
@@ -121,6 +121,7 @@ describe("Launcher", () => {
     });
     const params: RuntimeInstanceRefRpcParams = {
       ownerId: "owner-1",
+      workerId: "worker-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
     };
@@ -130,6 +131,7 @@ describe("Launcher", () => {
     expect(fakeDocker.stop).toHaveBeenCalledWith({
       runtimeType: "docker",
       ownerId: "owner-1",
+      workerId: "worker-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
     });
@@ -140,6 +142,7 @@ describe("Launcher", () => {
     const launcher = new Launcher(dockerConfig, registry);
     const params: RuntimeInstanceRefRpcParams = {
       ownerId: "owner-1",
+      workerId: "worker-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
     };
@@ -149,6 +152,7 @@ describe("Launcher", () => {
     expect(fakeDocker.destroy).toHaveBeenCalledWith({
       runtimeType: "docker",
       ownerId: "owner-1",
+      workerId: "worker-1",
       runtimeInstanceId: "container-1",
       isolationScope: "workspace",
     });
@@ -157,7 +161,7 @@ describe("Launcher", () => {
   it("records isolationScope='workspace' for local placements (no sandbox object)", async () => {
     const localConfig: RegisteredRuntimeConfig = {
       ...dockerConfig,
-      runtimeType: "local",
+      runtimeType: "native",
       workerImage: undefined,
       runtimeEntryPath: "/app/dist/main.js",
     };
@@ -165,7 +169,7 @@ describe("Launcher", () => {
     const localParams: RuntimeLaunchRpcParams = {
       ...launchParams,
       placement: {
-        runtimeType: "local",
+        runtimeType: "native",
         userId: "u1",
         workspaceId: "ws-1",
         hostPath: "/w",

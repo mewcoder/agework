@@ -30,12 +30,13 @@ import { LocalRuntime } from "./local/local-runtime";
 import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
+import { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import type { Runtime } from "./runtime.types";
-import { builtinRuntimeId, isBuiltinRuntimeId } from "./runtime.types";
+import { managedRuntimeId, isManagedRuntimeId, isManagedNativeRuntimeId } from "./runtime.types";
 
 /**
  * Runtime 领域门面:解析目标 `Runtime` 实现 + placement 计算 + 运行时策略
- * + Registered Runtime 的配对管理(create/list/revoke)+ builtin Runtime 的注册表。
+ * + Registered Runtime 的配对管理(create/list/revoke)+ managed Runtime 的注册表。
  * 起/停/毁 worker 的具体分发在 `Runtime` 实现内(见 `runtime.types.ts`)。
  */
 @Injectable()
@@ -46,33 +47,49 @@ export class RuntimeService implements OnApplicationBootstrap {
     private readonly configService: ConfigService,
     private readonly localRuntime: LocalRuntime,
     private readonly repository: RuntimeRepository,
-    private readonly tunnelHandler: RuntimeTunnelHandler
+    private readonly tunnelHandler: RuntimeTunnelHandler,
+    private readonly supervisor: ManagedRuntimeSupervisor
   ) {}
 
-  /** 启动时按部署允许的 runtimeType upsert 对应的 builtin Runtime 行(id 固定,幂等),
-   *  并通过 LocalRuntime 检测本机 CLI 环境写入 envConfig。 */
+  /** 启动时按部署允许的 runtimeType 初始化 managed Runtime:
+   *  - native:upsert managed 行(无 token)+ LocalRuntime 进程内检测 CLI 环境。
+   *  - docker/opensandbox:生成 managed token → upsert managed 行(tokenHash 非空)→
+   *    supervisor fork 独立 runtime 进程(注入 loopback + token)。envConfig 由
+   *    runtime 进程注册时上报(register 消息),不走 LocalRuntime.detectEnv。 */
   async onApplicationBootstrap(): Promise<void> {
     for (const runtimeType of this.configService.getAllowedRuntimeTypes()) {
-      await this.upsertBuiltin(runtimeType, {
-        isolationScopes: builtinIsolationScopes(runtimeType),
-      });
-      const id = builtinRuntimeId(runtimeType);
-      const envConfig = await this.localRuntime.detectEnv();
-      await this.repository.updateEnvConfig(id, envConfig);
+      if (runtimeType === "native") {
+        await this.upsertManaged(runtimeType, {
+          isolationScopes: managedIsolationScopes(runtimeType),
+        });
+        const id = managedRuntimeId(runtimeType);
+        const envConfig = await this.localRuntime.detectEnv();
+        await this.repository.updateEnvConfig(id, envConfig);
+      } else {
+        const token = randomBytes(32).toString("hex");
+        const tokenHash = createHash("sha256").update(token).digest("hex");
+        await this.upsertManaged(
+          runtimeType,
+          { isolationScopes: managedIsolationScopes(runtimeType) },
+          tokenHash
+        );
+        this.supervisor.startManagedRuntime(runtimeType, token);
+      }
     }
     this.logger.log(
-      `builtin runtimes ready: ${this.configService.getAllowedRuntimeTypes().join(", ")}`
+      `managed runtimes ready: ${this.configService.getAllowedRuntimeTypes().join(", ")}`
     );
   }
 
   /**
-   * 解析目标 `Runtime` 实现(server 起/停/毁 worker 的唯一入口)。builtin id
-   * (本机 in-process)→ Managed;其余 → Registered,经隧道转 RPC 给对应 manager。
+   * 解析目标 `Runtime` 实现(server 起/停/毁 worker 的唯一入口)。
+   * - managed-native:LocalRuntime(进程内直读)。
+   * - managed-docker/opensandbox + registered:RemoteRuntime(隧道 RPC)。
    * RemoteRuntime 每次都新建,不持有连接本身(连接归 RuntimeTunnelHandler 管),
    * 构造零开销。
    */
   runtimeFor(runtimeId: string): Runtime {
-    if (isBuiltinRuntimeId(runtimeId)) {
+    if (isManagedNativeRuntimeId(runtimeId)) {
       return this.localRuntime;
     }
     return new RemoteRuntime(
@@ -82,14 +99,14 @@ export class RuntimeService implements OnApplicationBootstrap {
     );
   }
 
-  /** 是否是 builtin(本机 in-process)Runtime id。供上层判断 Managed/Registered。 */
+  /** 是否是 managed(本机 in-process)Runtime id。供上层判断 Managed/Registered。 */
   isManaged(runtimeId: string): boolean {
-    return isBuiltinRuntimeId(runtimeId);
+    return isManagedRuntimeId(runtimeId);
   }
 
-  /** builtin Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
-  getBuiltinRuntimeId(runtimeType: RuntimeType): string {
-    return builtinRuntimeId(runtimeType);
+  /** managed Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
+  getManagedRuntimeId(runtimeType: RuntimeType): string {
+    return managedRuntimeId(runtimeType);
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
@@ -108,16 +125,19 @@ export class RuntimeService implements OnApplicationBootstrap {
     };
   }
 
-  /** 服务启动时 upsert 一个 builtin Runtime 行(id 固定,幂等)。 */
-  private upsertBuiltin(
+  /** 服务启动时 upsert 一个 managed Runtime 行(id 固定,幂等)。
+   *  tokenHash:native 传 null(进程内);docker/opensandbox 传 sha256(managed token)。 */
+  private upsertManaged(
     runtimeType: RuntimeType,
-    capabilities: { isolationScopes: string[] }
+    capabilities: { isolationScopes: string[] },
+    tokenHash: string | null = null
   ) {
-    return this.repository.upsertBuiltin({
-      id: builtinRuntimeId(runtimeType),
-      name: builtinRuntimeId(runtimeType),
+    return this.repository.upsertManaged({
+      id: managedRuntimeId(runtimeType),
+      name: managedRuntimeId(runtimeType),
       runtimeType,
       capabilities,
+      tokenHash,
     });
   }
 
@@ -136,20 +156,20 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  /** 列出当前用户可见的 Runtime:自己的 Registered + 全局 builtin。 */
+  /** 列出当前用户可见的 Runtime:自己的 Registered + 全局 managed。 */
   async list(ownerId: string): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listVisibleToOwner(ownerId);
     return { list: rows.map(toRuntimeResponse) };
   }
 
-  /** admin: 列出全部 Runtime(builtin + 所有用户的 registered),不含已注销。 */
+  /** admin: 列出全部 Runtime(managed + 所有用户的 registered),不含已注销。 */
   async listAll(): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listAll();
     return { list: rows.map(toRuntimeResponse) };
   }
 
   /**
-   * 查询 Runtime 是否存在且对该用户可见(自己的 Registered 或全局 builtin,且未注销);
+   * 查询 Runtime 是否存在且对该用户可见(自己的 Registered 或全局 managed,且未注销);
    * 返回 null 表示不存在/不可见/已注销。供上层入口(如创建 workspace 时校验目标 runtime)
    * 做归属校验,由调用方决定如何处理 null。
    */
@@ -161,7 +181,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 注销 Runtime(撤 token,软删除,行永久保留):只拦"以后不能再绑定新 workspace",
    * 不主动踢断在线隧道连接——这台机器上可能还有活跃 Worker 在跑,断连接等于强制判死,
    * 跟"放任其自然结束"的设计矛盾(见 runtime 模块 ADR-0001)。连接的存活/掉线继续按
-   * 心跳机制走,不因注销而改变。builtin 行 ownerId=null,不会匹配任何真实 userId,
+   * 心跳机制走,不因注销而改变。managed 行 ownerId=null,不会匹配任何真实 userId,
    * 天然不可被此方法注销。
    */
   async delete(ownerId: string, id: string): Promise<void> {
@@ -196,7 +216,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /**
-   * 管理员一键安装 runtime 的独立 CLI(仅支持 local 类型;docker/opensandbox
+   * 管理员一键安装 runtime 的独立 CLI(仅支持 native 类型;docker/opensandbox
    * 走镜像固定路径,装不装不影响实际执行,不支持此操作)。
    * 安装成功后自动写入 override 并重新检测刷新展示状态。
    */
@@ -208,9 +228,9 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    if (row.runtimeType !== "local") {
+    if (row.runtimeType !== "native") {
       throw new BadRequestException(
-        `runtime ${id} is not a local runtime, cannot install CLI`
+        `runtime ${id} is not a native runtime, cannot install CLI`
       );
     }
     const executablePath = await this.localRuntime.installCli(agentType);
@@ -220,12 +240,12 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /**
    * 管理员触发 runtime 重新检测 CLI 环境。
-   * - builtin runtime: LocalRuntime 进程内检测。
+   * - managed runtime: LocalRuntime 进程内检测。
    * - registered runtime: 通过隧道发 detect-env RPC,manager 重检后返回新 envConfig。
    *   runtime 未连接时返回 null。
    */
   async detectEnv(id: string): Promise<DetectEnvResponse> {
-    if (!this.tunnelHandler.isConnected(id) && !isBuiltinRuntimeId(id)) {
+    if (!this.tunnelHandler.isConnected(id) && !isManagedNativeRuntimeId(id)) {
       return { envConfig: null };
     }
     try {
@@ -277,23 +297,20 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  // ── 文件预览直读(ADR-0005: builtin runtime 不经 worker) ──────────
+  // ── 文件预览(ADR-0005: managed native 直读, docker/opensandbox/registered 隧道 RPC) ─────
 
   /**
-   * builtin runtime 文件预览直读:workspace 目录在本机硬盘上(server 进程
-   * 直接读),不经 worker 代理。安全校验复用 shared/fileBrowser(与 worker
-   * 同一份代码)。registered runtime 的文件预览不走这里——由 WorkspaceService
-   * 路由到 WorkerManager 代理读(现有逻辑不变)。
-   *
-   * rootPath 由 WorkspaceService 查出后传入(参数喂入,runtime 不反向依赖
-   * workspace)。
+   * 文件预览直读:managed native 在 server 进程内直读本机硬盘;docker/opensandbox/
+   * registered 经隧道 RPC 调 runtime 进程。安全校验复用 shared/fileBrowser(与
+   * worker 同一份代码)。rootPath 由 WorkspaceService 查出后传入。
    */
   async listFiles(
+    runtimeId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      return await this.localRuntime.listFiles(rootPath, relativePath);
+      return await this.runtimeFor(runtimeId).listFiles(rootPath, relativePath);
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -301,13 +318,14 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  /** builtin runtime 文件预览直读(ADR-0005),同 listFiles。 */
+  /** 文件预览直读(ADR-0005),同 listFiles。 */
   async readFile(
+    runtimeId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      return await this.localRuntime.readFile(rootPath, relativePath);
+      return await this.runtimeFor(runtimeId).readFile(rootPath, relativePath);
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -315,31 +333,32 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  // ── 变更查看直读(只支持 builtin local,server 就是文件 owner) ──────
+  // ── 变更查看(diff,只读) ──────
 
   /**
-   * builtin local runtime 变更查看:在本机 workspace 目录上直接跑 git,不经
-   * worker。rootPath 由 WorkspaceService 查出后传入(参数喂入,runtime 不反向
-   * 依赖 workspace);local 之外的运行时由 WorkspaceService 网关提前挡掉。
+   * 变更查看:managed native 在本机 workspace 目录直跑 git;docker/opensandbox/
+   * registered 经隧道 RPC 调 runtime 进程。rootPath 由 WorkspaceService 查出后传入。
    * 非 git 目录 → BadRequestException(可区分「非 git」);git 失败 → BadRequestException。
    */
   async listChangedFiles(
+    runtimeId: string,
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return await this.localRuntime.listChangedFiles(rootPath);
+      return await this.runtimeFor(runtimeId).listChangedFiles(rootPath);
     } catch (err) {
       throw this.toChangeViewError(err);
     }
   }
 
-  /** builtin local runtime 单文件 diff 直读,同 listChangedFiles。 */
+  /** 单文件 diff,同 listChangedFiles。 */
   async readFileDiff(
+    runtimeId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return await this.localRuntime.readFileDiff(rootPath, relativePath);
+      return await this.runtimeFor(runtimeId).readFileDiff(rootPath, relativePath);
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -363,7 +382,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!owned) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    if (!isBuiltinRuntimeId(id) && !this.tunnelHandler.isConnected(id)) {
+    if (!isManagedNativeRuntimeId(id) && !this.tunnelHandler.isConnected(id)) {
       throw new BadRequestException(`runtime ${id} is not connected`);
     }
   }
@@ -437,10 +456,10 @@ function mergeAgent(
   };
 }
 
-/** local 没有容器,没有隔离概念,只有 workspace 独占子进程;docker/opensandbox 都有容器
+/** native 没有容器,没有隔离概念,只有 workspace 独占子进程;docker/opensandbox 都有容器
  *  边界兜底,user 级共享安全,两种隔离都支持。 */
-function builtinIsolationScopes(runtimeType: RuntimeType): string[] {
-  return runtimeType === "local" ? ["workspace"] : ["user", "workspace"];
+function managedIsolationScopes(runtimeType: RuntimeType): string[] {
+  return runtimeType === "native" ? ["workspace"] : ["user", "workspace"];
 }
 
 function isPrismaUniqueError(err: unknown): boolean {

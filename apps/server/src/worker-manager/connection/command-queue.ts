@@ -2,12 +2,10 @@ import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
 import type {
   RunChannelMessage,
   CommandPayload,
-  OwnerCommand,
-  WorkspaceFileCommandPayload,
 } from "@agework/shared/protocol";
 import { safeLogJson } from "../../common/logging";
 
-type OwnerWaiter = {
+type WorkerWaiter = {
   afterSeq: number;
   resolve: (commands: RunChannelMessage<CommandPayload>[]) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -15,45 +13,40 @@ type OwnerWaiter = {
 
 /**
  * 内存 command 队列：写入侧由 RunDriver 经 WorkerManagerService →
- * WorkerCommandDispatcher 按 ownerId 推入；读取侧由持久容器 worker 经
- * WorkerCommandController → WorkerManagerService 按 ownerId 轮询。
- * local 实例不经过此队列（直接 IPC send）。
+ * WorkerCommandDispatcher 按 workerId 推入；读取侧由持久容器 worker 经
+ * WorkerCommandController → WorkerManagerService 按 workerId 轮询。
+ * native 实例不经过此队列（直接 IPC send）。
  *
- * ownerId 是 runtime 容器归属者的 ID（user 隔离下 = userId，workspace 隔离下 = workspaceId），
- * 一个 ownerId 对应一个可复用的持久容器，对应一个独立的命令队列分区。
+ * workerId 是 Worker.id 主键（协议身份,见 Ticket 03）,
+ * 一个 workerId 对应一个可复用的持久容器,对应一个独立的命令队列分区。
  */
 @Injectable()
 export class WorkerCommandQueue implements OnApplicationShutdown {
   private readonly logger = new Logger(WorkerCommandQueue.name);
-  /** ownerId 级队列——持久容器通过 ownerId 轮询命令。 */
-  private readonly ownerQueues = new Map<
+  /** workerId 级队列——持久容器通过 workerId 轮询命令。 */
+  private readonly workerQueues = new Map<
     string,
     RunChannelMessage<CommandPayload>[]
   >();
-  /** ownerId 级文件命令队列——与 run 命令共用同一条长轮询连接但走独立协议类型(见 ADR-0004)。 */
-  private readonly ownerFileQueues = new Map<
-    string,
-    OwnerCommand<WorkspaceFileCommandPayload>[]
-  >();
-  private readonly ownerWaiters = new Map<string, OwnerWaiter[]>();
-  /** ownerId 级"代次"标识——懒生成，进程重启即归零重来，用于让 worker 察觉自己的 afterSeq 已过期。 */
-  private readonly ownerEpochs = new Map<string, number>();
+  private readonly workerWaiters = new Map<string, WorkerWaiter[]>();
+  /** workerId 级"代次"标识——懒生成,进程重启即归零重来,用于让 worker 察觉自己的 afterSeq 已过期。 */
+  private readonly workerEpochs = new Map<string, number>();
 
-  /** 按 ownerId 推送命令（持久容器场景）。 */
-  pushByOwnerId(
-    ownerId: string,
+  /** 按 workerId 推送命令（持久容器场景）。 */
+  pushByWorkerId(
+    workerId: string,
     message: RunChannelMessage<CommandPayload>
   ): void {
-    let queue = this.ownerQueues.get(ownerId);
+    let queue = this.workerQueues.get(workerId);
     if (!queue) {
       queue = [];
-      this.ownerQueues.set(ownerId, queue);
+      this.workerQueues.set(workerId, queue);
     }
     queue.push(message);
-    this.resolveOwnerWaiters(ownerId);
+    this.resolveWorkerWaiters(workerId);
     this.logger.debug(
-      `push owner command ${safeLogJson({
-        ownerId,
+      `push worker command ${safeLogJson({
+        workerId,
         runId: message.runId,
         seq: message.seq,
         type: message.payload.type,
@@ -62,80 +55,45 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     );
   }
 
-  /** 按 ownerId 推送文件命令(与 run 命令共用同一条长轮询连接,见 ADR-0004)。 */
-  pushFileCommand(
-    ownerId: string,
-    command: OwnerCommand<WorkspaceFileCommandPayload>
-  ): void {
-    let queue = this.ownerFileQueues.get(ownerId);
-    if (!queue) {
-      queue = [];
-      this.ownerFileQueues.set(ownerId, queue);
-    }
-    queue.push(command);
-    this.resolveOwnerWaiters(ownerId);
-    this.logger.debug(
-      `push owner file command ${safeLogJson({
-        ownerId,
-        seq: command.seq,
-        type: command.payload.type,
-        commandId: command.payload.commandId,
-        queueSize: queue.length,
-      })}`
-    );
-  }
 
-  /** 排空 ownerId 的文件命令队列(轮询时调用,一次性全部取出)。 */
-  pollFileCommands(
-    ownerId: string
-  ): OwnerCommand<WorkspaceFileCommandPayload>[] {
-    const queue = this.ownerFileQueues.get(ownerId);
-    if (!queue || queue.length === 0) return [];
-    this.ownerFileQueues.delete(ownerId);
-    return queue;
-  }
-
-  waitForOwnerId(
-    ownerId: string,
+  waitForWorkerId(
+    workerId: string,
     afterSeq: number,
     timeoutMs: number
   ): Promise<RunChannelMessage<CommandPayload>[]> {
-    const commands = this.pollByOwnerId(ownerId, afterSeq);
+    const commands = this.pollByWorkerId(workerId, afterSeq);
     if (commands.length > 0 || timeoutMs <= 0) {
       return Promise.resolve(commands);
     }
 
     return new Promise((resolve) => {
-      const waiter: OwnerWaiter = {
+      const waiter: WorkerWaiter = {
         afterSeq,
         resolve,
         timer: setTimeout(() => {
-          this.removeOwnerWaiter(ownerId, waiter);
+          this.removeWorkerWaiter(workerId, waiter);
           resolve([]);
         }, timeoutMs),
       };
-      const waiters = this.ownerWaiters.get(ownerId) ?? [];
+      const waiters = this.workerWaiters.get(workerId) ?? [];
       waiters.push(waiter);
-      this.ownerWaiters.set(ownerId, waiters);
+      this.workerWaiters.set(workerId, waiters);
     });
   }
 
-  /** 按 ownerId 轮询命令（持久容器场景）。 */
-  pollByOwnerId(
-    ownerId: string,
+  /** 按 workerId 轮询命令（持久容器场景）。 */
+  pollByWorkerId(
+    workerId: string,
     afterSeq: number
   ): RunChannelMessage<CommandPayload>[] {
-    const queue = this.ownerQueues.get(ownerId);
+    const queue = this.workerQueues.get(workerId);
     if (!queue) return [];
-    // TODO: 当前假设每个 ownerId 只有一个 worker 轮询（单 worker per owner）。
-    // 多 worker 并发轮询同一 ownerId 时，先到的 worker 会截断队列导致后到的 worker 漏消息。
-    // 需要改为「按 (ownerId, consumerId) 切片、轮询时不截断队列」或引入 lease/ack 机制。
     const result = queue.filter((e) => e.seq > afterSeq);
-    this.ownerQueues.set(ownerId, result);
+    this.workerQueues.set(workerId, result);
     if (result.length > 0) {
       this.logger.debug(
-        `poll owner commands ${safeLogJson({
-          ownerId,
+        `poll worker commands ${safeLogJson({
+          workerId,
           afterSeq,
           returned: result.length,
           nextQueueSize: result.length,
@@ -151,61 +109,55 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
    */
   onApplicationShutdown(): void {
     let drained = 0;
-    for (const waiters of this.ownerWaiters.values()) {
+    for (const waiters of this.workerWaiters.values()) {
       for (const waiter of waiters) {
         clearTimeout(waiter.timer);
         waiter.resolve([]);
         drained += 1;
       }
     }
-    this.ownerWaiters.clear();
-    this.ownerQueues.clear();
-    this.ownerFileQueues.clear();
+    this.workerWaiters.clear();
+    this.workerQueues.clear();
     if (drained > 0) {
-      this.logger.log(`drained ${drained} owner command waiter(s) on shutdown`);
+      this.logger.log(`drained ${drained} worker command waiter(s) on shutdown`);
     }
   }
 
-  cleanupByOwnerId(ownerId: string): void {
-    this.ownerQueues.delete(ownerId);
-    this.ownerFileQueues.delete(ownerId);
-    const waiters = this.ownerWaiters.get(ownerId) ?? [];
+  cleanupByWorkerId(workerId: string): void {
+    this.workerQueues.delete(workerId);
+    const waiters = this.workerWaiters.get(workerId) ?? [];
     for (const waiter of waiters) {
       clearTimeout(waiter.timer);
       waiter.resolve([]);
     }
-    this.ownerWaiters.delete(ownerId);
-    this.ownerEpochs.delete(ownerId);
-    this.logger.debug(`cleanup owner commands ${safeLogJson({ ownerId })}`);
+    this.workerWaiters.delete(workerId);
+    this.workerEpochs.delete(workerId);
+    this.logger.debug(`cleanup worker commands ${safeLogJson({ workerId })}`);
   }
 
   /**
-   * 某个 owner 的队列在本进程内存里的"代次"标识：懒生成，进程重启即归零重来。
+   * 某个 worker 的队列在本进程内存里的"代次"标识：懒生成，进程重启即归零重来。
    * 用 `Date.now()` 生成值，不需要严格单调或防碰撞，只需要"跟重启前的旧值大概率不同"
    * 这个弱保证。第一次被问起（不管是 push 还是 poll 触发）时懒生成并记住，之后同一个
-   * ownerId 在本进程存活期间返回同一个值。
+   * workerId 在本进程存活期间返回同一个值。
    */
-  epochFor(ownerId: string): number {
-    let epoch = this.ownerEpochs.get(ownerId);
+  epochFor(workerId: string): number {
+    let epoch = this.workerEpochs.get(workerId);
     if (epoch === undefined) {
       epoch = Date.now();
-      this.ownerEpochs.set(ownerId, epoch);
+      this.workerEpochs.set(workerId, epoch);
     }
     return epoch;
   }
 
-  private resolveOwnerWaiters(ownerId: string): void {
-    const waiters = this.ownerWaiters.get(ownerId);
+  private resolveWorkerWaiters(workerId: string): void {
+    const waiters = this.workerWaiters.get(workerId);
     if (!waiters?.length) return;
 
-    // 文件命令到达时也要唤醒等待的 long-poll(即使没有 run 命令),
-    // 让 endpoint handler 有机会排空文件命令队列(见 ADR-0004)。
-    const hasFileCommands = (this.ownerFileQueues.get(ownerId)?.length ?? 0) > 0;
-
-    const remaining: OwnerWaiter[] = [];
+    const remaining: WorkerWaiter[] = [];
     for (const waiter of waiters) {
-      const commands = this.pollByOwnerId(ownerId, waiter.afterSeq);
-      if (commands.length > 0 || hasFileCommands) {
+      const commands = this.pollByWorkerId(workerId, waiter.afterSeq);
+      if (commands.length > 0) {
         clearTimeout(waiter.timer);
         waiter.resolve(commands);
       } else {
@@ -214,23 +166,23 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     }
 
     if (remaining.length > 0) {
-      this.ownerWaiters.set(ownerId, remaining);
+      this.workerWaiters.set(workerId, remaining);
     } else {
-      this.ownerWaiters.delete(ownerId);
+      this.workerWaiters.delete(workerId);
     }
   }
 
-  private removeOwnerWaiter(
-    ownerId: string,
-    waiterToRemove: OwnerWaiter
+  private removeWorkerWaiter(
+    workerId: string,
+    waiterToRemove: WorkerWaiter
   ): void {
-    const waiters = this.ownerWaiters.get(ownerId);
+    const waiters = this.workerWaiters.get(workerId);
     if (!waiters) return;
     const remaining = waiters.filter((waiter) => waiter !== waiterToRemove);
     if (remaining.length > 0) {
-      this.ownerWaiters.set(ownerId, remaining);
+      this.workerWaiters.set(workerId, remaining);
     } else {
-      this.ownerWaiters.delete(ownerId);
+      this.workerWaiters.delete(workerId);
     }
   }
 }

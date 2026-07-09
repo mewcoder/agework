@@ -6,7 +6,7 @@ import type {
 // ── runtime 类型:这个扩展点实现了哪些 runtime 的权威事实 ──────────────────
 
 export const SUPPORTED_RUNTIME_TYPES = [
-  "local",
+  "native",
   "docker",
   "opensandbox",
 ] as const;
@@ -28,10 +28,10 @@ export type OpenSandboxConnectionConfig = {
   useServerProxy: boolean;
 };
 
-/** local provider 的 config:agework-runtime 产物入口(纯 JS bundle,ESM)的绝对路径,
+/** native provider 的 config:agework-runtime 产物入口(纯 JS bundle,ESM)的绝对路径,
  *  由 server 备好后传入。provider 用 `node` fork 它并注入 AGEWORK_WORKER_ROLE=worker,
  *  因此包既不依赖 @agework/worker 也不依赖 tsx。 */
-export type LocalProviderConfig = {
+export type NativeProviderConfig = {
   runtimeEntryPath: string;
 };
 
@@ -43,7 +43,7 @@ export type RuntimeConfig = {
    *  provider 会把 127.0.0.1/localhost 换成 host.docker.internal。远程部署经
    *  AGEWORK_SERVER_BASE_URL 覆盖成真实可达地址,不触发替换。 */
   serverBaseUrl: string;
-  local: LocalProviderConfig;
+  native: NativeProviderConfig;
   openSandbox: OpenSandboxConnectionConfig;
 };
 
@@ -80,7 +80,7 @@ export type RuntimeSpecInput = {
   userWorkspaceRootPath: string;
   runtimeLogHostPath: string;
 } & (
-  | { runtimeType: "local" }
+  | { runtimeType: "native" }
   | {
       runtimeType: "docker" | "opensandbox";
       isolationScope: IsolationScope;
@@ -112,6 +112,7 @@ export type RuntimeLaunchContext = {
 export type RuntimeInstanceRef = {
   runtimeType: RuntimeType;
   ownerId: string;
+  workerId: string;
   runtimeInstanceId: string;
   isolationScope: string;
   /** 载体所在的 Registered Runtime id;null/undefined = Managed。provider 本身

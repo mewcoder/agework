@@ -11,9 +11,6 @@ import type {
   RuntimeSpec,
   WorkerCommandRpcRequest,
   WorkerExecutionStartInput,
-  OwnerCommand,
-  WorkspaceFileCommandPayload,
-  WorkspaceFileCommandResult,
 } from "@agework/shared/protocol";
 import type { AdminRunWorkerInstanceResponse } from "@agework/shared/api";
 import {
@@ -31,15 +28,14 @@ import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerProvisioner } from "./instance/worker.provisioner";
 import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
-import { WorkspaceFileCommandStore } from "./connection/workspace-file-command.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
 import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { OwnerRunStore } from "./instance/owner-run.store";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /**
- * local 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
- * runtimeType 分流,统一经 `commandDispatcher` 下发——local 与 sandbox 的差异
+ * native 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
+ * runtimeType 分流,统一经 `commandDispatcher` 下发——native 与 sandbox 的差异
  * 只剩"怎么把进程弄起来"(fork vs 起容器),归 `WorkerProvisioner` 统一编排,
  * 物理动作再转发给 `RuntimeService` 按 runtimeType 分发给对应 provider。
  */
@@ -56,25 +52,23 @@ export class WorkerManagerService {
     private readonly provisioner: WorkerProvisioner,
     private readonly handshakeStore: WorkerHandshakeStore,
     private readonly livenessStore: WorkerLivenessStore,
-    private readonly ownerRunStore: OwnerRunStore,
-    private readonly fileCommandStore: WorkspaceFileCommandStore
+    private readonly ownerRunStore: OwnerRunStore
   ) {}
 
   /**
-   * worker 长轮询拉取下行命令，按 ownerId + afterSeq 增量返回。长轮询本身就是心跳
-   * 信号,不加独立心跳 RPC——这里是 local/sandbox 唯一共用的 poll 入口,touch 记
-   * 一次该 owner 最后被看见的时间。
+   * worker 长轮询拉取下行命令，按 workerId + afterSeq 增量返回。长轮询本身就是心跳
+   * 信号,不加独立心跳 RPC——这里是 native/sandbox 唯一共用的 poll 入口,touch 记
+   * 一次该 worker 最后被看见的时间。
    */
   async pollCommands(
-    ownerId: string,
+    workerId: string,
     query: { afterSeq?: number; waitMs?: number }
   ): Promise<{
     messages: WorkerCommandRpcRequest[];
-    fileCommands: OwnerCommand<WorkspaceFileCommandPayload>[];
     queueEpoch: number;
   }> {
-    this.livenessStore.touch(ownerId);
-    return this.endpointHandler.pollCommands(ownerId, query);
+    this.livenessStore.touch(workerId);
+    return this.endpointHandler.pollCommands(workerId, query);
   }
 
   /** worker 启动后拉取本次 run 的 RunConfig。 */
@@ -84,13 +78,13 @@ export class WorkerManagerService {
 
   /**
    * 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。
-   * 事件上报本身也是"worker 活着"的证据，顺带 touch 一次该 owner 的心跳——否则一个
+   * 事件上报本身也是"worker 活着"的证据，顺带 touch 一次该 worker 的心跳——否则一个
    * 正在正常汇报进度的 worker，只要恰好没赶上 pollCommands 的节奏，也会被
    * WorkerLivenessSweeper 误判成心跳超时并 fence 掉。
    */
   async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
-    const ownerId = this.ownerRunStore.findOwnerIdByRunId(runId);
-    if (ownerId) this.livenessStore.touch(ownerId);
+    const workerId = this.ownerRunStore.findWorkerIdByRunId(runId);
+    if (workerId) this.livenessStore.touch(workerId);
     return this.endpointHandler.postEvent(runId, body);
   }
 
@@ -103,22 +97,22 @@ export class WorkerManagerService {
   // 与这个门面上其它 async 方法的调用约定保持一致。
   // eslint-disable-next-line @typescript-eslint/require-await
   async registerWorker(
-    ownerId: string,
+    workerId: string,
     body: RegisterWorkerDto
   ): Promise<{ ok: boolean }> {
     const accepted = this.handshakeStore.registerWorker(
-      ownerId,
+      workerId,
       body.startToken,
       { pid: body.pid }
     );
     if (!accepted) {
       throw new BadRequestException(
-        `no pending launch handshake for owner ${ownerId}, or token mismatch`
+        `no pending launch handshake for worker ${workerId}, or token mismatch`
       );
     }
     if (body.version && body.version !== AGEWORK_VERSION) {
       this.logger.warn(
-        `worker version mismatch for owner ${ownerId}: worker=${body.version} server=${AGEWORK_VERSION} (允许接入,注意 Registered 远程 manager 单独构建后的漂移)`
+        `worker version mismatch for worker ${workerId}: worker=${body.version} server=${AGEWORK_VERSION} (允许接入,注意 Registered 远程 manager 单独构建后的漂移)`
       );
     }
     return { ok: true };
@@ -127,64 +121,22 @@ export class WorkerManagerService {
   /** 为一次 run 打开命令下行会话。 */
   openSession(params: {
     runId: string;
-    ownerId: string;
+    workerId: string;
     runConfig: RunConfig;
   }): void {
     this.commandDispatcher.openSession(params);
   }
 
-  /** 向 owner 下发一条命令。 */
-  sendCommand(ownerId: string, runId: string, command: CommandPayload): void {
-    this.commandDispatcher.sendCommand(ownerId, runId, command);
+  /** 向 worker 下发一条命令。 */
+  sendCommand(workerId: string, runId: string, command: CommandPayload): void {
+    this.commandDispatcher.sendCommand(workerId, runId, command);
   }
 
-  // ── 文件命令(owner-scoped,无 runId,见 ADR-0004) ──
-
-  /** 向 owner 下发一条文件命令。 */
-  sendFileCommand(
-    ownerId: string,
-    payload: WorkspaceFileCommandPayload
-  ): void {
-    this.commandDispatcher.sendFileCommand(ownerId, payload);
-  }
-
-  /** 等待文件命令结果(由调用方套 withTimeout)。 */
-  waitForFileCommandResult(
-    commandId: string
-  ): Promise<WorkspaceFileCommandResult> {
-    return this.fileCommandStore.waitForResult(commandId);
-  }
-
-  /** 超时/出错分支清理 pending 文件命令结果条目。 */
-  cancelFileCommand(commandId: string, reason: string): void {
-    this.fileCommandStore.cancel(commandId, reason);
-  }
-
-  /** worker 结果端点回传文件命令结果,按 commandId 收敛。 */
-  resolveFileCommandResult(result: WorkspaceFileCommandResult): boolean {
-    return this.endpointHandler.resolveFileCommandResult(result);
-  }
-
-  /** 按 workspaceId 查找 running 状态的常驻 worker(薄方法,直通 registry)。 */
+  /** 按 workspaceId 查找 running 状态的常驻 worker(薄方法,直通 registry). */
   findActiveWorkerByWorkspace(workspaceId: string) {
     return this.registry.findActiveByWorkspace(workspaceId);
   }
 
-  /**
-   * 文件预览用的 worker 确保:worker 已在线则直接返回 ownerId;
-   * 离线则自动拉起,等握手完成后返回。直通 provisioner。
-   */
-  ensureWorkerForFilePreview(input: {
-    workspaceId: string;
-    userId: string;
-    username: string;
-    rootPath: string;
-    runtimeType: import("@agework/providers").RuntimeType;
-    isolationScope: string;
-    runtimeId: string;
-  }): Promise<string> {
-    return this.provisioner.ensureWorkerForFilePreview(input);
-  }
 
   /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
@@ -192,9 +144,9 @@ export class WorkerManagerService {
     this.commandDispatcher.cleanupRun(runId);
   }
 
-  /** 按 ownerId 清理命令队列/会话状态。 */
-  cleanupByOwnerId(ownerId: string): void {
-    this.commandDispatcher.cleanupByOwnerId(ownerId);
+  /** 按 workerId 清理命令队列/会话状态。 */
+  cleanupByWorkerId(workerId: string): void {
+    this.commandDispatcher.cleanupByWorkerId(workerId);
   }
 
   /** 接线 `run` 模块实现的上行事件 Port，供上报事件时反向回流。 */
@@ -217,25 +169,28 @@ export class WorkerManagerService {
     return this.registry.findByRuntimeId(runtimeType, runtimeInstanceId);
   }
 
-  // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/local
+  // ── 统一实例编排入口(resolveInstance 落地,替代按 runtimeType 分别调用 sandbox/native
   // 专属方法——runtimeType 判断收在 provisioner/RuntimeService 内部,run 层不再
-  // 需要认识 sandbox/local 的区别) ──
+  // 需要认识 sandbox/native 的区别) ──
 
   /**
    * 为一次 run 取得(创建/复用/attach)worker 载体,交给 provisioner 统一编排
-   * (runtimeType 分流收在 provisioner/RuntimeService 内部)。调用 provisioner
-   * 之前先登记 runId → ownerId,不等待 acquire 结果——早登记的坏处最多是索引里
-   * 多留了几毫秒一个"还没成功"的条目,releaseInstanceForRun/cleanupRun 迟早会
-   * 清掉它,不会造成持久污染。
+   * (runtimeType 分流收在 provisioner/RuntimeService 内部)。provisioner 返回后
+   * 登记 runId → workerId(协议身份),供 postEvent 的心跳 touch 和 fence 的
+   * run 终结反查。早登记的取舍不变——最多多留几毫秒一个"还没成功"的条目,
+   * releaseInstanceForRun/cleanupRun 迟早会清掉它。
    */
-  resolveInstance(
+  async resolveInstance(
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
-    this.ownerRunStore.registerRun(
-      input.runConfig.runId,
-      input.runtimeTarget.ownerId
-    );
-    return this.provisioner.acquireInstanceForRun(input);
+    const result = await this.provisioner.acquireInstanceForRun(input);
+    if (result.outcome === "ready") {
+      this.ownerRunStore.registerRun(
+        input.runConfig.runId,
+        result.workerId
+      );
+    }
+    return result;
   }
 
   /**
@@ -310,6 +265,7 @@ export class WorkerManagerService {
     const ref: RuntimeInstanceRef = {
       runtimeType: resource.runtimeType,
       ownerId: resource.ownerId,
+      workerId: resource.id,
       runtimeInstanceId: resource.instanceId,
       isolationScope: resource.isolationScope,
       targetRuntimeId: resource.runtimeId,

@@ -2,21 +2,38 @@ import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
 } from "@agework/providers";
-import type { RuntimeEnvConfig } from "@agework/shared/api";
+import type {
+  RuntimeEnvConfig,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+} from "@agework/shared/api";
 import type { RuntimeType } from "../config/config.service";
 
-const BUILTIN_RUNTIME_ID_PREFIX = "builtin-";
+const MANAGED_RUNTIME_ID_PREFIX = "managed-";
 
-/** builtin（本机 in-process）Runtime 的固定 id：`builtin-${runtimeType}`。
+/** managed native（本机 in-process）Runtime 的固定 id。native 留 server 进程内，
+ *  不起独立 runtime 进程，不经隧道 RPC。 */
+const MANAGED_NATIVE_RUNTIME_ID = `${MANAGED_RUNTIME_ID_PREFIX}native`;
+
+/** managed（本机）Runtime 的固定 id：`managed-${runtimeType}`。
  *  这些行在服务启动时 upsert，id 恒定，不用查库反查 source 就能判断。 */
-export function builtinRuntimeId(runtimeType: RuntimeType): string {
-  return `${BUILTIN_RUNTIME_ID_PREFIX}${runtimeType}`;
+export function managedRuntimeId(runtimeType: RuntimeType): string {
+  return `${MANAGED_RUNTIME_ID_PREFIX}${runtimeType}`;
 }
 
-/** 是否是 builtin Runtime id——固定前缀匹配，不用查库；替代原先 `runtimeId === null`
+/** 是否是 managed Runtime id——固定前缀匹配，不用查库；替代原先 `runtimeId === null`
  *  判断 Managed 的方式（见 runtime 模块 ADR-0001）。 */
-export function isBuiltinRuntimeId(runtimeId: string): boolean {
-  return runtimeId.startsWith(BUILTIN_RUNTIME_ID_PREFIX);
+export function isManagedRuntimeId(runtimeId: string): boolean {
+  return runtimeId.startsWith(MANAGED_RUNTIME_ID_PREFIX);
+}
+
+/** 是否是 managed native Runtime id——只有 `managed-native` 留 server 进程内（直读），
+ *  managed docker/opensandbox 起独立 runtime 进程经隧道 RPC，与 registered 同走 RemoteRuntime。
+ *  供 runtimeFor / detectEnv / assertRuntimeReachable 等判断「是否走进程内 LocalRuntime」。 */
+export function isManagedNativeRuntimeId(runtimeId: string): boolean {
+  return runtimeId === MANAGED_NATIVE_RUNTIME_ID;
 }
 
 /**
@@ -43,4 +60,22 @@ export interface Runtime {
   listDirectory(path?: string): Promise<{ path: string; entries: string[] }>;
   /** 在 path 下新建目录(含父级),返回新建目录的绝对路径。 */
   createDirectory(path: string): Promise<{ path: string }>;
+  /** 列出 rootPath 下 relativePath 的文件列表(含文件,非纯目录)。
+   *  native 直读本机硬盘;docker/opensandbox/registered 经隧道 RPC 调 runtime 进程。 */
+  listFiles(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileListResponse>;
+  /** 读取 rootPath 下 relativePath 的文件内容(文本或图片 base64)。 */
+  readFile(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileReadResponse>;
+  /** 列出 rootPath 下相对 HEAD 的累计变更文件(git-only、只读)。 */
+  listChangedFiles(rootPath: string): Promise<WorkspaceChangedFilesResponse>;
+  /** 读取 rootPath 下 relativePath 的 before(HEAD)/after(当前)对比(git)。 */
+  readFileDiff(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileDiffResponse>;
 }

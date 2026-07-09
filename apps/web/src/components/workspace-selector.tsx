@@ -33,7 +33,7 @@ interface WorkspaceSelectorProps {
 type WorkspaceItem = {
   value: string;
   label: string;
-  runtimeType?: "local" | "docker" | "opensandbox";
+  runtimeType?: "native" | "docker" | "opensandbox";
 };
 
 export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps) {
@@ -203,7 +203,7 @@ function WorkspaceItemIcon({
   runtimeType?: WorkspaceItem["runtimeType"];
   className?: string;
 }) {
-  if (runtimeType && runtimeType !== "local") {
+  if (runtimeType && runtimeType !== "native") {
     return <FolderDot className={className} />;
   }
 

@@ -14,7 +14,7 @@ export const DEFAULT_PORT = 3000;
 export const DEFAULT_API_BODY_LIMIT = "50mb";
 export const DEV_JWT_SECRET = "agework-dev-secret";
 
-export const DEFAULT_ALLOWED_RUNTIME_TYPES = ["local"] as const;
+export const DEFAULT_ALLOWED_RUNTIME_TYPES = ["native"] as const;
 export const DEFAULT_ALLOWED_ISOLATION_SCOPES = ["user"] as const;
 /** Managed 的 docker/opensandbox 载体镜像:统一为 agework-runtime 产物镜像
  *  (worker 内置其中,以 AGEWORK_WORKER_ROLE=worker 角色启动),与 Registered

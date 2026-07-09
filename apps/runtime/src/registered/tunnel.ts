@@ -19,6 +19,21 @@ import {
 } from "../config.js";
 import { detectEnvConfig } from "../cli/cli-resolver.js";
 import { createDirectory, listDirectory } from "../filesystem/directory-browser.js";
+import {
+  listFiles as listFilesDirect,
+  readFile as readFileDirect,
+  createFsTimeoutSignal,
+} from "@agework/shared/filesystem";
+import {
+  listChangedFiles as listChangedFilesDirect,
+  readFileDiff as readFileDiffDirect,
+} from "@agework/shared/git";
+import type {
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+} from "@agework/shared/api";
 import { Launcher } from "./launcher.js";
 import { LiveCarrierStore } from "./registry.js";
 
@@ -32,9 +47,9 @@ export interface LaunchDispatcher {
   destroy(params: RuntimeTunnelRpcRequest["params"]): Promise<void>;
 }
 
-/** 每种运行方式支持的隔离档(注册时上报的能力矩阵)。local 无容器,只有 host 档。 */
+/** 每种运行方式支持的隔离档(注册时上报的能力矩阵)。native 无容器,只有 host 档。 */
 const ISOLATION_SCOPES: Record<RuntimeType, string[]> = {
-  local: ["host"],
+  native: ["host"],
   docker: ["user", "workspace"],
   opensandbox: ["user", "workspace"],
 };
@@ -167,6 +182,10 @@ export class TunnelClient {
     | { envConfig: RuntimeEnvConfig }
     | { path: string; entries: string[] }
     | { path: string }
+    | WorkspaceFileListResponse
+    | WorkspaceFileReadResponse
+    | WorkspaceChangedFilesResponse
+    | WorkspaceFileDiffResponse
     | void
   > {
     const dispatcher = this.options.dispatcher;
@@ -183,6 +202,14 @@ export class TunnelClient {
         return Promise.resolve(listDirectory(request.params.path));
       case "runtime.create-dir":
         return Promise.resolve(createDirectory(request.params.path));
+      case "runtime.list-files":
+        return handleListFiles(request.params.rootPath, request.params.path);
+      case "runtime.read-file":
+        return handleReadFile(request.params.rootPath, request.params.path);
+      case "runtime.list-changed-files":
+        return listChangedFilesDirect(request.params.rootPath);
+      case "runtime.read-file-diff":
+        return readFileDiffDirect(request.params.rootPath, request.params.path);
     }
   }
 
@@ -230,6 +257,40 @@ export class TunnelClient {
       this.reconnectTimer = undefined;
     }
   }
+}
+
+// ── 文件预览 / git diff 隧道 RPC 处理(复用 shared 安全纯函数) ────────
+//
+// runtime 进程在那台机器上直读 fs / 跑 git,安全校验(路径越界、symlink 逃逸、
+// 二进制探测、大小截断)复用与 worker 相同的 shared 实现(见 ADR-0005 精确化)。
+// 返回类型是 API 响应形状(无 commandId),server 侧直接透传。
+
+async function handleListFiles(
+  rootPath: string,
+  relativePath: string
+): Promise<WorkspaceFileListResponse> {
+  const signal = createFsTimeoutSignal();
+  const result = await listFilesDirect(rootPath, relativePath, signal);
+  return {
+    path: result.path,
+    list: result.list,
+    truncated: result.truncated,
+  };
+}
+
+async function handleReadFile(
+  rootPath: string,
+  relativePath: string
+): Promise<WorkspaceFileReadResponse> {
+  const signal = createFsTimeoutSignal();
+  const result = await readFileDirect(rootPath, relativePath, signal);
+  return {
+    path: result.path,
+    encoding: result.encoding,
+    content: result.content,
+    size: result.size,
+    truncated: result.truncated,
+  };
 }
 
 /** Registered Runtime 常驻入口:解析配置、装配 launcher、起隧道、挂信号处理。 */

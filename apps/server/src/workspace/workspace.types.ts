@@ -10,8 +10,8 @@ export type WorkspaceRunContext = {
   runtimeType: string;
   isolationScope: string;
   username: string;
-  /** 绑定的 Runtime(builtin 或 registered)id,恒有值。 */
+  /** 绑定的 Runtime(managed 或 registered)id,恒有值。 */
   runtimeId: string;
-  /** 绑定 Runtime 的来源:"builtin" = Managed(本机 in-process),"registered" = 远程机器。 */
+  /** 绑定 Runtime 的来源:"managed" = Managed(本机 in-process),"registered" = 远程机器。 */
   runtimeSource: string;
 };

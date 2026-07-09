@@ -15,7 +15,7 @@ describe("RunRepository", () => {
       id: "run-1",
       conversationId: "conversation-1",
       agentType: "claude",
-      runtimeType: "local",
+      runtimeType: "native",
     });
 
     // conversation 存在性守卫已上移到 RunLauncher.claimRun，repository 只写 run 表
@@ -24,7 +24,7 @@ describe("RunRepository", () => {
         id: "run-1",
         conversationId: "conversation-1",
         agentType: "claude",
-        runtimeType: "local",
+        runtimeType: "native",
       },
     });
   });

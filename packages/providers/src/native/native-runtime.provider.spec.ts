@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { LocalRuntimeProvider } from "./local-runtime.provider";
+import { NativeRuntimeProvider } from "./native-runtime.provider";
 import type { RuntimeConfig, RuntimeInstanceRef } from "../types";
 
 const forkMock = vi.hoisted(() => {
@@ -23,7 +23,7 @@ const CONFIG: RuntimeConfig = {
   workerImage: "agework/runtime:latest",
   runtimeLogHostPath: "/tmp/agework-logs/runtime",
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
-  local: {
+  native: {
     runtimeEntryPath: "/pkg/agework-runtime/main.mjs",
   },
   openSandbox: {
@@ -34,15 +34,15 @@ const CONFIG: RuntimeConfig = {
   },
 };
 
-const makeProvider = () => new LocalRuntimeProvider(CONFIG);
+const makeProvider = () => new NativeRuntimeProvider(CONFIG);
 
 const makeCtx = (over: Record<string, unknown> = {}) => ({
-  runtimeType: "local" as const,
+  runtimeType: "native" as const,
   ownerId: "owner-1",
   workspaceId: "ws-1",
   runId: "run-1",
   placement: {
-    runtimeType: "local" as const,
+    runtimeType: "native" as const,
     userId: "u1",
     workspaceId: "ws-1",
     hostPath: "/w",
@@ -54,7 +54,7 @@ const makeCtx = (over: Record<string, unknown> = {}) => ({
 });
 
 const makeRef = (over: Partial<RuntimeInstanceRef> = {}): RuntimeInstanceRef => ({
-  runtimeType: "local",
+  runtimeType: "native",
   ownerId: "owner-1",
   runtimeInstanceId: "12345:some-token",
   isolationScope: "workspace",
@@ -64,7 +64,7 @@ const makeRef = (over: Partial<RuntimeInstanceRef> = {}): RuntimeInstanceRef => 
 const exitHandlerOf = (child: { on: ReturnType<typeof vi.fn> }) =>
   child.on.mock.calls.find((call) => call[0] === "exit")?.[1] as () => void;
 
-describe("LocalRuntimeProvider", () => {
+describe("NativeRuntimeProvider", () => {
   beforeEach(() => {
     forkMock.fork.mockClear();
     forkMock.children.length = 0;
@@ -209,7 +209,7 @@ describe("LocalRuntimeProvider", () => {
     });
   });
 
-  it("self-declares its type as local", () => {
-    expect(makeProvider().type).toBe("local");
+  it("self-declares its type as native", () => {
+    expect(makeProvider().type).toBe("native");
   });
 });

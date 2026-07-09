@@ -91,10 +91,10 @@ export function getJwtSecret(): string {
 }
 
 export type IsolationScope = "user" | "workspace";
-export type RuntimeType = "local" | "docker" | "opensandbox";
+export type RuntimeType = "native" | "docker" | "opensandbox";
 
 const RUNTIME_TYPES = [
-  "local",
+  "native",
   "docker",
   "opensandbox",
 ] as const satisfies readonly RuntimeType[];
@@ -231,7 +231,7 @@ export class ConfigService implements OnModuleInit {
 
     if (values.length === 0 || values.some((value) => !isRuntimeType(value))) {
       throw new Error(
-        `AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "local", "docker", "opensandbox", got: ${raw ?? values.join(",")}`
+        `AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "native", "docker", "opensandbox", got: ${raw ?? values.join(",")}`
       );
     }
 

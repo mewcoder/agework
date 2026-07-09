@@ -15,8 +15,8 @@ export type UpsertRunningInput = {
 };
 
 export type InsertStartingResult =
-  | { ok: true }
-  | { ok: false; existing: { runtimeInstanceId: string; status: string } };
+  | { ok: true; workerId: string }
+  | { ok: false; existing: { workerId: string; runtimeInstanceId: string; status: string } };
 
 function isPrismaUniqueError(err: unknown): boolean {
   return (
@@ -34,8 +34,7 @@ function isPrismaUniqueError(err: unknown): boolean {
  * 要读写的东西,归 runtime 会导致 worker-manager 反过来依赖 runtime,破坏 runtime 的零依赖身份。
  *
  * Worker 表里只有活跃行(starting/running):停止/报错立刻物理删除该行,不是标记终态再
- * 等下次启动 sweep——见 schema.prisma Worker 模型注释,这也是 ownerId 能做成裸
- * `@unique` 的前提。
+ * 等下次启动 sweep——见 schema.prisma Worker 模型注释。
  */
 @Injectable()
 export class WorkerRegistryRepository {
@@ -53,15 +52,13 @@ export class WorkerRegistryRepository {
 
   async upsertRunning(
     input: UpsertRunningInput,
+    workerId: string,
     runtimeInstanceId: string,
     transport: string,
     targetRuntimeId: string,
     metadata?: object
   ) {
     return this.prisma.$transaction(async (tx) => {
-      const existing = await tx.worker.findUnique({
-        where: { ownerId: input.ownerId },
-      });
       const data = {
         runtimeType: input.runtimeType,
         isolationScope: input.isolationScope,
@@ -76,14 +73,11 @@ export class WorkerRegistryRepository {
             workspaceId: input.workspaceId,
             ownerId: input.ownerId,
             runtimeInstanceId,
-            existing: existing?.metadata,
             metadata,
           })
         ),
       };
-      const worker = existing
-        ? await tx.worker.update({ where: { id: existing.id }, data })
-        : await tx.worker.create({ data: { id: generateId(), ...data } });
+      const worker = await tx.worker.update({ where: { id: workerId }, data });
       const binding = await tx.workerWorkspaceBinding.upsert({
         where: { workspaceId: input.workspaceId },
         create: {
@@ -98,13 +92,18 @@ export class WorkerRegistryRepository {
   }
 
   /**
-   * 冷启动前插入一条 starting 记录,靠 Worker.ownerId 列的 `@unique` 约束做并发防重:
-   * 表里只有活跃行,同一 owner 同时只能有一条。撞见冲突时返回已存在的活跃行,由调用方
-   * 决定是复用还是报错(sandbox/local 的策略不同,不在这一层判断)。
+   * 冷启动前插入一条 starting 记录,靠 Worker 的复合唯一约束
+   * (ownerId, runtimeId, isolationScope) 做并发防重:
+   * 表里只有活跃行,同一 (owner, runtime, scope) 同时只能有一条。撞见冲突时返回已存在的活跃行,由调用方
+   * 决定是复用还是报错(sandbox/native 的策略不同,不在这一层判断)。
+   *
+   * workerId 由调用方(provisioner)预生成,作为 Worker.id 主键写入,同时注入 worker env
+   * 供 worker 回连时携带(协议身份见 Ticket 03)。
    */
   async insertStarting(
     input: UpsertRunningInput,
-    runtimeInstanceId: string,
+    workerId: string,
+    instanceIdPlaceholder: string,
     transport: string,
     startToken: string,
     targetRuntimeId: string
@@ -112,11 +111,11 @@ export class WorkerRegistryRepository {
     try {
       await this.prisma.worker.create({
         data: {
-          id: generateId(),
+          id: workerId,
           runtimeType: input.runtimeType,
           isolationScope: input.isolationScope,
           ownerId: input.ownerId,
-          instanceId: runtimeInstanceId,
+          instanceId: instanceIdPlaceholder, // placeholder, updated by upsertRunning
           transport,
           startToken,
           status: "starting",
@@ -131,16 +130,23 @@ export class WorkerRegistryRepository {
           ),
         },
       });
-      return { ok: true };
+      return { ok: true, workerId };
     } catch (err) {
       if (!isPrismaUniqueError(err)) throw err;
       const existing = await this.prisma.worker.findUnique({
-        where: { ownerId: input.ownerId },
+        where: {
+          ownerId_runtimeId_isolationScope: {
+            ownerId: input.ownerId,
+            runtimeId: targetRuntimeId,
+            isolationScope: input.isolationScope,
+          },
+        },
       });
       if (!existing) throw err;
       return {
         ok: false,
         existing: {
+          workerId: existing.id,
           runtimeInstanceId: existing.instanceId,
           status: existing.status,
         },
@@ -324,14 +330,14 @@ export class WorkerRegistryRepository {
   }
 
   /**
-   * 按 ownerId 查该 owner 当前唯一活跃(starting/running)行,供端点鉴权(startToken)
-   * 和 fence(runtimeType,判断走 local 还是 sandbox 的物理停止路径)复用。ownerId 全局
-   * 唯一,系统任一时刻只支持一个 owner 对应一个活跃 Worker(见 worker-manager ADR-0003)。
+   * 按 workerId 查该 worker 当前活跃(starting/running)行,供端点鉴权(startToken)
+   * 和 fence 复用。协议身份改 workerId 后(Ticket 03),这是协议层的权威查找入口。
    */
-  findActiveByOwnerId(ownerId: string) {
+  findActiveByWorkerId(workerId: string) {
     return this.prisma.worker.findUnique({
-      where: { ownerId },
+      where: { id: workerId },
       select: {
+        id: true,
         startToken: true,
         runtimeType: true,
         instanceId: true,

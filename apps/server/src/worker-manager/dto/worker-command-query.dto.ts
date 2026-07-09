@@ -12,12 +12,12 @@ import { OptionalTrimmedString } from "../../common/decorators/query-value.decor
 
 export const MAX_COMMAND_WAIT_MS = 30_000;
 
-export class WorkerOwnerParamDto {
+export class WorkerWorkerIdParamDto {
   @OptionalTrimmedString()
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
-  ownerId!: string;
+  workerId!: string;
 }
 
 export class WorkerCommandQueryDto {

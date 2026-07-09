@@ -51,7 +51,7 @@ describe("WorkspaceController", () => {
         name: "my-ws",
         description: "test",
         rootPath: "/tmp",
-        runtimeType: "local",
+        runtimeType: "native",
         isolationScope: "workspace",
       } as never;
       await controller.create(body, mockUser);

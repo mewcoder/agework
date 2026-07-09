@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { HttpException } from "@nestjs/common";
 import type { ExecutionContext } from "@nestjs/common";
 import {
-  WORKER_OWNER_ID_HEADER,
+  WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
 import { WorkerTokenGuard } from "./worker-token.guard";
@@ -20,33 +20,33 @@ function makeContext(
 }
 
 describe("WorkerTokenGuard", () => {
-  it("allows the request through when the token matches the owner's active row", async () => {
+  it("allows the request through when the token matches the worker's active row", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(
-      { ownerId: "owner-1" },
+      { workerId: "worker-1" },
       { [WORKER_TOKEN_HEADER]: "token-1" }
     );
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledWith("owner-1");
+    expect(registry.findActiveByWorkerId).toHaveBeenCalledWith("worker-1");
   });
 
-  it("rejects with 410 when the token does not match the owner's active row", async () => {
+  it("rejects with 410 when the token does not match the worker's active row", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(
-      { ownerId: "owner-1" },
+      { workerId: "worker-1" },
       { [WORKER_TOKEN_HEADER]: "wrong-token" }
     );
 
@@ -55,44 +55,44 @@ describe("WorkerTokenGuard", () => {
     });
   });
 
-  it("rejects with 410 when there is no active row for the owner", async () => {
+  it("rejects with 410 when there is no active row for the worker", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue(null),
+      findActiveByWorkerId: vi.fn().mockResolvedValue(null),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(
-      { ownerId: "owner-1" },
+      { workerId: "worker-1" },
       { [WORKER_TOKEN_HEADER]: "token-1" }
     );
 
     await expect(guard.canActivate(context)).rejects.toMatchObject({
       status: 410,
     });
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledTimes(1);
+    expect(registry.findActiveByWorkerId).toHaveBeenCalledTimes(1);
   });
 
   it("rejects with 410 when the token header is missing", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn(),
+      findActiveByWorkerId: vi.fn(),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
-    const context = makeContext({ ownerId: "owner-1" }, {});
+    const context = makeContext({ workerId: "worker-1" }, {});
 
     await expect(guard.canActivate(context)).rejects.toMatchObject({
       status: 410,
     });
-    expect(registry.findActiveByOwnerId).not.toHaveBeenCalled();
+    expect(registry.findActiveByWorkerId).not.toHaveBeenCalled();
   });
 
-  it("rejects with 410 when neither a route param nor a header provides ownerId", async () => {
+  it("rejects with 410 when neither a route param nor a header provides workerId", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn(),
+      findActiveByWorkerId: vi.fn(),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
@@ -105,63 +105,63 @@ describe("WorkerTokenGuard", () => {
     await expect(guard.canActivate(context)).rejects.toMatchObject({
       status: 410,
     });
-    expect(registry.findActiveByOwnerId).not.toHaveBeenCalled();
+    expect(registry.findActiveByWorkerId).not.toHaveBeenCalled();
   });
 
-  it("prefers the route param ownerId over the header when both are present", async () => {
+  it("prefers the route param workerId over the header when both are present", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(
-      { ownerId: "owner-from-param" },
+      { workerId: "worker-from-param" },
       {
-        [WORKER_OWNER_ID_HEADER]: "owner-from-header",
+        [WORKER_ID_HEADER]: "worker-from-header",
         [WORKER_TOKEN_HEADER]: "token-1",
       }
     );
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledWith(
-      "owner-from-param"
+    expect(registry.findActiveByWorkerId).toHaveBeenCalledWith(
+      "worker-from-param"
     );
-    expect(registry.findActiveByOwnerId).not.toHaveBeenCalledWith(
-      "owner-from-header"
+    expect(registry.findActiveByWorkerId).not.toHaveBeenCalledWith(
+      "worker-from-header"
     );
   });
 
-  it("falls back to the owner-id header when there is no route param (runs endpoints)", async () => {
+  it("falls back to the worker-id header when there is no route param (runs endpoints)", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(undefined, {
-      [WORKER_OWNER_ID_HEADER]: "owner-from-header",
+      [WORKER_ID_HEADER]: "worker-from-header",
       [WORKER_TOKEN_HEADER]: "token-1",
     });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledWith(
-      "owner-from-header"
+    expect(registry.findActiveByWorkerId).toHaveBeenCalledWith(
+      "worker-from-header"
     );
   });
 
   it("does not leak the raw token value into the rejection message", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const guard = new WorkerTokenGuard(
       registry as unknown as WorkerRegistryRepository
     );
 
     const context = makeContext(
-      { ownerId: "owner-1" },
+      { workerId: "worker-1" },
       { [WORKER_TOKEN_HEADER]: "super-secret-value" }
     );
 

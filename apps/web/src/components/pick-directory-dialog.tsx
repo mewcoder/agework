@@ -33,7 +33,7 @@ interface PickDirectoryDialogProps {
 
 function runtimeTypeLabel(type: WorkspaceRuntimeType | null) {
   switch (type) {
-    case "local":
+    case "native":
       return "本地";
     case "docker":
       return "Docker";
@@ -63,19 +63,19 @@ export function PickDirectoryDialog({
   const { data: runtimes = [] } = useRuntimes();
   const createDirMutation = useCreateRuntimeDirectory();
 
-  // builtin runtime 都跑在 server 所在这台机器上,「选择本地文件夹」只在这些之间选,
+  // managed runtime 都跑在 server 所在这台机器上,「选择本地文件夹」只在这些之间选,
   // 不含已配对的远程机器(那台机器上的目录不属于"本地")。
-  const builtinRuntimes = useMemo(
-    () => runtimes.filter((r) => r.source === "builtin"),
+  const managedRuntimes = useMemo(
+    () => runtimes.filter((r) => r.source === "managed"),
     [runtimes]
   );
 
   const defaultRuntimeId =
-    (builtinRuntimes.find((r) => r.runtimeType === "local") ??
-      builtinRuntimes[0])?.id;
+    (managedRuntimes.find((r) => r.runtimeType === "native") ??
+      managedRuntimes[0])?.id;
   const selectedRuntimeId = runtimeOverrideId ?? defaultRuntimeId;
 
-  const selectedRuntime = builtinRuntimes.find(
+  const selectedRuntime = managedRuntimes.find(
     (r) => r.id === selectedRuntimeId
   );
 
@@ -138,7 +138,7 @@ export function PickDirectoryDialog({
         name,
         rootPath,
         runtimeType,
-        isolationScope: runtimeType !== "local" ? "workspace" : undefined,
+        isolationScope: runtimeType !== "native" ? "workspace" : undefined,
       },
       {
         onSuccess: (workspace) => {
@@ -162,11 +162,11 @@ export function PickDirectoryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {builtinRuntimes.length > 1 && (
+        {managedRuntimes.length > 1 && (
           <Field>
             <FieldLabel htmlFor="pick-directory-runtime">运行环境</FieldLabel>
             <Select
-              items={builtinRuntimes.map((runtime) => ({
+              items={managedRuntimes.map((runtime) => ({
                 value: runtime.id,
                 label: runtime.name,
               }))}
@@ -177,7 +177,7 @@ export function PickDirectoryDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {builtinRuntimes.map((runtime) => (
+                {managedRuntimes.map((runtime) => (
                   <SelectItem key={runtime.id} value={runtime.id}>
                     {runtime.name}
                     <span className="text-xs text-muted-foreground">

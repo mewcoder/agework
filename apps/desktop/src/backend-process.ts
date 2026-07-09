@@ -35,7 +35,7 @@ export function startBackend(
     AGEWORK_PRIVATE_JWT_SECRET: "agework-desktop-local-secret",
     AGEWORK_DEV_AUTH_DISABLED: "true",
     AGEWORK_SERVE_FRONTEND: "true",
-    AGEWORK_RUNTIME_ALLOWED_TYPES: "local",
+    AGEWORK_RUNTIME_ALLOWED_TYPES: "native",
     AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES: "user",
   });
   if (!resources.backendExecPath) env.ELECTRON_RUN_AS_NODE = "1";

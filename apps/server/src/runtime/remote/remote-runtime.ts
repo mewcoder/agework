@@ -8,9 +8,23 @@ import type {
   RuntimeLaunchRpcResult,
   RuntimeListDirRpcParams,
   RuntimeListDirRpcResult,
+  RuntimeListFilesRpcParams,
+  RuntimeListFilesRpcResult,
+  RuntimeReadFileRpcParams,
+  RuntimeReadFileRpcResult,
+  RuntimeListChangedFilesRpcParams,
+  RuntimeListChangedFilesRpcResult,
+  RuntimeReadFileDiffRpcParams,
+  RuntimeReadFileDiffRpcResult,
   RuntimeTunnelRpcRequest,
 } from "@agework/shared/protocol";
-import type { RuntimeEnvConfig } from "@agework/shared/api";
+import type {
+  RuntimeEnvConfig,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+} from "@agework/shared/api";
 import type {
   RuntimeInstanceRef,
   RuntimeLaunchContext,
@@ -95,12 +109,64 @@ export class RemoteRuntime implements Runtime {
     );
   }
 
+  /** 通过隧道发 list-files RPC,列出远程机器上 rootPath 下 relativePath 的文件列表。 */
+  async listFiles(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileListResponse> {
+    const params: RuntimeListFilesRpcParams = { rootPath, path: relativePath };
+    return this.tunnel.sendRequest<RuntimeListFilesRpcResult>(
+      this.runtimeId,
+      this.request("runtime.list-files", params),
+      this.launchTimeoutMs
+    );
+  }
+
+  /** 通过隧道发 read-file RPC,读取远程机器上 rootPath 下 relativePath 的文件内容。 */
+  async readFile(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileReadResponse> {
+    const params: RuntimeReadFileRpcParams = { rootPath, path: relativePath };
+    return this.tunnel.sendRequest<RuntimeReadFileRpcResult>(
+      this.runtimeId,
+      this.request("runtime.read-file", params),
+      this.launchTimeoutMs
+    );
+  }
+
+  /** 通过隧道发 list-changed-files RPC,列出远程机器上 rootPath 下相对 HEAD 的变更文件。 */
+  async listChangedFiles(
+    rootPath: string
+  ): Promise<WorkspaceChangedFilesResponse> {
+    const params: RuntimeListChangedFilesRpcParams = { rootPath };
+    return this.tunnel.sendRequest<RuntimeListChangedFilesRpcResult>(
+      this.runtimeId,
+      this.request("runtime.list-changed-files", params),
+      this.launchTimeoutMs
+    );
+  }
+
+  /** 通过隧道发 read-file-diff RPC,读取远程机器上 rootPath 下 relativePath 的 diff。 */
+  async readFileDiff(
+    rootPath: string,
+    relativePath: string
+  ): Promise<WorkspaceFileDiffResponse> {
+    const params: RuntimeReadFileDiffRpcParams = { rootPath, path: relativePath };
+    return this.tunnel.sendRequest<RuntimeReadFileDiffRpcResult>(
+      this.runtimeId,
+      this.request("runtime.read-file-diff", params),
+      this.launchTimeoutMs
+    );
+  }
+
   private async sendInstanceAction(
     method: "runtime.stop" | "runtime.destroy",
     ref: RuntimeInstanceRef
   ): Promise<void> {
     const params: RuntimeInstanceRefRpcParams = {
       ownerId: ref.ownerId,
+      workerId: ref.workerId,
       runtimeInstanceId: ref.runtimeInstanceId,
       isolationScope: ref.isolationScope,
     };

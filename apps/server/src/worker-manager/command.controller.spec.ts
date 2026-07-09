@@ -15,7 +15,7 @@ describe("WorkerCommandController", () => {
     );
   });
 
-  it("delegates pollCommands to WorkerManagerService with ownerId and query", async () => {
+  it("delegates pollCommands to WorkerManagerService with workerId and query", async () => {
     const workerManager = {
       pollCommands: vi.fn().mockResolvedValue({ messages: [] }),
     };
@@ -24,17 +24,17 @@ describe("WorkerCommandController", () => {
     );
 
     await controller.pollCommands(
-      { ownerId: "owner-1" },
+      { workerId: "worker-1" },
       { afterSeq: 3, waitMs: 25000 }
     );
 
-    expect(workerManager.pollCommands).toHaveBeenCalledWith("owner-1", {
+    expect(workerManager.pollCommands).toHaveBeenCalledWith("worker-1", {
       afterSeq: 3,
       waitMs: 25000,
     });
   });
 
-  it("delegates registerWorker to WorkerManagerService with ownerId and body", async () => {
+  it("delegates registerWorker to WorkerManagerService with workerId and body", async () => {
     const workerManager = {
       registerWorker: vi.fn().mockResolvedValue({ ok: true }),
     };
@@ -43,9 +43,9 @@ describe("WorkerCommandController", () => {
     );
 
     const body = { startToken: "token-1", pid: 4242 };
-    await controller.registerWorker({ ownerId: "owner-1" }, body);
+    await controller.registerWorker({ workerId: "worker-1" }, body);
 
-    expect(workerManager.registerWorker).toHaveBeenCalledWith("owner-1", body);
+    expect(workerManager.registerWorker).toHaveBeenCalledWith("worker-1", body);
   });
 });
 
@@ -61,7 +61,7 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
   });
 
   async function startApp(registry: {
-    findActiveByOwnerId: ReturnType<typeof vi.fn>;
+    findActiveByWorkerId: ReturnType<typeof vi.fn>;
   }) {
     const workerManager = {
       pollCommands: vi.fn().mockResolvedValue({ messages: [] }),
@@ -84,24 +84,24 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
 
   it("lets the request through and reaches the controller when the token matches", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const { baseUrl, workerManager } = await startApp(registry);
 
-    const res = await fetch(`${baseUrl}/worker/owners/owner-1/commands`, {
+    const res = await fetch(`${baseUrl}/worker/worker-1/commands`, {
       headers: { [WORKER_TOKEN_HEADER]: "token-1" },
     });
 
     expect(res.status).toBe(200);
     expect(workerManager.pollCommands).toHaveBeenCalledTimes(1);
-    expect(workerManager.pollCommands.mock.calls[0][0]).toBe("owner-1");
+    expect(workerManager.pollCommands.mock.calls[0][0]).toBe("worker-1");
   });
 
   it("returns 410 and never reaches the controller when the token is missing", async () => {
-    const registry = { findActiveByOwnerId: vi.fn() };
+    const registry = { findActiveByWorkerId: vi.fn() };
     const { baseUrl, workerManager } = await startApp(registry);
 
-    const res = await fetch(`${baseUrl}/worker/owners/owner-1/commands`);
+    const res = await fetch(`${baseUrl}/worker/worker-1/commands`);
 
     expect(res.status).toBe(410);
     expect(workerManager.pollCommands).not.toHaveBeenCalled();
@@ -109,11 +109,11 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
 
   it("returns 410 and never reaches the controller when the token does not match", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const { baseUrl, workerManager } = await startApp(registry);
 
-    const res = await fetch(`${baseUrl}/worker/owners/owner-1/commands`, {
+    const res = await fetch(`${baseUrl}/worker/worker-1/commands`, {
       headers: { [WORKER_TOKEN_HEADER]: "wrong-token" },
     });
 

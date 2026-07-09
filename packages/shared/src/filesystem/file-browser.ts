@@ -2,7 +2,7 @@
  * 工作空间文件浏览器（纯异步 fs/promises，无运行时依赖）。
  *
  * 提取自 `packages/worker/src/files/workspace-file-browser.ts`，供 worker
- * 和 server（LocalRuntime builtin 直读）共用同一份安全校验 + fs 读取逻辑。
+ * 和 server（LocalRuntime managed 直读）共用同一份安全校验 + fs 读取逻辑。
  *
  * 安全校验：相对路径、NUL/`..`/绝对路径拒绝、realpath 前缀判断挡 symlink 逃逸、
  * O_NOFOLLOW 打开文件消除 TOCTOU（Windows 降级为 lstat 预检）。
@@ -23,7 +23,8 @@ import type {
   ListFilesResult,
   ReadFileResult,
   WorkspaceFileCommandError,
-} from "../protocol/workspace-file-command";
+  BrowseResult,
+} from "./types";
 
 // ── 常量 ──────────────────────────────────────────────────────────
 
@@ -43,12 +44,6 @@ const IMAGE_EXTENSIONS = new Set([
   "ico",
   "bmp",
 ]);
-
-// ── 类型 ──────────────────────────────────────────────────────────
-
-export type BrowseResult =
-  | { ok: true; result: ListFilesResult | ReadFileResult }
-  | { ok: false; error: WorkspaceFileCommandError };
 
 // ── 路径安全校验 ───────────────────────────────────────────────────
 

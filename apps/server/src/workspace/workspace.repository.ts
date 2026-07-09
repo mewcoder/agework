@@ -33,7 +33,7 @@ export type WorkspaceCreateInput = {
   isolationScope: string;
   rootPath: string;
   directorySource: string;
-  /** 绑定的 Runtime(builtin 或 registered),必填。 */
+/** 绑定的 Runtime(managed 或 registered)，必填。 */
   runtimeId: string;
 };
 

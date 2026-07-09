@@ -35,7 +35,7 @@ describe("AdminWorkerController", () => {
   });
 
   it("delegates policy and stats to WorkerManagerService", async () => {
-    const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "local" });
+    const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "native" });
     const getWorkerStats = vi.fn().mockResolvedValue({ activeWorkers: 0 });
     const controller = makeController({ getRuntimePolicy, getWorkerStats });
 

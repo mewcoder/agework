@@ -16,7 +16,7 @@ import { resolveApiBasePath } from "../../common/api-path";
  *    @agework/runtime build`,turbo `^build` 会带上)。
  * server 因此不 import @agework/worker,只消费 agework-runtime 这个外部产物。
  */
-function resolveRuntimeEntry(): string {
+export function resolveRuntimeEntry(): string {
   const override = process.env[EnvKey.RUNTIME_LOCAL_ENTRY]?.trim();
   if (override) return override;
 
@@ -48,7 +48,7 @@ export function toRuntimeConfig(configService: ConfigService): RuntimeConfig {
     runtimeLogHostPath: configService.getRuntimeLogDir(),
     serverBaseUrl:
       serverBaseUrlOverride || `http://127.0.0.1:${port}${apiBasePath}`,
-    local: {
+    native: {
       runtimeEntryPath: resolveRuntimeEntry(),
     },
     openSandbox: {

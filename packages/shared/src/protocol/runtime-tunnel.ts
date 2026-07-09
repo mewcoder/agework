@@ -1,6 +1,14 @@
 import type { RpcRequest, RpcResponse } from "./rpc";
 import type { RuntimeSpec } from "./channel";
 import type { RuntimeEnvConfig } from "../api/runtimes";
+import type {
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+} from "../api/workspace-files";
+import type {
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+} from "../api/workspaces";
 
 /**
  * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。
@@ -65,6 +73,7 @@ export type RuntimeLaunchRpcParams = {
  *  RuntimeInstanceRef 去掉 runtimeType(同上,manager 已知自己的类型)。 */
 export type RuntimeInstanceRefRpcParams = {
   ownerId: string;
+  workerId: string;
   runtimeInstanceId: string;
   isolationScope: string;
 };
@@ -78,25 +87,49 @@ export type RuntimeListDirRpcParams = { path?: string };
 /** server → manager：在 path 下新建一个目录（含父级）。 */
 export type RuntimeCreateDirRpcParams = { path: string };
 
+/** server → manager：列出 rootPath 下 relativePath 的文件列表（含文件，非纯目录）。 */
+export type RuntimeListFilesRpcParams = { rootPath: string; path: string };
+
+/** server → manager：读取 rootPath 下 relativePath 的文件内容（文本或图片 base64）。 */
+export type RuntimeReadFileRpcParams = { rootPath: string; path: string };
+
+/** server → manager：列出 rootPath 下相对 HEAD 的累计变更文件（git-only、只读）。 */
+export type RuntimeListChangedFilesRpcParams = { rootPath: string };
+
+/** server → manager：读取 rootPath 下 relativePath 的 before/after diff（git）。 */
+export type RuntimeReadFileDiffRpcParams = { rootPath: string; path: string };
+
 export type RuntimeTunnelRpcRequest =
   | RpcRequest<"runtime.launch", RuntimeLaunchRpcParams>
   | RpcRequest<"runtime.stop", RuntimeInstanceRefRpcParams>
   | RpcRequest<"runtime.destroy", RuntimeInstanceRefRpcParams>
   | RpcRequest<"runtime.detect-env", RuntimeDetectEnvRpcParams>
   | RpcRequest<"runtime.list-dir", RuntimeListDirRpcParams>
-  | RpcRequest<"runtime.create-dir", RuntimeCreateDirRpcParams>;
+  | RpcRequest<"runtime.create-dir", RuntimeCreateDirRpcParams>
+  | RpcRequest<"runtime.list-files", RuntimeListFilesRpcParams>
+  | RpcRequest<"runtime.read-file", RuntimeReadFileRpcParams>
+  | RpcRequest<"runtime.list-changed-files", RuntimeListChangedFilesRpcParams>
+  | RpcRequest<"runtime.read-file-diff", RuntimeReadFileDiffRpcParams>;
 
 export type RuntimeLaunchRpcResult = { runtimeInstanceId: string };
 export type RuntimeDetectEnvRpcResult = { envConfig: RuntimeEnvConfig };
 /** entries 为完整绝对路径(不是裸名字):拼接、排序均由 manager 端做好,server 直接展示。 */
 export type RuntimeListDirRpcResult = { path: string; entries: string[] };
 export type RuntimeCreateDirRpcResult = { path: string };
+export type RuntimeListFilesRpcResult = WorkspaceFileListResponse;
+export type RuntimeReadFileRpcResult = WorkspaceFileReadResponse;
+export type RuntimeListChangedFilesRpcResult = WorkspaceChangedFilesResponse;
+export type RuntimeReadFileDiffRpcResult = WorkspaceFileDiffResponse;
 
 export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeLaunchRpcResult>
   | RpcResponse<RuntimeDetectEnvRpcResult>
   | RpcResponse<RuntimeListDirRpcResult>
   | RpcResponse<RuntimeCreateDirRpcResult>
+  | RpcResponse<RuntimeListFilesRpcResult>
+  | RpcResponse<RuntimeReadFileRpcResult>
+  | RpcResponse<RuntimeListChangedFilesRpcResult>
+  | RpcResponse<RuntimeReadFileDiffRpcResult>
   | RpcResponse<null>;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,

@@ -41,9 +41,7 @@ function makeFakeProvider(type: RuntimeType): RuntimeProvider & {
 
 describe("LocalRuntime", () => {
   let configService: Partial<ConfigService>;
-  let fakeLocal: ReturnType<typeof makeFakeProvider>;
-  let fakeDocker: ReturnType<typeof makeFakeProvider>;
-  let fakeOpenSandbox: ReturnType<typeof makeFakeProvider>;
+  let fakeNative: ReturnType<typeof makeFakeProvider>;
   let runtime: LocalRuntime;
 
   beforeEach(() => {
@@ -57,13 +55,11 @@ describe("LocalRuntime", () => {
         useServerProxy: false,
       }),
     };
-    fakeLocal = makeFakeProvider("local");
-    fakeDocker = makeFakeProvider("docker");
-    fakeOpenSandbox = makeFakeProvider("opensandbox");
+    fakeNative = makeFakeProvider("native");
     fakes.clear();
-    fakes.set("local", fakeLocal);
-    fakes.set("docker", fakeDocker);
-    fakes.set("opensandbox", fakeOpenSandbox);
+    fakes.set("native", fakeNative);
+    fakes.set("docker", makeFakeProvider("docker"));
+    fakes.set("opensandbox", makeFakeProvider("opensandbox"));
     runtime = new LocalRuntime(configService as ConfigService);
   });
 
@@ -79,34 +75,31 @@ describe("LocalRuntime", () => {
   const ref = (runtimeType: RuntimeType): RuntimeInstanceRef => ({
     runtimeType,
     ownerId: "owner-1",
+    workerId: "worker-1",
     runtimeInstanceId: "instance-1",
     isolationScope: "user",
   });
 
-  it("start dispatches to the docker provider", async () => {
-    await expect(runtime.start(ctx("docker"))).resolves.toEqual({
-      runtimeInstanceId: "docker-instance",
+  it("start always dispatches to the native provider, regardless of ctx.runtimeType", async () => {
+    await expect(runtime.start(ctx("native"))).resolves.toEqual({
+      runtimeInstanceId: "native-instance",
     });
-    expect(fakeDocker.start).toHaveBeenCalledOnce();
-    expect(fakeLocal.start).not.toHaveBeenCalled();
-    expect(fakeOpenSandbox.start).not.toHaveBeenCalled();
+    expect(fakeNative.start).toHaveBeenCalledOnce();
   });
 
-  it("forwards the onExit hook through to the provider", async () => {
+  it("forwards the onExit hook through to the native provider", async () => {
     const onExit = vi.fn();
-    await runtime.start(ctx("local"), onExit);
-    expect(fakeLocal.start).toHaveBeenCalledWith(ctx("local"), onExit);
+    await runtime.start(ctx("native"), onExit);
+    expect(fakeNative.start).toHaveBeenCalledWith(ctx("native"), onExit);
   });
 
-  it("stop dispatches to the provider matching runtimeType", async () => {
-    await runtime.stop(ref("docker"));
-    expect(fakeDocker.stop).toHaveBeenCalledOnce();
-    expect(fakeLocal.stop).not.toHaveBeenCalled();
+  it("stop always dispatches to the native provider", async () => {
+    await runtime.stop(ref("native"));
+    expect(fakeNative.stop).toHaveBeenCalledOnce();
   });
 
-  it("destroy dispatches to the provider matching runtimeType", async () => {
-    await runtime.destroy(ref("opensandbox"));
-    expect(fakeOpenSandbox.destroy).toHaveBeenCalledOnce();
-    expect(fakeDocker.destroy).not.toHaveBeenCalled();
+  it("destroy always dispatches to the native provider", async () => {
+    await runtime.destroy(ref("native"));
+    expect(fakeNative.destroy).toHaveBeenCalledOnce();
   });
 });

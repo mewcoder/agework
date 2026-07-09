@@ -1,4 +1,4 @@
-import type { FileEntry } from "../protocol/workspace-file-command";
+import type { FileEntry } from "../filesystem/types";
 
 export type WorkspaceFileListResponse = {
   path: string;

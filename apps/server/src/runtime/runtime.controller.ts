@@ -16,7 +16,7 @@ import { CreateRuntimeDirectoryDto } from "./dto/create-runtime-directory.dto";
 export class RuntimeController {
   constructor(private readonly runtimeService: RuntimeService) {}
 
-  /** 所有用户:列出自己可见的 Runtime(自己的 Registered + 全局 builtin)。 */
+  /** 所有用户:列出自己可见的 Runtime(自己的 Registered + 全局 managed)。 */
   @Get("list")
   list(@CurrentUser() user: JwtUser) {
     return this.runtimeService.list(user.userId);

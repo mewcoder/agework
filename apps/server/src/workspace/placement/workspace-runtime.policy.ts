@@ -19,8 +19,8 @@ export class WorkspaceRuntimePolicy {
     const runtimeType = this.config.getDefaultRuntimeType();
     const isolationScope = this.config.getDefaultIsolationScope();
     const canSelectLocalDirectory =
-      allowedRuntimeTypes.includes("local") ||
-      (allowedRuntimeTypes.some((type) => type !== "local") &&
+      allowedRuntimeTypes.includes("native") ||
+      (allowedRuntimeTypes.some((type) => type !== "native") &&
         allowedIsolationScopes.includes("workspace"));
     return {
       canSelectLocalDirectory,
@@ -70,7 +70,7 @@ export class WorkspaceRuntimePolicy {
     runtimeType: RuntimeType,
     isolationScope: IsolationScope | null
   ) {
-    return runtimeType === "local" || isolationScope === "workspace";
+    return runtimeType === "native" || isolationScope === "workspace";
   }
 
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {
@@ -89,7 +89,7 @@ export class WorkspaceRuntimePolicy {
     hasCustomRootPath: boolean
   ): IsolationScope | null {
     const value = isolationScope?.trim();
-    if (runtimeType === "local") {
+    if (runtimeType === "native") {
       if (value) {
         throw new BadRequestException("本地工作空间不能设置 isolationScope");
       }

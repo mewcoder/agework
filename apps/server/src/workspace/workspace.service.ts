@@ -8,10 +8,6 @@ import {
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { generateId } from "@agework/shared";
-import type {
-  WorkspaceFileCommandPayload,
-  WorkspaceFileCommandResult,
-} from "@agework/shared/protocol";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { WorkspaceRepository } from "./workspace.repository";
 import type { WorkspaceRunContext } from "./workspace.types";
@@ -170,7 +166,7 @@ export class WorkspaceService {
     }
   }
 
-  // ── 文件预览(ADR-0005: builtin 直读, registered 走 worker 代理) ──
+  // ── 文件预览(managed native 直读, docker/opensandbox/registered 隧道 RPC) ──
 
   /** 列出一层目录(根目录时 path 为空串)。 */
   async listFiles(
@@ -179,32 +175,11 @@ export class WorkspaceService {
     path: string
   ): Promise<WorkspaceFileListResponse> {
     const ctx = await this.resolveFileContext(userId, workspaceId);
-
-    // builtin runtime: server 本机直读,不经 worker(ADR-0005)
-    if (ctx.runtimeSource === "builtin") {
-      return this.runtimeService.listFiles(ctx.workspaceRootPath, path ?? "");
-    }
-
-    // registered runtime: worker 代理读(现有逻辑)
-    const result = await this.executeFileCommand(ctx, userId, workspaceId, {
-      type: "list_files",
-      commandId: generateId(),
-      path: path ?? "",
-    });
-
-    if ("error" in result) {
-      throw new BadRequestException(result.error);
-    }
-
-    const listResult = result as Extract<
-      WorkspaceFileCommandResult,
-      { type: "list_files"; list: unknown }
-    >;
-    return {
-      path: listResult.path,
-      list: listResult.list,
-      truncated: listResult.truncated,
-    };
+    return this.runtimeService.listFiles(
+      ctx.runtimeId,
+      ctx.workspaceRootPath,
+      path ?? ""
+    );
   }
 
   /** 读取文件内容(文本或图片 base64)。 */
@@ -216,52 +191,29 @@ export class WorkspaceService {
     if (!path) {
       throw new BadRequestException("path is required");
     }
-
     const ctx = await this.resolveFileContext(userId, workspaceId);
-
-    // builtin runtime: server 本机直读,不经 worker(ADR-0005)
-    if (ctx.runtimeSource === "builtin") {
-      return this.runtimeService.readFile(ctx.workspaceRootPath, path);
-    }
-
-    // registered runtime: worker 代理读(现有逻辑)
-    const result = await this.executeFileCommand(ctx, userId, workspaceId, {
-      type: "read_file",
-      commandId: generateId(),
-      path,
-    });
-
-    if ("error" in result) {
-      throw new BadRequestException(result.error);
-    }
-
-    const readResult = result as Extract<
-      WorkspaceFileCommandResult,
-      { type: "read_file"; encoding: "utf8" | "base64" }
-    >;
-    return {
-      path: readResult.path,
-      encoding: readResult.encoding,
-      content: readResult.content,
-      size: readResult.size,
-      truncated: readResult.truncated,
-    };
+    return this.runtimeService.readFile(
+      ctx.runtimeId,
+      ctx.workspaceRootPath,
+      path
+    );
   }
 
-  // ── 变更查看(diff,只读,本次仅支持 builtin local runtime) ──
+  // ── 变更查看(diff,只读) ──
 
   /**
-   * 列出工作空间相对 HEAD 的累计变更(git-only、只读)。本次仅支持 builtin local
-   * runtime:server 就是文件 owner,直接在本机目录跑 git,无 ownership 问题。
-   * docker/sandbox/registered 一律网关挡掉,返回「暂不支持」。
+   * 列出工作空间相对 HEAD 的累计变更(git-only、只读)。managed native 直跑 git;
+   * docker/opensandbox/registered 经隧道 RPC 调 runtime 进程。
    */
   async listChangedFiles(
     userId: string,
     workspaceId: string
   ): Promise<WorkspaceChangedFilesResponse> {
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    this.assertLocalChangeViewSupported(ctx);
-    return this.runtimeService.listChangedFiles(ctx.workspaceRootPath);
+    return this.runtimeService.listChangedFiles(
+      ctx.runtimeId,
+      ctx.workspaceRootPath
+    );
   }
 
   /** 读取单文件的 before(HEAD)/after(当前)对比。约束同 listChangedFiles。 */
@@ -274,23 +226,15 @@ export class WorkspaceService {
       throw new BadRequestException("path is required");
     }
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    this.assertLocalChangeViewSupported(ctx);
-    return this.runtimeService.readFileDiff(ctx.workspaceRootPath, path);
+    return this.runtimeService.readFileDiff(
+      ctx.runtimeId,
+      ctx.workspaceRootPath,
+      path
+    );
   }
 
   /**
-   * 网关:只有 builtin(本机 in-process)local runtime 的工作空间才由 server
-   * 直读 git。registered local 的目录在远程机器上、docker/sandbox 有容器边界,
-   * 本次都不支持。
-   */
-  private assertLocalChangeViewSupported(ctx: WorkspaceRunContext): void {
-    if (ctx.runtimeType !== "local" || ctx.runtimeSource !== "builtin") {
-      throw new BadRequestException("当前仅支持本地运行时的变更查看");
-    }
-  }
-
-  /**
-   * 属主校验 + 解析运行上下文。builtin 和 registered 分支共用。
+   * 属主校验 + 解析运行上下文。managed 和 registered 分支共用。
    */
   private async resolveFileContext(
     userId: string,
@@ -301,52 +245,6 @@ export class WorkspaceService {
       throw new NotFoundException(`Workspace ${workspaceId} not found`);
     }
     return this.getRunContext(workspaceId);
-  }
-
-  /**
-   * [registered 分支] 下发文件命令 → 等待 worker 回传结果(10s 超时)。
-   *
-   * 确保 worker 在线(离线则自动拉起) → 委派。
-   * 超时/出错分支显式清理 Store 里的 pending 条目(见 ADR-0004)。
-   */
-  private async executeFileCommand(
-    ctx: WorkspaceRunContext,
-    userId: string,
-    workspaceId: string,
-    payload: WorkspaceFileCommandPayload
-  ): Promise<WorkspaceFileCommandResult> {
-    // 确保 worker 在线(已在线直接返回,离线则自动拉起)
-    const ownerId = await this.workerManager.ensureWorkerForFilePreview({
-      workspaceId,
-      userId,
-      username: ctx.username,
-      rootPath: ctx.workspaceRootPath,
-      runtimeType: ctx.runtimeType as import("@agework/providers").RuntimeType,
-      isolationScope: ctx.isolationScope,
-      runtimeId: ctx.runtimeId,
-    });
-
-    // 下发命令
-    this.workerManager.sendFileCommand(ownerId, payload);
-
-    // 等待结果(10s 超时)
-    try {
-      return await withTimeout(
-        this.workerManager.waitForFileCommandResult(payload.commandId),
-        10_000,
-        "文件预览请求超时"
-      );
-    } catch (err) {
-      // 超时/出错分支显式清理 pending 条目
-      this.workerManager.cancelFileCommand(
-        payload.commandId,
-        err instanceof Error ? err.message : String(err)
-      );
-      if (err instanceof Error && err.message.includes("超时")) {
-        throw new ServiceUnavailableException(err.message);
-      }
-      throw err;
-    }
   }
 
   /**
@@ -377,13 +275,13 @@ export class WorkspaceService {
         requestedRuntimeId,
         hasCustomRootPath: Boolean(requestedRootPath?.trim()),
       });
-    // local 没有隔离概念,isolationScope 解析结果是 null;Workspace.isolationScope
+    // native 没有隔离概念,isolationScope 解析结果是 null;Workspace.isolationScope
     // 列必填,用 "workspace" 占位(与 Worker 侧同一约定,见 worker.provisioner.ts
     // 的 identity())。
     const storedIsolationScope = isolationScope ?? "workspace";
     const id = generateId();
     // directoryHandler 用 targetRuntimeId 是否有值判断"目录在远程机器上,不碰本机
-    // 文件系统"——builtin runtimeId 现在也总是有值,但 builtin 就是 Managed(本机),
+    // 文件系统"——managed runtimeId 现在也总是有值,但 managed 就是 Managed(本机),
     // 目录仍要走本机 fs 校验/创建,只有 registered 才传给它。
     const remoteRuntimeId = this.runtimeService.isManaged(targetRuntimeId)
       ? undefined
@@ -422,7 +320,7 @@ export class WorkspaceService {
   /**
    * 解析 placement:Registered(传了 runtimeId)分支复用 resolveRegisteredPlacement;
    * Managed 分支按部署策略解析 runtimeType/isolationScope 后,落到该 runtimeType
-   * 对应的 builtin Runtime id。
+   * 对应的 managed Runtime id。
    */
   private async resolvePlacement(input: {
     userId: string;
@@ -451,7 +349,7 @@ export class WorkspaceService {
     return {
       runtimeType,
       isolationScope,
-      targetRuntimeId: this.runtimeService.getBuiltinRuntimeId(runtimeType),
+      targetRuntimeId: this.runtimeService.getManagedRuntimeId(runtimeType),
     };
   }
 
@@ -481,7 +379,7 @@ export class WorkspaceService {
       throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
     }
     const runtimeType = registeredRuntime.runtimeType as RuntimeType;
-    if (runtimeType === "local") {
+    if (runtimeType === "native") {
       if (requestedIsolationScope) {
         throw new BadRequestException("本地运行环境不能设置 isolationScope");
       }
@@ -580,7 +478,7 @@ export class WorkspaceService {
     const runtimeType =
       runtime.runtimeType ?? this.runtimePolicy.defaultRuntimeType();
     const workspaceIsolationScope =
-      runtimeType !== "local"
+      runtimeType !== "native"
         ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)
         : null;
     return {

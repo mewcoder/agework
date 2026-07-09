@@ -80,7 +80,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       meta: { headerClassName: "pl-4", cellClassName: "pl-4" },
       cell: ({ row }) => (
         <DataTableBadge variant="outline">
-          {row.original.runtimeType === "local"
+          {row.original.runtimeType === "native"
             ? "host"
             : row.original.isolationScope}
         </DataTableBadge>

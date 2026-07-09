@@ -3,7 +3,7 @@ import { Test } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import {
-  WORKER_OWNER_ID_HEADER,
+  WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
 import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
@@ -49,8 +49,8 @@ describe("WorkerRunController", () => {
 // 上面的用例直接手搓 controller 实例调用方法,完全绕过了 Nest 的 guard 执行管道
 // (方法级 @UseGuards(WorkerTokenGuard) 不会跑)。下面起一个真正的 Nest app 通过
 // HTTP 打 getRunConfig/postEvent,证明装饰器确实接线到了这两个方法上。这两个
-// 端点 URL 里没有 ownerId,鉴权全靠 WorkerTokenGuard 退回读
-// x-agework-owner-id header —— 这条路径手搓 controller 调用测不到。
+// 端点 URL 里没有 workerId,鉴权全靠 WorkerTokenGuard 退回读
+// x-agework-worker-id header —— 这条路径手搓 controller 调用测不到。
 describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
   let app: INestApplication | undefined;
 
@@ -60,7 +60,7 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
   });
 
   async function startApp(registry: {
-    findActiveByOwnerId: ReturnType<typeof vi.fn>;
+    findActiveByWorkerId: ReturnType<typeof vi.fn>;
   }) {
     const workerManager = {
       getRunConfig: vi.fn().mockReturnValue({ config: { runId: "run-1" } }),
@@ -82,26 +82,26 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
     return { baseUrl, workerManager };
   }
 
-  it("getRunConfig reaches the controller when the owner-id header token matches", async () => {
+  it("getRunConfig reaches the controller when the worker-id header token matches", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const { baseUrl, workerManager } = await startApp(registry);
 
     const res = await fetch(`${baseUrl}/worker/runs/run-1`, {
       headers: {
-        [WORKER_OWNER_ID_HEADER]: "owner-1",
+        [WORKER_ID_HEADER]: "worker-1",
         [WORKER_TOKEN_HEADER]: "token-1",
       },
     });
 
     expect(res.status).toBe(200);
-    expect(registry.findActiveByOwnerId).toHaveBeenCalledWith("owner-1");
+    expect(registry.findActiveByWorkerId).toHaveBeenCalledWith("worker-1");
     expect(workerManager.getRunConfig).toHaveBeenCalledWith("run-1");
   });
 
-  it("getRunConfig returns 410 and never reaches the controller without the owner-id header", async () => {
-    const registry = { findActiveByOwnerId: vi.fn() };
+  it("getRunConfig returns 410 and never reaches the controller without the worker-id header", async () => {
+    const registry = { findActiveByWorkerId: vi.fn() };
     const { baseUrl, workerManager } = await startApp(registry);
 
     const res = await fetch(`${baseUrl}/worker/runs/run-1`, {
@@ -114,7 +114,7 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
 
   it("postEvent returns 410 and never reaches the controller when the token mismatches", async () => {
     const registry = {
-      findActiveByOwnerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
     };
     const { baseUrl, workerManager } = await startApp(registry);
 
@@ -122,7 +122,7 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        [WORKER_OWNER_ID_HEADER]: "owner-1",
+        [WORKER_ID_HEADER]: "worker-1",
         [WORKER_TOKEN_HEADER]: "wrong-token",
       },
       body: JSON.stringify({ jsonrpc: "2.0", method: "run.aguiEvent" }),

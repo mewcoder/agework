@@ -19,7 +19,7 @@ export type RuntimeRow = {
   removedAt: Date | null;
 };
 
-/** Runtime 表(builtin + Registered 部署实例)的数据访问唯一入口。tokenHash 只进不出:
+/** Runtime 表(managed + Registered 部署实例)的数据访问唯一入口。tokenHash 只进不出:
  *  按 hash 反查用于隧道鉴权,select 默认挡住该列。 */
 @Injectable()
 export class RuntimeRepository {
@@ -56,26 +56,29 @@ export class RuntimeRepository {
     });
   }
 
-  /** builtin 行启动时 upsert:id 固定,by-id 幂等落 runtimeType/capabilities/online。 */
-  upsertBuiltin(input: {
+  /** managed 行启动时 upsert:id 固定,by-id 幂等落 runtimeType/capabilities/online。
+   *  tokenHash:native 传 null(留进程内,不经隧道);docker/opensandbox 传 sha256(managed token)
+   *  供隧道鉴权。每次 server 启动重新生成 token 并覆盖 tokenHash(旧进程已死,旧 token 自然失效)。 */
+  upsertManaged(input: {
     id: string;
     name: string;
     runtimeType: string;
     capabilities: RuntimeCapabilities;
+    tokenHash: string | null;
   }): Promise<RuntimeRow> {
     const shared = {
       runtimeType: input.runtimeType,
       capabilities: input.capabilities,
       status: "online",
+      tokenHash: input.tokenHash,
     };
     return this.prisma.runtime.upsert({
       where: { id: input.id },
       create: {
         id: input.id,
         name: input.name,
-        source: "builtin",
+        source: "managed",
         ownerId: null,
-        tokenHash: null,
         ...shared,
       },
       update: shared,
@@ -83,7 +86,7 @@ export class RuntimeRepository {
     });
   }
 
-  /** 我的（含未注销）+ 全局 builtin 行，供"我的运行环境"列表展示。 */
+  /** 我的（含未注销）+ 全局 managed 行，供"我的运行环境"列表展示。 */
   listVisibleToOwner(ownerId: string): Promise<RuntimeRow[]> {
     return this.prisma.runtime.findMany({
       where: { OR: [{ ownerId }, { ownerId: null }] },
@@ -92,7 +95,7 @@ export class RuntimeRepository {
     });
   }
 
-  /** admin: 列出全部 Runtime 行（builtin + 所有用户的 registered），不含已注销。 */
+  /** admin: 列出全部 Runtime 行（managed + 所有用户的 registered），不含已注销。 */
   listAll(): Promise<RuntimeRow[]> {
     return this.prisma.runtime.findMany({
       where: { removedAt: null },
@@ -117,7 +120,7 @@ export class RuntimeRepository {
   }
 
   /**
-   * 按可见性查询单条：属于该 owner，或是全局 builtin 行；不存在/不可见/已注销时返回 null
+   * 按可见性查询单条：属于该 owner，或是全局 managed 行；不存在/不可见/已注销时返回 null
    * (供上层收敛为 404)。供 workspace 创建时校验目标 Runtime。
    */
   findVisibleToOwner(ownerId: string, id: string): Promise<RuntimeRow | null> {
@@ -128,7 +131,7 @@ export class RuntimeRepository {
   }
 
   /**
-   * 注销（软删除）：只能注销属于该 owner 的行（builtin 行 ownerId=null，天然不会匹配
+   * 注销（软删除）：只能注销属于该 owner 的行（managed 行 ownerId=null，天然不会匹配
    * 任何真实 userId，无需额外判断）。name 打散腾出原名，行本身永久保留。
    * 返回是否真的注销了(false = 不存在/不属于该 owner/已经注销过)。
    */

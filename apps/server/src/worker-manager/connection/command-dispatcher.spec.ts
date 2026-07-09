@@ -14,8 +14,8 @@ function makeRunConfig(): RunConfig {
 function makeService() {
   const configStore = { register: vi.fn(), unregister: vi.fn() };
   const commandQueue = {
-    pushByOwnerId: vi.fn(),
-    cleanupByOwnerId: vi.fn(),
+    pushByWorkerId: vi.fn(),
+    cleanupByWorkerId: vi.fn(),
   };
   const service = new WorkerCommandDispatcher(
     configStore as never,
@@ -30,38 +30,38 @@ describe("WorkerCommandDispatcher", () => {
 
     service.openSession({
       runId: "run-1",
-      ownerId: "owner-1",
+      workerId: "worker-1",
       runConfig: makeRunConfig(),
     });
 
     expect(configStore.register).toHaveBeenCalledWith("run-1", makeRunConfig());
     // 首个 user_message 由 run 侧 RunDriver 显式下发，openSession 不再代发。
-    expect(commandQueue.pushByOwnerId).not.toHaveBeenCalled();
+    expect(commandQueue.pushByWorkerId).not.toHaveBeenCalled();
   });
 
   it("increments command sequence per owner", () => {
     const { service, commandQueue } = makeService();
 
-    service.sendCommand("owner-1", "run-1", {
+    service.sendCommand("worker-1", "run-1", {
       type: "user_message",
       commandId: "command-1",
       runId: "run-1",
     });
-    service.sendCommand("owner-1", "run-1", {
+    service.sendCommand("worker-1", "run-1", {
       type: "cancel",
       commandId: "command-2",
       runId: "run-1",
       conversationId: "conversation-1",
     });
 
-    expect(commandQueue.pushByOwnerId).toHaveBeenNthCalledWith(
+    expect(commandQueue.pushByWorkerId).toHaveBeenNthCalledWith(
       1,
-      "owner-1",
+      "worker-1",
       expect.objectContaining({ runId: "run-1", seq: 1 })
     );
-    expect(commandQueue.pushByOwnerId).toHaveBeenNthCalledWith(
+    expect(commandQueue.pushByWorkerId).toHaveBeenNthCalledWith(
       2,
-      "owner-1",
+      "worker-1",
       expect.objectContaining({
         runId: "run-1",
         seq: 2,
@@ -74,9 +74,9 @@ describe("WorkerCommandDispatcher", () => {
     const { service, configStore, commandQueue } = makeService();
 
     service.cleanupRun("run-1");
-    service.cleanupByOwnerId("owner-1");
+    service.cleanupByWorkerId("worker-1");
 
     expect(configStore.unregister).toHaveBeenCalledWith("run-1");
-    expect(commandQueue.cleanupByOwnerId).toHaveBeenCalledWith("owner-1");
+    expect(commandQueue.cleanupByWorkerId).toHaveBeenCalledWith("worker-1");
   });
 });

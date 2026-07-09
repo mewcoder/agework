@@ -113,26 +113,26 @@ describe("WorkerRegistryRepository", () => {
       ownerId: "ws-1",
     };
 
-    it("creates a new Worker row when none exists for the owner", async () => {
-      const findUnique = vi.fn().mockResolvedValue(null);
-      const create = vi.fn().mockResolvedValue({ id: "new-id" });
+    it("updates the Worker row by workerId and upserts the workspace binding", async () => {
+      const update = vi.fn().mockResolvedValue({ id: "worker-1" });
       const upsert = vi.fn().mockResolvedValue({ id: "binding-id" });
       const prismaMock = makePrismaWithTransaction(
-        { findUnique, create, update: vi.fn() },
+        { findUnique: vi.fn(), create: vi.fn(), update },
         { upsert }
       );
       repository = new WorkerRegistryRepository(prismaMock as any);
 
       const result = await repository.upsertRunning(
         upsertInput,
+        "worker-1",
         "inst-1",
         "http",
         "rt-1"
       );
 
-      expect(findUnique).toHaveBeenCalledWith({ where: { ownerId: "ws-1" } });
-      expect(create).toHaveBeenCalledWith(
+      expect(update).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id: "worker-1" },
           data: expect.objectContaining({
             runtimeType: "sandbox",
             isolationScope: "workspace",
@@ -144,29 +144,12 @@ describe("WorkerRegistryRepository", () => {
           }),
         })
       );
-      expect(result.resource).toEqual({ id: "new-id" });
-    });
-
-    it("updates the existing row instead of creating a new one when the owner already has one", async () => {
-      const findUnique = vi.fn().mockResolvedValue({
-        id: "existing-id",
-        metadata: {},
-      });
-      const create = vi.fn();
-      const update = vi.fn().mockResolvedValue({ id: "existing-id" });
-      const upsert = vi.fn().mockResolvedValue({ id: "binding-id" });
-      const prismaMock = makePrismaWithTransaction(
-        { findUnique, create, update },
-        { upsert }
+      expect(upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { workspaceId: "ws-1" },
+        })
       );
-      repository = new WorkerRegistryRepository(prismaMock as any);
-
-      await repository.upsertRunning(upsertInput, "inst-2", "http", "rt-1");
-
-      expect(create).not.toHaveBeenCalled();
-      expect(update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: "existing-id" } })
-      );
+      expect(result.resource).toEqual({ id: "worker-1" });
     });
   });
 
@@ -244,9 +227,9 @@ describe("WorkerRegistryRepository", () => {
   });
 
   describe("insertStarting", () => {
-    it("creates a starting row and returns ok:true when no active row exists for the owner", async () => {
+    it("creates a starting row and returns ok:true with workerId when no active row exists for the owner", async () => {
       const prismaMocks = makePrismaMock();
-      prismaMocks.worker.create.mockResolvedValue({ id: "rr-1" });
+      prismaMocks.worker.create.mockResolvedValue({ id: "worker-1" });
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
       const result = await repository.insertStarting(
@@ -256,16 +239,18 @@ describe("WorkerRegistryRepository", () => {
           workspaceId: "ws-1",
           ownerId: "ws-1",
         },
+        "worker-1",
         "placeholder-1",
         "http",
         "token-1",
         "rt-1"
       );
 
-      expect(result).toEqual({ ok: true });
+      expect(result).toEqual({ ok: true, workerId: "worker-1" });
       expect(prismaMocks.worker.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
+            id: "worker-1",
             runtimeType: "sandbox",
             isolationScope: "workspace",
             ownerId: "ws-1",
@@ -283,6 +268,7 @@ describe("WorkerRegistryRepository", () => {
       const prismaMocks = makePrismaMock();
       prismaMocks.worker.create.mockRejectedValue({ code: "P2002" });
       prismaMocks.worker.findUnique.mockResolvedValue({
+        id: "existing-worker-id",
         instanceId: "docker-resource-1",
         status: "running",
       });
@@ -295,6 +281,7 @@ describe("WorkerRegistryRepository", () => {
           workspaceId: "ws-1",
           ownerId: "ws-1",
         },
+        "worker-2",
         "placeholder-2",
         "http",
         "token-2",
@@ -303,10 +290,20 @@ describe("WorkerRegistryRepository", () => {
 
       expect(result).toEqual({
         ok: false,
-        existing: { runtimeInstanceId: "docker-resource-1", status: "running" },
+        existing: {
+          workerId: "existing-worker-id",
+          runtimeInstanceId: "docker-resource-1",
+          status: "running",
+        },
       });
       expect(prismaMocks.worker.findUnique).toHaveBeenCalledWith({
-        where: { ownerId: "ws-1" },
+        where: {
+          ownerId_runtimeId_isolationScope: {
+            ownerId: "ws-1",
+            runtimeId: "rt-1",
+            isolationScope: "workspace",
+          },
+        },
       });
     });
 
@@ -325,6 +322,7 @@ describe("WorkerRegistryRepository", () => {
             workspaceId: "ws-1",
             ownerId: "ws-1",
           },
+          "worker-3",
           "placeholder-3",
           "http",
           "token-3",
@@ -347,6 +345,7 @@ describe("WorkerRegistryRepository", () => {
             workspaceId: "ws-1",
             ownerId: "ws-1",
           },
+          "worker-4",
           "placeholder-4",
           "http",
           "token-4",
@@ -371,9 +370,10 @@ describe("WorkerRegistryRepository", () => {
     });
   });
 
-  describe("findActiveByOwnerId", () => {
-    it("returns the startToken, runtimeType, instanceId, isolationScope, ownerId and runtimeId when the owner has an active row", async () => {
+  describe("findActiveByWorkerId", () => {
+    it("returns the id, startToken, runtimeType, instanceId, isolationScope, ownerId and runtimeId when the worker has an active row", async () => {
       prisma.worker.findUnique.mockResolvedValue({
+        id: "worker-1",
         startToken: "token-starting",
         runtimeType: "sandbox",
         instanceId: "inst-1",
@@ -382,11 +382,12 @@ describe("WorkerRegistryRepository", () => {
         runtimeId: "rt-1",
       });
 
-      const result = await repository.findActiveByOwnerId("owner-1");
+      const result = await repository.findActiveByWorkerId("worker-1");
 
       expect(prisma.worker.findUnique).toHaveBeenCalledWith({
-        where: { ownerId: "owner-1" },
+        where: { id: "worker-1" },
         select: {
+          id: true,
           startToken: true,
           runtimeType: true,
           instanceId: true,
@@ -396,6 +397,7 @@ describe("WorkerRegistryRepository", () => {
         },
       });
       expect(result).toEqual({
+        id: "worker-1",
         startToken: "token-starting",
         runtimeType: "sandbox",
         instanceId: "inst-1",
@@ -405,10 +407,10 @@ describe("WorkerRegistryRepository", () => {
       });
     });
 
-    it("returns null when the owner has no active row", async () => {
+    it("returns null when the worker has no active row", async () => {
       prisma.worker.findUnique.mockResolvedValue(null);
 
-      const result = await repository.findActiveByOwnerId("owner-3");
+      const result = await repository.findActiveByWorkerId("worker-3");
 
       expect(result).toBeNull();
     });
@@ -420,7 +422,7 @@ describe("WorkerRegistryRepository", () => {
       prismaMocks.worker.findMany.mockResolvedValue([
         {
           id: "rr-1",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-1",
           instanceId: "4242:token",
@@ -428,15 +430,15 @@ describe("WorkerRegistryRepository", () => {
       ]);
       const repository = new WorkerRegistryRepository(prismaMocks as never);
 
-      const result = await repository.findRunningByRuntimeType("local");
+      const result = await repository.findRunningByRuntimeType("native");
 
       expect(prismaMocks.worker.findMany).toHaveBeenCalledWith({
-        where: { runtimeType: "local", status: "running" },
+        where: { runtimeType: "native", status: "running" },
       });
       expect(result).toEqual([
         {
           id: "rr-1",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-1",
           instanceId: "4242:token",
@@ -480,11 +482,10 @@ describe("WorkerRegistryRepository", () => {
   });
 });
 
-// ownerId uniqueness is a real SQLite constraint (see schema.prisma
-// Worker.ownerId @unique) — mocking prisma calls can't exercise it, so this
-// suite runs against a real, disposable SQLite database pushed from the
-// current schema.
-describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => {
+// Worker 的复合唯一约束 (ownerId, runtimeId, isolationScope) 是真实 SQLite 约束
+// (见 schema.prisma @@unique([ownerId, runtimeId, isolationScope]))——mocking prisma
+// calls 无法验证,因此这个 suite 使用真实 SQLite 数据库。
+describe("WorkerRegistryRepository — composite unique key (real sqlite)", () => {
   const serverRoot = path.resolve(__dirname, "../../..");
   let tmpDir: string;
   let prisma: InstanceType<typeof PrismaClient>;
@@ -496,7 +497,8 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
     workspaceId: "ws-real-1",
     ownerId: "owner-real-1",
   };
-  const targetRuntimeId = "builtin-docker";
+  const targetRuntimeId = "managed-docker";
+  const secondRuntimeId = "managed-native";
 
   beforeAll(async () => {
     tmpDir = mkdtempSync(path.join(tmpdir(), "worker-registry-repo-test-"));
@@ -524,8 +526,16 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
       data: {
         id: targetRuntimeId,
         name: targetRuntimeId,
-        source: "builtin",
+        source: "managed",
         runtimeType: "docker",
+      },
+    });
+    await prisma.runtime.create({
+      data: {
+        id: secondRuntimeId,
+        name: secondRuntimeId,
+        source: "managed",
+        runtimeType: "native",
       },
     });
     await prisma.workspace.create({
@@ -548,18 +558,20 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
     await prisma.worker.deleteMany({});
   });
 
-  it("rejects a concurrent insertStarting for the same owner instead of inserting a duplicate row", async () => {
+  it("rejects a concurrent insertStarting for the same (owner, runtime, scope) instead of inserting a duplicate row", async () => {
     const first = await repository.insertStarting(
       baseInput,
+      "worker-real-1",
       "inst-real-1",
       "http",
       "token-real-1",
       targetRuntimeId
     );
-    expect(first).toEqual({ ok: true });
+    expect(first).toEqual({ ok: true, workerId: "worker-real-1" });
 
     const second = await repository.insertStarting(
       baseInput,
+      "worker-real-2",
       "inst-real-2",
       "http",
       "token-real-2",
@@ -568,6 +580,7 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
     expect(second.ok).toBe(false);
     if (!second.ok) {
       expect(second.existing).toEqual({
+        workerId: "worker-real-1",
         runtimeInstanceId: "inst-real-1",
         status: "starting",
       });
@@ -579,9 +592,10 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
     expect(rows).toHaveLength(1);
   });
 
-  it("allows a new insertStarting once the owner's previous row is physically removed on stop", async () => {
+  it("allows a new insertStarting once the (owner, runtime, scope)'s previous row is physically removed on stop", async () => {
     await repository.insertStarting(
       baseInput,
+      "worker-real-3",
       "inst-real-3",
       "http",
       "token-real-3",
@@ -600,13 +614,14 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
 
     const result = await repository.insertStarting(
       baseInput,
+      "worker-real-4",
       "inst-real-4",
       "http",
       "token-real-4",
       targetRuntimeId
     );
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, workerId: "worker-real-4" });
     const rows = await prisma.worker.findMany({
       where: { ownerId: baseInput.ownerId },
     });
@@ -614,9 +629,18 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
     expect(rows[0].status).toBe("starting");
   });
 
-  it("upsertRunning stores ownerId uniquely, blocking a concurrent insertStarting", async () => {
+  it("upsertRunning stores (owner, runtime, scope) uniquely, blocking a concurrent insertStarting", async () => {
+    await repository.insertStarting(
+      baseInput,
+      "worker-real-5",
+      "inst-real-5",
+      "http",
+      "token-real-5",
+      targetRuntimeId
+    );
     await repository.upsertRunning(
       baseInput,
+      "worker-real-5",
       "inst-real-5",
       "http",
       targetRuntimeId
@@ -629,11 +653,39 @@ describe("WorkerRegistryRepository — ownerId uniqueness (real sqlite)", () => 
 
     const conflict = await repository.insertStarting(
       baseInput,
+      "worker-real-6",
       "inst-real-6",
       "http",
       "token-real-6",
       targetRuntimeId
     );
     expect(conflict.ok).toBe(false);
+  });
+
+  it("allows the same owner to have parallel workers on different runtimes", async () => {
+    const first = await repository.insertStarting(
+      baseInput,
+      "worker-docker",
+      "inst-docker",
+      "http",
+      "token-docker",
+      targetRuntimeId
+    );
+    expect(first).toEqual({ ok: true, workerId: "worker-docker" });
+
+    const second = await repository.insertStarting(
+      { ...baseInput, workspaceId: "ws-real-2" },
+      "worker-native",
+      "inst-native",
+      "http",
+      "token-native",
+      secondRuntimeId
+    );
+    expect(second).toEqual({ ok: true, workerId: "worker-native" });
+
+    const rows = await prisma.worker.findMany({
+      where: { ownerId: baseInput.ownerId },
+    });
+    expect(rows).toHaveLength(2);
   });
 });

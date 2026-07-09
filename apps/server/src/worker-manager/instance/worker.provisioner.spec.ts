@@ -9,7 +9,7 @@ function deps() {
       destroy: vi.fn().mockResolvedValue(undefined),
     },
     registry: {
-      insertStarting: vi.fn().mockResolvedValue({ ok: true }),
+      insertStarting: vi.fn().mockResolvedValue({ ok: true, workerId: "worker-1" }),
       upsertRunning: vi.fn().mockResolvedValue(undefined),
       markErrorByOwner: vi.fn().mockResolvedValue(undefined),
       markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
@@ -19,7 +19,7 @@ function deps() {
       waitForRegister: vi.fn().mockResolvedValue({ pid: 1, registeredAt: "t" }),
       cancel: vi.fn(),
     },
-    dispatcher: { cleanupByOwnerId: vi.fn() },
+    dispatcher: { cleanupByWorkerId: vi.fn() },
     config: { getLaunchTimeoutSeconds: () => 30 },
   };
 }
@@ -28,7 +28,7 @@ const input = (runId = "run-1") =>
   ({
     runConfig: { runId, workspaceId: "ws-1", conversationId: "c" },
     runtimeTarget: {
-      runtimeType: "local",
+      runtimeType: "native",
       ownerId: "ws-1",
       userId: "u1",
       workspaceId: "ws-1",
@@ -36,7 +36,7 @@ const input = (runId = "run-1") =>
       runtimePath: "/w",
       runtimeLogDir: "/logs",
     },
-    targetRuntimeId: "builtin-local",
+    targetRuntimeId: "managed-native",
   }) as any;
 
 const dockerInput = (runId = "run-1") =>
@@ -55,7 +55,7 @@ const dockerInput = (runId = "run-1") =>
         mountTarget: "/workspaces",
       },
     },
-    targetRuntimeId: "builtin-docker",
+    targetRuntimeId: "managed-docker",
   }) as any;
 
 function make(d = deps()) {
@@ -80,15 +80,15 @@ describe("WorkerProvisioner", () => {
     expect(d.runtime.start).toHaveBeenCalledOnce();
     expect(d.handshake.waitForRegister).toHaveBeenCalledOnce();
     expect(d.registry.upsertRunning).toHaveBeenCalledOnce();
-    expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+    expect(res).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
   });
 
   describe("targetRuntimeId routing", () => {
-    it("routes start() to runtimeFor(targetRuntimeId) for a Managed run (builtin id)", async () => {
+    it("routes start() to runtimeFor(targetRuntimeId) for a Managed run (managed id)", async () => {
       const d = deps();
       const { provisioner, runtimeFor } = make(d);
       await provisioner.acquireInstanceForRun(input());
-      expect(runtimeFor).toHaveBeenCalledWith("builtin-local");
+      expect(runtimeFor).toHaveBeenCalledWith("managed-native");
     });
 
     it("routes start() to runtimeFor(targetRuntimeId) for a Registered run", async () => {
@@ -102,6 +102,7 @@ describe("WorkerProvisioner", () => {
       expect(d.registry.insertStarting).toHaveBeenCalledWith(
         expect.anything(),
         expect.any(String),
+        expect.any(String),
         "http",
         expect.any(String),
         "rt-1"
@@ -114,6 +115,7 @@ describe("WorkerProvisioner", () => {
       await provisioner.stop({
         runtimeType: "docker",
         ownerId: "owner-1",
+        workerId: "worker-1",
         runtimeInstanceId: "c1",
         isolationScope: "workspace",
         targetRuntimeId: "rt-1",
@@ -122,17 +124,18 @@ describe("WorkerProvisioner", () => {
       expect(d.runtime.stop).toHaveBeenCalledOnce();
     });
 
-    it("destroy() routes to runtimeFor(ref.targetRuntimeId) for a Managed ref (builtin id)", async () => {
+    it("destroy() routes to runtimeFor(ref.targetRuntimeId) for a Managed ref (managed id)", async () => {
       const d = deps();
       const { provisioner, runtimeFor } = make(d);
       await provisioner.destroy({
-        runtimeType: "local",
+        runtimeType: "native",
         ownerId: "owner-1",
+        workerId: "worker-1",
         runtimeInstanceId: "1234:token",
         isolationScope: "workspace",
-        targetRuntimeId: "builtin-local",
+        targetRuntimeId: "managed-native",
       });
-      expect(runtimeFor).toHaveBeenCalledWith("builtin-local");
+      expect(runtimeFor).toHaveBeenCalledWith("managed-native");
       expect(d.runtime.destroy).toHaveBeenCalledOnce();
     });
 
@@ -141,15 +144,16 @@ describe("WorkerProvisioner", () => {
       const { provisioner } = make(d);
       await expect(
         provisioner.destroy({
-          runtimeType: "local",
+          runtimeType: "native",
           ownerId: "owner-1",
+          workerId: "worker-1",
           runtimeInstanceId: "1234:token",
           isolationScope: "workspace",
         })
       ).resolves.toBeUndefined();
       // finalize() swallows the teardown error and still tears down the registry row
       expect(d.registry.markStoppedByOwner).toHaveBeenCalledWith(
-        "local",
+        "native",
         "workspace",
         "owner-1"
       );
@@ -168,9 +172,10 @@ describe("WorkerProvisioner", () => {
         isolationScope: "user",
       }),
       expect.any(String),
+      expect.any(String),
       "http",
       expect.any(String),
-      "builtin-docker"
+      "managed-docker"
     );
   });
 
@@ -185,7 +190,7 @@ describe("WorkerProvisioner", () => {
   it("sets ctx.expectedRuntimeInstanceId to the bound instance id when runtimeType matches", async () => {
     const d = deps();
     d.registry.findBindingWithResource.mockResolvedValueOnce({
-      worker: { runtimeType: "local", instanceId: "bound-1" },
+      worker: { runtimeType: "native", instanceId: "bound-1" },
     });
     await make(d).provisioner.acquireInstanceForRun(input());
     const ctx = d.runtime.start.mock.calls[0][0];
@@ -211,7 +216,7 @@ describe("WorkerProvisioner", () => {
 
     onExit();
     expect(d.registry.markStoppedByOwner).toHaveBeenCalledWith(
-      "local",
+      "native",
       "workspace",
       "ws-1"
     );
@@ -229,8 +234,8 @@ describe("WorkerProvisioner", () => {
       p.acquireInstanceForRun(input("r1")),
       p.acquireInstanceForRun(input("r2")),
     ]);
-    expect(a).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
-    expect(b).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+    expect(a).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
+    expect(b).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
     expect(d.runtime.start).toHaveBeenCalledOnce();
   });
 
@@ -246,10 +251,10 @@ describe("WorkerProvisioner", () => {
     const d = deps();
     d.registry.insertStarting.mockResolvedValueOnce({
       ok: false,
-      existing: { runtimeInstanceId: "old", status: "running" },
+      existing: { workerId: "existing-worker", runtimeInstanceId: "old", status: "running" },
     });
     const res = await make(d).provisioner.acquireInstanceForRun(input());
-    expect(res).toEqual({ outcome: "ready", runtimeInstanceId: "old" });
+    expect(res).toEqual({ outcome: "ready", workerId: "existing-worker", runtimeInstanceId: "old" });
     expect(d.runtime.start).not.toHaveBeenCalled();
   });
 
@@ -262,7 +267,7 @@ describe("WorkerProvisioner", () => {
     expect(res.outcome).toBe("error");
 
     const res2 = await p.acquireInstanceForRun(input("r2"));
-    expect(res2).toEqual({ outcome: "ready", runtimeInstanceId: "c1" });
+    expect(res2).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
     expect(d.registry.insertStarting).toHaveBeenCalledTimes(2);
     expect(d.runtime.start).toHaveBeenCalledOnce();
   });

@@ -1,6 +1,6 @@
 import { isAbsolute, relative, sep } from "node:path";
 import type {
-  LocalRuntimeSpec,
+  NativeRuntimeSpec,
   RuntimeSpec,
   SandboxRuntimeSpec,
 } from "@agework/shared/protocol";
@@ -34,8 +34,8 @@ function resolveWorkspaceMount(
     );
   }
 
-  // local:无容器,runtimePath === hostPath,日志目录直接用宿主机目录。
-  if (input.runtimeType === "local") {
+  // native:无容器,runtimePath === hostPath,日志目录直接用宿主机目录。
+  if (input.runtimeType === "native") {
     return {
       hostPath: workspaceRootPath,
       runtimePath: workspaceRootPath,
@@ -72,7 +72,7 @@ function resolveWorkspaceMount(
 
 /** 载体归属键:user 隔离下全用户共享一个容器(userId),其余按 workspace。 */
 function resolveOwnerId(input: RuntimeSpecInput): string {
-  return input.runtimeType !== "local" && input.isolationScope === "user"
+  return input.runtimeType !== "native" && input.isolationScope === "user"
     ? input.userId
     : input.workspaceId;
 }
@@ -88,9 +88,9 @@ export function resolveRuntimeSpec(
   const ownerId = resolveOwnerId(input);
   const { userId, workspaceId } = input;
 
-  if (input.runtimeType === "local") {
-    const local: LocalRuntimeSpec = {
-      runtimeType: "local",
+  if (input.runtimeType === "native") {
+    const native: NativeRuntimeSpec = {
+      runtimeType: "native",
       userId,
       workspaceId,
       hostPath: mount.hostPath,
@@ -98,7 +98,7 @@ export function resolveRuntimeSpec(
       runtimeLogDir: mount.runtimeLogDir,
       ownerId,
     };
-    return local;
+    return native;
   }
 
   const spec: SandboxRuntimeSpec = {

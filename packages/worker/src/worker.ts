@@ -11,7 +11,6 @@ import { WorkerCommands } from "./commands.js";
 import { WorkerHttpTransport } from "./transport/worker-http.js";
 import { RunnerIpcTransport } from "./transport/runner-ipc.js";
 import { RunnerManager } from "./runner-manager.js";
-import { WorkspaceFileCommandHandler } from "./files/workspace-file-command.handler.js";
 import {
   errorDetails,
   setWorkerLogContext,
@@ -193,7 +192,7 @@ export async function runRunner() {
     error?: string
   ) {
     // Final status must be reported; otherwise the API run can remain running
-    // until timeout. Exit non-zero so LocalRuntimeProvider can mark it failed.
+    // until timeout. Exit non-zero so NativeRuntimeProvider can mark it failed.
     let statusReported = false;
     try {
       await emitStatus(transport, runId, {
@@ -231,13 +230,12 @@ export async function runWorker() {
     emptyRetryDelayMs: COMMAND_EMPTY_RETRY_DELAY_MS,
   });
   const runnerManager = new RunnerManager(client, commands);
-  const fileCommandHandler = new WorkspaceFileCommandHandler(client);
   workerLog("worker started", {
-    ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
+    workerId: process.env.AGEWORK_WORKER_ID,
   });
 
   // 进入命令轮询循环前先向 server 注册握手,证明这个进程/容器真的活着能通信。
-  // server 在此之前不会把该 owner 判定为 running（见 WorkerHandshakeStore）。
+  // server 在此之前不会把该 worker 判定为 running（见 WorkerHandshakeStore）。
   // 重试用尽说明这个进程反正没法正常工作,主动退出比等 server 侧 launchTimeout
   // 超时收敛更快。
   await registerWithRetry(client);
@@ -260,10 +258,7 @@ export async function runWorker() {
   process.once("SIGTERM", requestShutdown);
   process.once("SIGINT", requestShutdown);
 
-  await commands.run(
-    (command) => runnerManager.handle(command),
-    (command) => fileCommandHandler.handle(command)
-  );
+  await commands.run((command) => runnerManager.handle(command));
 
   async function shutdown(signal: NodeJS.Signals) {
     commands.stop();
@@ -312,7 +307,7 @@ export async function registerWithRetry(
     try {
       await client.register();
       workerLog("worker registered", {
-        ownerId: process.env.AGEWORK_WORKER_OWNER_ID,
+        workerId: process.env.AGEWORK_WORKER_ID,
       });
       return;
     } catch (err) {

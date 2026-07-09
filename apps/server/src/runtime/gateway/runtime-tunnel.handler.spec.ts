@@ -9,13 +9,22 @@ import { RuntimeTunnelHandler } from "./runtime-tunnel.handler";
 
 const GOOD_TOKEN = "good-token";
 const GOOD_HASH = createHash("sha256").update(GOOD_TOKEN).digest("hex");
+const MANAGED_TOKEN = "managed-token";
+const MANAGED_HASH = createHash("sha256").update(MANAGED_TOKEN).digest("hex");
+const MANAGED_RUNTIME_ID = "managed-docker";
 
 function makeRepository() {
   return {
     findByTokenHash: vi
       .fn()
       .mockImplementation((hash: string) =>
-        Promise.resolve(hash === GOOD_HASH ? { id: "rt-1" } : null)
+        Promise.resolve(
+          hash === GOOD_HASH
+            ? { id: "rt-1" }
+            : hash === MANAGED_HASH
+              ? { id: MANAGED_RUNTIME_ID }
+              : null
+        )
       ),
     markRegistered: vi.fn().mockResolvedValue(true),
     touchHeartbeat: vi.fn().mockResolvedValue(true),
@@ -113,7 +122,7 @@ describe("RuntimeTunnelHandler", () => {
     expect(code).toBe(4410);
   });
 
-  it("marks the runtime offline when the connection drops", async () => {
+  it("marks the runtime offline when the connection drops (registered)", async () => {
     const ws = connect();
     await once(ws, "open");
     ws.close();
@@ -121,6 +130,16 @@ describe("RuntimeTunnelHandler", () => {
     await vi.waitFor(() => {
       expect(repository.markOffline).toHaveBeenCalledWith("rt-1");
     });
+  });
+
+  it("does NOT mark managed runtime offline on disconnect (supervisor restarts)", async () => {
+    const ws = connect(MANAGED_TOKEN);
+    await once(ws, "open");
+    ws.close();
+    await once(ws, "close");
+    // Give the close handler time to run
+    await new Promise((r) => setTimeout(r, 50));
+    expect(repository.markOffline).not.toHaveBeenCalledWith(MANAGED_RUNTIME_ID);
   });
 
   it("closeConnection kicks the live socket with 4410", async () => {

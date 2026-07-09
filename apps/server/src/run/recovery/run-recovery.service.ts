@@ -69,7 +69,7 @@ export class RunRecoveryService {
     // local worker 是 fork 的子进程,API 重启时必随父进程一起死;WorkerInstanceLifecycleHandler
     // 在 bootstrap 已经杀掉孤儿并标 stopped,这里再发 cancel 纯属打空气,直接跳过。只有 sandbox
     // 容器可能还活着,才有必要发 cancel 让仍在 poll 的 worker 自己收尾。
-    if (run.runtimeType === "local") return;
+    if (run.runtimeType === "native") return;
     const resource = await this.workerManager.findRuntimeByRuntimeId(
       run.runtimeType,
       run.runtimeInstanceId

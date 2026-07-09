@@ -18,7 +18,7 @@ export type { CreateRuntimeResponse };
 export const runtimesApi = {
   list: () => apiGet<{ list: RuntimeResponse[] }>('/api/v1/runtimes/list'),
 
-  /** admin: 列出全部 Runtime（builtin + 所有用户的 registered）。 */
+  /** admin: 列出全部 Runtime（managed + 所有用户的 registered）。 */
   adminList: () =>
     apiGet<{ list: RuntimeResponse[] }>('/api/v1/admin/runtimes/list'),
 

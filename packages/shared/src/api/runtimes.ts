@@ -50,13 +50,13 @@ export type RuntimeEnvStatus = {
   detectedAt: string | null;
 };
 
-/** /api/v1/runtimes/list 的条目(builtin 本机内置 + Registered 部署实例)。 */
+/** /api/v1/runtimes/list 的条目(managed 本机内置 + Registered 部署实例)。 */
 export type RuntimeResponse = {
   id: string;
   name: string;
-  /** "registered"=远程机器注册, "builtin"=本机内置(全局,不可删除)。 */
+  /** "registered"=远程机器注册, "managed"=本机内置(全局,不可删除)。 */
   source: string;
-  /** null = 全局 builtin,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
+  /** null = 全局 managed,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
   ownerId: string | null;
   /** manager 注册时上报,配对未完成时为 null。 */
   runtimeType: string | null;
@@ -102,7 +102,7 @@ export type DetectEnvResponse = {
   envConfig: RuntimeEnvConfig | null;
 };
 
-/** admin 一键安装 runtime 独立 CLI 的请求 body：per-agent，仅支持 local runtime。 */
+/** admin 一键安装 runtime 独立 CLI 的请求 body：per-agent，仅支持 native runtime。 */
 export type InstallCliRequest = {
   /** 目标 runtime id。 */
   id: string;

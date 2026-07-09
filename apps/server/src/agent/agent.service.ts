@@ -157,9 +157,9 @@ export class AgentService {
         err instanceof Error ? err.message : String(err)
       );
     }
-    // Resolve CLI paths for local runtime (parameter feeding: RunModule should not depend on RuntimeModule)
+    // Resolve CLI paths for native runtime (parameter feeding: RunModule should not depend on RuntimeModule)
     let cliPaths: RunCliPaths | undefined;
-    if (workspace.runtimeType === "local") {
+    if (workspace.runtimeType === "native") {
       const resolved = await this.runtimeService.getResolvedCliPaths(
         workspace.runtimeId
       );

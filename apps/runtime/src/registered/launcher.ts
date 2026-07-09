@@ -68,15 +68,16 @@ export class Launcher {
     return {
       runtimeType: this.runtimeType,
       ownerId: params.ownerId,
+      workerId: params.workerId,
       runtimeInstanceId: params.runtimeInstanceId,
       isolationScope: params.isolationScope,
     };
   }
 }
 
-/** local 无容器隔离语义,固定按 "workspace" 记账(与 server 侧 provisioner.identity() 同约定)。 */
+/** native 无容器隔离语义,固定按 "workspace" 记账(与 server 侧 provisioner.identity() 同约定)。 */
 function isolationScopeOf(params: RuntimeLaunchRpcParams): string {
-  return params.placement.runtimeType === "local"
+  return params.placement.runtimeType === "native"
     ? "workspace"
     : params.placement.sandbox.isolationScope;
 }
@@ -86,9 +87,9 @@ function toRuntimeConfig(config: RegisteredRuntimeConfig): RuntimeConfig {
     workerImage: config.workerImage ?? "",
     runtimeLogHostPath: config.runtimeLogHostPath,
     serverBaseUrl: config.serverBaseUrl,
-    local: {
+    native: {
       // 默认 fork Registered Runtime 自身(同一产物,ROLE=worker 角色启动)——
-      // Registered+local 场景下它与 worker 共用同一 bundle。
+      // Registered+native 场景下它与 worker 共用同一 bundle。
       runtimeEntryPath: config.runtimeEntryPath ?? process.argv[1] ?? "",
     },
     // 本 Registered Runtime 实例专一,不用 opensandbox 时这些字段是未用的占位值——

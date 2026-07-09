@@ -63,10 +63,10 @@ describe("resolveRuntimeSpec", () => {
     });
   });
 
-  describe("local", () => {
+  describe("native", () => {
     it("runtimePath === hostPath === workspaceRootPath, no sandbox info, ownerId=workspaceId", () => {
-      const r = resolve({ runtimeType: "local" });
-      expect(r.runtimeType).toBe("local");
+      const r = resolve({ runtimeType: "native" });
+      expect(r.runtimeType).toBe("native");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimeLogDir).toBe("/data/logs/runtime");

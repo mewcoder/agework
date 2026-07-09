@@ -119,7 +119,7 @@ describe("WorkerEventService", () => {
   it("sendEvent cleans up execution on terminal run status", async () => {
     const runtimeHandle = {
       runId: "run-1",
-      runtimeType: "local",
+      runtimeType: "native",
       runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     };
@@ -275,7 +275,7 @@ describe("WorkerEventService", () => {
   it("markRunTimedOut marks error and terminates the execution session", async () => {
     const runtimeHandle = {
       runId: "run-1",
-      runtimeType: "local",
+      runtimeType: "native",
       runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     };
@@ -379,7 +379,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -420,7 +420,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -463,7 +463,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -511,7 +511,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -564,7 +564,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -595,7 +595,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -625,7 +625,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -696,7 +696,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-2", {
       runtimeHandle: {
         runId: "run-2",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "2:token",
         conversationId: "conversation-2",
       },
@@ -729,7 +729,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -779,7 +779,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -831,7 +831,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
@@ -864,7 +864,7 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },

@@ -6,9 +6,8 @@ const CONFIG: RuntimeConfig = {
   workerImage: "agework-worker:test",
   runtimeLogHostPath: "/tmp/agework-runtime-logs",
   serverBaseUrl: "http://127.0.0.1:3000/api/v1",
-  local: {
-    workerEntryPath: "/tmp/worker/index.js",
-    tsxCliPath: "/tmp/tsx/cli.mjs",
+  native: {
+    runtimeEntryPath: "/tmp/worker/index.js",
   },
   openSandbox: {
     domain: "opensandbox.test",
@@ -21,14 +20,14 @@ const CONFIG: RuntimeConfig = {
 describe("createRuntimeResolver", () => {
   it("resolves each runtimeType to its matching provider (build-once)", () => {
     const resolve = createRuntimeResolver(CONFIG);
-    expect(resolve("local").type).toBe("local");
+    expect(resolve("native").type).toBe("native");
     expect(resolve("docker").type).toBe("docker");
     expect(resolve("opensandbox").type).toBe("opensandbox");
   });
 
   it("returns the same long-lived instance across calls (singleton)", () => {
     const resolve = createRuntimeResolver(CONFIG);
-    expect(resolve("local")).toBe(resolve("local"));
+    expect(resolve("native")).toBe(resolve("native"));
   });
 
   it("throws for an unknown runtimeType", () => {

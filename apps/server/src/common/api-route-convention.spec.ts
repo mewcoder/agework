@@ -63,7 +63,7 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
   "GET auth/config",
 ]);
 
-const RAW_RESPONSE_ALLOWLIST = ["worker/owners/*", "worker/runs/*"];
+const RAW_RESPONSE_ALLOWLIST = ["worker/*", "worker/runs/*"];
 
 const RAW_RES_ROUTE_ALLOWLIST = ["POST agent/run", "GET agent/resume"];
 
@@ -300,12 +300,13 @@ describe("external API route convention", () => {
   });
 
   it("keeps worker callbacks public", () => {
-    const workerControllers = CONTROLLERS.filter((controller) =>
-      controllerPath(controller).startsWith("worker/")
-    );
+    const workerControllers = CONTROLLERS.filter((controller) => {
+      const p = controllerPath(controller);
+      return p === "worker" || p.startsWith("worker/");
+    });
 
     expect(workerControllers.map(controllerPath)).toEqual([
-      "worker/owners",
+      "worker",
       "worker/runs",
     ]);
     expect(
@@ -317,11 +318,10 @@ describe("external API route convention", () => {
 
   it("does not mark non-worker controllers public at class level", () => {
     expect(
-      CONTROLLERS.filter(
-        (controller) =>
-          !controllerPath(controller).startsWith("worker/") &&
-          isPublic(controller)
-      ).map(controllerPath)
+      CONTROLLERS.filter((controller) => {
+        const p = controllerPath(controller);
+        return p !== "worker" && !p.startsWith("worker/") && isPublic(controller);
+      }).map(controllerPath)
     ).toEqual([]);
   });
 

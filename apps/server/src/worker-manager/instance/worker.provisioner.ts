@@ -24,10 +24,21 @@ type OwnerInstance =
   | { status: "pending"; promise: Promise<AcquireInstanceResult> }
   | {
       status: "ready";
+      workerId: string;
       runtimeInstanceId: string;
       isolationScope: string;
       runtimeType: string;
     };
+
+/** owners Map 的复合 key: (ownerId, runtimeId, isolationScope)。
+ * 推翻 wm-0003 的裸 ownerId key——同一 owner 跨 runtime/scope 可并行多个 worker。 */
+function ownerKey(
+  ownerId: string,
+  runtimeId: string,
+  isolationScope: string
+): string {
+  return `${ownerId}:${runtimeId}:${isolationScope}`;
+}
 
 /** worker 实例编排(泛型,不认识 runtimeType):两个旧 executor 复制的启动握手
  *  序列的唯一副本。无回收(引用计数/idle/settle 全砍)。 */
@@ -48,17 +59,21 @@ export class WorkerProvisioner {
     input: WorkerExecutionStartInput
   ): Promise<AcquireInstanceResult> {
     const ownerId = input.runtimeTarget.ownerId;
-    const existing = this.owners.get(ownerId);
+    const targetRuntimeId = input.targetRuntimeId;
+    const { isolationScope } = this.identity(input);
+    const key = ownerKey(ownerId, targetRuntimeId, isolationScope);
+    const existing = this.owners.get(key);
     if (existing?.status === "ready") {
       return Promise.resolve({
         outcome: "ready",
+        workerId: existing.workerId,
         runtimeInstanceId: existing.runtimeInstanceId,
       });
     }
     if (existing?.status === "pending") return existing.promise;
 
     const promise = this.launch(input);
-    this.owners.set(ownerId, { status: "pending", promise });
+    this.owners.set(key, { status: "pending", promise });
     return promise;
   }
 
@@ -69,7 +84,9 @@ export class WorkerProvisioner {
     const ownerId = runtimeTarget.ownerId;
     const { runtimeType, isolationScope } = this.identity(input);
     const startToken = randomUUID();
+    const workerId = randomUUID();
     const targetRuntimeId = input.targetRuntimeId;
+    const key = ownerKey(ownerId, targetRuntimeId, isolationScope);
 
     try {
       const insert = await this.registry.insertStarting(
@@ -79,25 +96,28 @@ export class WorkerProvisioner {
           workspaceId: runConfig.workspaceId,
           ownerId,
         },
-        randomUUID(),
+        workerId,
+        "", // instanceId placeholder, will be updated after provider.start()
         "http",
         startToken,
         targetRuntimeId
       );
       if (!insert.ok) {
         if (insert.existing.status === "running") {
-          this.owners.set(ownerId, {
+          this.owners.set(key, {
             status: "ready",
+            workerId: insert.existing.workerId,
             runtimeInstanceId: insert.existing.runtimeInstanceId,
             isolationScope,
             runtimeType,
           });
           return {
             outcome: "ready",
+            workerId: insert.existing.workerId,
             runtimeInstanceId: insert.existing.runtimeInstanceId,
           };
         }
-        this.owners.delete(ownerId);
+        this.owners.delete(key);
         return {
           outcome: "error",
           error: `owner ${ownerId} has a concurrent launch already starting`,
@@ -121,6 +141,7 @@ export class WorkerProvisioner {
         workerEnv: this.buildWorkerEnv(
           input,
           startToken,
+          workerId,
           runtimeType,
           isolationScope
         ),
@@ -128,11 +149,11 @@ export class WorkerProvisioner {
       };
 
       const onWorkerExit = () => {
-        this.owners.delete(ownerId);
+        this.owners.delete(key);
         void Promise.resolve(
           this.registry.markStoppedByOwner(runtimeType, isolationScope, ownerId)
         ).catch(
-          swallow(this.logger, `mark stopped on exit for owner ${ownerId}`)
+          swallow(this.logger, `mark stopped on exit for worker ${workerId}`)
         );
       };
 
@@ -141,11 +162,11 @@ export class WorkerProvisioner {
           const launched = await this.runtimeService
             .runtimeFor(targetRuntimeId)
             .start(ctx, onWorkerExit);
-          await this.handshakeStore.waitForRegister(ownerId, startToken);
+          await this.handshakeStore.waitForRegister(workerId, startToken);
           return launched;
         })(),
         this.configService.getLaunchTimeoutSeconds() * 1000,
-        `worker launch timed out for owner ${ownerId}`
+        `worker launch timed out for worker ${workerId}`
       );
 
       await this.registry
@@ -156,30 +177,32 @@ export class WorkerProvisioner {
             workspaceId: runConfig.workspaceId,
             ownerId,
           },
+          workerId,
           runtimeInstanceId,
           "http",
           targetRuntimeId
         )
         .catch(swallow(this.logger, `upsert running for owner ${ownerId}`));
 
-      this.owners.set(ownerId, {
+      this.owners.set(key, {
         status: "ready",
+        workerId,
         runtimeInstanceId,
         isolationScope,
         runtimeType,
       });
-      return { outcome: "ready", runtimeInstanceId };
+      return { outcome: "ready", workerId, runtimeInstanceId };
     } catch (err) {
       this.handshakeStore.cancel(
-        ownerId,
-        `worker launch failed for owner ${ownerId}`
+        workerId,
+        `worker launch failed for worker ${workerId}`
       );
       await this.registry
         .markErrorByOwner(runtimeType, isolationScope, ownerId)
-        .catch(swallow(this.logger, `mark launch error for owner ${ownerId}`));
-      this.owners.delete(ownerId);
+        .catch(swallow(this.logger, `mark launch error for worker ${workerId}`));
+      this.owners.delete(key);
       this.logger.warn(
-        `worker launch failed ${safeLogJson({ ownerId, runtimeType, ...errorLogFields(err) })}`
+        `worker launch failed ${safeLogJson({ workerId, runtimeType, ...errorLogFields(err) })}`
       );
       return {
         outcome: "error",
@@ -195,82 +218,6 @@ export class WorkerProvisioner {
     );
   }
 
-  /**
-   * 文件预览用的 worker 确保:worker 已在线则直接返回 ownerId;
-   * 离线则自动拉起一个(无 run 上下文),等握手完成后返回。
-   *
-   * 与 acquireInstanceForRun 的区别:不需要 runId/conversationId/agentProviderConfig——
-   * 文件预览只要求 worker 进程在线并轮询文件命令,不跑 agent。
-   * 合成 runConfig 仅满足 provisioner 内部对 workspaceId/runId 的结构需求,
-   * worker 以 runWorker() 模式启动,不会 fetchRunConfig。
-   */
-  async ensureWorkerForFilePreview(input: {
-    workspaceId: string;
-    userId: string;
-    username: string;
-    rootPath: string;
-    runtimeType: RuntimeType;
-    isolationScope: string;
-    runtimeId: string;
-  }): Promise<string> {
-    // 1. 已有 running worker 直接返回
-    const existing = await this.registry.findActiveByWorkspace(
-      input.workspaceId
-    );
-    if (existing) return existing.worker.ownerId;
-
-    // 2. 解析 RuntimeSpec(placement)
-    const runtimeSpecInput: import("@agework/providers").RuntimeSpecInput =
-      input.runtimeType === "local"
-        ? {
-            userId: input.userId,
-            workspaceId: input.workspaceId,
-            workspaceRootPath: input.rootPath,
-            userWorkspaceRootPath:
-              this.configService.getUserWorkspace(input.username),
-            runtimeLogHostPath: this.configService.getRuntimeLogDir(),
-            runtimeType: "local",
-          }
-        : {
-            userId: input.userId,
-            workspaceId: input.workspaceId,
-            workspaceRootPath: input.rootPath,
-            userWorkspaceRootPath:
-              this.configService.getUserWorkspace(input.username),
-            runtimeLogHostPath: this.configService.getRuntimeLogDir(),
-            runtimeType: input.runtimeType,
-            isolationScope:
-              input.isolationScope as import("@agework/shared/protocol").IsolationScope,
-          };
-    const runtimeTarget = this.runtimeService.resolveRuntimeSpec(
-      runtimeSpecInput
-    );
-
-    // 3. 合成最小 runConfig(仅满足 provisioner 结构需求,worker 不会 fetch 它)
-    const syntheticRunConfig: RunConfig = {
-      runId: `fp-${generateId()}`,
-      conversationId: "",
-      workspaceId: input.workspaceId,
-      runtimePath: runtimeTarget.runtimePath,
-      env: {},
-      input: null,
-      agentProviderConfig: { agentType: "claude", source: "system" },
-    };
-
-    // 4. 经 acquireInstanceForRun 走正常启动/复用流程
-    const result = await this.acquireInstanceForRun({
-      runtimeTarget,
-      runConfig: syntheticRunConfig,
-      targetRuntimeId: input.runtimeId,
-    });
-
-    if (result.outcome === "error") {
-      throw new Error(`运行时启动失败: ${result.error}`);
-    }
-
-    return runtimeTarget.ownerId;
-  }
-
   /** owner 永久消失(删 workspace / user):删除载体。 */
   destroy(ref: RuntimeInstanceRef): Promise<void> {
     return this.finalize(ref, (r) =>
@@ -284,8 +231,12 @@ export class WorkerProvisioner {
     ref: RuntimeInstanceRef,
     runtimeAction: (ref: RuntimeInstanceRef) => Promise<void> | void
   ): Promise<void> {
-    this.owners.delete(ref.ownerId);
-    this.commandDispatcher.cleanupByOwnerId(ref.ownerId);
+    if (ref.targetRuntimeId) {
+      this.owners.delete(
+        ownerKey(ref.ownerId, ref.targetRuntimeId, ref.isolationScope)
+      );
+    }
+    this.commandDispatcher.cleanupByWorkerId(ref.workerId);
     // Promise.resolve().then(...) 而不是 Promise.resolve(runtimeAction(ref)):
     // runtimeAction 内部(requireTargetRuntimeId)可能同步 throw,同步 throw 发生在
     // Promise.resolve(...) 求值参数阶段,不会被后面的 .catch() 接住,会导致 finalize
@@ -293,10 +244,10 @@ export class WorkerProvisioner {
     // 执行,同步 throw 才会正确变成 rejected promise、被 .catch() 吞掉。
     await Promise.resolve()
       .then(() => runtimeAction(ref))
-      .catch(swallow(this.logger, `provider teardown for owner ${ref.ownerId}`));
+      .catch(swallow(this.logger, `provider teardown for worker ${ref.workerId}`));
     await this.registry
       .markStoppedByOwner(ref.runtimeType, ref.isolationScope, ref.ownerId)
-      .catch(swallow(this.logger, `mark stopped for owner ${ref.ownerId}`));
+      .catch(swallow(this.logger, `mark stopped for worker ${ref.workerId}`));
   }
 
   private identity(input: WorkerExecutionStartInput): {
@@ -305,7 +256,7 @@ export class WorkerProvisioner {
   } {
     const target = input.runtimeTarget;
     const isolationScope =
-      target.runtimeType !== "local"
+      target.runtimeType !== "native"
         ? target.sandbox.isolationScope
         : "workspace";
     return { runtimeType: target.runtimeType, isolationScope };
@@ -314,6 +265,7 @@ export class WorkerProvisioner {
   private buildWorkerEnv(
     input: WorkerExecutionStartInput,
     startToken: string,
+    workerId: string,
     runtimeType: string,
     isolationScope: string
   ): Record<string, string> {
@@ -321,6 +273,7 @@ export class WorkerProvisioner {
     const env: Record<string, string> = {
       AGEWORK_WORKER_ROLE: "worker",
       AGEWORK_WORKER_OWNER_ID: input.runtimeTarget.ownerId,
+      AGEWORK_WORKER_ID: workerId,
       AGEWORK_WORKER_START_TOKEN: startToken,
       AGEWORK_WORKER_RUNTIME_TYPE: runtimeType,
       AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,

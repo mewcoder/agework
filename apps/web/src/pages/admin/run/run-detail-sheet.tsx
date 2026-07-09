@@ -206,7 +206,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     label="隔离粒度"
                     value={
                       <Badge variant="outline">
-                        {run.workerInstance.runtimeType === "local"
+                        {run.workerInstance.runtimeType === "native"
                           ? "host"
                           : run.workerInstance.isolationScope}
                       </Badge>

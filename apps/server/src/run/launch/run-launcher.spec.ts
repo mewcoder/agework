@@ -15,17 +15,17 @@ import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
 
-function makePlacement(runtimeType: "local" | "docker"): RuntimeSpec {
+function makePlacement(runtimeType: "native" | "docker"): RuntimeSpec {
   const common = {
     userId: "user-1",
     workspaceId: "ws-1",
     hostPath: "/tmp/ws",
     ownerId: "ws-1",
   };
-  if (runtimeType === "local") {
+  if (runtimeType === "native") {
     return {
       ...common,
-      runtimeType: "local",
+      runtimeType: "native",
       runtimePath: "/tmp/ws",
       runtimeLogDir: RUNTIME_LOG_DIR,
     };
@@ -42,11 +42,11 @@ function makePlacement(runtimeType: "local" | "docker"): RuntimeSpec {
   };
 }
 
-function makeRuntimeSpec(placement = makePlacement("local")): RuntimeSpec {
+function makeRuntimeSpec(placement = makePlacement("native")): RuntimeSpec {
   return {
     ...placement,
     ownerId:
-      placement.runtimeType !== "local" &&
+      placement.runtimeType !== "native" &&
       placement.sandbox.isolationScope === "user"
         ? placement.userId
         : placement.workspaceId,
@@ -73,11 +73,11 @@ function makeWorkspaceView(
   return {
     workspaceId: "ws-1",
     workspaceRootPath: "/tmp/ws",
-    runtimeType: "local",
+    runtimeType: "native",
     isolationScope: "workspace",
     username: "admin-1",
-    runtimeId: "builtin-local",
-    runtimeSource: "builtin",
+    runtimeId: "managed-native",
+    runtimeSource: "managed",
     ...overrides,
   };
 }
@@ -147,12 +147,12 @@ describe("RunLauncher", () => {
     mockWorkerManager = {
       resolveRuntimeSpec: vi
         .fn()
-        .mockReturnValue(makeRuntimeSpec(makePlacement("local"))),
+        .mockReturnValue(makeRuntimeSpec(makePlacement("native"))),
     };
     mockExecutor = {
       start: vi.fn().mockReturnValue({
         runId: "run-1",
-        runtimeType: "local",
+        runtimeType: "native",
         runtimeInstanceId: "1:token",
       }),
       sendCommand: vi.fn(),
@@ -168,10 +168,10 @@ describe("RunLauncher", () => {
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockConfigService = {
-      getDefaultRuntimeType: vi.fn().mockReturnValue("local"),
+      getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
       getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
-      isRuntimeTypeAllowed: (t: string): t is "local" | "docker" =>
-        t === "local" || t === "docker",
+      isRuntimeTypeAllowed: (t: string): t is "native" | "docker" =>
+        t === "native" || t === "docker",
       isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
       getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
@@ -200,19 +200,19 @@ describe("RunLauncher", () => {
     await launch(makeStartInput({ res }));
 
     expect(mockWorkerManager.resolveRuntimeSpec).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "ws-1", runtimeType: "local" })
+      expect.objectContaining({ workspaceId: "ws-1", runtimeType: "native" })
     );
     expect(mockRunRepository.create).toHaveBeenCalledWith({
       id: "run-1",
       conversationId: "conversation-1",
       agentType: "claude",
-      runtimeType: "local",
+      runtimeType: "native",
     });
     expect(mockExecutor.start).toHaveBeenCalledWith(
       expect.objectContaining({
         runConfig: expect.objectContaining({ runId: "run-1" }),
         runtimeTarget: expect.objectContaining({
-          runtimeType: "local",
+          runtimeType: "native",
           ownerId: "ws-1",
         }),
       })
@@ -247,7 +247,7 @@ describe("RunLauncher", () => {
     );
     expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
       "run-1",
-      "local",
+      "native",
       "1:token"
     );
     const registered = (
@@ -288,7 +288,7 @@ describe("RunLauncher", () => {
   it("throws BadRequestException when the runtime type is not allowed", async () => {
     mockConfigService.isRuntimeTypeAllowed = (
       _t: string
-    ): _t is "local" | "docker" => false;
+    ): _t is "native" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
     expect(mockWorkerManager.resolveRuntimeSpec).not.toHaveBeenCalled();
   });

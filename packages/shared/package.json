@@ -8,6 +8,7 @@
     "./protocol/rpc": "./src/protocol/rpc.ts",
     "./api": "./src/api/index.ts",
     "./filesystem": "./src/filesystem/file-browser.ts",
+    "./filesystem/types": "./src/filesystem/types.ts",
     "./git": "./src/git.ts"
   },
   "scripts": {

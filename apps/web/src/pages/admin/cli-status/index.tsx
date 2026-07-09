@@ -10,7 +10,7 @@ import { formatDateTime } from '@/utils/format';
 
 function runtimeTypeLabel(runtimeType: string | null) {
   switch (runtimeType) {
-    case 'local':
+    case 'native':
       return '本地';
     case 'docker':
       return 'Docker';

@@ -70,7 +70,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
         {
           id: "run-1",
           conversationId: "conversation-1",
-          runtimeType: "local",
+          runtimeType: "native",
           runtimeInstanceId: null,
         },
       ]),
@@ -141,7 +141,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
         {
           id: "run-1",
           conversationId: "conversation-1",
-          runtimeType: "local",
+          runtimeType: "native",
           runtimeInstanceId: "4242:token",
         },
       ]),

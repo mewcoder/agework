@@ -16,6 +16,29 @@ vi.mock("../cli/cli-resolver.js", () => ({
   detectEnvConfig: () => stubEnvConfig,
 }));
 
+const { mockListFiles, mockReadFile, mockListChangedFiles, mockReadFileDiff } =
+  vi.hoisted(() => ({
+    mockListFiles: vi.fn(),
+    mockReadFile: vi.fn(),
+    mockListChangedFiles: vi.fn(),
+    mockReadFileDiff: vi.fn(),
+  }));
+
+vi.mock("@agework/shared/filesystem", () => ({
+  listFiles: mockListFiles,
+  readFile: mockReadFile,
+  createFsTimeoutSignal: () => AbortSignal.timeout(8_000),
+  validateRelativePath: vi.fn(),
+  resolveWithinRoot: vi.fn(),
+  browse: vi.fn(),
+}));
+
+vi.mock("@agework/shared/git", () => ({
+  listChangedFiles: mockListChangedFiles,
+  readFileDiff: mockReadFileDiff,
+  NotGitRepositoryError: class NotGitRepositoryError extends Error {},
+}));
+
 type ServerConnection = {
   ws: WebSocket;
   authorization?: string;
@@ -227,6 +250,165 @@ describe("TunnelClient", () => {
         error: { message: string };
       };
       expect(response.error.message).toBe("docker daemon unreachable");
+    });
+  });
+
+  describe("file preview / git diff RPC", () => {
+    async function connectAndDrainRegister() {
+      client!.start();
+      await vi.waitFor(() => expect(connections).toHaveLength(1));
+      await connections[0].nextMessage(); // drain the register message
+      return connections[0];
+    }
+
+    beforeEach(() => {
+      mockListFiles.mockResolvedValue({
+        type: "list_files",
+        commandId: "",
+        path: "src",
+        list: [{ name: "a.ts", type: "file", size: 10 }],
+        truncated: false,
+      });
+      mockReadFile.mockResolvedValue({
+        type: "read_file",
+        commandId: "",
+        path: "a.ts",
+        encoding: "utf8",
+        content: "hello",
+        size: 5,
+        truncated: false,
+      });
+      mockListChangedFiles.mockResolvedValue({
+        list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
+        truncated: false,
+      });
+      mockReadFileDiff.mockResolvedValue({
+        path: "a.ts",
+        status: "modified",
+        before: "old",
+        after: "new",
+      });
+    });
+
+    it("dispatches runtime.list-files and replies with the file list", async () => {
+      makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-lf",
+          method: "runtime.list-files",
+          params: { rootPath: "/ws", path: "src" },
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        jsonrpc: string;
+        id: string;
+        result: { path: string; list: unknown[]; truncated: boolean };
+      };
+      expect(response.id).toBe("req-lf");
+      expect(response.result.path).toBe("src");
+      expect(response.result.list).toHaveLength(1);
+      expect(mockListFiles).toHaveBeenCalledWith(
+        "/ws",
+        "src",
+        expect.any(AbortSignal)
+      );
+    });
+
+    it("dispatches runtime.read-file and replies with the file content", async () => {
+      makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-rf",
+          method: "runtime.read-file",
+          params: { rootPath: "/ws", path: "a.ts" },
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        jsonrpc: string;
+        id: string;
+        result: { path: string; content: string; encoding: string };
+      };
+      expect(response.id).toBe("req-rf");
+      expect(response.result.content).toBe("hello");
+      expect(mockReadFile).toHaveBeenCalledWith(
+        "/ws",
+        "a.ts",
+        expect.any(AbortSignal)
+      );
+    });
+
+    it("dispatches runtime.list-changed-files and replies with the changed files", async () => {
+      makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-lcf",
+          method: "runtime.list-changed-files",
+          params: { rootPath: "/ws" },
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        jsonrpc: string;
+        id: string;
+        result: { list: unknown[]; truncated: boolean };
+      };
+      expect(response.id).toBe("req-lcf");
+      expect(response.result.list).toHaveLength(1);
+      expect(mockListChangedFiles).toHaveBeenCalledWith("/ws");
+    });
+
+    it("dispatches runtime.read-file-diff and replies with the diff", async () => {
+      makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-rfd",
+          method: "runtime.read-file-diff",
+          params: { rootPath: "/ws", path: "a.ts" },
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        jsonrpc: string;
+        id: string;
+        result: { path: string; before: string; after: string };
+      };
+      expect(response.id).toBe("req-rfd");
+      expect(response.result.after).toBe("new");
+      expect(mockReadFileDiff).toHaveBeenCalledWith("/ws", "a.ts");
+    });
+
+    it("replies with an RPC error when the filesystem function rejects", async () => {
+      mockReadFile.mockRejectedValueOnce(new Error("路径越界"));
+      makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-err",
+          method: "runtime.read-file",
+          params: { rootPath: "/ws", path: "../escape" },
+        })
+      );
+
+      const response = (await conn.nextMessage()) as {
+        error: { message: string };
+      };
+      expect(response.error.message).toBe("路径越界");
     });
   });
 });

@@ -16,7 +16,7 @@ import { OwnerRunStore } from "../instance/owner-run.store";
 import { WORKER_LOST_EVENT, WorkerLostEvent } from "../worker-manager.events";
 
 /**
- * 定时扫描 WorkerLivenessStore,把超过心跳超时阈值没见到 poll 的 owner 判定为
+ * 定时扫描 WorkerLivenessStore,把超过心跳超时阈值没见到 poll 的 worker 判定为
  * unhealthy 并 fence 掉它名下的 worker。超时即判死,不做"确认死亡"(卡死但进程
  * 没退出正是本机制要抓的场景)。直接依赖 registry/provisioner/ownerRunStore 这些
  * 下层 internal provider 自己把 fence 动作做完,不反过来依赖 WorkerManagerService
@@ -59,43 +59,43 @@ export class WorkerLivenessSweeper
 
   private sweep(): void {
     const timeoutMs = this.configService.getHeartbeatTimeoutSeconds() * 1000;
-    const staleOwnerIds = this.livenessStore.listStale(timeoutMs, Date.now());
-    for (const ownerId of staleOwnerIds) {
-      this.fenceWorkerByOwnerId(ownerId, "worker heartbeat timeout").catch(
-        swallow(this.logger, `fence owner ${ownerId}`)
+    const staleWorkerIds = this.livenessStore.listStale(timeoutMs, Date.now());
+    for (const workerId of staleWorkerIds) {
+      this.fenceWorkerByWorkerId(workerId, "worker heartbeat timeout").catch(
+        swallow(this.logger, `fence worker ${workerId}`)
       );
     }
   }
 
   /**
-   * fence 掉某 owner 名下 unhealthy 的 worker:超时即判死,不做"确认死亡"(卡死但
+   * fence 掉某 worker 名下 unhealthy 的 worker:超时即判死,不做"确认死亡"(卡死但
    * 进程没退出正是本机制要抓的场景)。物理停止载体是幂等操作,对已经死透的容器/
-   * 进程重复调用无害。找不到活跃行说明该 owner 已经被别的路径清理过,回收残留的
+   * 进程重复调用无害。找不到活跃行说明该 worker 已经被别的路径清理过,回收残留的
    * liveness 条目后 return。
    */
-  private async fenceWorkerByOwnerId(
-    ownerId: string,
+  private async fenceWorkerByWorkerId(
+    workerId: string,
     reason: string
   ): Promise<void> {
-    const active = await this.registry.findActiveByOwnerId(ownerId);
+    const active = await this.registry.findActiveByWorkerId(workerId);
     if (!active) {
-      // owner 已被别的路径清理(local 进程退出 / 手动停),liveness 条目是残留,
+      // worker 已被别的路径清理(native 进程退出 / 手动停),liveness 条目是残留,
       // 这里是唯一的兜底回收点:不清掉会每个 sweep 周期都命中 listStale 白查一次 DB
-      this.livenessStore.remove(ownerId);
+      this.livenessStore.remove(workerId);
       return;
     }
 
-    const runIds = this.ownerRunStore.listRunIdsByOwnerId(ownerId);
+    const runIds = this.ownerRunStore.listRunIdsByWorkerId(workerId);
     for (const runId of runIds) {
       this.events.emit(WORKER_LOST_EVENT, new WorkerLostEvent(runId, reason));
     }
 
-    await this.stopWorkerByOwnerId(ownerId);
-    this.livenessStore.remove(ownerId);
+    await this.stopWorkerByWorkerId(workerId);
+    this.livenessStore.remove(workerId);
 
     this.logger.warn(
-      `fenced unhealthy owner ${safeLogJson({
-        ownerId,
+      `fenced unhealthy worker ${safeLogJson({
+        workerId,
         reason,
         terminatedRuns: runIds.length,
       })}`
@@ -103,17 +103,18 @@ export class WorkerLivenessSweeper
   }
 
   /**
-   * 停掉指定 owner 名下的 worker(owner 仍在):从 registry 取出该 owner 当前活跃行
+   * 停掉指定 worker 名下的 worker(worker 仍在):从 registry 取出该 worker 当前活跃行
    * (权威来源),按行内容构造 ref 交给 provisioner.stop(保留载体)。找不到活跃行
    * 说明已经被别的路径清理过,no-op。
    */
-  private async stopWorkerByOwnerId(ownerId: string): Promise<void> {
-    const row = await this.registry.findActiveByOwnerId(ownerId);
+  private async stopWorkerByWorkerId(workerId: string): Promise<void> {
+    const row = await this.registry.findActiveByWorkerId(workerId);
     if (!row) return;
     if (!isRuntimeType(row.runtimeType)) return;
     const ref: RuntimeInstanceRef = {
       runtimeType: row.runtimeType,
       ownerId: row.ownerId,
+      workerId: row.id,
       runtimeInstanceId: row.instanceId,
       isolationScope: row.isolationScope,
       targetRuntimeId: row.runtimeId,

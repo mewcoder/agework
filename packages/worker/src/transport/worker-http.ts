@@ -6,12 +6,9 @@ import type {
   UpstreamMessage,
   WorkerCommandRpcRequest,
   WorkerRegisterRequest,
-  WorkspaceFileCommandPayload,
-  WorkspaceFileCommandResult,
-  OwnerCommand,
 } from "@agework/shared/protocol";
 import {
-  WORKER_OWNER_ID_HEADER,
+  WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
 import {
@@ -25,14 +22,14 @@ import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
  * 常驻 worker 的 worker-manager HTTP 客户端。
- * commands 轮询是 ownerId 级（`/worker/owners/:ownerId/commands`，
- * ownerId 由 env AGEWORK_WORKER_OWNER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
+ * commands 轮询是 workerId 级（`/worker/:workerId/commands`，
+ * workerId 由 env AGEWORK_WORKER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
 export class WorkerHttpTransport {
   private readonly apiBase: string;
-  private readonly ownerId: string;
+  private readonly workerId: string;
   private readonly token: string;
   private commandSeq = 0;
   private emptyPolls = 0;
@@ -44,16 +41,16 @@ export class WorkerHttpTransport {
 
   constructor() {
     this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
-    this.ownerId = process.env.AGEWORK_WORKER_OWNER_ID ?? "";
+    this.workerId = process.env.AGEWORK_WORKER_ID ?? "";
     this.token = process.env.AGEWORK_WORKER_START_TOKEN ?? "";
 
-    if (!this.ownerId) {
-      throw new Error("AGEWORK_WORKER_OWNER_ID is required for resident worker");
+    if (!this.workerId) {
+      throw new Error("AGEWORK_WORKER_ID is required for resident worker");
     }
 
     workerLog("worker-manager http client initialized", {
       apiBase: this.apiBase,
-      ownerId: this.ownerId,
+      workerId: this.workerId,
       logFile:
         process.env.AGEWORK_WORKER_LOG_FILE ??
         "/tmp/agework-worker.log",
@@ -62,9 +59,8 @@ export class WorkerHttpTransport {
 
   async pollCommands(waitMs = 0): Promise<{
     commands: RunChannelMessage<CommandPayload>[];
-    fileCommands: OwnerCommand<WorkspaceFileCommandPayload>[];
   }> {
-    const commandsPath = `/worker/owners/${this.ownerId}/commands`;
+    const commandsPath = `/worker/${this.workerId}/commands`;
     const params = new URLSearchParams({ afterSeq: String(this.commandSeq) });
     if (waitMs > 0) {
       params.set("waitMs", String(waitMs));
@@ -75,37 +71,36 @@ export class WorkerHttpTransport {
       res = await fetch(url, { headers: this.buildAuthHeaders() });
     } catch (err) {
       workerLog("command poll failed", {
-        ownerId: this.ownerId,
+        workerId: this.workerId,
         afterSeq: this.commandSeq,
         ...errorDetails(err),
       }, "warn");
       // 网络瞬时故障不崩溃，返回空让调用方重试
-      return { commands: [], fileCommands: [] };
+      return { commands: [] };
     }
 
     if (!res.ok) {
       const body = await safeText(res);
       workerLog("command poll returned non-ok", {
-        ownerId: this.ownerId,
+        workerId: this.workerId,
         afterSeq: this.commandSeq,
         status: res.status,
         body,
       }, res.status === 401 ? "error" : "warn");
       if (this.handleFatalResponse(res, { afterSeq: this.commandSeq })) {
-        return { commands: [], fileCommands: [] };
+        return { commands: [] };
       }
       if (res.status === 401) {
         workerLog("runtime access key invalid, exiting", {
-          ownerId: this.ownerId,
+          workerId: this.workerId,
         }, "error");
         process.exit(1);
       }
-      return { commands: [], fileCommands: [] };
+      return { commands: [] };
     }
 
     const data = (await res.json()) as {
       messages?: WorkerCommandRpcRequest[];
-      fileCommands?: OwnerCommand<WorkspaceFileCommandPayload>[];
       queueEpoch?: number;
     };
 
@@ -119,7 +114,7 @@ export class WorkerHttpTransport {
       data.queueEpoch !== previousEpoch
     ) {
       workerLog("queue epoch changed, resetting afterSeq and re-polling", {
-        ownerId: this.ownerId,
+        workerId: this.workerId,
         previousEpoch,
         newEpoch: data.queueEpoch,
       }, "warn");
@@ -131,14 +126,12 @@ export class WorkerHttpTransport {
     }
 
     const commands = normalizeCommandPollResponse(data);
-    const fileCommands = data.fileCommands ?? [];
-    if (commands.length > 0 || fileCommands.length > 0) {
+    if (commands.length > 0) {
       this.emptyPolls = 0;
       workerLog("command poll received commands", {
-        ownerId: this.ownerId,
+        workerId: this.workerId,
         afterSeq: this.commandSeq,
         count: commands.length,
-        fileCommandCount: fileCommands.length,
         commands: commands.map((command) => ({
           seq: command.seq,
           runId: command.runId,
@@ -150,7 +143,7 @@ export class WorkerHttpTransport {
       this.emptyPolls += 1;
       if (this.emptyPolls <= 3 || this.emptyPolls % 30 === 0) {
         workerLog("command poll empty", {
-          ownerId: this.ownerId,
+          workerId: this.workerId,
           afterSeq: this.commandSeq,
           emptyPolls: this.emptyPolls,
         }, "debug");
@@ -161,13 +154,13 @@ export class WorkerHttpTransport {
         this.commandSeq = command.seq;
       }
     }
-    return { commands, fileCommands };
+    return { commands };
   }
 
   async fetchRunConfig(runId: string): Promise<RunConfig> {
     workerLog("fetch run config", {
       runId,
-      ownerId: this.ownerId,
+      workerId: this.workerId,
     }, "debug");
     const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
       headers: this.buildAuthHeaders(),
@@ -176,7 +169,7 @@ export class WorkerHttpTransport {
       const body = await safeText(res);
       workerLog("fetch run config returned non-ok", {
         runId,
-        ownerId: this.ownerId,
+        workerId: this.workerId,
         status: res.status,
         body,
       }, "warn");
@@ -186,7 +179,7 @@ export class WorkerHttpTransport {
     const data = (await res.json()) as { config: RunConfig };
     workerLog("fetch run config ok", {
       runId,
-      ownerId: this.ownerId,
+      workerId: this.workerId,
       conversationId: data.config.conversationId,
       agentType: data.config.agentProviderConfig.agentType,
       runtimePath: data.config.runtimePath,
@@ -197,11 +190,11 @@ export class WorkerHttpTransport {
 
   /**
    * 进入命令轮询循环前的注册握手:带上 launch 时下发的 startToken 证明自己是
-   * server 期望的那个进程/容器,server 收到后才把该 owner 判定为 running。
+   * server 期望的那个进程/容器,server 收到后才把该 worker 判定为 running。
    * 重试/兜底退出由调用方（worker.ts runWorker）负责。
    */
   async register(): Promise<void> {
-    const url = `${this.apiBase}/worker/owners/${this.ownerId}/register`;
+    const url = `${this.apiBase}/worker/${this.workerId}/register`;
     const body: WorkerRegisterRequest = {
       startToken: process.env.AGEWORK_WORKER_START_TOKEN ?? "",
       pid: process.pid,
@@ -215,25 +208,6 @@ export class WorkerHttpTransport {
     if (!res.ok) {
       const responseBody = await safeText(res);
       throw new Error(`register failed: ${res.status} ${responseBody}`);
-    }
-  }
-
-  /** 经独立结果端点回传文件命令结果,不经 command.result/RunEvent。 */
-  async postFileCommandResult(
-    result: WorkspaceFileCommandResult
-  ): Promise<void> {
-    const url = `${this.apiBase}/worker/owners/${this.ownerId}/file-command-results`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...this.buildAuthHeaders(),
-      },
-      body: JSON.stringify(result),
-    });
-    if (!res.ok) {
-      const body = await safeText(res);
-      throw new Error(`file command result POST failed: ${res.status} ${body}`);
     }
   }
 
@@ -332,13 +306,13 @@ export class WorkerHttpTransport {
   /** commands/runConfig/events 三个端点共用的鉴权 header。 */
   private buildAuthHeaders(): Record<string, string> {
     return {
-      [WORKER_OWNER_ID_HEADER]: this.ownerId,
+      [WORKER_ID_HEADER]: this.workerId,
       [WORKER_TOKEN_HEADER]: this.token,
     };
   }
 
   /**
-   * 410 = 该 owner 的 token 已被 server 判定为不再有效（比如已经被新的
+   * 410 = 该 worker 的 token 已被 server 判定为不再有效（比如已经被新的
    * worker 进程顶替），此时应直接退出进程，不重试、不重连。
    * 返回是否已经处理，调用方据此决定要不要继续走原来的重试/报错逻辑。
    */
@@ -348,7 +322,7 @@ export class WorkerHttpTransport {
   ): boolean {
     if (res.status !== 410) return false;
     workerLog("worker token evicted by server, exiting", {
-      ownerId: this.ownerId,
+      workerId: this.workerId,
       ...context,
     }, "error");
     process.exit(1);

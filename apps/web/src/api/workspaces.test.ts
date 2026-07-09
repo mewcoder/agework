@@ -51,7 +51,7 @@ describe('workspacesApi', () => {
 
   describe('create', () => {
     it('发送 create 请求', async () => {
-      const body = { name: 'test-workspace', runtimeType: 'local' as const };
+      const body = { name: 'test-workspace', runtimeType: 'native' as const };
       mockApiPost.mockResolvedValue({ id: 'ws-1' });
 
       await workspacesApi.create(body);

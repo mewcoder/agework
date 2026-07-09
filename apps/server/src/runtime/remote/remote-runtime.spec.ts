@@ -36,6 +36,7 @@ const ctx: RuntimeLaunchContext = {
 const ref: RuntimeInstanceRef = {
   runtimeType: "docker",
   ownerId: "owner-1",
+  workerId: "worker-1",
   runtimeInstanceId: "container-1",
   isolationScope: "workspace",
 };
@@ -104,6 +105,7 @@ describe("RemoteRuntime", () => {
         method: "runtime.stop",
         params: {
           ownerId: "owner-1",
+          workerId: "worker-1",
           runtimeInstanceId: "container-1",
           isolationScope: "workspace",
         },
@@ -141,5 +143,113 @@ describe("RemoteRuntime", () => {
     );
 
     await expect(runtime.start(ctx)).rejects.toThrow("is not connected");
+  });
+
+  // ── 文件预览 / git diff 隧道 RPC ───────────────────────────────
+
+  it("listFiles sends a runtime.list-files RPC with rootPath and path", async () => {
+    const tunnel = makeTunnel();
+    tunnel.sendRequest.mockResolvedValueOnce({
+      path: "src",
+      list: [{ name: "a.ts", type: "file", size: 10 }],
+      truncated: false,
+    });
+    const runtime = new RemoteRuntime(
+      "rt-1",
+      tunnel as unknown as RuntimeTunnelHandler,
+      15_000
+    );
+
+    const result = await runtime.listFiles("/remote/ws", "src");
+
+    expect(tunnel.sendRequest).toHaveBeenCalledWith(
+      "rt-1",
+      expect.objectContaining({
+        method: "runtime.list-files",
+        params: { rootPath: "/remote/ws", path: "src" },
+      }),
+      15_000
+    );
+    expect(result.list[0].name).toBe("a.ts");
+  });
+
+  it("readFile sends a runtime.read-file RPC with rootPath and path", async () => {
+    const tunnel = makeTunnel();
+    tunnel.sendRequest.mockResolvedValueOnce({
+      path: "a.ts",
+      encoding: "utf8",
+      content: "hello",
+      size: 5,
+      truncated: false,
+    });
+    const runtime = new RemoteRuntime(
+      "rt-1",
+      tunnel as unknown as RuntimeTunnelHandler,
+      15_000
+    );
+
+    const result = await runtime.readFile("/remote/ws", "a.ts");
+
+    expect(tunnel.sendRequest).toHaveBeenCalledWith(
+      "rt-1",
+      expect.objectContaining({
+        method: "runtime.read-file",
+        params: { rootPath: "/remote/ws", path: "a.ts" },
+      }),
+      15_000
+    );
+    expect(result.content).toBe("hello");
+  });
+
+  it("listChangedFiles sends a runtime.list-changed-files RPC with rootPath", async () => {
+    const tunnel = makeTunnel();
+    tunnel.sendRequest.mockResolvedValueOnce({
+      list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
+      truncated: false,
+    });
+    const runtime = new RemoteRuntime(
+      "rt-1",
+      tunnel as unknown as RuntimeTunnelHandler,
+      15_000
+    );
+
+    const result = await runtime.listChangedFiles("/remote/ws");
+
+    expect(tunnel.sendRequest).toHaveBeenCalledWith(
+      "rt-1",
+      expect.objectContaining({
+        method: "runtime.list-changed-files",
+        params: { rootPath: "/remote/ws" },
+      }),
+      15_000
+    );
+    expect(result.list[0].path).toBe("a.ts");
+  });
+
+  it("readFileDiff sends a runtime.read-file-diff RPC with rootPath and path", async () => {
+    const tunnel = makeTunnel();
+    tunnel.sendRequest.mockResolvedValueOnce({
+      path: "a.ts",
+      status: "modified",
+      before: "old",
+      after: "new",
+    });
+    const runtime = new RemoteRuntime(
+      "rt-1",
+      tunnel as unknown as RuntimeTunnelHandler,
+      15_000
+    );
+
+    const result = await runtime.readFileDiff("/remote/ws", "a.ts");
+
+    expect(tunnel.sendRequest).toHaveBeenCalledWith(
+      "rt-1",
+      expect.objectContaining({
+        method: "runtime.read-file-diff",
+        params: { rootPath: "/remote/ws", path: "a.ts" },
+      }),
+      15_000
+    );
+    expect(result.after).toBe("new");
   });
 });

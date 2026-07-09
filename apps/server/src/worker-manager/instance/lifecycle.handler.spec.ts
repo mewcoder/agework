@@ -44,7 +44,7 @@ function makeRuntimeService(overrides: Record<string, unknown> = {}) {
   return {
     ...runtime,
     runtimeFor: vi.fn().mockReturnValue(runtime),
-    getBuiltinRuntimeId: vi.fn().mockReturnValue("builtin-local"),
+    getManagedRuntimeId: vi.fn().mockReturnValue("managed-native"),
   };
 }
 
@@ -81,6 +81,7 @@ describe("WorkerLifecycleHandler", () => {
       expect(provisioner.destroy).toHaveBeenCalledWith({
         runtimeType: "docker",
         ownerId: "ws-1",
+        workerId: "rr-1",
         runtimeInstanceId: "container-1",
         isolationScope: "workspace",
         targetRuntimeId: "rt-1",
@@ -126,7 +127,7 @@ describe("WorkerLifecycleHandler", () => {
           id: "wr-1",
           workspaceId: "ws-1",
           worker: makeResource({
-            runtimeType: "local",
+            runtimeType: "native",
             instanceId: "4242:token",
           }),
         }),
@@ -144,14 +145,15 @@ describe("WorkerLifecycleHandler", () => {
       await service.shutdownForWorkspace("ws-1");
 
       expect(provisioner.destroy).toHaveBeenCalledWith({
-        runtimeType: "local",
+        runtimeType: "native",
         ownerId: "ws-1",
+        workerId: "rr-1",
         runtimeInstanceId: "4242:token",
         isolationScope: "workspace",
         targetRuntimeId: "rt-1",
       });
       expect(registry.markStoppedById).toHaveBeenCalledWith(
-        expect.objectContaining({ id: "rr-1", runtimeType: "local" }),
+        expect.objectContaining({ id: "rr-1", runtimeType: "native" }),
         "owner_released"
       );
       expect(registry.deleteWorkspaceBinding).toHaveBeenCalledWith("ws-1");
@@ -247,19 +249,19 @@ describe("onApplicationBootstrap", () => {
       findRunningByRuntimeType: vi.fn().mockResolvedValue([
         {
           id: "rr-1",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-1",
           instanceId: "4242:token",
-          runtimeId: "builtin-local",
+          runtimeId: "managed-native",
         },
         {
           id: "rr-2",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-2",
           instanceId: "5555:token",
-          runtimeId: "builtin-local",
+          runtimeId: "managed-native",
         },
       ]),
     });
@@ -276,16 +278,18 @@ describe("onApplicationBootstrap", () => {
     await service.onApplicationBootstrap();
 
     expect(registry.markAllStartingAsError).toHaveBeenCalledTimes(1);
-    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
+    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("native");
     expect(runtimeService.destroy).toHaveBeenCalledWith({
-      runtimeType: "local",
+      runtimeType: "native",
       ownerId: "ws-1",
+      workerId: "rr-1",
       runtimeInstanceId: "4242:token",
       isolationScope: "workspace",
     });
     expect(runtimeService.destroy).toHaveBeenCalledWith({
-      runtimeType: "local",
+      runtimeType: "native",
       ownerId: "ws-2",
+      workerId: "rr-2",
       runtimeInstanceId: "5555:token",
       isolationScope: "workspace",
     });
@@ -304,15 +308,15 @@ describe("onApplicationBootstrap", () => {
       findRunningByRuntimeType: vi.fn().mockResolvedValue([
         {
           id: "rr-managed",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-1",
           instanceId: "4242:token",
-          runtimeId: "builtin-local",
+          runtimeId: "managed-native",
         },
         {
           id: "rr-registered",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-2",
           instanceId: "9999:token",
@@ -362,7 +366,7 @@ describe("onApplicationBootstrap", () => {
 
     await service.onApplicationBootstrap();
 
-    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("local");
+    expect(registry.findRunningByRuntimeType).toHaveBeenCalledWith("native");
     expect(provisioner.destroy).not.toHaveBeenCalled();
     expect(registry.markStoppedById).not.toHaveBeenCalled();
   });
@@ -406,19 +410,19 @@ describe("onApplicationBootstrap", () => {
       findRunningByRuntimeType: vi.fn().mockResolvedValue([
         {
           id: "rr-1",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-1",
           instanceId: "4242:token",
-          runtimeId: "builtin-local",
+          runtimeId: "managed-native",
         },
         {
           id: "rr-2",
-          runtimeType: "local",
+          runtimeType: "native",
           isolationScope: "workspace",
           ownerId: "ws-2",
           instanceId: "5555:token",
-          runtimeId: "builtin-local",
+          runtimeId: "managed-native",
         },
       ]),
     });

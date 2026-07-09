@@ -1,4 +1,4 @@
-import { LocalRuntimeProvider } from "./local/local-runtime.provider";
+import { NativeRuntimeProvider } from "./native/native-runtime.provider";
 import { DockerRuntimeProvider } from "./docker/docker-runtime.provider";
 import { OpenSandboxRuntimeProvider } from "./opensandbox/opensandbox-runtime.provider";
 import type { RuntimeConfig, RuntimeProvider, RuntimeType } from "./types";
@@ -13,7 +13,7 @@ export function createRuntimeResolver(
   cfg: RuntimeConfig
 ): (type: RuntimeType) => RuntimeProvider {
   const providers = new Map<RuntimeType, RuntimeProvider>([
-    ["local", new LocalRuntimeProvider(cfg)],
+    ["native", new NativeRuntimeProvider(cfg)],
     ["docker", new DockerRuntimeProvider(cfg)],
     ["opensandbox", new OpenSandboxRuntimeProvider(cfg)],
   ]);

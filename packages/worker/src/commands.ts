@@ -4,13 +4,10 @@ import type {
   CommandTracePayload,
   RunChannelMessage,
   UpstreamMessage,
-  WorkspaceFileCommandPayload,
-  OwnerCommand,
 } from "@agework/shared/protocol";
 
 export type CommandPollResult = {
   commands: RunChannelMessage<CommandPayload>[];
-  fileCommands: OwnerCommand<WorkspaceFileCommandPayload>[];
 };
 
 export type CommandSource = {
@@ -25,10 +22,6 @@ export type CommandClient = CommandSource & CommandSink;
 
 export type CommandHandler = (
   command: CommandPayload
-) => Promise<void> | void;
-
-export type FileCommandHandler = (
-  command: WorkspaceFileCommandPayload
 ) => Promise<void> | void;
 
 export type CommandOptions = {
@@ -48,9 +41,6 @@ type CommandStatus = CommandResultPayload["status"];
 /**
  * Owns the resident worker command lifecycle:
  * poll commands, dedupe them, dispatch them, and report command receipts.
- *
- * 文件命令走独立分支:fire-and-forget(不 await),避免拖慢同一批次里排在后面的
- * cancel/interrupt。文件命令的 dedupe 用同一个 processedCommands 集合。
  */
 export class WorkerCommands {
   private readonly processedCommands = new Set<string>();
@@ -65,13 +55,10 @@ export class WorkerCommands {
     this.dedupeClearEveryPolls = options.dedupeClearEveryPolls ?? 100;
   }
 
-  async run(
-    handle: CommandHandler,
-    fileHandle?: FileCommandHandler
-  ): Promise<void> {
+  async run(handle: CommandHandler): Promise<void> {
     for (;;) {
       if (this.stopped) break;
-      const { commands, fileCommands } = await this.client.pollCommands(
+      const { commands } = await this.client.pollCommands(
         this.options.waitMs
       );
       if (this.stopped) break;
@@ -85,20 +72,7 @@ export class WorkerCommands {
         await handle(command);
       }
 
-      // 文件命令:fire-and-forget,不 await,不拖慢后面的 run 命令
-      if (fileHandle) {
-        for (const ownerCommand of fileCommands) {
-          if (this.stopped) break;
-          const command = ownerCommand.payload;
-          if (this.processedCommands.has(command.commandId)) continue;
-          this.processedCommands.add(command.commandId);
-          void Promise.resolve(fileHandle(command)).catch(() => {
-            // handler 内部已有 try/catch,这里兜底防 unhandled rejection
-          });
-        }
-      }
-
-      if (commands.length === 0 && fileCommands.length === 0) {
+      if (commands.length === 0) {
         await sleep(this.options.emptyRetryDelayMs);
       }
     }

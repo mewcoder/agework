@@ -13,7 +13,7 @@ function makeHandle(runId = "run-1"): LiveRunHandle {
   return {
     runtimeHandle: {
       runId,
-      runtimeType: "local",
+      runtimeType: "native",
       runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },

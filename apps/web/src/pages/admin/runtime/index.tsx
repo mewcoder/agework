@@ -45,7 +45,7 @@ type CreateRuntimeFormValues = z.infer<typeof createRuntimeFormSchema>;
 
 function runtimeTypeLabel(runtimeType: string | null) {
   switch (runtimeType) {
-    case 'local':
+    case 'native':
       return '本地';
     case 'docker':
       return 'Docker';
@@ -235,7 +235,7 @@ function RuntimeSection({
 }) {
   const detectMutation = useDetectEnv();
   const env = runtime.envStatus;
-  const canDelete = runtime.source !== 'builtin';
+  const canDelete = runtime.source !== 'managed';
 
   return (
     <SettingsSection>
@@ -246,9 +246,9 @@ function RuntimeSection({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{runtime.name}</span>
             <Badge
-              variant={runtime.source === 'builtin' ? 'secondary' : 'outline'}
+              variant={runtime.source === 'managed' ? 'secondary' : 'outline'}
             >
-              {runtime.source === 'builtin' ? '内置' : '注册'}
+              {runtime.source === 'managed' ? '内置' : '注册'}
             </Badge>
             <Badge variant="outline">
               {runtimeTypeLabel(runtime.runtimeType)}
@@ -268,7 +268,7 @@ function RuntimeSection({
 
         {/* 右侧：操作按钮 — 紧凑对齐 */}
         <div className="flex shrink-0 items-center gap-1.5">
-          {runtime.runtimeType === 'local' && (
+          {runtime.runtimeType === 'native' && (
             <Button
               variant="outline"
               size="sm"
@@ -300,7 +300,7 @@ function RuntimeSection({
       </div>
 
       {/* CLI 环境行 */}
-      {runtime.runtimeType === 'local' ? (
+      {runtime.runtimeType === 'native' ? (
         <>
           <AgentEnvItem
             agentType="claude"

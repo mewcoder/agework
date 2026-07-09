@@ -16,12 +16,12 @@ describe("WorkerCommandQueue", () => {
     vi.useRealTimers();
   });
 
-  it("should return empty array for unknown ownerId", () => {
-    const result = queue.pollByOwnerId("nonexistent", 0);
+  it("should return empty array for unknown workerId", () => {
+    const result = queue.pollByWorkerId("nonexistent", 0);
     expect(result).toEqual([]);
   });
 
-  it("should push and poll owner commands", () => {
+  it("should push and poll worker commands", () => {
     const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
@@ -35,13 +35,13 @@ describe("WorkerCommandQueue", () => {
       ts: new Date().toISOString(),
     };
 
-    queue.pushByOwnerId("owner-1", message);
-    const result = queue.pollByOwnerId("owner-1", 0);
+    queue.pushByWorkerId("worker-1", message);
+    const result = queue.pollByWorkerId("worker-1", 0);
     expect(result).toHaveLength(1);
     expect(result[0].seq).toBe(1);
   });
 
-  it("should only return owner commands after given seq", () => {
+  it("should only return worker commands after given seq", () => {
     const e1: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
@@ -67,15 +67,15 @@ describe("WorkerCommandQueue", () => {
       ts: "",
     };
 
-    queue.pushByOwnerId("owner-1", e1);
-    queue.pushByOwnerId("owner-1", e2);
+    queue.pushByWorkerId("worker-1", e1);
+    queue.pushByWorkerId("worker-1", e2);
 
-    const result = queue.pollByOwnerId("owner-1", 1);
+    const result = queue.pollByWorkerId("worker-1", 1);
     expect(result).toHaveLength(1);
     expect(result[0].seq).toBe(2);
   });
 
-  it("should cleanup an owner's queue", () => {
+  it("should cleanup a worker's queue", () => {
     const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
@@ -88,13 +88,13 @@ describe("WorkerCommandQueue", () => {
       },
       ts: "",
     };
-    queue.pushByOwnerId("owner-1", message);
-    queue.cleanupByOwnerId("owner-1");
-    expect(queue.pollByOwnerId("owner-1", 0)).toEqual([]);
+    queue.pushByWorkerId("worker-1", message);
+    queue.cleanupByWorkerId("worker-1");
+    expect(queue.pollByWorkerId("worker-1", 0)).toEqual([]);
   });
 
-  it("should resolve an owner waiter when a matching command is pushed", async () => {
-    const pending = queue.waitForOwnerId("owner-1", 0, 1_000);
+  it("should resolve a worker waiter when a matching command is pushed", async () => {
+    const pending = queue.waitForWorkerId("worker-1", 0, 1_000);
     const message: RunChannelMessage<CommandPayload> = {
       runId: "run-1",
       seq: 1,
@@ -108,23 +108,23 @@ describe("WorkerCommandQueue", () => {
       ts: "",
     };
 
-    queue.pushByOwnerId("owner-1", message);
+    queue.pushByWorkerId("worker-1", message);
 
     await expect(pending).resolves.toEqual([message]);
   });
 
-  it("should resolve an owner waiter with empty commands on timeout", async () => {
+  it("should resolve a worker waiter with empty commands on timeout", async () => {
     vi.useFakeTimers();
 
-    const pending = queue.waitForOwnerId("owner-1", 0, 1_000);
+    const pending = queue.waitForWorkerId("worker-1", 0, 1_000);
     await vi.advanceTimersByTimeAsync(1_000);
 
     await expect(pending).resolves.toEqual([]);
   });
 
   it("drains all pending waiters with empty commands on application shutdown", async () => {
-    const a = queue.waitForOwnerId("owner-1", 0, 60_000);
-    const b = queue.waitForOwnerId("owner-2", 0, 60_000);
+    const a = queue.waitForWorkerId("worker-1", 0, 60_000);
+    const b = queue.waitForWorkerId("worker-2", 0, 60_000);
 
     queue.onApplicationShutdown();
 
@@ -133,33 +133,33 @@ describe("WorkerCommandQueue", () => {
   });
 
   describe("epochFor()", () => {
-    it("returns the same value across repeated calls for the same ownerId", () => {
-      const first = queue.epochFor("owner-1");
-      const second = queue.epochFor("owner-1");
+    it("returns the same value across repeated calls for the same workerId", () => {
+      const first = queue.epochFor("worker-1");
+      const second = queue.epochFor("worker-1");
       expect(second).toBe(first);
     });
 
-    it("returns independent values for different ownerIds", () => {
+    it("returns independent values for different workerIds", () => {
       vi.useFakeTimers();
       vi.setSystemTime(1_000);
-      const owner1Epoch = queue.epochFor("owner-1");
+      const worker1Epoch = queue.epochFor("worker-1");
       vi.setSystemTime(2_000);
-      const owner2Epoch = queue.epochFor("owner-2");
+      const worker2Epoch = queue.epochFor("worker-2");
 
-      expect(owner1Epoch).not.toBe(owner2Epoch);
+      expect(worker1Epoch).not.toBe(worker2Epoch);
       // 各自的值在重复调用后依然稳定，互不影响
-      expect(queue.epochFor("owner-1")).toBe(owner1Epoch);
-      expect(queue.epochFor("owner-2")).toBe(owner2Epoch);
+      expect(queue.epochFor("worker-1")).toBe(worker1Epoch);
+      expect(queue.epochFor("worker-2")).toBe(worker2Epoch);
     });
 
-    it("issues a new epoch after cleanupByOwnerId", () => {
+    it("issues a new epoch after cleanupByWorkerId", () => {
       vi.useFakeTimers();
       vi.setSystemTime(1_000);
-      const beforeCleanup = queue.epochFor("owner-1");
+      const beforeCleanup = queue.epochFor("worker-1");
 
-      queue.cleanupByOwnerId("owner-1");
+      queue.cleanupByWorkerId("worker-1");
       vi.setSystemTime(2_000);
-      const afterCleanup = queue.epochFor("owner-1");
+      const afterCleanup = queue.epochFor("worker-1");
 
       expect(afterCleanup).not.toBe(beforeCleanup);
     });

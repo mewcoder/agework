@@ -15,7 +15,7 @@ import { swallow } from "../../common/swallow";
 /** 一次 run 的执行状态(run 层持有)。 */
 type WorkerRunState = {
   handle: WorkerExecutionHandle;
-  ownerId: string;
+  workerId: string;
   status: "acquiring" | "ready";
   cancelled: boolean;
 };
@@ -23,7 +23,7 @@ type WorkerRunState = {
 /**
  * run 的驱动器:per-run 执行编排归 run 层,取得/释放 runtime 实例统一经
  * `WorkerManagerService.resolveInstance()`/`releaseInstanceForRun()`
- * 完成——runtimeType(sandbox/local)判断被 worker-manager 内部吸收,run 层不再需要认识
+ * 完成——runtimeType(sandbox/native)判断被 worker-manager 内部吸收,run 层不再需要认识
  * 这个区别,也因此不再需要按 runtimeType 分别持有两个驱动器类(设计文档第一节)。
  *
  * 就绪后直接对 worker-manager 完成 openSession / 命令下发 / cleanup,命令不绕经 runtime。
@@ -55,7 +55,7 @@ export class RunDriver {
     };
     this.states.set(runConfig.runId, {
       handle,
-      ownerId: runtimeTarget.ownerId,
+      workerId: "", // set when resolveInstance settles ready
       status: "acquiring",
       cancelled: false,
     });
@@ -96,13 +96,14 @@ export class RunDriver {
       return;
     }
 
+    state.workerId = result.workerId;
     state.handle.runtimeInstanceId = result.runtimeInstanceId;
     state.status = "ready";
     input.onRuntimeInstanceIdReady?.(result.runtimeInstanceId);
 
     this.workerManager.openSession({
       runId,
-      ownerId: state.ownerId,
+      workerId: result.workerId,
       runConfig: input.runConfig,
     });
     this.sendCommand(state.handle, {
@@ -124,7 +125,7 @@ export class RunDriver {
       );
       return;
     }
-    this.workerManager.sendCommand(state.ownerId, handle.runId, command);
+    this.workerManager.sendCommand(state.workerId, handle.runId, command);
     this.recordCommandSent(handle.runId, command);
   }
 

@@ -75,32 +75,33 @@ export class WorkerLifecycleHandler implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     await this.registry.markAllStartingAsError();
 
-    // "local" runtimeType 不等于 Managed——Registered manager 也能配成
-    // --runtime local(裸远程机器)。这条扫尾专治"server 重启,fork 出的子进程
-    // 父子关系断了"这一种孤儿,只对 Managed(builtin-local)成立:Registered
+    // "native" runtimeType 不等于 Managed——Registered manager 也能配成
+    // --runtime native(裸远程机器)。这条扫尾专治"server 重启,fork 出的子进程
+    // 父子关系断了"这一种孤儿,只对 Managed(managed-native)成立:Registered
     // worker 的父进程是远程 manager,server 重启跟它无关,不是孤儿,不该动它——
     // 它的存活由心跳 fence 另行判定。
-    const builtinLocalId = this.runtimeService.getBuiltinRuntimeId("local");
-    const staleLocalRows = (
-      await this.registry.findRunningByRuntimeType("local")
-    ).filter((row) => row.runtimeId === builtinLocalId);
-    for (const row of staleLocalRows) {
+    const managedNativeId = this.runtimeService.getManagedRuntimeId("native");
+    const staleNativeRows = (
+      await this.registry.findRunningByRuntimeType("native")
+    ).filter((row) => row.runtimeId === managedNativeId);
+    for (const row of staleNativeRows) {
       try {
-        await this.runtimeService.runtimeFor(builtinLocalId).destroy({
-          runtimeType: "local",
+        await this.runtimeService.runtimeFor(managedNativeId).destroy({
+          runtimeType: "native",
           ownerId: row.ownerId,
+          workerId: row.id,
           runtimeInstanceId: row.instanceId,
           isolationScope: row.isolationScope,
         });
       } catch (err) {
         this.logger.warn(
-          `Failed to recover orphaned local instance ${row.instanceId}: ${err instanceof Error ? err.message : String(err)}`
+          `Failed to recover orphaned native instance ${row.instanceId}: ${err instanceof Error ? err.message : String(err)}`
         );
       }
       await this.registry
         .markStoppedById(row, "interrupted_by_restart")
         .catch(
-          swallow(this.logger, `mark stopped for orphaned local row ${row.id}`)
+          swallow(this.logger, `mark stopped for orphaned native row ${row.id}`)
         );
     }
 
@@ -128,6 +129,7 @@ export class WorkerLifecycleHandler implements OnApplicationBootstrap {
       const ref: RuntimeInstanceRef = {
         runtimeType: resource.runtimeType,
         ownerId: resource.ownerId,
+        workerId: resource.id,
         runtimeInstanceId: resource.instanceId,
         isolationScope: resource.isolationScope,
         targetRuntimeId: resource.runtimeId,

@@ -115,7 +115,7 @@ describe("RunService", () => {
       const handle = {
         runtimeHandle: {
           runId: "run-1",
-          runtimeType: "local",
+          runtimeType: "native",
           runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
@@ -204,7 +204,7 @@ describe("RunService", () => {
       const handle = {
         runtimeHandle: {
           runId: "run-1",
-          runtimeType: "local",
+          runtimeType: "native",
           runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },

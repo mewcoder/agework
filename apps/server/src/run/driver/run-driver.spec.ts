@@ -29,7 +29,7 @@ function makeRunEvents() {
   };
 }
 
-function makeRuntimeSpec(runtimeType: "local" | "sandbox"): RuntimeSpec {
+function makeRuntimeSpec(runtimeType: "native" | "docker"): RuntimeSpec {
   return {
     runtimeType,
     ownerId: "ws-1",
@@ -37,7 +37,8 @@ function makeRuntimeSpec(runtimeType: "local" | "sandbox"): RuntimeSpec {
     workspaceId: "ws-1",
     hostPath: "/tmp/ws-1",
     runtimePath: "/tmp/ws-1",
-    ...(runtimeType === "sandbox"
+    runtimeLogDir: "/tmp/logs",
+    ...(runtimeType === "docker"
       ? {
           sandbox: {
             isolationScope: "workspace" as const,
@@ -49,7 +50,7 @@ function makeRuntimeSpec(runtimeType: "local" | "sandbox"): RuntimeSpec {
 }
 
 function makeInput(
-  runtimeType: "local" | "sandbox"
+  runtimeType: "native" | "docker"
 ): WorkerExecutionStartInput {
   return {
     runConfig: {
@@ -57,11 +58,11 @@ function makeInput(
       conversationId: "conversation-1",
     } as WorkerExecutionStartInput["runConfig"],
     runtimeTarget: makeRuntimeSpec(runtimeType),
-    targetRuntimeId: "builtin-local",
+    targetRuntimeId: "managed-native",
   };
 }
 
-describe.each(["local", "sandbox"] as const)(
+describe.each(["native", "docker"] as const)(
   "RunDriver (%s)",
   (runtimeType) => {
     let workerManager: ReturnType<typeof makeWorkerManager>;
@@ -89,6 +90,7 @@ describe.each(["local", "sandbox"] as const)(
     it("calls resolveInstance and opens the session once the instance is ready", async () => {
       const ready: AcquireInstanceResult = {
         outcome: "ready",
+        workerId: "worker-1",
         runtimeInstanceId: "instance-1",
       };
       workerManager.resolveInstance.mockResolvedValue(ready);
@@ -103,11 +105,11 @@ describe.each(["local", "sandbox"] as const)(
 
       expect(workerManager.openSession).toHaveBeenCalledWith({
         runId: "run-1",
-        ownerId: "ws-1",
+        workerId: "worker-1",
         runConfig: input.runConfig,
       });
       expect(workerManager.sendCommand).toHaveBeenCalledWith(
-        "ws-1",
+        "worker-1",
         "run-1",
         expect.objectContaining({ type: "user_message" })
       );

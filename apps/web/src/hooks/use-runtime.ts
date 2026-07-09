@@ -16,7 +16,7 @@ export function useRuntimes() {
   });
 }
 
-/** admin: 列出全部 Runtime（builtin + 所有用户的 registered）。 */
+/** admin: 列出全部 Runtime（managed + 所有用户的 registered）。 */
 export function useAdminRuntimes() {
   return useQuery({
     queryKey: ['admin-runtimes'],

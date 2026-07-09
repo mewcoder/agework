@@ -125,8 +125,8 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getIdleTimeoutSeconds: () => 600,
     getHeartbeatTimeoutSeconds: () => 60,
     getHeartbeatCheckIntervalSeconds: () => 30,
-    getAllowedRuntimeTypes: () => ["local"],
-    getDefaultRuntimeType: () => "local",
+    getAllowedRuntimeTypes: () => ["native"],
+    getDefaultRuntimeType: () => "native",
     getRuntimeLogDir: () => "/tmp/agework-logs/runtime",
     getAgentEventTraceConfig: () => ({ enabled: false, maxFileMb: 5 }),
     getOpenSandboxConfig: () => ({

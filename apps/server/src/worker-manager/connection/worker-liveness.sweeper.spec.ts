@@ -22,7 +22,7 @@ function makeDeps(
       .mockReturnValue(overrides.timeoutSeconds ?? 75),
   };
   const registry = {
-    findActiveByOwnerId: vi.fn().mockResolvedValue(null),
+    findActiveByWorkerId: vi.fn().mockResolvedValue(null),
   };
   const provisioner = {
     stop: vi.fn().mockResolvedValue(undefined),
@@ -33,7 +33,7 @@ function makeDeps(
   const ownerRunStore = {
     registerRun: vi.fn(),
     unregisterRun: vi.fn(),
-    listRunIdsByOwnerId: vi.fn().mockReturnValue([]),
+    listRunIdsByWorkerId: vi.fn().mockReturnValue([]),
   };
   return {
     livenessStore,
@@ -58,11 +58,13 @@ function makeSweeper(deps: ReturnType<typeof makeDeps>) {
 
 function activeRow(overrides: Record<string, unknown> = {}) {
   return {
+    id: "worker-1",
     startToken: "token",
     runtimeType: "docker",
     ownerId: "owner-1",
     instanceId: "container-1",
     isolationScope: "workspace",
+    runtimeId: "rt-1",
     ...overrides,
   };
 }
@@ -101,8 +103,8 @@ describe("WorkerLivenessSweeper — scheduling", () => {
       75_000,
       expect.any(Number)
     );
-    expect(deps.registry.findActiveByOwnerId).toHaveBeenCalledWith("owner-1");
-    expect(deps.registry.findActiveByOwnerId).toHaveBeenCalledWith("owner-2");
+    expect(deps.registry.findActiveByWorkerId).toHaveBeenCalledWith("owner-1");
+    expect(deps.registry.findActiveByWorkerId).toHaveBeenCalledWith("owner-2");
   });
 
   it("does not fence anyone when listStale returns no owners", async () => {
@@ -112,7 +114,7 @@ describe("WorkerLivenessSweeper — scheduling", () => {
     sweeper.onApplicationBootstrap();
     await vi.advanceTimersByTimeAsync(20_000);
 
-    expect(deps.registry.findActiveByOwnerId).not.toHaveBeenCalled();
+    expect(deps.registry.findActiveByWorkerId).not.toHaveBeenCalled();
   });
 
   it("keeps sweeping on subsequent ticks", async () => {
@@ -128,7 +130,7 @@ describe("WorkerLivenessSweeper — scheduling", () => {
 
   it("swallows a fence rejection without breaking the interval", async () => {
     const deps = makeDeps({ intervalSeconds: 20, stale: ["owner-1"] });
-    deps.registry.findActiveByOwnerId.mockRejectedValue(new Error("boom"));
+    deps.registry.findActiveByWorkerId.mockRejectedValue(new Error("boom"));
     const sweeper = makeSweeper(deps);
 
     sweeper.onApplicationBootstrap();
@@ -174,10 +176,10 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
   it("emits a WorkerLostEvent for every in-flight run registered for the stale owner", async () => {
     const deps = makeDeps({ stale: ["owner-1"] });
-    deps.registry.findActiveByOwnerId.mockResolvedValue(
+    deps.registry.findActiveByWorkerId.mockResolvedValue(
       activeRow({ ownerId: "owner-1" })
     );
-    deps.ownerRunStore.listRunIdsByOwnerId.mockReturnValue(["run-1"]);
+    deps.ownerRunStore.listRunIdsByWorkerId.mockReturnValue(["run-1"]);
 
     await triggerSweep(deps);
 
@@ -189,10 +191,10 @@ describe("WorkerLivenessSweeper — fence flow", () => {
 
   it("full flow emits a WorkerLostEvent for every in-flight run, tears down the instance via the provisioner, and clears the liveness entry", async () => {
     const deps = makeDeps({ stale: ["owner-4"] });
-    deps.registry.findActiveByOwnerId.mockResolvedValue(
+    deps.registry.findActiveByWorkerId.mockResolvedValue(
       activeRow({ ownerId: "owner-4", instanceId: "container-4" })
     );
-    deps.ownerRunStore.listRunIdsByOwnerId.mockReturnValue([
+    deps.ownerRunStore.listRunIdsByWorkerId.mockReturnValue([
       "run-4a",
       "run-4b",
     ]);
@@ -210,18 +212,20 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     expect(deps.provisioner.stop).toHaveBeenCalledWith({
       runtimeType: "docker",
       ownerId: "owner-4",
+      workerId: "worker-1",
       runtimeInstanceId: "container-4",
       isolationScope: "workspace",
+      targetRuntimeId: "rt-1",
     });
     expect(deps.livenessStore.remove).toHaveBeenCalledWith("owner-4");
   });
 
-  it("builds the teardown ref from the active row's runtimeType (local)", async () => {
+  it("builds the teardown ref from the active row's runtimeType (native)", async () => {
     const deps = makeDeps({ stale: ["owner-5"] });
-    deps.registry.findActiveByOwnerId.mockResolvedValue(
+    deps.registry.findActiveByWorkerId.mockResolvedValue(
       activeRow({
         ownerId: "owner-5",
-        runtimeType: "local",
+        runtimeType: "native",
         instanceId: "4242:token",
       })
     );
@@ -229,16 +233,18 @@ describe("WorkerLivenessSweeper — fence flow", () => {
     await triggerSweep(deps);
 
     expect(deps.provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "local",
+      runtimeType: "native",
       ownerId: "owner-5",
+      workerId: "worker-1",
       runtimeInstanceId: "4242:token",
       isolationScope: "workspace",
+      targetRuntimeId: "rt-1",
     });
   });
 
   it("cleans up the stale liveness entry when the owner has no active registry row", async () => {
     const deps = makeDeps({ stale: ["owner-gone"] });
-    deps.registry.findActiveByOwnerId.mockResolvedValue(null);
+    deps.registry.findActiveByWorkerId.mockResolvedValue(null);
 
     await triggerSweep(deps);
 

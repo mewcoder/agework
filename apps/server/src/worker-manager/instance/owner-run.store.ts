@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
 /**
- * owner → 其名下 in-flight runId 的双向索引,供心跳 fence 时反查该 owner 名下要
+ * worker → 其名下 in-flight runId 的双向索引,供心跳 fence 时反查该 worker 名下要
  * 终结哪些 run。resolveInstance/releaseInstanceForRun/cleanupRun 是 local 与
  * sandbox 两条路径都会经过的地方,索引维护收在这个独立 store 里,而不是散在
  * provisioner 或 facade 的私有状态里——WorkerManagerService 和
@@ -9,36 +9,36 @@ import { Injectable } from "@nestjs/common";
  */
 @Injectable()
 export class OwnerRunStore {
-  private readonly ownerRunIds = new Map<string, Set<string>>();
-  private readonly runOwner = new Map<string, string>();
+  private readonly workerRunIds = new Map<string, Set<string>>();
+  private readonly runWorker = new Map<string, string>();
 
-  registerRun(runId: string, ownerId: string): void {
-    this.runOwner.set(runId, ownerId);
-    let runIds = this.ownerRunIds.get(ownerId);
+  registerRun(runId: string, workerId: string): void {
+    this.runWorker.set(runId, workerId);
+    let runIds = this.workerRunIds.get(workerId);
     if (!runIds) {
       runIds = new Set();
-      this.ownerRunIds.set(ownerId, runIds);
+      this.workerRunIds.set(workerId, runIds);
     }
     runIds.add(runId);
   }
 
   unregisterRun(runId: string): void {
-    const ownerId = this.runOwner.get(runId);
-    if (!ownerId) return;
-    this.runOwner.delete(runId);
-    const runIds = this.ownerRunIds.get(ownerId);
+    const workerId = this.runWorker.get(runId);
+    if (!workerId) return;
+    this.runWorker.delete(runId);
+    const runIds = this.workerRunIds.get(workerId);
     if (!runIds) return;
     runIds.delete(runId);
     if (runIds.size === 0) {
-      this.ownerRunIds.delete(ownerId);
+      this.workerRunIds.delete(workerId);
     }
   }
 
-  listRunIdsByOwnerId(ownerId: string): string[] {
-    return Array.from(this.ownerRunIds.get(ownerId) ?? []);
+  listRunIdsByWorkerId(workerId: string): string[] {
+    return Array.from(this.workerRunIds.get(workerId) ?? []);
   }
 
-  findOwnerIdByRunId(runId: string): string | undefined {
-    return this.runOwner.get(runId);
+  findWorkerIdByRunId(runId: string): string | undefined {
+    return this.runWorker.get(runId);
   }
 }

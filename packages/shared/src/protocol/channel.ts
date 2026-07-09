@@ -59,9 +59,9 @@ export type RunConfig = {
   agentProviderConfig: AgentProviderConfig;
   agentEventTrace?: AgentEventTraceConfig;
   workerLogFilePath?: string;
-  /** local runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
   claudeExecutablePath?: string;
-  /** local runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
   codexExecutablePath?: string;
 };
 
@@ -165,7 +165,7 @@ export type IsolationScope = "user" | "workspace";
 
 /**
  * 沙箱专属放置信息：隔离粒度、容器内挂载目标、沙箱引擎类型。
- * 仅 runtimeType 为 container（docker|opensandbox）时存在；local 模式无容器隔离语义，不带此对象。
+ * 仅 runtimeType 为 container（docker|opensandbox）时存在；native 模式无容器隔离语义，不带此对象。
  */
 export type SandboxPlacementInfo = {
   isolationScope: IsolationScope;
@@ -178,19 +178,19 @@ export type SandboxPlacementInfo = {
  * + ownerId（容器归属/复用键）。启动前纯计算,provider 照此挂卷/起容器。
  *
  * 判别联合，discriminant 为 `runtimeType`：container（docker|opensandbox）分支带 `sandbox`
- * 对象，local 分支不带。`runtimePath` 跨 local/container 都有意义（worker 在执行环境内看到的
+ * 对象，native 分支不带。`runtimePath` 跨 native/container 都有意义（worker 在执行环境内看到的
  * workspace 路径），留顶层。container-only 逻辑可直接以 `SandboxRuntimeSpec` 为入参。
  *
- * ownerId：user 隔离→userId，workspace 隔离/local→workspaceId。一个 ownerId 对应一个可复用
+ * ownerId：user 隔离→userId，workspace 隔离/native→workspaceId。一个 ownerId 对应一个可复用
  * 容器（同 owner 多 run 共用），承担容器命名/队列分区等，须早于 runtimeInstanceId 稳定。
  */
-export type LocalRuntimeSpec = {
-  runtimeType: "local";
+export type NativeRuntimeSpec = {
+  runtimeType: "native";
   userId: string;
   workspaceId: string;
   hostPath: string;
   runtimePath: string;
-  /** 日志目录在执行环境内的路径(local 下即宿主机日志目录)。 */
+  /** 日志目录在执行环境内的路径(native 下即宿主机日志目录)。 */
   runtimeLogDir: string;
   ownerId: string;
 };
@@ -207,7 +207,7 @@ export type SandboxRuntimeSpec = {
   ownerId: string;
 };
 
-export type RuntimeSpec = LocalRuntimeSpec | SandboxRuntimeSpec;
+export type RuntimeSpec = NativeRuntimeSpec | SandboxRuntimeSpec;
 
 // ── WorkerExecutionHandle / RuntimeSpec ───────────────────────────
 // worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
@@ -230,7 +230,7 @@ export type WorkerExecutionStartInput = {
   runtimeTarget: RuntimeSpec;
   runConfig: RunConfig;
   onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
-  /** 目标 Runtime id(builtin 本机内置 或 registered 远程机器)。不进 RuntimeSpec——
+  /** 目标 Runtime id(managed 本机内置 或 registered 远程机器)。不进 RuntimeSpec——
    *  那是纯 DB 无关的 placement 计算类型,这个字段来自 workspace.runtimeId,是
    *  "起在哪台机器上"而非"怎么挂载/隔离"。 */
   targetRuntimeId: string;
@@ -244,11 +244,11 @@ export type WorkerExecutionStartInput = {
  * 取消请求早于容器就绪到达时，run 层在 ready 分支通过自身 state.cancelled 自处理。
  */
 export type AcquireInstanceResult =
-  | { outcome: "ready"; runtimeInstanceId: string }
+  | { outcome: "ready"; workerId: string; runtimeInstanceId: string }
   | { outcome: "error"; error: string };
 
 /**
- * worker 进程启动后向 `POST /worker/owners/:ownerId/register` 发起的注册握手请求体。
+ * worker 进程启动后向 `POST /worker/:workerId/register` 发起的注册握手请求体。
  * startToken 由 server 在 launch 时下发（env `AGEWORK_WORKER_START_TOKEN`），worker
  * 原样带回以证明自己是 server 期望的那个进程/容器。
  */

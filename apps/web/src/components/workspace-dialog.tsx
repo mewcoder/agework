@@ -50,16 +50,16 @@ interface WorkspaceDialogProps {
 
 const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
-const RUNTIME_TYPES = ["local", "docker", "opensandbox"] as const;
+const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
 const ISOLATION_SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["managed", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
-/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选;builtin 全局运行环境
+/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选;managed 全局运行环境
  *  走上面的 runtimeType/isolationScope 下拉,不在这个"选择已配对机器"的列表里出现)。 */
 function eligibleRuntimes(runtimes: Runtime[]): Runtime[] {
   return runtimes.filter(
-    (runtime) => runtime.runtimeType !== null && runtime.source !== "builtin"
+    (runtime) => runtime.runtimeType !== null && runtime.source !== "managed"
   );
 }
 
@@ -195,7 +195,7 @@ function WorkspaceDialogForm({
       description: workspace?.description ?? "",
       useGit: false,
       placementMode: "managed",
-      runtimeType: "local",
+      runtimeType: "native",
       isolationScope: "user",
       gitUrl: "",
       gitBranch: "",
@@ -263,7 +263,7 @@ function WorkspaceDialogForm({
           rootPath: normalizeFilesystemPath(values.rootPath ?? ""),
           runtimeId: values.runtimeId,
           isolationScope:
-            selectedRuntime?.runtimeType !== "local"
+            selectedRuntime?.runtimeType !== "native"
               ? values.isolationScope
               : undefined,
         },
@@ -284,7 +284,7 @@ function WorkspaceDialogForm({
       gitUrl && values.gitBranch?.trim() ? values.gitBranch.trim() : undefined;
     const runtimeType = values.runtimeType;
     const isolationScope =
-      runtimeType !== "local" ? values.isolationScope : undefined;
+      runtimeType !== "native" ? values.isolationScope : undefined;
     createWorkspace.mutate(
       {
         name,
@@ -347,15 +347,15 @@ function WorkspaceDialogForm({
   const canSubmitRegistered =
     !!runtimeId &&
     !!rootPathValue.trim() &&
-    (selectedRuntime?.runtimeType === "local" ||
+    (selectedRuntime?.runtimeType === "native" ||
       selectedRuntimeIsolationScopes.includes(isolationScope));
-  /** managed 场景下,当前 runtimeType 对应的 builtin runtime(浏览目录接口按 runtime 维度调用,
-   *  builtin 也有固定的 runtime id)。 */
+  /** managed 场景下,当前 runtimeType 对应的 managed runtime(浏览目录接口按 runtime 维度调用,
+   *  managed 也有固定的 runtime id)。 */
   const browserDisabled =
     placementMode === "registered" && selectedRuntime?.status !== "online";
 
   useEffect(() => {
-    if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "local") {
+    if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "native") {
       return;
     }
     const allowedScopes = selectedRuntime.capabilities?.isolationScopes ?? [];
@@ -366,19 +366,19 @@ function WorkspaceDialogForm({
   }, [isEdit, form, selectedRuntime, isolationScope]);
 
   const allowedRuntimeTypes =
-    capabilities?.allowedRuntimeTypes ?? [capabilities?.runtimeType ?? "local"];
+    capabilities?.allowedRuntimeTypes ?? [capabilities?.runtimeType ?? "native"];
   const allowedIsolationScopes =
     capabilities?.allowedIsolationScopes ?? [
       capabilities?.isolationScope ?? "user",
     ];
   const canSelectRuntimeType = allowedRuntimeTypes.length > 1;
   const canSelectIsolationScope =
-    runtimeType !== "local" && allowedIsolationScopes.length > 1;
+    runtimeType !== "native" && allowedIsolationScopes.length > 1;
   const canSubmitRuntimeType =
     isEdit || (capabilities && allowedRuntimeTypes.includes(runtimeType));
   const canSubmitIsolationScope =
     isEdit ||
-    runtimeType === "local" ||
+    runtimeType === "native" ||
     (capabilities &&
       allowedIsolationScopes.includes(isolationScope));
 
@@ -519,7 +519,7 @@ function WorkspaceDialogForm({
                 )}
               />
 
-              {selectedRuntime && selectedRuntime.runtimeType !== "local" && (
+              {selectedRuntime && selectedRuntime.runtimeType !== "native" && (
                 <Controller
                   name="isolationScope"
                   control={form.control}
@@ -842,7 +842,7 @@ function isPlacementMode(value: string): value is PlacementMode {
 
 function runtimeTypeLabel(type: WorkspaceRuntimeType) {
   switch (type) {
-    case "local":
+    case "native":
       return "本地";
     case "docker":
       return "Docker";
@@ -874,7 +874,7 @@ function resolveIsolationScopeForRuntimeType({
   allowedScopes: WorkspaceIsolationScope[];
   defaultScope: WorkspaceIsolationScope;
 }): WorkspaceIsolationScope {
-  if (runtimeType === "local") return "user";
+  if (runtimeType === "native") return "user";
 
   const fallbackScope = allowedScopes.includes(defaultScope)
     ? defaultScope

@@ -44,8 +44,8 @@ describe("AgentService", () => {
       getRunContext: vi.fn().mockResolvedValue({
         workspaceId: "proj-1",
         workspaceRootPath: "/tmp/ws",
-        runtimeType: "local",
-        runtimeId: "builtin-local",
+        runtimeType: "native",
+        runtimeId: "managed-native",
         username: "mew",
       }),
     };

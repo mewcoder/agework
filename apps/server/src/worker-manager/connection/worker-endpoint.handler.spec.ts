@@ -5,7 +5,6 @@ import { WorkerCommandQueue } from "./command-queue";
 import { WorkerConfigStore } from "./worker-config.store";
 import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
-import { WorkspaceFileCommandStore } from "./workspace-file-command.store";
 
 function makeHandler(opts: {
   commandQueue?: Partial<WorkerCommandQueue>;
@@ -14,12 +13,13 @@ function makeHandler(opts: {
 }) {
   const commandQueue = {
     epochFor: vi.fn().mockReturnValue(0),
-    pollFileCommands: vi.fn().mockReturnValue([]),
+    pollByWorkerId: vi.fn().mockReturnValue([]),
+    waitForWorkerId: vi.fn().mockResolvedValue([]),
     ...opts.commandQueue,
-  } as WorkerCommandQueue;
+  } as unknown as WorkerCommandQueue;
   const configStore = (opts.configStore ?? {}) as WorkerConfigStore;
   const upstream = (opts.upstream ?? {}) as WorkerUpstreamRegistry;
-  return new WorkerEndpointHandler(commandQueue, configStore, upstream, {} as unknown as WorkspaceFileCommandStore);
+  return new WorkerEndpointHandler(commandQueue, configStore, upstream);
 }
 
 const commandMessage = {
@@ -37,16 +37,16 @@ const commandMessage = {
 
 describe("WorkerEndpointHandler", () => {
   describe("pollCommands()", () => {
-    it("polls the command queue by ownerId and afterSeq", async () => {
-      const pollByOwnerId = vi.fn().mockReturnValue([commandMessage]);
+    it("polls the command queue by workerId and afterSeq", async () => {
+      const pollByWorkerId = vi.fn().mockReturnValue([commandMessage]);
       const epochFor = vi.fn().mockReturnValue(1000);
       const handler = makeHandler({
-        commandQueue: { pollByOwnerId, epochFor },
+        commandQueue: { pollByWorkerId, epochFor },
       });
 
-      const result = await handler.pollCommands("owner-1", { afterSeq: 3 });
+      const result = await handler.pollCommands("worker-1", { afterSeq: 3 });
 
-      expect(pollByOwnerId).toHaveBeenCalledWith("owner-1", 3);
+      expect(pollByWorkerId).toHaveBeenCalledWith("worker-1", 3);
       expect(result).toEqual({
         messages: [
           {
@@ -63,38 +63,38 @@ describe("WorkerEndpointHandler", () => {
     });
 
     it("returns the current queueEpoch regardless of whether commands were found", async () => {
-      const pollByOwnerId = vi.fn().mockReturnValue([]);
+      const pollByWorkerId = vi.fn().mockReturnValue([]);
       const epochFor = vi.fn().mockReturnValue(4242);
       const handler = makeHandler({
-        commandQueue: { pollByOwnerId, epochFor },
+        commandQueue: { pollByWorkerId, epochFor },
       });
 
-      const result = await handler.pollCommands("owner-1", { afterSeq: 0 });
+      const result = await handler.pollCommands("worker-1", { afterSeq: 0 });
 
-      expect(epochFor).toHaveBeenCalledWith("owner-1");
+      expect(epochFor).toHaveBeenCalledWith("worker-1");
       expect(result.queueEpoch).toBe(4242);
     });
 
     it("defaults afterSeq to 0 when not provided", async () => {
-      const pollByOwnerId = vi.fn().mockReturnValue([]);
-      const handler = makeHandler({ commandQueue: { pollByOwnerId } });
+      const pollByWorkerId = vi.fn().mockReturnValue([]);
+      const handler = makeHandler({ commandQueue: { pollByWorkerId } });
 
-      await handler.pollCommands("owner-1", {});
+      await handler.pollCommands("worker-1", {});
 
-      expect(pollByOwnerId).toHaveBeenCalledWith("owner-1", 0);
+      expect(pollByWorkerId).toHaveBeenCalledWith("worker-1", 0);
     });
 
     it("defaults afterSeq to 0 when only waitMs is provided", async () => {
-      const pollByOwnerId = vi.fn().mockReturnValue([]);
-      const handler = makeHandler({ commandQueue: { pollByOwnerId } });
+      const pollByWorkerId = vi.fn().mockReturnValue([]);
+      const handler = makeHandler({ commandQueue: { pollByWorkerId } });
 
-      await handler.pollCommands("owner-1", { waitMs: 0 });
+      await handler.pollCommands("worker-1", { waitMs: 0 });
 
-      expect(pollByOwnerId).toHaveBeenCalledWith("owner-1", 0);
+      expect(pollByWorkerId).toHaveBeenCalledWith("worker-1", 0);
     });
 
     it("long-polls when waitMs is provided", async () => {
-      const waitForOwnerId = vi.fn().mockResolvedValue([
+      const waitForWorkerId = vi.fn().mockResolvedValue([
         {
           seq: 2,
           runId: "run-2",
@@ -107,14 +107,14 @@ describe("WorkerEndpointHandler", () => {
           ts: "2026-06-27T00:00:00.000Z",
         },
       ]);
-      const handler = makeHandler({ commandQueue: { waitForOwnerId } });
+      const handler = makeHandler({ commandQueue: { waitForWorkerId } });
 
-      const result = await handler.pollCommands("owner-1", {
+      const result = await handler.pollCommands("worker-1", {
         afterSeq: 1,
         waitMs: 25000,
       });
 
-      expect(waitForOwnerId).toHaveBeenCalledWith("owner-1", 1, 25000);
+      expect(waitForWorkerId).toHaveBeenCalledWith("worker-1", 1, 25000);
       expect(result.messages).toHaveLength(1);
       expect(result.messages[0]).toMatchObject({
         id: "cmd-2",

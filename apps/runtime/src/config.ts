@@ -1,4 +1,4 @@
-export const RUNTIME_TYPES = ["local", "docker", "opensandbox"] as const;
+export const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
 export type RuntimeType = (typeof RUNTIME_TYPES)[number];
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
@@ -12,12 +12,12 @@ export interface RegisteredRuntimeConfig {
   runtimeType: RuntimeType;
   /** 载体日志目录(容器内/宿主机路径,按 runtimeType 语义同 packages/providers)。 */
   runtimeLogHostPath: string;
-  /** docker/opensandbox 起 worker 载体用的镜像 tag;local 不用。 */
+  /** docker/opensandbox 起 worker 载体用的镜像 tag;native 不用。 */
   workerImage?: string;
-  /** local 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
+  /** native 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
    *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
    *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
-   *  的 LocalProviderConfig。Registered+local 场景下镜像里只有一份 bundle,默认即正确。 */
+   *  的 NativeProviderConfig。Registered+native 场景下镜像里只有一份 bundle,默认即正确。 */
   runtimeEntryPath?: string;
 }
 
@@ -51,7 +51,7 @@ export function resolveRegisteredRuntimeConfig(
       `missing or invalid runtime type: pass --runtime <${RUNTIME_TYPES.join("|")}> or AGEWORK_RUNTIME_TYPE`
     );
   }
-  if (runtimeType !== "local" && !workerImage) {
+  if (runtimeType !== "native" && !workerImage) {
     throw new Error(
       `missing worker image for --runtime ${runtimeType}: pass --worker-image or AGEWORK_RUNTIME_WORKER_IMAGE`
     );

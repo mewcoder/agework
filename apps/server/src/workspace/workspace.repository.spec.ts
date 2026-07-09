@@ -43,8 +43,8 @@ describe("WorkspaceRepository", () => {
       name: "Local workspace",
       userId: "admin-1",
       isolationScope: "workspace",
-      runtimeId: "builtin-local",
-      runtime: { runtimeType: "local" },
+      runtimeId: "managed-native",
+      runtime: { runtimeType: "native" },
       directory: { source: "managed" },
     });
     const prisma = makePrisma({
@@ -65,7 +65,7 @@ describe("WorkspaceRepository", () => {
       isolationScope: "workspace",
       rootPath: "/tmp/ws-1",
       directorySource: "managed",
-      runtimeId: "builtin-local",
+      runtimeId: "managed-native",
     });
 
     expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
@@ -73,7 +73,7 @@ describe("WorkspaceRepository", () => {
       name: "Local workspace",
       userId: "admin-1",
       isolationScope: "workspace",
-      runtimeId: "builtin-local",
+      runtimeId: "managed-native",
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {

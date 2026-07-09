@@ -33,14 +33,14 @@ describe("resolveRegisteredRuntimeConfig", () => {
       {
         AGEWORK_SERVER_BASE_URL: "http://env:3000/api/v1",
         AGEWORK_RUNTIME_TOKEN: "env-token",
-        AGEWORK_RUNTIME_TYPE: "local",
+        AGEWORK_RUNTIME_TYPE: "native",
         AGEWORK_RUNTIME_ENTRY: "/path/env.js",
       }
     );
     expect(config).toEqual({
       serverBaseUrl: "http://env:3000/api/v1",
       token: "flag-token",
-      runtimeType: "local",
+      runtimeType: "native",
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       runtimeEntryPath: "/path/flag.js",
     });
@@ -48,13 +48,13 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("local without runtime-entry defaults to self (allowed)", () => {
     const config = resolveRegisteredRuntimeConfig(
-      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
+      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native"],
       {}
     );
     expect(config).toEqual({
       serverBaseUrl: "http://h/api/v1",
       token: "t",
-      runtimeType: "local",
+      runtimeType: "native",
       runtimeLogHostPath: DEFAULT_LOG_DIR,
     });
   });
@@ -113,10 +113,10 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("accepts local with no --runtime-entry (defaults later to process.argv[1])", () => {
     const config = resolveRegisteredRuntimeConfig(
-      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "local"],
+      ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native"],
       {}
     );
-    expect(config.runtimeType).toBe("local");
+    expect(config.runtimeType).toBe("native");
   });
 
   it("rejects a flag without value", () => {

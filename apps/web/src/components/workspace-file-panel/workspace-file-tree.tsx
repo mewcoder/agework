@@ -15,7 +15,7 @@ import { FileTypeIcon } from "@/components/icons/file-icon";
 import {
   useWorkspaceFiles,
 } from "@/hooks/use-workspace";
-import type { FileEntry } from "@agework/shared/protocol";
+import type { FileEntry } from "@agework/shared/filesystem/types";
 import { cn } from "@/lib/utils";
 
 export type FileTreeProps = {

@@ -279,7 +279,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const needsModelProvider = !selectedModelProviderId;
   const needsNonSystemModelProvider =
     !!targetWorkspace &&
-    targetWorkspace.runtimeType !== "local" &&
+    targetWorkspace.runtimeType !== "native" &&
     !!selectedModelProvider &&
     isSystemModelProvider(selectedModelProvider);
   const modelProviderAttentionMessage = needsNonSystemModelProvider

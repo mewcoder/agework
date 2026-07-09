@@ -10,8 +10,8 @@ import type {
 } from "../types";
 
 /**
- * local 运行形态的 Provider:fork 一个 worker 子进程,IPC channel 只在内部用于
- * 接收进程 exit 信号与 SIGTERM 终止,业务收发走 HTTP。local 无独立载体,
+ * native 运行形态的 Provider:fork 一个 worker 子进程,IPC channel 只在内部用于
+ * 接收进程 exit 信号与 SIGTERM 终止,业务收发走 HTTP。native 无独立载体,
  * `stop` 与 `destroy` 都是杀进程——`stop` 杀内存中跟踪的 channel,`destroy`
  * 在无内存态时(如 server 重启后清孤儿)按 `runtimeInstanceId` 里的 pid 杀。
  *
@@ -19,9 +19,9 @@ import type {
  * `AGEWORK_WORKER_ROLE=worker` 让同一产物以 worker 角色启动。入口路径由 server
  * 经 config 传入,包因此既不依赖 `@agework/worker` 也不依赖 tsx。
  */
-export class LocalRuntimeProvider implements RuntimeProvider {
-  readonly type = "local";
-  private readonly logger = new Logger(LocalRuntimeProvider.name);
+export class NativeRuntimeProvider implements RuntimeProvider {
+  readonly type = "native";
+  private readonly logger = new Logger(NativeRuntimeProvider.name);
   private readonly channels = new Map<string, ChildProcess>();
 
   constructor(private readonly config: RuntimeConfig) {}
@@ -33,7 +33,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     onExit?: () => void
   ): Promise<{ runtimeInstanceId: string }> {
     const startToken = randomUUID();
-    const child = fork(this.config.local.runtimeEntryPath, [], {
+    const child = fork(this.config.native.runtimeEntryPath, [], {
       env: {
         ...process.env,
         ...ctx.workerEnv,
@@ -45,7 +45,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
     });
     const runtimeInstanceId = `${child.pid}:${startToken}`;
     this.logger.log(
-      `local worker forked ${safeLogJson({ runId: ctx.runId, pid: child.pid })}`
+      `native worker forked ${safeLogJson({ runId: ctx.runId, pid: child.pid })}`
     );
 
     this.channels.set(ctx.ownerId, child);
@@ -78,7 +78,7 @@ export class LocalRuntimeProvider implements RuntimeProvider {
         channel.kill("SIGTERM");
       } catch (err) {
         this.logger.warn(
-          `terminate local worker failed ${safeLogJson({ ownerId, error: err instanceof Error ? err.message : String(err) })}`
+          `terminate native worker failed ${safeLogJson({ ownerId, error: err instanceof Error ? err.message : String(err) })}`
         );
       }
     }

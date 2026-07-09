@@ -96,3 +96,17 @@ pnpm dlx --package=shadcn@latest --package=zod@3.25.76 shadcn add https://elemen
 - AG-UI：https://docs.ag-ui.com/llms-full.txt
 - shadcn: https://ui.shadcn.com/llms.txt
 - base-ui: https://base-ui.com/llms.txt
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles using default label strings. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Multi-context layout (per-context `docs/adr/`, indexed by `CONTEXT-MAP.md`). See `docs/agents/domain.md`.

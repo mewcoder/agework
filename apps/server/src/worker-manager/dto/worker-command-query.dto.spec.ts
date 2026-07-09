@@ -5,14 +5,14 @@ import { describe, expect, it } from "vitest";
 import {
   MAX_COMMAND_WAIT_MS,
   WorkerCommandQueryDto,
-  WorkerOwnerParamDto,
+  WorkerWorkerIdParamDto,
 } from "./worker-command-query.dto";
 
-describe("WorkerOwnerParamDto", () => {
-  it("trims and requires ownerId", async () => {
-    const dto = plainToInstance(WorkerOwnerParamDto, { ownerId: " owner-1 " });
+describe("WorkerWorkerIdParamDto", () => {
+  it("trims and requires workerId", async () => {
+    const dto = plainToInstance(WorkerWorkerIdParamDto, { workerId: " worker-1 " });
 
-    expect(dto.ownerId).toBe("owner-1");
+    expect(dto.workerId).toBe("worker-1");
     expect(await validate(dto)).toHaveLength(0);
   });
 });

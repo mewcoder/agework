@@ -94,7 +94,7 @@ export class RunLauncher {
     const runtimeTarget = this.getPlacement({ workspace, userId });
     const runtimeType = runtimeTarget.runtimeType;
     const sandbox =
-      runtimeTarget.runtimeType !== "local" ? runtimeTarget.sandbox : undefined;
+      runtimeTarget.runtimeType !== "native" ? runtimeTarget.sandbox : undefined;
     const runConfig = this.makeRunConfig({
       agentProviderConfig,
       placement: runtimeTarget,
@@ -195,7 +195,7 @@ export class RunLauncher {
     userId: string;
   }): RuntimeSpec {
     const { workspace, userId } = input;
-    const isRegistered = workspace.runtimeSource !== "builtin";
+    const isRegistered = workspace.runtimeSource !== "managed";
     const requestedRuntimeType = workspace.runtimeType;
     if (
       !isRegistered &&
@@ -221,10 +221,10 @@ export class RunLauncher {
       ),
       runtimeLogHostPath: this.readRuntimeLogHostPath(),
     };
-    if (runtimeType === "local") {
+    if (runtimeType === "native") {
       return this.workerManager.resolveRuntimeSpec({
         ...base,
-        runtimeType: "local",
+        runtimeType: "native",
       });
     }
 
@@ -288,7 +288,7 @@ export class RunLauncher {
       // container 不走此链路（镜像固定路径，经 env 注入，见 ADR-0004）。
       let claudeExecutablePath: string | undefined;
       let codexExecutablePath: string | undefined;
-      if (runtimeType === "local" && cliPaths) {
+      if (runtimeType === "native" && cliPaths) {
         claudeExecutablePath = cliPaths.claude;
         codexExecutablePath = cliPaths.codex;
       }

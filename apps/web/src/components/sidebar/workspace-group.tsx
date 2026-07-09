@@ -113,7 +113,7 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
             }}
             className="h-7 rounded-md pl-4 pr-16 text-sm font-normal text-sidebar-foreground/90 hover:bg-transparent hover:text-sidebar-foreground data-open:hover:bg-transparent"
           >
-            {workspace.runtimeType !== "local" ? (
+            {workspace.runtimeType !== "native" ? (
               open ? (
                 <FolderOpenDot className="size-4 shrink-0" />
               ) : (
@@ -303,7 +303,7 @@ function WorkspaceHoverRow({
 
 function runtimeLabel(workspace: Workspace) {
   switch (workspace.runtimeType) {
-    case "local":
+    case "native":
       return "本地";
     case "docker":
       return "Docker";
