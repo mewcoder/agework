@@ -1,5 +1,13 @@
-export const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
-export type RuntimeType = (typeof RUNTIME_TYPES)[number];
+import {
+  SUPPORTED_RUNTIME_TYPES,
+  isRuntimeType,
+  type RuntimeType,
+} from "@agework/providers";
+
+// RuntimeType / isRuntimeType / SUPPORTED_RUNTIME_TYPES 的权威来源是
+// @agework/providers（design §4.2）。re-export RuntimeType 保持现有消费者
+// 从 config.js 引入的路径不破。
+export type { RuntimeType };
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
 
@@ -48,7 +56,7 @@ export function resolveRegisteredRuntimeConfig(
   }
   if (!runtimeType || !isRuntimeType(runtimeType)) {
     throw new Error(
-      `missing or invalid runtime type: pass --runtime <${RUNTIME_TYPES.join("|")}> or AGEWORK_RUNTIME_TYPE`
+      `missing or invalid runtime type: pass --runtime <${SUPPORTED_RUNTIME_TYPES.join("|")}> or AGEWORK_RUNTIME_TYPE`
     );
   }
   if (runtimeType !== "native" && !workerImage) {
@@ -65,10 +73,6 @@ export function resolveRegisteredRuntimeConfig(
     ...(workerImage ? { workerImage } : {}),
     ...(runtimeEntryPath ? { runtimeEntryPath } : {}),
   };
-}
-
-function isRuntimeType(value: string): value is RuntimeType {
-  return (RUNTIME_TYPES as readonly string[]).includes(value);
 }
 
 function parseFlags(argv: string[]): Map<string, string> {

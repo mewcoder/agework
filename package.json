@@ -3,9 +3,10 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "dev": "turbo dev --filter=server --filter=web",
+    "dev": "node scripts/clean-dev.mjs && turbo dev --filter=server --filter=web",
     "dev:server": "pnpm --filter server dev",
     "dev:web": "pnpm --filter web dev",
+    "clean:dev": "node scripts/clean-dev.mjs",
     "dev:reset": "node scripts/init.mjs --dev --reset --no-install",
     "build": "turbo build",
     "start": "cross-env NODE_ENV=production AGEWORK_SERVE_FRONTEND=true pnpm --filter server start:prod",

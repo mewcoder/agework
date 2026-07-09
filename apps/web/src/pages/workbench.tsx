@@ -60,7 +60,10 @@ function WorkbenchContent({
 
   // 未选工作空间或移动端时不显示文件面板入口
   const canShowPanel = !!workspaceId && !isMobile;
-  const showPanel = panelOpen && canShowPanel && !!workspaceId;
+  // 面板与切换按钮同生命周期：按钮只在选中对话时渲染（ChatHeader 内），
+  // 面板也必须在选中对话时才显示，否则回到首页时按钮消失但面板仍在，无法关闭。
+  const showPanel =
+    panelOpen && canShowPanel && selectedConversationId !== undefined;
 
   return (
     <SidebarInset className="relative min-h-0 overflow-hidden shadow-none ring-1 ring-border/60">

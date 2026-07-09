@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { mkdirSync } from "fs";
 import { join } from "path";
+import { isRuntimeType, type RuntimeType } from "@agework/providers";
+import type { IsolationScope } from "@agework/shared/protocol";
 import { SystemSettingRepository } from "./system-setting.repository";
 import {
   AGEWORK_HOST_RUNTIME_LOG_DIR,
@@ -90,22 +92,15 @@ export function getJwtSecret(): string {
   );
 }
 
-export type IsolationScope = "user" | "workspace";
-export type RuntimeType = "native" | "docker" | "opensandbox";
+// RuntimeType / isRuntimeType 的权威来源是 @agework/providers（design §4.2），
+// IsolationScope 的权威来源是 @agework/shared/protocol。re-export 保持现有消费者
+// 从 config.service 引入的路径不破。
+export type { RuntimeType, IsolationScope };
 
-const RUNTIME_TYPES = [
-  "native",
-  "docker",
-  "opensandbox",
-] as const satisfies readonly RuntimeType[];
 const ISOLATION_SCOPES = [
   "user",
   "workspace",
 ] as const satisfies readonly IsolationScope[];
-
-function isRuntimeType(value: string): value is RuntimeType {
-  return (RUNTIME_TYPES as readonly string[]).includes(value);
-}
 
 function isIsolationScope(value: string): value is IsolationScope {
   return (ISOLATION_SCOPES as readonly string[]).includes(value);
