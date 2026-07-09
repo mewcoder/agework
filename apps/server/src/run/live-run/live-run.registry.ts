@@ -8,7 +8,7 @@ import type {
   AssistantMessageAggregator,
 } from "../upstream/assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { errorLogFields } from "../../common/logging";
 import type { RunStream } from "../streaming/run-stream";
 
 export interface RunTimeoutErrorPort {
@@ -85,20 +85,16 @@ export class LiveRunRegistry implements OnApplicationShutdown {
       if (!handle) return;
       const timeoutErrorPort = this.timeoutErrorPort;
       if (!timeoutErrorPort) {
-        this.logger.error(
-          `run timeout error port missing ${safeLogJson({ runId })}`
-        );
+        this.logger.error("run timeout error port missing", { runId });
         return;
       }
       timeoutErrorPort
         .markRunTimedOut(runId, handle.runtimeHandle)
         .catch((err) => {
-          this.logger.error(
-            `force run timeout status failed ${safeLogJson({
-              runId,
-              ...errorLogFields(err),
-            })}`
-          );
+          this.logger.error("force run timeout status failed", {
+            runId,
+            ...errorLogFields(err),
+          });
         });
     }, timeoutMs);
     timer.unref();

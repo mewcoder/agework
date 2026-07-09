@@ -9,7 +9,7 @@ import type {
 import type { RunEventPort } from "./run-event.port";
 import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 import { RunEventService } from "../../run-event/run-event.service";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { errorLogFields } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 
 /** 一次 run 的执行状态(run 层持有)。 */
@@ -116,13 +116,11 @@ export class RunDriver {
   sendCommand(handle: WorkerExecutionHandle, command: CommandPayload): void {
     const state = this.states.get(handle.runId);
     if (!state) {
-      this.logger.warn(
-        `send command dropped ${safeLogJson({
-          runId: handle.runId,
-          commandType: command.type,
-          reason: "no_active_state",
-        })}`
-      );
+      this.logger.warn("send command dropped", {
+        runId: handle.runId,
+        commandType: command.type,
+        reason: "no_active_state",
+      });
       return;
     }
     this.workerManager.sendCommand(state.workerId, handle.runId, command);
@@ -158,23 +156,19 @@ export class RunDriver {
         })
       )
       .catch((err) =>
-        this.logger.warn(
-          `record command sent failed ${safeLogJson({
-            runId,
-            commandType: command.type,
-            ...errorLogFields(err),
-          })}`
-        )
+        this.logger.warn("record command sent failed", {
+          runId,
+          commandType: command.type,
+          ...errorLogFields(err),
+        })
       );
   }
 
   private onAcquireFailed(runId: string, err: unknown): void {
-    this.logger.warn(
-      `resolve instance failed ${safeLogJson({
-        runId,
-        ...errorLogFields(err),
-      })}`
-    );
+    this.logger.warn("resolve instance failed", {
+      runId,
+      ...errorLogFields(err),
+    });
     this.states.delete(runId);
     this.notifyWorkerError(runId, `resolve instance failed: ${String(err)}`);
   }
@@ -194,9 +188,7 @@ export class RunDriver {
   }
 
   terminateExecution(runId: string, reason: string): void {
-    this.logger.warn(
-      `terminating run session ${safeLogJson({ runId, reason })}`
-    );
+    this.logger.warn("terminating run session", { runId, reason });
     this.cleanup(runId);
   }
 

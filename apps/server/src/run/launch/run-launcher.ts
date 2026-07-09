@@ -28,7 +28,7 @@ import {
 } from "../upstream/assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { errorLogFields } from "../../common/logging";
 import {
   RunEventService,
   compactData,
@@ -125,16 +125,14 @@ export class RunLauncher {
     const saveRun = this.makeSaveRun({ conversationId, runId, aggregator });
     const onAgentSessionId = this.saveSession(conversationId);
 
-    this.logger.log(
-      `run starting ${safeLogJson({
-        runId,
-        conversationId,
-        workspaceId: runtimeTarget.workspaceId,
-        agentType,
-        runtimeType,
-        isolationScope: sandbox?.isolationScope,
-      })}`
-    );
+    this.logger.log("run starting", {
+      runId,
+      conversationId,
+      workspaceId: runtimeTarget.workspaceId,
+      agentType,
+      runtimeType,
+      isolationScope: sandbox?.isolationScope,
+    });
 
     const runCreated = await this.createRun({
       runId,
@@ -363,12 +361,10 @@ export class RunLauncher {
         reason: "user_steered",
         endResponse: true,
       });
-      this.logger.log(
-        `active run interrupted by user steering ${safeLogJson({
-          conversationId,
-          runId,
-        })}`
-      );
+      this.logger.log("active run interrupted by user steering", {
+        conversationId,
+        runId,
+      });
       return;
     }
 
@@ -514,13 +510,11 @@ export class RunLauncher {
       }
       return true;
     } catch (err) {
-      this.logger.warn(
-        `create run record failed ${safeLogJson({
-          runId,
-          conversationId,
-          ...errorLogFields(err),
-        })}`
-      );
+      this.logger.warn("create run record failed", {
+        runId,
+        conversationId,
+        ...errorLogFields(err),
+      });
       const errorMsg = err instanceof Error ? err.message : String(err);
       stream.writeError({ threadId: conversationId, runId, message: errorMsg });
       stream.end();
@@ -567,14 +561,12 @@ export class RunLauncher {
           void this.persistRuntimeHandle(runId, runtimeType, runtimeInstanceId),
       });
     } catch (err) {
-      this.logger.error(
-        `start worker failed ${safeLogJson({
-          runId,
-          conversationId,
-          runtimeType,
-          ...errorLogFields(err),
-        })}`
-      );
+      this.logger.error("start worker failed", {
+        runId,
+        conversationId,
+        runtimeType,
+        ...errorLogFields(err),
+      });
       await this.runRepository
         .markError(runId, "Failed to start worker")
         .catch(swallow(this.logger, `mark run ${runId} start failure`));
@@ -687,14 +679,12 @@ export class RunLauncher {
       }
     });
 
-    this.logger.log(
-      `run registered ${safeLogJson({
-        runId,
-        conversationId,
-        runtimeType: runtimeHandle.runtimeType,
-        runtimeInstanceId: runtimeHandle.runtimeInstanceId,
-      })}`
-    );
+    this.logger.log("run registered", {
+      runId,
+      conversationId,
+      runtimeType: runtimeHandle.runtimeType,
+      runtimeInstanceId: runtimeHandle.runtimeInstanceId,
+    });
   }
 }
 

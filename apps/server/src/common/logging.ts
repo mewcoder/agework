@@ -1,5 +1,11 @@
 export type LogLevel = "debug" | "log" | "warn" | "error";
-export type NestLogLevel = "error" | "warn" | "log" | "debug" | "verbose";
+export type NestLogLevel =
+  | "fatal"
+  | "error"
+  | "warn"
+  | "log"
+  | "debug"
+  | "verbose";
 
 const SECRET_KEY_RE =
   /(api[_-]?key|authorization|auth[_-]?token|token|password|secret|jwt|cookie)$/i;
@@ -30,15 +36,30 @@ export function redactLogValue(value: unknown): unknown {
   return redactValue(value, "", new WeakSet<object>());
 }
 
+/**
+ * AGEWORK_LOG_LEVEL 五档语义（低→高信息量）：
+ * - error：仅严重错误
+ * - warn ：错误 + 警告
+ * - info ：一般操作信息（默认）
+ * - debug：详细信息
+ * - trace：全部日志，含逐事件 upstream 流水（最详细）
+ * 未设置时默认 info（不含 debug/trace），dev/prod 一致。`verbose` 作为 `trace` 旧别名保留。
+ */
 export function resolveNestLogLevels(): NestLogLevel[] {
-  const raw = process.env.AGEWORK_LOG_LEVEL?.toLowerCase();
-  if (raw === "debug") return ["error", "warn", "log", "debug"];
-  if (raw === "warn") return ["error", "warn"];
-  if (raw === "error") return ["error"];
-  if (raw === "verbose") return ["error", "warn", "log", "debug", "verbose"];
-  return process.env.NODE_ENV === "production"
-    ? ["error", "warn", "log"]
-    : ["error", "warn", "log", "debug"];
+  switch (process.env.AGEWORK_LOG_LEVEL?.toLowerCase()) {
+    case "error":
+      return ["fatal", "error"];
+    case "warn":
+      return ["fatal", "error", "warn"];
+    case "debug":
+      return ["fatal", "error", "warn", "log", "debug"];
+    case "trace":
+    case "verbose":
+      return ["fatal", "error", "warn", "log", "debug", "verbose"];
+    case "info":
+    default:
+      return ["fatal", "error", "warn", "log"];
+  }
 }
 
 function redactValue(

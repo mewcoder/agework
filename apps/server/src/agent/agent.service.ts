@@ -10,7 +10,6 @@ import type { JwtUser } from "../auth/auth.types";
 import { RunService } from "../run/run.service";
 import type { RunCliPaths } from "../run/run.types";
 import { WorkspaceService } from "../workspace/workspace.service";
-import { safeLogJson } from "../common/logging";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
 import type { CreateConversationDto } from "./dto/create-conversation.dto";
 import {
@@ -88,18 +87,16 @@ export class AgentService {
     const requestedModel = this.optionalString(body.forwardedProps.model);
     const interruptReason = body.interruptReason;
 
-    this.logger.log(
-      `agent run requested ${safeLogJson({
-        conversationId,
-        runId,
-        userId,
-        userMessageId,
-        requestedAgentType,
-        requestedModelProviderId: modelProviderId,
-        requestedModel,
-        interruptReason,
-      })}`
-    );
+    this.logger.log("agent run requested", {
+      conversationId,
+      runId,
+      userId,
+      userMessageId,
+      requestedAgentType,
+      requestedModelProviderId: modelProviderId,
+      requestedModel,
+      interruptReason,
+    });
 
     const conversation = await this.conversationService.findById(
       userId,

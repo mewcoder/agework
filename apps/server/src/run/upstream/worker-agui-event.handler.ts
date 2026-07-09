@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { RecordRunEventInput, RunUsage } from "@agework/shared/protocol";
-import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { RunRepository } from "../run.repository";
 import {
@@ -25,19 +24,12 @@ export class WorkerAgUiEventHandler {
   handle(runId: string, event: unknown): void {
     const handle = this.liveRuns.get(runId);
     if (!handle) {
-      this.logger.warn(
-        `drop AG-UI event without live handle ${safeLogJson({ runId })}`
-      );
+      this.logger.warn("drop AG-UI event without live handle", { runId });
       return;
     }
 
     const evt = event as Record<string, unknown>;
     const eventType = typeof evt.type === "string" ? evt.type : "unknown";
-    if (this.runEvents.shouldLogAgUiEvent(eventType)) {
-      this.logger.debug(
-        `forward AG-UI event ${safeLogJson({ runId, type: eventType })}`
-      );
-    }
     this.recordAgUi(runId, eventType, evt);
     handle.aggregator.handle(evt as { type: string; [key: string]: unknown });
 

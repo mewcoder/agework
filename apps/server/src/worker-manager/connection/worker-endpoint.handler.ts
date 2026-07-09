@@ -9,7 +9,6 @@ import type {
   WorkerCommandRpcRequest,
 } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
-import { safeLogJson } from "../../common/logging";
 import { WorkerCommandQueue } from "./command-queue";
 import { WorkerConfigStore } from "./worker-config.store";
 import { parseWorkerEventPostBody } from "./worker-event.parser";
@@ -39,18 +38,16 @@ export class WorkerEndpointHandler {
         ? await this.commandQueue.waitForWorkerId(workerId, seq, wait)
         : this.commandQueue.pollByWorkerId(workerId, seq);
     if (commands.length > 0) {
-      this.logger.debug(
-        `worker commands fetched ${safeLogJson({
-          workerId,
-          afterSeq: seq,
-          count: commands.length,
-          commands: commands.map((command) => ({
-            seq: command.seq,
-            runId: command.runId,
-            type: command.payload.type,
-          })),
-        })}`
-      );
+      this.logger.debug("worker commands fetched", {
+        workerId,
+        afterSeq: seq,
+        count: commands.length,
+        commands: commands.map((command) => ({
+          seq: command.seq,
+          runId: command.runId,
+          type: command.payload.type,
+        })),
+      });
     }
     return {
       messages: commands.map(commandMessageToRpcRequest),
@@ -64,15 +61,13 @@ export class WorkerEndpointHandler {
       this.logger.warn(`Run config not found runId=${runId}`);
       throw new NotFoundException(`Run config not found: ${runId}`);
     }
-    this.logger.debug(
-      `run config fetched ${safeLogJson({
-        runId,
-        conversationId: config.conversationId,
-        workspaceId: config.workspaceId,
-        agentType: config.agentProviderConfig.agentType,
-        agentProviderSource: config.agentProviderConfig.source,
-      })}`
-    );
+    this.logger.debug("run config fetched", {
+      runId,
+      conversationId: config.conversationId,
+      workspaceId: config.workspaceId,
+      agentType: config.agentProviderConfig.agentType,
+      agentProviderSource: config.agentProviderConfig.source,
+    });
     return { config };
   }
 

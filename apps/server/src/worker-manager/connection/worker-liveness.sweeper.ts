@@ -7,7 +7,6 @@ import {
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { isRuntimeType, type RuntimeInstanceRef } from "@agework/providers";
 import { ConfigService } from "../../config/config.service";
-import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import { WorkerLivenessStore } from "./worker-liveness.store";
 import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
@@ -93,13 +92,11 @@ export class WorkerLivenessSweeper
     await this.stopWorkerByWorkerId(workerId);
     this.livenessStore.remove(workerId);
 
-    this.logger.warn(
-      `fenced unhealthy worker ${safeLogJson({
-        workerId,
-        reason,
-        terminatedRuns: runIds.length,
-      })}`
-    );
+    this.logger.warn("fenced unhealthy worker", {
+      workerId,
+      reason,
+      terminatedRuns: runIds.length,
+    });
   }
 
   /**

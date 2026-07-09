@@ -10,7 +10,7 @@ import type {
   RunEventTargetType,
   RunStatusPayload,
 } from "@agework/shared/protocol";
-import { errorLogFields, safeLogJson } from "../common/logging";
+import { errorLogFields } from "../common/logging";
 import { RunEventRepository } from "./run-event.repository";
 import { RunEventSeqStore } from "./seq/run-event-seq.store";
 import { RawJsonlReader } from "./raw/raw-jsonl-reader";
@@ -62,13 +62,11 @@ export class RunEventService {
           runSeq,
         });
       } catch (err) {
-        this.logger.warn(
-          `append run event failed ${safeLogJson({
-            runId: event.runId,
-            type: event.type,
-            ...errorLogFields(err),
-          })}`
-        );
+        this.logger.warn("append run event failed", {
+          runId: event.runId,
+          type: event.type,
+          ...errorLogFields(err),
+        });
         throw err;
       }
     });
@@ -535,16 +533,6 @@ export class RunEventService {
       error: payload.error,
       reason: pendingActionSummary(payload.pendingAction),
     });
-  }
-
-  /** 判定某个 AG-UI 事件类型是否属于需要落 run event 的生命周期边界。 */
-  shouldLogAgUiEvent(eventType: string): boolean {
-    return (
-      eventType.endsWith("_START") ||
-      eventType.endsWith("_END") ||
-      eventType === "RUN_STARTED" ||
-      eventType === "RUN_ERROR"
-    );
   }
 
   /** 将一条 AG-UI 事件归一化为 0..N 条结构化 run event。 */

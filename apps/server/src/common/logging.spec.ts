@@ -111,24 +111,36 @@ describe("resolveNestLogLevels", () => {
     restoreEnv("NODE_ENV", originalEnv.NODE_ENV);
   });
 
-  it("returns debug levels for debug setting", () => {
-    process.env.AGEWORK_LOG_LEVEL = "debug";
-    expect(resolveNestLogLevels()).toEqual(["error", "warn", "log", "debug"]);
-  });
-
-  it("returns warn levels for warn setting", () => {
-    process.env.AGEWORK_LOG_LEVEL = "warn";
-    expect(resolveNestLogLevels()).toEqual(["error", "warn"]);
-  });
-
-  it("returns error only for error setting", () => {
+  it("error → fatal+error", () => {
     process.env.AGEWORK_LOG_LEVEL = "error";
-    expect(resolveNestLogLevels()).toEqual(["error"]);
+    expect(resolveNestLogLevels()).toEqual(["fatal", "error"]);
   });
 
-  it("returns verbose levels for verbose setting", () => {
-    process.env.AGEWORK_LOG_LEVEL = "verbose";
+  it("warn → +warn", () => {
+    process.env.AGEWORK_LOG_LEVEL = "warn";
+    expect(resolveNestLogLevels()).toEqual(["fatal", "error", "warn"]);
+  });
+
+  it("info → +log", () => {
+    process.env.AGEWORK_LOG_LEVEL = "info";
+    expect(resolveNestLogLevels()).toEqual(["fatal", "error", "warn", "log"]);
+  });
+
+  it("debug → +debug", () => {
+    process.env.AGEWORK_LOG_LEVEL = "debug";
     expect(resolveNestLogLevels()).toEqual([
+      "fatal",
+      "error",
+      "warn",
+      "log",
+      "debug",
+    ]);
+  });
+
+  it("trace → all", () => {
+    process.env.AGEWORK_LOG_LEVEL = "trace";
+    expect(resolveNestLogLevels()).toEqual([
+      "fatal",
       "error",
       "warn",
       "log",
@@ -137,16 +149,27 @@ describe("resolveNestLogLevels", () => {
     ]);
   });
 
-  it("defaults to debug in non-production", () => {
-    delete process.env.AGEWORK_LOG_LEVEL;
-    process.env.NODE_ENV = "development";
-    expect(resolveNestLogLevels()).toEqual(["error", "warn", "log", "debug"]);
+  it("verbose alias → all", () => {
+    process.env.AGEWORK_LOG_LEVEL = "verbose";
+    expect(resolveNestLogLevels()).toEqual([
+      "fatal",
+      "error",
+      "warn",
+      "log",
+      "debug",
+      "verbose",
+    ]);
   });
 
-  it("defaults to no-debug in production", () => {
+  it("defaults to info regardless of NODE_ENV", () => {
     delete process.env.AGEWORK_LOG_LEVEL;
-    process.env.NODE_ENV = "production";
-    expect(resolveNestLogLevels()).toEqual(["error", "warn", "log"]);
+    process.env.NODE_ENV = "development";
+    expect(resolveNestLogLevels()).toEqual([
+      "fatal",
+      "error",
+      "warn",
+      "log",
+    ]);
   });
 });
 

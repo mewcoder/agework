@@ -3,7 +3,6 @@ import type {
   RunChannelMessage,
   CommandPayload,
 } from "@agework/shared/protocol";
-import { safeLogJson } from "../../common/logging";
 
 type WorkerWaiter = {
   afterSeq: number;
@@ -44,15 +43,13 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     }
     queue.push(message);
     this.resolveWorkerWaiters(workerId);
-    this.logger.debug(
-      `push worker command ${safeLogJson({
-        workerId,
-        runId: message.runId,
-        seq: message.seq,
-        type: message.payload.type,
-        queueSize: queue.length,
-      })}`
-    );
+    this.logger.debug("push worker command", {
+      workerId,
+      runId: message.runId,
+      seq: message.seq,
+      type: message.payload.type,
+      queueSize: queue.length,
+    });
   }
 
 
@@ -91,14 +88,12 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     const result = queue.filter((e) => e.seq > afterSeq);
     this.workerQueues.set(workerId, result);
     if (result.length > 0) {
-      this.logger.debug(
-        `poll worker commands ${safeLogJson({
-          workerId,
-          afterSeq,
-          returned: result.length,
-          nextQueueSize: result.length,
-        })}`
-      );
+      this.logger.debug("poll worker commands", {
+        workerId,
+        afterSeq,
+        returned: result.length,
+        nextQueueSize: result.length,
+      });
     }
     return result;
   }
@@ -132,7 +127,7 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     }
     this.workerWaiters.delete(workerId);
     this.workerEpochs.delete(workerId);
-    this.logger.debug(`cleanup worker commands ${safeLogJson({ workerId })}`);
+    this.logger.debug("cleanup worker commands", { workerId });
   }
 
   /**

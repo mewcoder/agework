@@ -16,7 +16,7 @@ import { WorkerCommandDispatcher } from "../connection/command-dispatcher";
 import { ConfigService } from "../../config/config.service";
 import { withTimeout } from "../../common/with-timeout";
 import { swallow } from "../../common/swallow";
-import { errorLogFields, safeLogJson } from "../../common/logging";
+import { errorLogFields } from "../../common/logging";
 
 type OwnerInstance =
   | { status: "pending"; promise: Promise<AcquireInstanceResult> }
@@ -200,9 +200,11 @@ export class WorkerProvisioner {
         .markErrorByOwner(runtimeType, isolationScope, ownerId)
         .catch(swallow(this.logger, `mark launch error for worker ${workerId}`));
       this.owners.delete(key);
-      this.logger.warn(
-        `worker launch failed ${safeLogJson({ workerId, runtimeType, ...errorLogFields(err) })}`
-      );
+      this.logger.warn("worker launch failed", {
+        workerId,
+        runtimeType,
+        ...errorLogFields(err),
+      });
       return {
         outcome: "error",
         error: `worker launch failed: ${String(err)}`,

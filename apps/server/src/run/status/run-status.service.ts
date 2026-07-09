@@ -1,6 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
 import type { RunStatusPayload } from "@agework/shared/protocol";
-import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
 import type { LiveRunHandle } from "../live-run/live-run.registry";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
@@ -58,14 +57,12 @@ export class RunStatusService {
   }): Promise<void> {
     const { runId, payload, effect } = input;
     const isTerminal = effect.isTerminal;
-    this.logger[isTerminal ? "log" : "debug"](
-      `run status ${safeLogJson({
-        runId,
-        status: payload.status,
-        pendingAction: payload.pendingAction,
-        error: payload.error,
-      })}`
-    );
+    this.logger[isTerminal ? "log" : "debug"]("run status", {
+      runId,
+      status: payload.status,
+      pendingAction: payload.pendingAction,
+      error: payload.error,
+    });
     if (isTerminal) {
       this.finalization.beginFinalizing(runId);
     }

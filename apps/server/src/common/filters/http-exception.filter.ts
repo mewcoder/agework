@@ -7,7 +7,7 @@ import {
   Logger,
 } from "@nestjs/common";
 import type { Request, Response } from "express";
-import { errorLogFields, safeLogJson } from "../logging";
+import { errorLogFields } from "../logging";
 import { REQUEST_ID_HEADER, resolveRequestId } from "../request-id";
 
 @Catch()
@@ -69,13 +69,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
       path: string;
     }
   ): void {
-    const payload = safeLogJson({
+    const payload = {
       ...context,
       ...errorLogFields(exception),
-    });
+    };
 
     if (context.status >= 500) {
-      this.logger.error(`request failed ${payload}`);
+      this.logger.error("request failed", payload);
     } else if (context.status >= 400) {
       // 区分不同类型的 4xx 错误
       // 401/400/404: 常见客户端错误，使用 debug 避免日志噪音
@@ -85,12 +85,12 @@ export class AllExceptionsFilter implements ExceptionFilter {
         context.status === 400 ||
         context.status === 404
       ) {
-        this.logger.debug(`request rejected ${payload}`);
+        this.logger.debug("request rejected", payload);
       } else {
-        this.logger.warn(`request rejected ${payload}`);
+        this.logger.warn("request rejected", payload);
       }
     } else {
-      this.logger.debug(`request exception ${payload}`);
+      this.logger.debug("request exception", payload);
     }
   }
 }

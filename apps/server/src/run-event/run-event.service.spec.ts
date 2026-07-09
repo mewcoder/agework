@@ -304,12 +304,6 @@ describe("RunEventService normalizers", () => {
       },
     });
   });
-
-  it("keeps AG-UI debug logging scoped to lifecycle boundaries", () => {
-    expect(service.shouldLogAgUiEvent("TEXT_MESSAGE_START")).toBe(true);
-    expect(service.shouldLogAgUiEvent("TEXT_MESSAGE_CONTENT")).toBe(false);
-    expect(service.shouldLogAgUiEvent("RUN_ERROR")).toBe(true);
-  });
 });
 
 describe("RunEventService append", () => {

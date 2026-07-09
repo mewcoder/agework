@@ -15,9 +15,7 @@ import {
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
 import { RunDriver } from "../driver/run-driver";
-import { safeLogJson } from "../../common/logging";
 import { swallow } from "../../common/swallow";
-import { summarizeMessagePayload } from "./message-payload-summary";
 import {
   TERMINAL_RUN_STATUSES,
   type RunStatusDecision,
@@ -27,26 +25,22 @@ import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
-/** 逐 token/chunk 触发的流式增量事件类型，量太大，不值得逐条 debug 日志。 */
-const HIGH_FREQUENCY_AGUI_EVENT_TYPES = new Set([
-  "TEXT_MESSAGE_CONTENT",
-  "TEXT_MESSAGE_CHUNK",
-]);
-
-function isHighFrequencyStreamingEvent(
-  message: RunChannelMessage<unknown>
-): boolean {
-  if (message.type !== "agui.event") return false;
-  const payloadType = (message.payload as { type?: string } | undefined)
-    ?.type;
-  return !!payloadType && HIGH_FREQUENCY_AGUI_EVENT_TYPES.has(payloadType);
-}
-
 /**
  * worker 上行事件的统一入口:seq 闸门(去重 / gap 诊断)+ 按消息类型分发。
  * run.status 的整条处理序列(决策、落库、终态收敛与清理)由 RunStatusService
  * 独立持有,这里只做入口守卫与转发。
  */
+
+/** trace 档逐事件日志用的精简标签；完整 payload 见 <conversationId>.agui.jsonl。 */
+function payloadTag(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const p = payload as { type?: unknown; name?: unknown; status?: unknown };
+  const parts = [p.type, p.name ?? p.status].filter(
+    (v): v is string => typeof v === "string"
+  );
+  return parts.length ? parts.join(":") : undefined;
+}
+
 @Injectable()
 export class WorkerEventService
   implements OnModuleInit, RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
@@ -74,17 +68,12 @@ export class WorkerEventService
     runId: string,
     message: RunChannelMessage<unknown>
   ): Promise<void> {
-    if (!isHighFrequencyStreamingEvent(message)) {
-      this.logger.debug(
-        `worker event received ${safeLogJson({
-          runId,
-          messageRunId: message.runId,
-          seq: message.seq,
-          type: message.type,
-          payload: summarizeMessagePayload(message.payload),
-        })}`
-      );
-    }
+    this.logger.verbose("worker event received", {
+      runId,
+      seq: message.seq,
+      type: message.type,
+      event: payloadTag(message.payload),
+    });
 
     // 先取出 handle：终态处理会 unregister，之后就拿不到 runtimeType 了。
     const handle = this.liveRuns.get(runId);
@@ -140,42 +129,27 @@ export class WorkerEventService
     }
 
     const decision = this.seqGate.accept(runId, seq);
-    if (!isHighFrequencyStreamingEvent(message)) {
-      this.logger.debug(
-        `publish message ${safeLogJson({
-          runId,
-          seq,
-          lastSeq: decision.lastSeq,
-          type: message.type,
-          payload: summarizeMessagePayload(message.payload),
-        })}`
-      );
-    }
 
     // Dedup: drop if seq <= lastSeq
     if (decision.action === "drop") {
-      this.logger.warn(
-        `drop duplicate message ${safeLogJson({
-          runId,
-          seq,
-          lastSeq: decision.lastSeq,
-          origin: "worker",
-          type: message.type,
-        })}`
-      );
+      this.logger.warn("drop duplicate message", {
+        runId,
+        seq,
+        lastSeq: decision.lastSeq,
+        origin: "worker",
+        type: message.type,
+      });
       return;
     }
     if (decision.gap) {
       const { expected, got } = decision.gap;
-      this.logger.warn(
-        `seq gap detected ${safeLogJson({
-          runId,
-          expected,
-          got,
-          origin: "worker",
-          type: message.type,
-        })}`
-      );
+      this.logger.warn("seq gap detected", {
+        runId,
+        expected,
+        got,
+        origin: "worker",
+        type: message.type,
+      });
       // gap 只 warn 不可在管理端追溯；落一条摘要事件，使其在 run detail 中可见。
       this.recordSeqGap({
         runId,
@@ -184,6 +158,14 @@ export class WorkerEventService
         messageType: message.type,
       });
     }
+
+    this.logger.verbose("publish message", {
+      runId,
+      seq,
+      lastSeq: decision.lastSeq,
+      type: message.type,
+      event: payloadTag(message.payload),
+    });
 
     switch (message.type) {
       case "run.status":
@@ -303,13 +285,11 @@ export class WorkerEventService
   }
 
   private logIgnoredRunStatus(runId: string, payload: RunStatusPayload): void {
-    this.logger.warn(
-      `skip run status after terminal ${safeLogJson({
-        runId,
-        status: payload.status,
-        pendingAction: payload.pendingAction,
-        error: payload.error,
-      })}`
-    );
+    this.logger.warn("skip run status after terminal", {
+      runId,
+      status: payload.status,
+      pendingAction: payload.pendingAction,
+      error: payload.error,
+    });
   }
 }

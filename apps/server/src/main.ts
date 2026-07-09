@@ -12,6 +12,7 @@ import { AllExceptionsFilter } from "./common/filters/http-exception.filter";
 import { resolveApiBasePath } from "./common/api-path";
 import { ConfigService, getApiContext } from "./config/config.service";
 import { resolveNestLogLevels } from "./common/logging";
+import { RedactingConsoleLogger } from "./common/redacting-console.logger";
 
 function getLanAddress(): string | undefined {
   const interfaces = networkInterfaces();
@@ -28,10 +29,21 @@ function getLanAddress(): string | undefined {
 }
 
 async function bootstrap() {
+  const isProd = process.env.NODE_ENV === "production";
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
-    logger: resolveNestLogLevels(),
+    bufferLogs: true,
   });
+
+  app.useLogger(
+    new RedactingConsoleLogger({
+      logLevels: resolveNestLogLevels(),
+      json: isProd,
+      colors: !isProd,
+      timestamp: true,
+    })
+  );
   const configService = app.get(ConfigService);
   const bodyLimit = configService.getApiBodyLimit();
   const apiBasePath = resolveApiBasePath(getApiContext());
