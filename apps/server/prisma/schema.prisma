@@ -216,9 +216,7 @@ model RunEvent {
   @@index([type, createdAt])
 }
 
-/// worker 载体的存活台账。实际只有 runtimeType="sandbox" 写入：local 模式 one run =
-/// one 子进程，instanceId 即 `pid:startToken`，只记内存、不持久化（进程随 API 重启即
-/// 销毁，pid 会被 OS 回收复用，入库只会留下过期脏数据）。
+/// worker 载体的存活台账。所有 runtimeType（native/docker/opensandbox）都写活跃行。
 /// 表里只有活跃行（starting/running）：停止/报错立刻物理删除该行，不标记终态再等下次
 /// 启动时 sweep——sweep 按 (runtimeType, isolationScope, ownerId) 三元组做，删不掉"同
 /// owner 换过 runtimeType"的旧终态行。立刻物理删就没有这个残留窗口。代价：Admin 面板

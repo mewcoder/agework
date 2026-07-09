@@ -1,9 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { randomUUID } from "node:crypto";
-import { generateId } from "@agework/shared";
 import type {
   AcquireInstanceResult,
-  RunConfig,
   WorkerExecutionStartInput,
 } from "@agework/shared/protocol";
 import type {
@@ -31,13 +29,14 @@ type OwnerInstance =
     };
 
 /** owners Map 的复合 key: (ownerId, runtimeId, isolationScope)。
- * 推翻 wm-0003 的裸 ownerId key——同一 owner 跨 runtime/scope 可并行多个 worker。 */
+ * 推翻 wm-0003 的裸 ownerId key——同一 owner 跨 runtime/scope 可并行多个 worker。
+ * 用 NUL 作分隔符(三个值都是 id/枚举,永不含 NUL),避免拼接歧义。 */
 function ownerKey(
   ownerId: string,
   runtimeId: string,
   isolationScope: string
 ): string {
-  return `${ownerId}:${runtimeId}:${isolationScope}`;
+  return `${ownerId}\u0000${runtimeId}\u0000${isolationScope}`;
 }
 
 /** worker 实例编排(泛型,不认识 runtimeType):两个旧 executor 复制的启动握手

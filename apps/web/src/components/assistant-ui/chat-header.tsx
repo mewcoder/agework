@@ -52,19 +52,21 @@ export function ChatHeader({ rightSlot }: { rightSlot?: ReactNode }) {
           {conversationTitle}
         </h1>
         <span
-          className="flex min-w-0 items-center gap-2 text-[11px] leading-3.5 text-muted-foreground"
+          className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-muted-foreground"
           title={workspaceName}
         >
           <Folder className="size-3 shrink-0" />
           <span className="min-w-0 truncate">{workspaceName}</span>
           {workspace?.gitBranch && (
-            <span
-              className="flex min-w-0 shrink-0 items-center gap-1"
-              title={workspace.gitBranch}
-            >
+            <>
               <GitBranch className="size-3 shrink-0" />
-              <span className="min-w-0 truncate">{workspace.gitBranch}</span>
-            </span>
+              <span
+                className="shrink-0 truncate"
+                title={workspace.gitBranch}
+              >
+                {workspace.gitBranch}
+              </span>
+            </>
           )}
           {updatedAt && <span>{updatedAt}</span>}
         </span>
