@@ -234,8 +234,11 @@ export class TunnelClient {
       this.options.onGone();
       return;
     }
-    const delay = this.reconnectDelayMs;
+    const ceiling = this.reconnectDelayMs;
     this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 30_000);
+    // 加抖动:server 重启后大量 manager 不要锁步同时重连(惊群),
+    // 在当前退避档的 50%~100% 之间随机取一个延迟。
+    const delay = Math.round(ceiling / 2 + Math.random() * (ceiling / 2));
     log(`tunnel closed (code ${code}), reconnecting in ${delay}ms`);
     // 注意:重连等待期间这个 timer 是进程唯一的存活来源,不能 unref
     this.reconnectTimer = setTimeout(() => {

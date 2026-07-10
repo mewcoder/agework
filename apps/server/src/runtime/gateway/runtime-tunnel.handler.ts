@@ -279,6 +279,13 @@ export class RuntimeTunnelHandler
       );
       return;
     }
+    if (entry.runtimeId !== runtimeId) {
+      // 防御:响应必须来自当初收到请求的那条连接,不能拿别人的 id 解掉本请求
+      this.logger.warn(
+        `runtime ${runtimeId} sent an RPC response for a request owned by ${entry.runtimeId}`
+      );
+      return;
+    }
     clearTimeout(entry.timer);
     this.pending.delete(response.id);
     if ("result" in response) {
