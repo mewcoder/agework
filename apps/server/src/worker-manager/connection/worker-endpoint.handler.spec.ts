@@ -57,7 +57,6 @@ describe("WorkerEndpointHandler", () => {
             meta: { runId: "run-1", seq: 1, ts: "2026-06-27T00:00:00.000Z" },
           },
         ],
-        fileCommands: [],
         queueEpoch: 1000,
       });
     });
