@@ -1,4 +1,5 @@
 import type { AgentType, PendingAction, ListResponse } from "../common";
+import type { AgentContextUsage } from "../protocol";
 
 export type ConversationStatus = "regular" | "archived";
 export type ConversationRunStatus = "idle" | "running" | "error";
@@ -38,6 +39,8 @@ export type StoredMessage = {
   parent_id: string | null;
   format: string;
   content: Record<string, unknown>;
+  /** 该消息所属 run 的上下文窗口占用（冷加载喂 context meter），无则省略。 */
+  contextUsage?: AgentContextUsage;
 };
 
 export type StoredMessageListResponse = ListResponse<StoredMessage>;

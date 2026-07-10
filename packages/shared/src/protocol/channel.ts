@@ -37,6 +37,28 @@ export interface RunUsage {
   durationApiMs: number | null;
 }
 
+/**
+ * 一次 run 结束时的上下文窗口占用。与 {@link RunUsage} 同理，两个 SDK 各自的
+ * 字段名不同，adapter 归一化到这个形状后挂在 `RUN_FINISHED.result.contextUsage`。
+ * Claude 由 SDK `getContextUsage()` 直接给出真窗口（含 1M beta，无需静态表）；
+ * Codex 后续从事件流的 `model_context_window` + token count 填充。
+ */
+export interface AgentContextUsage {
+  /** 当前已占用的上下文 token 数。claude `totalTokens`。 */
+  usedTokens: number;
+  /** 有效上下文窗口（已扣除输出预留）。claude `maxTokens`。 */
+  maxTokens: number;
+  /** 占用百分比（0-100）。claude 由 SDK 直接给出。 */
+  percentage: number;
+  /** 触发自动压缩的阈值 token 数；SDK 未启用/未给出时省略。 */
+  autoCompactThreshold?: number;
+  /** 本轮 token 明细（context meter hover 卡用），来自 result.usage。 */
+  inputTokens?: number;
+  outputTokens?: number;
+  /** cache_read + cache_creation。 */
+  cachedInputTokens?: number;
+}
+
 export type ArtifactRefPayload = {
   artifactId: string;
   kind: string;

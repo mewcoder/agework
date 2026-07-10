@@ -1,5 +1,9 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { RecordRunEventInput, RunUsage } from "@agework/shared/protocol";
+import type {
+  AgentContextUsage,
+  RecordRunEventInput,
+  RunUsage,
+} from "@agework/shared/protocol";
 import { swallow } from "../../common/swallow";
 import { RunRepository } from "../run.repository";
 import {
@@ -50,6 +54,7 @@ export class WorkerAgUiEventHandler {
     }
 
     this.persistUsageFromRunFinished(runId, evt);
+    this.persistContextUsageFromRunFinished(runId, evt);
   }
 
   clearRun(runId: string): void {
@@ -152,6 +157,20 @@ export class WorkerAgUiEventHandler {
       .recordUsage(runId, usage)
       .catch(swallow(this.logger, `record usage for run ${runId}`));
   }
+
+  private persistContextUsageFromRunFinished(
+    runId: string,
+    evt: Record<string, unknown>
+  ): void {
+    if (evt.type !== "RUN_FINISHED") return;
+
+    const contextUsage = normalizeContextUsage(evt.result);
+    if (!contextUsage) return;
+
+    this.runRepository
+      .recordContextUsage(runId, contextUsage)
+      .catch(swallow(this.logger, `record context usage for run ${runId}`));
+  }
 }
 
 /**
@@ -180,6 +199,44 @@ function normalizeRunUsage(result: unknown): RunUsage | null {
   };
 
   return isEmptyRunUsage(usage) ? null : usage;
+}
+
+/**
+ * 从 `RUN_FINISHED.result`（unknown）安全抽取 `AgentContextUsage`。
+ *
+ * adapter 侧已归一化写进 `result.contextUsage`（见 packages/adapters 的
+ * `sampleContextUsage`）。这里只做一次跨进程边界的运行时校验：`maxTokens` 为 0
+ * 说明窗口没取到，视为无效返回 null，避免存进占用率算不出来的脏数据。
+ */
+function normalizeContextUsage(result: unknown): AgentContextUsage | null {
+  if (!result || typeof result !== "object") return null;
+  const raw = (result as Record<string, unknown>).contextUsage;
+  if (!raw || typeof raw !== "object") return null;
+  const c = raw as Record<string, unknown>;
+
+  const maxTokens = num(c.maxTokens);
+  if (maxTokens <= 0) return null;
+
+  const optNum = (v: unknown) =>
+    typeof v === "number" && Number.isFinite(v) ? v : undefined;
+  return {
+    usedTokens: num(c.usedTokens),
+    maxTokens,
+    percentage: num(c.percentage),
+    ...(typeof c.autoCompactThreshold === "number" &&
+    Number.isFinite(c.autoCompactThreshold)
+      ? { autoCompactThreshold: c.autoCompactThreshold }
+      : {}),
+    ...(optNum(c.inputTokens) !== undefined
+      ? { inputTokens: c.inputTokens as number }
+      : {}),
+    ...(optNum(c.outputTokens) !== undefined
+      ? { outputTokens: c.outputTokens as number }
+      : {}),
+    ...(optNum(c.cachedInputTokens) !== undefined
+      ? { cachedInputTokens: c.cachedInputTokens as number }
+      : {}),
+  };
 }
 
 /** 全部 token/次数字段为 0 且没有 cost/耗时信息时视为空，跳过持久化。 */

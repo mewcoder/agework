@@ -4,6 +4,7 @@ import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../auth/auth.types";
 import { AgentService } from "./agent.service";
 import { AgentConversationIdDto, AgentReplyDto } from "./dto/agent-control.dto";
+import { AgentSkillsDto } from "./dto/agent-skills.dto";
 import { AgentRunRequestDto } from "./dto/agent-run.dto";
 import { CreateConversationDto } from "./dto/create-conversation.dto";
 
@@ -27,6 +28,14 @@ export class AgentController {
   @Get("options")
   agentOptions() {
     return this.agentService.getOptions();
+  }
+
+  @Get("skills")
+  agentSkills(
+    @Query() query: AgentSkillsDto,
+    @CurrentUser() user: JwtUser
+  ) {
+    return this.agentService.getSkills(user.userId, query.workspaceId, query.agentType);
   }
 
   @Post("run")

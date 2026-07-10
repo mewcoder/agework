@@ -534,11 +534,13 @@ export class ConversationService {
     return {
       list: messages.map((m) => {
         const content = m.content as unknown;
+        const contextUsage = m.run?.contextUsage ?? undefined;
         const message = {
           id: m.id,
           parent_id: m.parentId ?? previousMessageId,
           format: this.normalizeMessageFormat(m.format, content),
           content,
+          ...(contextUsage ? { contextUsage } : {}),
         };
         previousMessageId = message.id;
         return message;

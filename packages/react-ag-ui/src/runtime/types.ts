@@ -89,12 +89,25 @@ export type AgUiRunFinishedOutcome =
   | { type: "success" }
   | { type: "interrupt"; interrupts: AgUiInterrupt[] };
 
+/** 一次 run 结束时的上下文窗口占用，来自 `RUN_FINISHED.result.contextUsage`。 */
+export type AgUiContextUsage = {
+  usedTokens: number;
+  maxTokens: number;
+  percentage: number;
+  autoCompactThreshold?: number;
+  /** 本轮 token 明细（hover 卡用）。 */
+  inputTokens?: number;
+  outputTokens?: number;
+  cachedInputTokens?: number;
+};
+
 export type AgUiEvent =
   | { type: "RUN_STARTED"; runId: string }
   | {
       type: "RUN_FINISHED";
       runId: string;
       outcome?: AgUiRunFinishedOutcome;
+      contextUsage?: AgUiContextUsage;
     }
   | { type: "RUN_CANCELLED"; runId?: string }
   | { type: "RUN_ERROR"; message?: string; code?: string }

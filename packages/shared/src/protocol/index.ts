@@ -55,6 +55,7 @@ export type {
   RunStatus,
   RunStatusPayload,
   RunUsage,
+  AgentContextUsage,
   ArtifactRefPayload,
   RunConfig,
   SystemAgentProviderConfig,

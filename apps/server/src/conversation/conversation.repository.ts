@@ -238,6 +238,7 @@ export class ConversationRepository {
     return this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: "asc" },
+      include: { run: { select: { contextUsage: true } } },
     });
   }
 

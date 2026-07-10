@@ -30,6 +30,12 @@ export const AGENT_LABELS: Record<AgentType, string> = {
   codex: "Codex",
 };
 
+/** agent 在工作空间目录下的配置目录前缀，用于定位 skills 等资源。 */
+export const AGENT_DIR_PREFIX: Record<AgentType, string> = {
+  claude: ".claude",
+  codex: ".codex",
+};
+
 export function isAgentType(value: unknown): value is AgentType {
   return (
     typeof value === "string" &&

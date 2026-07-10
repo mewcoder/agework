@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type UIEvent,
 } from "react";
 import {
   ArrowUpIcon,
@@ -18,6 +19,7 @@ import {
   ComposerAttachments,
 } from "@/components/assistant-ui/attachment";
 import { AgentPermissionMenu } from "@/components/assistant-ui/agent-permission-menu";
+import { ContextMeter } from "@/components/assistant-ui/context-meter";
 import { AgentSettingsMenu, AgentSwitcher } from "@/components/assistant-ui/agent-settings-menu";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { WorkspaceSelector } from "@/components/workspace-selector";
@@ -25,7 +27,10 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useConversations } from "@/hooks/use-conversation";
 import { useModelProviders } from "@/hooks/model-provider-hooks";
 import { useWorkspaces } from "@/hooks/use-workspace";
-import { useAui, useAuiState, ComposerPrimitive } from "@assistant-ui/react";
+import { useAui, useAuiState, ComposerPrimitive, unstable_useSlashCommandAdapter, type Unstable_DirectiveFormatter } from "@assistant-ui/react";
+import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
+import { ComposerDirectiveOverlay } from "@/components/assistant-ui/composer-directive-overlay";
+import { useAgentSkills } from "@/hooks/use-agent-skills";
 import { useRuntimeUiStore, type QueuedUserInput } from "@/stores/runtime-ui-store";
 import { StopConversationRunButton } from "@/components/assistant-ui/stop-conversation-run-button";
 import { Button } from "@/components/ui/button";
@@ -36,6 +41,12 @@ import { isSystemModelProvider } from "@/utils/model-provider";
 const EMPTY_QUEUED_INPUTS: QueuedUserInput[] = [];
 const COMPOSER_SEND_BUTTON_CLASS =
   "aui-composer-send size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/85 disabled:bg-muted-foreground/20 disabled:text-muted-foreground/40";
+
+/** Custom formatter: serializes skill items as `/skill-name` plain text (no chip syntax). */
+const slashCommandFormatter: Unstable_DirectiveFormatter = {
+  serialize: (item) => `/${item.label}`,
+  parse: (text) => [{ kind: "text", text }],
+};
 
 // ── Composer action ────────────────────────────────────────────────────────
 
@@ -70,6 +81,7 @@ function ComposerAction({
       <div className="flex min-w-0 items-center gap-1.5">
         <ComposerAddAttachment />
         <AgentPermissionMenu />
+        <ContextMeter />
       </div>
       <div className="flex min-w-0 items-center gap-1.5">
         <AgentSettingsMenu
@@ -298,6 +310,39 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const [pendingPrioritizeId, setPendingPrioritizeId] = useState<string | null>(null);
   const [inputAttentionActive, setInputAttentionActive] = useState(false);
   const wasRunningRef = useRef(false);
+  // Composer directive-highlight overlay: mirror the textarea's scroll so the
+  // highlighted backdrop stays aligned while the (transparent-text) textarea scrolls.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const handleInputScroll = useCallback((event: UIEvent<HTMLTextAreaElement>) => {
+    if (overlayRef.current) overlayRef.current.scrollTop = event.currentTarget.scrollTop;
+  }, []);
+
+  // ── Slash command (skill) picker ────────────────────────────────────────
+  const { data: skillsData } = useAgentSkills(targetWorkspaceId, selectedAgentType);
+  const skills = skillsData?.list ?? [];
+  const slash = unstable_useSlashCommandAdapter({
+    commands: skills.map((skill) => ({
+      id: skill.name,
+      label: skill.name,
+      description: skill.description,
+      execute: () => {},
+    })),
+  });
+
+  // The trigger popover derives its open state from the composer's cursor
+  // position, which mouse-selecting an item doesn't update (the click blurs the
+  // textarea and setText is programmatic). Refocus and move the caret past the
+  // inserted command so trigger detection clears and the popover closes.
+  const closeSlashPopover = useCallback(() => {
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+      input.dispatchEvent(new Event("select", { bubbles: true }));
+    });
+  }, []);
 
   const requestWorkspaceForSend = useCallback(() => {
     if (!canSend) return;
@@ -463,11 +508,18 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   }, [aui, queueConversationId, showStop]);
 
   return (
+    <ComposerPrimitive.Unstable_TriggerPopoverRoot>
     <ComposerPrimitive.Root
       ref={formRef}
       onSubmit={handleSubmit}
       className="aui-composer-root relative flex w-full flex-col"
     >
+      <ComposerTriggerPopover
+        char="/"
+        adapter={slash.adapter}
+        directive={{ formatter: slashCommandFormatter, onInserted: closeSlashPopover }}
+        fallbackIcon={slash.fallbackIcon}
+      />
       <AgentSwitcher />
       <div
         className={cn(
@@ -492,17 +544,21 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
           >
             <div className="flex min-h-28 w-full flex-col gap-3 p-(--composer-padding)">
               <ComposerAttachments />
-              <ComposerPrimitive.Input
-                ref={inputRef}
-                placeholder={labels.composer.placeholder}
-                className="aui-composer-input w-full resize-none bg-transparent px-1.5 py-0.5 text-[15px] leading-6 outline-none placeholder:text-muted-foreground/70"
-                minRows={2}
-                maxRows={10}
-                onHeightChange={onTextareaResize}
-                onKeyDownCapture={handleQueueKeyDownCapture}
-                autoFocus
-                aria-label="消息输入"
-              />
+              <div className="relative">
+                <ComposerDirectiveOverlay ref={overlayRef} />
+                <ComposerPrimitive.Input
+                  ref={inputRef}
+                  placeholder={labels.composer.placeholder}
+                  className="aui-composer-input relative w-full resize-none bg-transparent px-1.5 py-0.5 text-[15px] leading-6 text-transparent caret-foreground outline-none placeholder:text-muted-foreground/70"
+                  minRows={2}
+                  maxRows={10}
+                  onHeightChange={onTextareaResize}
+                  onKeyDownCapture={handleQueueKeyDownCapture}
+                  onScroll={handleInputScroll}
+                  autoFocus
+                  aria-label="消息输入"
+                />
+              </div>
               <ComposerAction
                 canSend={canSend}
                 canQueue={Boolean(queueConversationId && composerText.trim())}
@@ -525,5 +581,6 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
         )}
       </div>
     </ComposerPrimitive.Root>
+    </ComposerPrimitive.Unstable_TriggerPopoverRoot>
   );
 }

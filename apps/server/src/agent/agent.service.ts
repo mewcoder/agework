@@ -18,6 +18,7 @@ import {
 } from "./options/agent-options";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { RuntimeService } from "../runtime/runtime.service";
+import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
 
 type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
 
@@ -35,12 +36,27 @@ export class AgentService {
     private readonly runService: RunService,
     private readonly modelProviderService: ModelProviderService,
     private readonly workspaceService: WorkspaceService,
-    private readonly runtimeService: RuntimeService
+    private readonly runtimeService: RuntimeService,
+    private readonly skillsScanner: AgentSkillsScanner,
   ) {}
 
   /** 返回各 agent 类型的入口可选项(权限模式等),供前端入口展示。 */
   getOptions() {
     return getAgentOptions();
+  }
+
+  /**
+   * 扫描工作空间目录下的 skill SKILL.md，返回 `/` 命令菜单所需的
+   * SlashCommandItem 列表。不经过 agent，不需要 run。
+   * runtime 不可达或目录不存在时返回空数组。
+   */
+  async getSkills(
+    userId: string,
+    workspaceId: string,
+    agentType: string,
+  ) {
+    const list = await this.skillsScanner.scan(userId, workspaceId, agentType);
+    return { list };
   }
 
   /**

@@ -6,6 +6,7 @@ import { RuntimeModule } from "../runtime/runtime.module";
 import { WorkspaceModule } from "../workspace/workspace.module";
 import { AgentController } from "./agent.controller";
 import { AgentService } from "./agent.service";
+import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
 
 /**
  * Agent interaction entrypoint module:用户跟 agent 打交道的入口流程
@@ -21,6 +22,6 @@ import { AgentService } from "./agent.service";
     RuntimeModule, // AgentService resolves CLI paths via RuntimeService
   ],
   controllers: [AgentController],
-  providers: [AgentService],
+  providers: [AgentService, AgentSkillsScanner],
 })
 export class AgentModule {}

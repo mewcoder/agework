@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import type { RunUsage } from "@agework/shared/protocol";
+import type { AgentContextUsage, RunUsage } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -51,6 +51,15 @@ export class RunRepository {
     await this.prisma.run.update({
       where: { id: runId },
       data: { usage: usage as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  async recordContextUsage(runId: string, contextUsage: AgentContextUsage) {
+    await this.prisma.run.update({
+      where: { id: runId },
+      data: {
+        contextUsage: contextUsage as unknown as Prisma.InputJsonValue,
+      },
     });
   }
 

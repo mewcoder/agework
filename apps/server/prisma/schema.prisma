@@ -182,6 +182,8 @@ model Run {
   // Token 用量，由 RUN_FINISHED.result 归一化写入（见 RunRecordService.recordUsage），
   // 整体对应 @agework/shared/protocol 的 RunUsage。
   usage             Json?
+  // 上下文窗口占用，由 RUN_FINISHED.result 归一化写入，对应 AgentContextUsage。
+  contextUsage      Json?
   conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   messages          Message[]
   events            RunEvent[]

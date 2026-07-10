@@ -6,7 +6,7 @@ import { Observable, Subscriber } from "rxjs";
 import { AbstractAgent, EventType } from "@ag-ui/client";
 import type { BaseEvent, RunAgentInput, Message } from "@ag-ui/core";
 import { generateId } from "@agework/shared";
-import type { RunUsage } from "@agework/shared/protocol";
+import type { AgentContextUsage, RunUsage } from "@agework/shared/protocol";
 
 import { createSdkMcpServer, query } from "@anthropic-ai/claude-agent-sdk";
 import type {
@@ -16,6 +16,7 @@ import type {
   SDKPartialAssistantMessage,
   SDKAssistantMessage,
   SDKUserMessage,
+  ModelUsage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 
@@ -48,7 +49,69 @@ type ClaudeResultData = {
   durationMs?: number;
   structuredOutput?: unknown;
   usage: RunUsage;
+  contextUsage?: AgentContextUsage;
 };
+
+/** result.usage 里、算上下文占用 + 明细需要的 token 字段子集。 */
+type ContextTokenUsage = {
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+  cache_creation_input_tokens?: number | null;
+};
+
+/**
+ * 从 `result` 消息的 `usage` + `modelUsage` 派生上下文窗口占用。
+ *
+ * 不走 SDK `getContextUsage()` 控制请求——它在 `result` 时机 query 已关闭
+ * （"Query closed before response received"）。也不用流式 assistant 消息的
+ * `usage`——实测那是 `{input_tokens:0, output_tokens:0}` 的零占位。改从 result：
+ * - `maxTokens`：`modelUsage[model].contextWindow`（Claude Code 已知的真窗口，含 1M beta）。
+ * - `usedTokens`：`result.usage` 的 `input + cache_read + cache_creation`（送进模型的完整
+ *   prompt = 上下文占用）。单请求轮次精确；多请求 agentic 轮次 result.usage 为累加，
+ *   会略偏高，作为占用条足够。
+ *
+ * 数据不全（无 usage / 取不到窗口）时返回 undefined，best-effort。
+ */
+function deriveContextUsage(
+  resultUsage: ContextTokenUsage | undefined,
+  model: string | undefined,
+  modelUsage: Record<string, ModelUsage> | undefined,
+): AgentContextUsage | undefined {
+  if (!resultUsage) return undefined;
+  const maxTokens = resolveContextWindow(model, modelUsage);
+  if (!maxTokens) return undefined;
+
+  const inputTokens = resultUsage.input_tokens ?? 0;
+  const outputTokens = resultUsage.output_tokens ?? 0;
+  const cachedInputTokens =
+    (resultUsage.cache_read_input_tokens ?? 0) +
+    (resultUsage.cache_creation_input_tokens ?? 0);
+  const usedTokens = inputTokens + cachedInputTokens;
+
+  return {
+    usedTokens,
+    maxTokens,
+    percentage: Math.round((usedTokens / maxTokens) * 100),
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+  };
+}
+
+/** 取模型窗口：优先按 model key 精确匹配，否则退而取任一带正窗口的条目。 */
+function resolveContextWindow(
+  model: string | undefined,
+  modelUsage: Record<string, ModelUsage> | undefined,
+): number | undefined {
+  if (!modelUsage) return undefined;
+  const exact = model ? modelUsage[model]?.contextWindow : undefined;
+  if (exact && exact > 0) return exact;
+  for (const entry of Object.values(modelUsage)) {
+    if (entry?.contextWindow > 0) return entry.contextWindow;
+  }
+  return undefined;
+}
 
 /**
  * AG-UI adapter for the Anthropic Claude Agent SDK.
@@ -538,6 +601,10 @@ export class ClaudeAgentAdapter extends AbstractAgent {
     let hasStreamedText = false;
     let accumulatedSignature = "";
 
+    // 上下文占用：记录最后一条 assistant 消息的 model（用于在 result 的 modelUsage
+    // 里按 key 取窗口）；token 数在 result 时从 result.usage 取（见 deriveContextUsage）。
+    let lastAssistantModel: string | undefined;
+
     // Tool call streaming state
     let currentToolCallId: string | null = null;
     let currentToolCallName: string | null = null;
@@ -885,6 +952,10 @@ export class ClaudeAgentAdapter extends AbstractAgent {
           const assistantMsg = message as SDKAssistantMessage;
           const content = assistantMsg.message?.content ?? [];
 
+          if (assistantMsg.message?.model) {
+            lastAssistantModel = assistantMsg.message.model;
+          }
+
           {
             const msgId = currentMessageId ?? generateId();
             const aguiMsg = buildAguiAssistantMessage(assistantMsg, msgId);
@@ -996,6 +1067,11 @@ export class ClaudeAgentAdapter extends AbstractAgent {
           const resultMsg = message as SDKResultMessage;
           const isSuccess = resultMsg.subtype === "success";
 
+          const contextUsage = deriveContextUsage(
+            resultMsg.usage,
+            lastAssistantModel,
+            isSuccess ? resultMsg.modelUsage : undefined,
+          );
           runCtx.lastResultData = {
             isError: resultMsg.is_error,
             durationMs: resultMsg.duration_ms,
@@ -1003,6 +1079,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
               ? resultMsg.structured_output
               : undefined,
             usage: toRunUsage(resultMsg),
+            ...(contextUsage ? { contextUsage } : {}),
           };
 
           const resultText = isSuccess ? resultMsg.result : undefined;

@@ -6,6 +6,7 @@ import { RunService } from "../run/run.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { WorkspaceService } from "../workspace/workspace.service";
 import { RuntimeService } from "../runtime/runtime.service";
+import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
 import type { Response } from "express";
 import type { JwtUser } from "../auth/auth.types";
 import type { AgentRunRequestDto as AgentRunRequestBody } from "./dto/agent-run.dto";
@@ -17,6 +18,7 @@ describe("AgentService", () => {
   let mockModelProviderService: Partial<ModelProviderService>;
   let mockWorkspaceService: Partial<WorkspaceService>;
   let mockRuntimeService: Partial<RuntimeService>;
+  let mockSkillsScanner: Partial<AgentSkillsScanner>;
   let res: Partial<Response>;
   let user: JwtUser;
 
@@ -55,6 +57,9 @@ describe("AgentService", () => {
         codex: null,
       }),
     };
+    mockSkillsScanner = {
+      scan: vi.fn().mockResolvedValue([]),
+    };
     res = {
       setHeader: vi.fn(),
       on: vi.fn(),
@@ -69,7 +74,8 @@ describe("AgentService", () => {
       mockRunService as RunService,
       mockModelProviderService as ModelProviderService,
       mockWorkspaceService as WorkspaceService,
-      mockRuntimeService as RuntimeService
+      mockRuntimeService as RuntimeService,
+      mockSkillsScanner as AgentSkillsScanner
     );
   });
 

@@ -1,4 +1,5 @@
 import type { ThreadMessage } from "@assistant-ui/react";
+import { AG_UI_METADATA_NAMESPACE } from "@assistant-ui/react-ag-ui";
 import type { StoredMessage } from "@/api/conversations";
 import { isPlainObject } from "lodash-es";
 
@@ -43,7 +44,24 @@ export function toThreadMessageItem(m: StoredMessage): ThreadMessageItem | null 
 
   if (message.role === "assistant") {
     message.status = message.status ?? { type: "complete", reason: "unknown" };
-    message.metadata = message.metadata ?? assistantMetadata();
+    const metadata =
+      (message.metadata as Record<string, unknown> | undefined) ??
+      assistantMetadata();
+    // 冷加载注入上下文占用到 custom.agui，与 live（run-aggregator）同一位置。
+    if (m.contextUsage) {
+      const custom: Record<string, unknown> = isPlainObject(metadata.custom)
+        ? { ...(metadata.custom as Record<string, unknown>) }
+        : {};
+      const agui = isPlainObject(custom[AG_UI_METADATA_NAMESPACE])
+        ? (custom[AG_UI_METADATA_NAMESPACE] as Record<string, unknown>)
+        : {};
+      custom[AG_UI_METADATA_NAMESPACE] = {
+        ...agui,
+        contextUsage: m.contextUsage,
+      };
+      metadata.custom = custom;
+    }
+    message.metadata = metadata;
   } else {
     delete message.status;
   }

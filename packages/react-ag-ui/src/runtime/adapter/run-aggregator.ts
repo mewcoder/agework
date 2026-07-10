@@ -5,7 +5,7 @@ import {
   type ThreadAssistantMessagePart,
   type ToolCallMessagePart,
 } from "@assistant-ui/core";
-import type { AgUiEvent, AgUiInterrupt } from "../types";
+import type { AgUiContextUsage, AgUiEvent, AgUiInterrupt } from "../types";
 import type { Logger } from "../logger";
 
 export type { AgUiEvent } from "../types";
@@ -14,6 +14,7 @@ export const AG_UI_METADATA_NAMESPACE = "agui";
 
 export type AgUiCustomMetadata = {
   interrupts?: AgUiInterrupt[];
+  contextUsage?: AgUiContextUsage;
 };
 
 type Emit = (update: ChatModelRunResult) => void;
@@ -53,6 +54,7 @@ export class RunAggregator {
 
   private status: ChatModelRunResult["status"] | undefined;
   private interrupts: AgUiInterrupt[] | undefined;
+  private contextUsage: AgUiContextUsage | undefined;
   private readonly textParts = new Map<
     string,
     { buffer: string; touched: boolean }
@@ -108,6 +110,9 @@ export class RunAggregator {
         break;
       }
       case "RUN_FINISHED": {
+        if (event.contextUsage) {
+          this.contextUsage = event.contextUsage;
+        }
         if (event.outcome?.type === "interrupt") {
           this.interrupts = event.outcome.interrupts;
           this.status = { type: "requires-action", reason: "interrupt" };
@@ -444,16 +449,14 @@ export class RunAggregator {
     }
 
     const timing = this.getTiming();
+    const customMetadata: AgUiCustomMetadata = {
+      ...(this.interrupts ? { interrupts: this.interrupts } : {}),
+      ...(this.contextUsage ? { contextUsage: this.contextUsage } : {}),
+    };
     const metadata = {
       ...(timing ? { timing } : {}),
-      ...(this.interrupts
-        ? {
-            custom: {
-              [AG_UI_METADATA_NAMESPACE]: {
-                interrupts: this.interrupts,
-              } satisfies AgUiCustomMetadata,
-            },
-          }
+      ...(Object.keys(customMetadata).length > 0
+        ? { custom: { [AG_UI_METADATA_NAMESPACE]: customMetadata } }
         : {}),
     };
     return {

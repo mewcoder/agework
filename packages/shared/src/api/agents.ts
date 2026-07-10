@@ -68,3 +68,13 @@ export type AgentOption = {
 export type AgentOptionsResponse = {
   list: AgentOption[];
 };
+
+/** 工作空间本地扫描出的 skill 条目，供 `/` 命令菜单使用。 */
+export type SlashCommandItem = {
+  name: string;
+  description?: string;
+};
+
+export type AgentSkillsResponse = {
+  list: SlashCommandItem[];
+};

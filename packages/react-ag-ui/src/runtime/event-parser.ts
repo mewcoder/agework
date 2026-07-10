@@ -1,4 +1,9 @@
-import type { AgUiEvent, AgUiInterrupt, AgUiRunFinishedOutcome } from "./types";
+import type {
+  AgUiContextUsage,
+  AgUiEvent,
+  AgUiInterrupt,
+  AgUiRunFinishedOutcome,
+} from "./types";
 import type { Logger } from "./logger";
 
 export type ParseAgUiEventOptions = {
@@ -37,6 +42,42 @@ const parseInterrupt = (raw: unknown): AgUiInterrupt | null => {
     interrupt.responseSchema = raw.responseSchema;
   if (isPlainObject(raw.metadata)) interrupt.metadata = raw.metadata;
   return interrupt;
+};
+
+/** 从 `RUN_FINISHED.result.contextUsage` 解析上下文占用；缺字段则返回 undefined。 */
+const parseContextUsage = (
+  result: unknown,
+): AgUiContextUsage | undefined => {
+  if (!isPlainObject(result)) return undefined;
+  const raw = result.contextUsage;
+  if (!isPlainObject(raw)) return undefined;
+  const { usedTokens, maxTokens, percentage, autoCompactThreshold } = raw;
+  if (
+    typeof usedTokens !== "number" ||
+    typeof maxTokens !== "number" ||
+    typeof percentage !== "number" ||
+    maxTokens <= 0
+  ) {
+    return undefined;
+  }
+  const num = (v: unknown) => (typeof v === "number" ? v : undefined);
+  return {
+    usedTokens,
+    maxTokens,
+    percentage,
+    ...(typeof autoCompactThreshold === "number"
+      ? { autoCompactThreshold }
+      : {}),
+    ...(num(raw.inputTokens) !== undefined
+      ? { inputTokens: raw.inputTokens as number }
+      : {}),
+    ...(num(raw.outputTokens) !== undefined
+      ? { outputTokens: raw.outputTokens as number }
+      : {}),
+    ...(num(raw.cachedInputTokens) !== undefined
+      ? { cachedInputTokens: raw.cachedInputTokens as number }
+      : {}),
+  };
 };
 
 const parseRunFinishedOutcome = (
@@ -92,6 +133,7 @@ export const parseAgUiEvent = (
         { type: "RUN_FINISHED" as const, runId },
         {
           outcome: parseRunFinishedOutcome(payload.outcome, options?.logger),
+          contextUsage: parseContextUsage(payload.result),
         },
       );
     }

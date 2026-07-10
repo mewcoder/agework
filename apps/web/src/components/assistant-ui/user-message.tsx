@@ -12,6 +12,7 @@ import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button
 import { Button } from "@/components/ui/button";
 import { type GroupableMessagePart } from "@/components/assistant-ui/thread-utils";
 import { useCopyMessageText } from "@/hooks/use-copy-message";
+import { DirectiveText } from "@/components/assistant-ui/directive-text";
 
 function UserCopyButton() {
   const messageParts = useAuiState((s) => s.message.parts as readonly GroupableMessagePart[]);
@@ -55,7 +56,7 @@ export const UserMessage = memo(function UserMessage() {
 
       <div className="aui-user-message-content-wrapper col-start-2 min-w-0">
         <div className="aui-user-message-content rounded-xl bg-muted-foreground/6 px-4 py-2 text-[15px] leading-6 wrap-break-word text-foreground empty:hidden dark:bg-muted-foreground/10">
-          <MessagePrimitive.Parts />
+          <MessagePrimitive.Parts components={{ Text: DirectiveText }} />
         </div>
       </div>
 
