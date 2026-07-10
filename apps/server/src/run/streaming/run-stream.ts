@@ -2,6 +2,13 @@ import type { Response } from "express";
 
 type RunStreamMode = "events" | "snapshots";
 
+/**
+ * 单条 SSE 连接的发送缓冲上限。连着但读得慢的客户端(卡死 / 被节流的标签页)会让
+ * Node 无限缓冲在内存里。超过这个上限就主动断开该连接——run 仍在服务端聚合,客户端
+ * 可经 /agent/resume 续接拿到完整快照,不丢数据。
+ */
+const MAX_SSE_BUFFERED_BYTES = 8 * 1024 * 1024;
+
 export type RunSnapshotPayload = {
   content: unknown[];
   status: unknown;
@@ -77,8 +84,14 @@ export class RunStream {
   }
 
   private writeData(data: unknown): void {
-    if (!this.response || this.response.writableEnded) return;
-    this.response.write(`data: ${JSON.stringify(data)}\n\n`);
+    const res = this.response;
+    if (!res || res.writableEnded) return;
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    // 背压保护:慢客户端把发送缓冲堆过上限时断开,交给 onClose→detach 收尾,
+    // 保护 server 内存;run 不受影响,客户端可 resume 续接。
+    if (res.writableLength > MAX_SSE_BUFFERED_BYTES) {
+      res.end();
+    }
   }
 
   private setHeaders(response: Response): void {
