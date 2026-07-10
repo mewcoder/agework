@@ -135,7 +135,10 @@ export default function WorkbenchPage() {
   }
 
   return (
-    <SidebarProvider className="h-svh overflow-hidden">
+    <SidebarProvider
+      className="h-svh overflow-hidden"
+      style={{ "--sidebar-width": "16rem" } as React.CSSProperties}
+    >
       <WorkbenchSidebar
         variant="inset"
         className="[&_[data-slot=sidebar-inner]]:border-transparent [&_[data-slot=sidebar-inner]]:shadow-none"

@@ -633,7 +633,10 @@ export function Thread() {
         ["--history-to-composer-gap" as string]: "16px",
       }}
     >
-      <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+      {/* scrollEdgeThreshold 放宽到 64px:流式回复时最后一条消息不停增高/reflow,
+          默认 8px 太小,两次自动贴底之间的瞬时小缝隙容易被 message-scroller 误判成
+          "用户手动上滚"从而退出 following-bottom,回复中途就不再自动贴底。 */}
+      <MessageScrollerProvider autoScroll defaultScrollPosition="end" scrollEdgeThreshold={64}>
         <ThreadScroller
           turns={turns}
           navigationItems={navigationItems}

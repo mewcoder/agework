@@ -125,9 +125,12 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
 
     super({
       model: opts.model,
-      // 系统环境时不限制 settingSources，让 SDK 从 ~/.claude.json 等文件读取认证
-      // 自定义配置时禁用文件系统配置源，通过 env 注入认证信息
-      settingSources: isEnvironmentConfig ? undefined : [],
+      // 系统环境时不限制 settingSources，让 SDK 从 ~/.claude.json 等文件读取认证。
+      // 自定义配置时加载 project + local 级（cwd 下的 .claude/：skills、commands、CLAUDE.md、
+      // settings 及本地覆盖 settings.local.json），不读本机 user 级 ~/.claude，认证仍通过 env 注入。
+      // project 级必须加载，否则工作空间的 .claude/skills、.claude/commands 不会注册，
+      // /<command> 会报 Unknown command。
+      settingSources: isEnvironmentConfig ? undefined : ["project", "local"],
       permissionMode: "acceptEdits",
       ...(!isRoot ? { allowDangerouslySkipPermissions: true } : {}),
       env: { ...baseEnv, ...authEnv },
