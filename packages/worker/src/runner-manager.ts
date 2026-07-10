@@ -26,6 +26,9 @@ import {
   workerLog,
 } from "./logging/worker-log.js";
 
+/** SIGTERM 到 SIGKILL 的宽限期。 */
+const RUNNER_SIGKILL_GRACE_MS = 5_000;
+
 type UserMessageCommand = Extract<CommandPayload, { type: "user_message" }>;
 type CancelCommand = Extract<CommandPayload, { type: "cancel" }>;
 type InterruptCommand = Extract<CommandPayload, { type: "interrupt" }>;
@@ -399,6 +402,7 @@ export class RunnerManager {
     try {
       if (!runner.child.killed) {
         runner.child.kill("SIGTERM");
+        this.scheduleForceKill(runner);
       }
     } catch (err) {
       workerLog("terminate runner process failed", {
@@ -407,6 +411,30 @@ export class RunnerManager {
         ...errorDetails(err),
       }, "warn");
     }
+  }
+
+  /** SIGTERM 宽限期后仍存活则 SIGKILL,避免忽略 SIGTERM 的 runner 变僵尸残留。 */
+  private scheduleForceKill(runner: RunnerProcess): void {
+    const timer = setTimeout(() => {
+      if (runner.child.exitCode !== null || runner.child.signalCode !== null) {
+        return; // 已退出,无需强杀
+      }
+      workerLog("runner did not exit after SIGTERM, sending SIGKILL", {
+        runId: runner.runId,
+        pid: runner.child.pid,
+      }, "warn");
+      try {
+        runner.child.kill("SIGKILL");
+      } catch (err) {
+        workerLog("force kill runner failed", {
+          runId: runner.runId,
+          pid: runner.child.pid,
+          ...errorDetails(err),
+        }, "warn");
+      }
+    }, RUNNER_SIGKILL_GRACE_MS);
+    // 强杀兜底不该拖住进程正常退出
+    timer.unref();
   }
 
   private cleanupRunner(runId: string): void {

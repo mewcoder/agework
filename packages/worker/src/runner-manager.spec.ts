@@ -22,13 +22,15 @@ vi.mock("node:child_process", () => ({
 class MockChildProcess extends EventEmitter {
   pid = 1234;
   killed = false;
+  exitCode: number | null = null;
+  signalCode: string | null = null;
   stdout = new EventEmitter();
   stderr = new EventEmitter();
   send = vi.fn((_message: unknown, callback?: (err: Error | null) => void) => {
     callback?.(null);
     return true;
   });
-  kill = vi.fn(() => {
+  kill = vi.fn((_signal?: NodeJS.Signals) => {
     this.killed = true;
     return true;
   });
@@ -251,5 +253,44 @@ describe("RunnerManager", () => {
         })
       );
     });
+  });
+
+  it("escalates to SIGKILL when a runner ignores SIGTERM", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = makeClient();
+      const manager = makeManager(client);
+      await manager.handle(userMessage);
+      const child = forkMock.mock.results[0]?.value as MockChildProcess;
+
+      await manager.shutdown("SIGTERM");
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+      expect(child.kill).not.toHaveBeenCalledWith("SIGKILL");
+
+      // runner 忽略 SIGTERM(exitCode 仍为 null),宽限期后强杀兜底
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not SIGKILL a runner that exited within the grace period", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = makeClient();
+      const manager = makeManager(client);
+      await manager.handle(userMessage);
+      const child = forkMock.mock.results[0]?.value as MockChildProcess;
+
+      await manager.shutdown("SIGTERM");
+      // runner 在宽限期内退出
+      child.exitCode = 0;
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(child.kill).not.toHaveBeenCalledWith("SIGKILL");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
