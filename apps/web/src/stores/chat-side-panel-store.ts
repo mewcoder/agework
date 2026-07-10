@@ -61,9 +61,19 @@ export const useChatSidePanelStore = create<ChatSidePanelStore>()(
       name: 'agework-chat-side-panel',
       partialize: (state) => ({
         activeFeature: state.activeFeature,
-        panelOpen: state.panelOpen,
         treeOpen: state.treeOpen,
       }),
+      // panelOpen 不持久化（每次会话默认关闭），但旧版本写入的
+      // panelOpen 仍残留在 localStorage，默认浅合并会把它 hydrate 回来，
+      // 导致进对话时面板自动展开。这里只取白名单字段，丢弃 panelOpen。
+      merge: (persisted, currentState) => {
+        const p = (persisted ?? {}) as Partial<ChatSidePanelStore>;
+        return {
+          ...currentState,
+          activeFeature: p.activeFeature ?? currentState.activeFeature,
+          treeOpen: p.treeOpen ?? currentState.treeOpen,
+        };
+      },
     },
   ),
 );

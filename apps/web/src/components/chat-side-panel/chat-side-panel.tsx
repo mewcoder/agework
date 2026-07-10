@@ -2,11 +2,9 @@ import { useRef, useState, useEffect, useLayoutEffect } from "react";
 import {
   Folder,
   FileDiff,
-  Globe,
-  Terminal,
-  Settings,
   X,
   MoreHorizontal,
+  PanelRight,
 } from "lucide-react";
 import { PanelTreeRefreshToolbar } from "@/components/workspace-file-panel/panel-tree-refresh-toolbar";
 import {
@@ -16,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceChangesPanel } from "@/components/workspace-file-panel/workspace-changes-panel";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useChatSidePanelStore } from "@/stores/chat-side-panel-store";
 import { useRefreshWorkspaceFiles } from "@/hooks/use-workspace";
@@ -25,13 +24,10 @@ export type ChatSidePanelProps = {
   workspaceId: string;
 };
 
-// 功能图标列表：只有文件可点击，其他灰显占位
+// 功能图标列表
 const FEATURES = [
-  { id: "files", label: "文件", icon: Folder, enabled: true },
-  { id: "changes", label: "变更", icon: FileDiff, enabled: true },
-  { id: "browser", label: "浏览器", icon: Globe, enabled: false },
-  { id: "terminal", label: "终端", icon: Terminal, enabled: false },
-  { id: "config", label: "配置", icon: Settings, enabled: false },
+  { id: "files", label: "文件", icon: Folder },
+  { id: "changes", label: "变更", icon: FileDiff },
 ] as const;
 
 /** 单个 tab 最大宽度，防止超长文件名占满整个 tab 栏 */
@@ -46,6 +42,7 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
   const selectedFilePath = useChatSidePanelStore((s) => s.selectedFilePath);
   const setSelectedFilePath = useChatSidePanelStore((s) => s.setSelectedFilePath);
   const removeFileTab = useChatSidePanelStore((s) => s.removeFileTab);
+  const togglePanel = useChatSidePanelStore((s) => s.togglePanel);
   const refreshFiles = useRefreshWorkspaceFiles(workspaceId);
 
   const tabRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -118,39 +115,40 @@ export function ChatSidePanel({ workspaceId }: ChatSidePanelProps) {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {/* 第一行：功能图标按钮，容器 52px */}
+      {/* 第一行：收起按钮（左） + 功能图标按钮（右），容器 52px */}
       <div className="flex h-[52px] shrink-0 items-center gap-1 border-b border-border/50 px-2">
-        {FEATURES.map((feature) => {
-          const Icon = feature.icon;
-          const isActive = activeFeature === feature.id;
-          if (!feature.enabled) {
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-muted-foreground hover:text-foreground"
+          onClick={togglePanel}
+          title="收起侧边栏"
+        >
+          <PanelRight className="size-4" />
+        </Button>
+
+        <div className="ml-auto flex items-center gap-1">
+          {FEATURES.map((feature) => {
+            const Icon = feature.icon;
+            const isActive = activeFeature === feature.id;
             return (
-              <span
+              <button
                 key={feature.id}
-                className="inline-flex items-center gap-1.5 px-2 text-xs text-muted-foreground/35 select-none"
+                type="button"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors select-none",
+                  isActive
+                    ? "text-foreground bg-accent"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
+                )}
+                onClick={() => setActiveFeature(feature.id)}
               >
                 <Icon className="size-4" />
                 {feature.label}
-              </span>
+              </button>
             );
-          }
-          return (
-            <button
-              key={feature.id}
-              type="button"
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors select-none",
-                isActive
-                  ? "text-foreground bg-accent"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/50",
-              )}
-              onClick={() => setActiveFeature(feature.id)}
-            >
-              <Icon className="size-4" />
-              {feature.label}
-            </button>
-          );
-        })}
+          })}
+        </div>
       </div>
 
       {/* 文件视图 */}
