@@ -4,7 +4,6 @@ import { Public } from "../auth/decorators/public.decorator";
 import { RawResponse } from "../common/decorators/raw-response.decorator";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerRunParamDto } from "./dto/worker-run-param.dto";
-import { WorkerEventPostBodyDto } from "./dto/worker-event-post-body.dto";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
 
 /**
@@ -34,13 +33,15 @@ export class WorkerRunController {
 
   /**
    * POST /worker/runs/:runId/events
-   * Worker 上报上行事件，转发给 run 层处理。
+   * Worker 上报上行事件，转发给 run 层处理。body 是单条上行事件或其数组
+   * （worker 在事件产出快过 POST 往返时会合批），结构校验与 runId 归属校验都在
+   * WorkerEndpointHandler.postEvent()→parseWorkerEventPostBody 里完成，非法即 400。
    */
   @Post(":runId/events")
   @UseGuards(WorkerTokenGuard)
   async postEvent(
     @Param() params: WorkerRunParamDto,
-    @Body() body: WorkerEventPostBodyDto
+    @Body() body: unknown
   ): Promise<{ ok: boolean }> {
     return this.workerManager.postEvent(params.runId, body);
   }

@@ -27,6 +27,24 @@ import { errorDetails, workerLog } from "../logging/worker-log.js";
  */
 const EMIT_RETRY_ATTEMPTS = 3;
 const EMIT_RETRY_DELAYS_MS = [1_000, 2_000, 4_000];
+/**
+ * 单次 fetch 的客户端超时。连接被黑洞(NAT 回收 / LB 空闲剔除 / 半开 socket)时,
+ * 裸 fetch 不会报错,只挂着靠 undici 分钟级默认超时才醒——对控制面轮询和逐事件
+ * emit 这种关键路径太粗。这里强制在超时后 abort,让上层走各自的重试 / 重连。
+ */
+const EMIT_TIMEOUT_MS = 10_000;
+const RUN_CONFIG_TIMEOUT_MS = 10_000;
+const REGISTER_TIMEOUT_MS = 10_000;
+/** long-poll 客户端超时 = 服务端等待窗口 + 余量,保证正常挂起不被误伤。 */
+const POLL_TIMEOUT_MARGIN_MS = 10_000;
+
+type EmitWaiter = { resolve: () => void; reject: (err: unknown) => void };
+/** 单个 runId 的上行发送状态:待发队列 + 对应 waiter + 是否已有 flush 循环在跑。 */
+type EmitState = {
+  queue: unknown[];
+  waiters: EmitWaiter[];
+  loop?: Promise<void>;
+};
 export class WorkerHttpTransport {
   private readonly apiBase: string;
   private readonly workerId: string;
@@ -36,8 +54,13 @@ export class WorkerHttpTransport {
   /** server 侧队列的代次标识，未定义表示还没见过任何 epoch（冷启动）。 */
   private queueEpoch: number | undefined;
   private readonly eventSeqs = new Map<string, number>();
-  /** 按 runId 串行化 emit，避免并发 fetch 乱序到达导致服务端按 seq 去重时丢弃早序事件。 */
-  private readonly emitChains = new Map<string, Promise<void>>();
+  /**
+   * 按 runId 聚合上行事件。同一时刻每个 runId 最多一个 POST 在飞,期间到达的事件
+   * 累积成下一批一起发。低负载(如 loopback)下每批只有 1 条=退化为单事件直发、不加
+   * 延迟;只有事件产出快过 POST 往返时才自然成批,减少请求数。单 POST 在飞也保住了
+   * 原来的顺序保证(服务端按 seq 去重不会丢早序事件)。
+   */
+  private readonly emitStates = new Map<string, EmitState>();
 
   constructor() {
     this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
@@ -68,7 +91,11 @@ export class WorkerHttpTransport {
     const url = `${this.apiBase}${commandsPath}?${params.toString()}`;
     let res: Response;
     try {
-      res = await fetch(url, { headers: this.buildAuthHeaders() });
+      res = await fetchWithTimeout(
+        url,
+        { headers: this.buildAuthHeaders() },
+        (waitMs > 0 ? waitMs : 0) + POLL_TIMEOUT_MARGIN_MS
+      );
     } catch (err) {
       workerLog("command poll failed", {
         workerId: this.workerId,
@@ -162,9 +189,11 @@ export class WorkerHttpTransport {
       runId,
       workerId: this.workerId,
     }, "debug");
-    const res = await fetch(`${this.apiBase}/worker/runs/${runId}`, {
-      headers: this.buildAuthHeaders(),
-    });
+    const res = await fetchWithTimeout(
+      `${this.apiBase}/worker/runs/${runId}`,
+      { headers: this.buildAuthHeaders() },
+      RUN_CONFIG_TIMEOUT_MS
+    );
     if (!res.ok) {
       const body = await safeText(res);
       workerLog("fetch run config returned non-ok", {
@@ -200,11 +229,15 @@ export class WorkerHttpTransport {
       pid: process.pid,
       version: AGEWORK_VERSION,
     };
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await fetchWithTimeout(
+      url,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      REGISTER_TIMEOUT_MS
+    );
     if (!res.ok) {
       const responseBody = await safeText(res);
       throw new Error(`register failed: ${res.status} ${responseBody}`);
@@ -212,40 +245,73 @@ export class WorkerHttpTransport {
   }
 
   async emit(runId: string, msg: UpstreamMessage): Promise<void> {
-    const prev = this.emitChains.get(runId) ?? Promise.resolve();
-    const next = prev.then(() => this.doEmit(runId, msg));
-    this.emitChains.set(
-      runId,
-      next.catch(() => {})
-    );
-    return next;
-  }
-
-  private async doEmit(runId: string, msg: UpstreamMessage): Promise<void> {
-    const url = `${this.apiBase}/worker/runs/${runId}/events`;
     const message = {
       ...msg,
       runId,
       seq: this.nextEventSeq(runId),
       ts: new Date().toISOString(),
     };
-    const body = JSON.stringify(encodeUpstreamMessageForHttp(message));
-    const summary = summarizeUpstreamMessage(message);
     if (shouldLogEmit(message)) {
-      workerLog("emit event", summary, "debug");
+      workerLog("emit event", summarizeUpstreamMessage(message), "debug");
     }
+    let state = this.emitStates.get(runId);
+    if (!state) {
+      state = { queue: [], waiters: [] };
+      this.emitStates.set(runId, state);
+    }
+    state.queue.push(encodeUpstreamMessageForHttp(message));
+    const settled = new Promise<void>((resolve, reject) => {
+      state!.waiters.push({ resolve, reject });
+    });
+    // flush 循环自驱动;emit 返回的是本条事件所在批次的结果 promise。
+    state.loop ??= this.flushLoop(runId);
+    return settled;
+  }
+
+  /**
+   * 单 runId 的 flush 循环:每轮取走当前全部待发事件发一批,POST 期间新到的事件
+   * 进下一轮。批内所有 waiter 随该批 POST 结果一起 resolve/reject——保持与原逐事件
+   * emit 相同的成功/失败语义,只是把多条合并成一次请求。
+   */
+  private async flushLoop(runId: string): Promise<void> {
+    for (;;) {
+      const state = this.emitStates.get(runId);
+      if (!state || state.queue.length === 0) {
+        this.emitStates.delete(runId);
+        return;
+      }
+      const batch = state.queue.splice(0, state.queue.length);
+      const waiters = state.waiters.splice(0, state.waiters.length);
+      try {
+        await this.postBatch(runId, batch);
+        for (const waiter of waiters) waiter.resolve();
+      } catch (err) {
+        for (const waiter of waiters) waiter.reject(err);
+      }
+    }
+  }
+
+  /** 发送一批上行事件。批内 1 条时退化为单对象(与旧线格式一致),>1 条时发数组。 */
+  private async postBatch(runId: string, batch: unknown[]): Promise<void> {
+    const url = `${this.apiBase}/worker/runs/${runId}/events`;
+    const body = JSON.stringify(batch.length === 1 ? batch[0] : batch);
+    const summary = { runId, count: batch.length };
     let lastError: Error | undefined;
     for (let attempt = 0; attempt < EMIT_RETRY_ATTEMPTS; attempt++) {
       let res: Response;
       try {
-        res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            ...this.buildAuthHeaders(),
+        res = await fetchWithTimeout(
+          url,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...this.buildAuthHeaders(),
+            },
+            body,
           },
-          body,
-        });
+          EMIT_TIMEOUT_MS
+        );
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         workerLog("emit event request failed", {
@@ -336,18 +402,37 @@ export class WorkerHttpTransport {
   }
 
   /**
-   * 释放某个 run 在持久 worker 生命周期内的内存槽位（seq 计数器与 emit 串行链）。
+   * 释放某个 run 在持久 worker 生命周期内的内存槽位（seq 计数器与 emit 批次状态）。
    * run 完成后调用，避免长期运行的 worker 随 run 数量累积 Map 条目。
-   * emitChains 的 Promise 此时已 settle，删除条目不影响进行中的 emit。
+   * 终态事件已 emit 且其批次 POST 已 settle（flush 循环随之排空并自删），此时删除
+   * 残留条目不影响任何进行中的 emit。
    */
   cleanup(runId: string): void {
     this.eventSeqs.delete(runId);
-    this.emitChains.delete(runId);
+    this.emitStates.delete(runId);
   }
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * 给 fetch 套客户端超时:超时即 abort,fetch 抛错走上层重试 / 重连逻辑。
+ * timer 在 fetch settle 后立即清除,不拖住事件循环。
+ */
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function safeText(res: Response): Promise<string> {

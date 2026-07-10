@@ -5,7 +5,7 @@ import { WorkerHttpTransport } from "./worker-http";
 describe("WorkerHttpTransport", () => {
   beforeEach(() => {
     vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://api");
-    vi.stubEnv("AGEWORK_WORKER_OWNER_ID", "ws-1");
+    vi.stubEnv("AGEWORK_WORKER_ID", "ws-1");
     vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "token-1");
   });
   afterEach(() => {
@@ -42,12 +42,13 @@ describe("WorkerHttpTransport", () => {
     const result = await client.pollCommands();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0",
+      "http://api/worker/ws-1/commands?afterSeq=0",
       {
         headers: {
-          "x-agework-owner-id": "ws-1",
+          "x-agework-worker-id": "ws-1",
           "x-agework-worker-token": "token-1",
         },
+        signal: expect.any(AbortSignal),
       }
     );
     expect(result.commands[0].payload).toMatchObject({
@@ -58,7 +59,7 @@ describe("WorkerHttpTransport", () => {
     // 下一次 poll 用更新后的 afterSeq
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=3",
+      "http://api/worker/ws-1/commands?afterSeq=3",
       expect.anything()
     );
   });
@@ -107,7 +108,7 @@ describe("WorkerHttpTransport", () => {
 
     await client.pollCommands();
     expect(fetchMock).toHaveBeenLastCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=4",
+      "http://api/worker/ws-1/commands?afterSeq=4",
       expect.anything()
     );
   });
@@ -124,9 +125,10 @@ describe("WorkerHttpTransport", () => {
 
     expect(fetchMock).toHaveBeenCalledWith("http://api/worker/runs/run-1", {
       headers: {
-        "x-agework-owner-id": "ws-1",
+        "x-agework-worker-id": "ws-1",
         "x-agework-worker-token": "token-1",
       },
+      signal: expect.any(AbortSignal),
     });
     expect(config).toMatchObject({ runId: "run-1" });
   });
@@ -142,7 +144,7 @@ describe("WorkerHttpTransport", () => {
     await client.pollCommands(25_000);
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/commands?afterSeq=0&waitMs=25000",
+      "http://api/worker/ws-1/commands?afterSeq=0&waitMs=25000",
       expect.anything()
     );
   });
@@ -165,7 +167,7 @@ describe("WorkerHttpTransport", () => {
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
-          "x-agework-owner-id": "ws-1",
+          "x-agework-worker-id": "ws-1",
           "x-agework-worker-token": "token-1",
         }),
       })
@@ -307,7 +309,7 @@ describe("WorkerHttpTransport", () => {
     vi.useRealTimers();
   });
 
-  it("registers with the owner's register endpoint, sending startToken and pid", async () => {
+  it("registers with the worker's register endpoint, sending startToken and pid", async () => {
     vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "token-1");
     const fetchMock = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchMock);
@@ -316,7 +318,7 @@ describe("WorkerHttpTransport", () => {
     await client.register();
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://api/worker/owners/ws-1/register",
+      "http://api/worker/ws-1/register",
       expect.objectContaining({ method: "POST" })
     );
     expect(
@@ -445,12 +447,12 @@ describe("WorkerHttpTransport", () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock).toHaveBeenNthCalledWith(
         1,
-        "http://api/worker/owners/ws-1/commands?afterSeq=9",
+        "http://api/worker/ws-1/commands?afterSeq=9",
         expect.anything()
       );
       expect(fetchMock).toHaveBeenNthCalledWith(
         2,
-        "http://api/worker/owners/ws-1/commands?afterSeq=0",
+        "http://api/worker/ws-1/commands?afterSeq=0",
         expect.anything()
       );
       // returns the re-polled (correct, non-empty) result, not the first (stale, empty) one
@@ -521,6 +523,88 @@ describe("WorkerHttpTransport", () => {
 
       expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+  });
+
+  describe("adaptive batching", () => {
+    const mk = (n: number) =>
+      ({
+        runId: "run-1",
+        seq: 0,
+        type: "agui.event",
+        payload: { type: "RAW", event: { n } },
+        ts: "",
+      }) as unknown as UpstreamMessage;
+
+    it("sends a single-object body when there is no in-flight backlog", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await client.emit("run-1", mk(1));
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const body = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+      expect(Array.isArray(body)).toBe(false);
+      expect(body.meta.seq).toBe(1);
+    });
+
+    it("coalesces events that arrive during an in-flight POST into one ordered batch", async () => {
+      const releases: Array<() => void> = [];
+      const fetchMock = vi.fn(
+        (_url: string, _init: RequestInit) =>
+          new Promise<Response>((resolve) => {
+            releases.push(() => resolve({ ok: true } as Response));
+          })
+      );
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      const p1 = client.emit("run-1", mk(1)); // 起第一批 POST(单条 seq1)
+      const p2 = client.emit("run-1", mk(2)); // 在飞期间入队
+      const p3 = client.emit("run-1", mk(3)); // 在飞期间入队
+
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const body1 = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string);
+      expect(Array.isArray(body1)).toBe(false);
+      expect(body1.meta.seq).toBe(1);
+
+      releases[0]?.(); // 完成第一批 → 触发合并后的第二批
+      await p1;
+
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      const body2 = JSON.parse(fetchMock.mock.calls[1]?.[1]?.body as string);
+      expect(Array.isArray(body2)).toBe(true);
+      expect(body2.map((m: { meta: { seq: number } }) => m.meta.seq)).toEqual([
+        2, 3,
+      ]);
+
+      releases[1]?.();
+      await Promise.all([p2, p3]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it("rejects every waiter in a batch when its POST fails", async () => {
+      vi.useFakeTimers();
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        text: async () => "bad request",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      // 第一条独占第一批;它失败(4xx 不重试)后,后续两条组第二批也失败
+      const p1 = client.emit("run-1", mk(1));
+      const p2 = client.emit("run-1", mk(2));
+      const p3 = client.emit("run-1", mk(3));
+
+      const a1 = expect(p1).rejects.toThrow("Event POST failed: 400 bad request");
+      const a2 = expect(p2).rejects.toThrow("Event POST failed: 400 bad request");
+      const a3 = expect(p3).rejects.toThrow("Event POST failed: 400 bad request");
+      await vi.runAllTimersAsync();
+      await Promise.all([a1, a2, a3]);
+      vi.useRealTimers();
     });
   });
 });
