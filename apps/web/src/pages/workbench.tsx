@@ -80,23 +80,25 @@ function WorkbenchContent({
         </div>
       ) : null}
       <ResizablePanelGroup
-        key={showPanel ? "with-panel" : "without-panel"}
         orientation="horizontal"
         className="flex min-h-0 flex-1"
       >
-        {/* 聊天区（ChatHeader 在这里，不贯通到面板） */}
-        <ResizablePanel defaultSize={showPanel ? "50%" : "100%"}>
+        {/* 聊天区（ChatHeader 在这里，不贯通到面板）。
+            不用 key 切换：key 变化会让整个 group + Thread remount，
+            导致收起/展开面板时聊天记录瞬间消失。面板条件渲染时 group
+            会自动重算布局，聊天区随之让出/收回空间。 */}
+        <ResizablePanel id="chat" defaultSize="100%" minSize="30%">
           <div className="flex h-full flex-col">
             {selectedConversationId !== undefined ? (
               <ChatHeader
                 rightSlot={
-                  canShowPanel ? (
+                  canShowPanel && !panelOpen ? (
                     <Button
                       variant="ghost"
                       size="icon-sm"
                       className="no-drag text-muted-foreground hover:text-foreground"
                       onClick={togglePanel}
-                      title={panelOpen ? "关闭侧边栏" : "打开侧边栏"}
+                      title="打开侧边栏"
                     >
                       <PanelRight className="size-4" />
                     </Button>
@@ -115,8 +117,8 @@ function WorkbenchContent({
         {/* 面板区 */}
         {showPanel && workspaceId ? (
           <>
-            <ResizableHandle withHandle />
-            <ResizablePanel defaultSize="50%" minSize="15%" maxSize="70%">
+            <ResizableHandle withHandle className="bg-border/50" />
+            <ResizablePanel id="side-panel" defaultSize="50%" minSize="15%" maxSize="70%">
               <ChatSidePanel workspaceId={workspaceId} />
             </ResizablePanel>
           </>
