@@ -39,7 +39,9 @@ async function bootstrap() {
   app.useLogger(
     new RedactingConsoleLogger({
       logLevels: resolveNestLogLevels(),
-      json: isProd,
+      // 统一文本格式：本项目为本地/桌面单机部署，日志由人直接阅读，
+      // 无采集系统消费 JSON 字段，故 dev/prod 均输出可读文本。颜色按环境区分。
+      json: false,
       colors: !isProd,
       timestamp: true,
     })
