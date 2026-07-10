@@ -65,7 +65,7 @@ function firstEnvValue(...values: Array<string | undefined>): string | undefined
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const webEnv = loadEnv(mode, __dirname, "");
-  const apiEnv = readEnvFile(path.resolve(__dirname, "../api/.env"));
+  const apiEnv = readEnvFile(path.resolve(__dirname, "../server/.env"));
   const appBasePath = normalizeBasePath(
     firstEnvValue(
       process.env.VITE_APP_BASE_PATH,

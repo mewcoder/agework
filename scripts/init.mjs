@@ -184,13 +184,13 @@ function normalizeRuntimeTypes(rawValue) {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 
-  const allowed = ["local", "docker", "opensandbox"];
+  const allowed = ["native", "docker", "opensandbox"];
   if (
     values.length === 0 ||
     values.some((value) => !allowed.includes(value))
   ) {
     throw new Error(
-      "--runtime expects comma-separated values from \"local\", \"docker\", \"opensandbox\""
+      "--runtime expects comma-separated values from \"native\", \"docker\", \"opensandbox\""
     );
   }
 
@@ -565,13 +565,15 @@ async function main() {
     console.log("  pnpm init:dev         Dev defaults (no-auth=true, no prompts)");
     console.log("  pnpm init:prod        Prod defaults (no-auth=false, no prompts)");
     console.log("Options:");
+    console.log("  --dev            Dev defaults (no-auth=true, skip prompts); used by pnpm init:dev");
+    console.log("  --prod           Prod defaults (no-auth=false, skip prompts); used by pnpm init:prod");
     console.log("  --no-auth        Disable authentication (sets AGEWORK_DEV_AUTH_DISABLED=true)");
     console.log("  --reset          Reset .env defaults and recreate database data");
     console.log("  --start          Start dev server after init");
     console.log("  --ctx <path>     Set backend context and frontend paths, for example /agent");
     console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/server/.env");
     console.log("  --port <port>    Set backend PORT in apps/server/.env");
-    console.log("  --runtime <local|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)");
+    console.log("  --runtime <native|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)");
     console.log("  --isolation <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES in apps/server/.env");
     console.log("  --no-install     Skip pnpm install");
     console.log("Default: runs pnpm install unless --no-install is set.");
@@ -606,11 +608,11 @@ async function main() {
     const result = await p.multiselect({
       message: "允许的工作空间运行环境（可多选）",
       options: [
-        { value: "local", label: "local（只允许本机进程）" },
+        { value: "native", label: "native（只允许本机进程）" },
         { value: "docker", label: "docker（本机 Docker 容器）" },
         { value: "opensandbox", label: "opensandbox（OpenSandbox Server + worker 镜像）" },
       ],
-      initialValues: ["local"],
+      initialValues: ["native"],
       required: true,
     });
     if (p.isCancel(result)) process.exit(0);
@@ -705,7 +707,7 @@ async function main() {
       message: "启动服务",
       options: [
         { value: "dev", label: "开发模式" },
-        { value: "api-web", label: "启动后端 + 前端" },
+        { value: "server-web", label: "启动后端 + 前端" },
         { value: "server", label: "启动后端" },
         { value: "build", label: "仅构建" },
         { value: "none", label: "跳过" },
@@ -716,8 +718,8 @@ async function main() {
     else if (run === "build") runPnpm(["build"]);
     else if (run === "server") {
       runPnpm(["build"]);
-      runPnpm(["start:api"]);
-    } else if (run === "api-web") {
+      runPnpm(["start:server"]);
+    } else if (run === "server-web") {
       runPnpm(["build"]);
       runPnpm(["start"]);
     }
