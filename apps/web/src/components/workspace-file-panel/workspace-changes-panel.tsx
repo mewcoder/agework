@@ -80,7 +80,7 @@ export function WorkspaceChangesPanel({ workspaceId }: { workspaceId: string }) 
   return (
     <div className="flex h-full flex-col">
       {/* 顶部工具条:复用与文件面板一致的 目录树开关 + 刷新 图标组 */}
-      <div className="flex shrink-0 items-center gap-1 border-b border-border/40 px-1.5">
+      <div className="flex h-[32px] shrink-0 items-center gap-1 border-b border-border/50 px-1.5">
         <PanelTreeRefreshToolbar
           treeOpen={listOpen}
           onToggleTree={() => setListOpen((v) => !v)}

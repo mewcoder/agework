@@ -34,7 +34,7 @@ export function PanelTreeRefreshToolbar({
         )}
         onClick={onToggleTree}
       >
-        <ListTree className="size-4" />
+        <ListTree className="size-3.5" />
       </TooltipIconButton>
 
       <TooltipIconButton

@@ -1,7 +1,8 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { diffLines } from "diff";
-import { AlertCircle, ChevronsUpDown } from "lucide-react";
+import { AlertCircle, ChevronsUpDown, FoldVertical, UnfoldVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { useWorkspaceFileDiff } from "@/hooks/use-workspace";
 import type { ChangedFileEntry } from "@agework/shared/api";
 import { cn } from "@/lib/utils";
@@ -29,7 +30,9 @@ function splitLines(value: string): string[] {
 }
 
 function buildRows(before: string, after: string): DiffRow[] {
-  const parts = diffLines(before, after);
+  // 统一换行符：git show 输出 LF，但 Windows 工作区文件是 CRLF，
+  // diffLines 会把 "line\r\n" 和 "line\n" 当成不同行，导致整文件全红全绿。
+  const parts = diffLines(before.replace(/\r\n/g, "\n"), after.replace(/\r\n/g, "\n"));
   const rows: DiffRow[] = [];
   let oldNo = 0;
   let newNo = 0;
@@ -109,11 +112,26 @@ function DiffLine({ row }: { row: DiffRow }) {
   );
 }
 
-function DiffGap({ rows }: { rows: DiffRow[] }) {
-  const [expanded, setExpanded] = useState(false);
+function DiffGap({
+  rows,
+  expanded,
+  onToggle,
+}: {
+  rows: DiffRow[];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   if (expanded) {
     return (
       <>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="flex w-full items-center gap-1.5 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
+        >
+          <ChevronsUpDown className="size-3 shrink-0" />
+          收起 {rows.length} 行
+        </button>
         {rows.map((row) => (
           <DiffLine key={row.no} row={row} />
         ))}
@@ -123,7 +141,7 @@ function DiffGap({ rows }: { rows: DiffRow[] }) {
   return (
     <button
       type="button"
-      onClick={() => setExpanded(true)}
+      onClick={onToggle}
       className="flex w-full items-center gap-1.5 bg-muted/30 px-3 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50"
     >
       <ChevronsUpDown className="size-3 shrink-0" />
@@ -135,9 +153,13 @@ function DiffGap({ rows }: { rows: DiffRow[] }) {
 const UnifiedDiff = memo(function UnifiedDiff({
   before,
   after,
+  expandedGaps,
+  onToggleGap,
 }: {
   before: string;
   after: string;
+  expandedGaps: Set<number>;
+  onToggleGap: (index: number) => void;
 }) {
   const items = useMemo(() => groupRows(buildRows(before, after)), [before, after]);
 
@@ -153,7 +175,12 @@ const UnifiedDiff = memo(function UnifiedDiff({
     <div className="text-xs leading-relaxed">
       {items.map((item, index) =>
         item.type === "gap" ? (
-          <DiffGap key={index} rows={item.rows} />
+          <DiffGap
+            key={index}
+            rows={item.rows}
+            expanded={expandedGaps.has(index)}
+            onToggle={() => onToggleGap(index)}
+          />
         ) : (
           <DiffLine key={index} row={item.row} />
         ),
@@ -172,11 +199,38 @@ export function WorkspaceFileDiffView({
   entry: ChangedFileEntry;
 }) {
   const { data, isLoading, error } = useWorkspaceFileDiff(workspaceId, entry.path);
+  const before = data?.before ?? "";
+  const after = data?.after ?? "";
+
+  const items = useMemo(() => groupRows(buildRows(before, after)), [before, after]);
+  const gapIndices = useMemo(
+    () => items.map((item, index) => (item.type === "gap" ? index : -1)).filter((i) => i >= 0),
+    [items],
+  );
+  const [expandedGaps, setExpandedGaps] = useState<Set<number>>(() => new Set());
+  // 切换文件时重置展开状态
+  useEffect(() => {
+    setExpandedGaps(new Set());
+  }, [entry.path]);
+  const hasGaps = gapIndices.length > 0;
+  const allExpanded = hasGaps && gapIndices.every((i) => expandedGaps.has(i));
+
+  const toggleGap = (index: number) => {
+    setExpandedGaps((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    setExpandedGaps(allExpanded ? new Set() : new Set(gapIndices));
+  };
 
   return (
     <div className="flex h-full flex-col">
-      {/* 顶部:文件路径 + 状态 */}
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-1">
+      {/* 顶部:文件路径 + 状态 + 展开/收起全部 */}
+      <div className="flex h-[32px] shrink-0 items-center gap-2 border-b border-border/50 px-2">
         <ChangeStatusBadge status={entry.status} />
         <span
           className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground"
@@ -184,6 +238,20 @@ export function WorkspaceFileDiffView({
         >
           {entry.path}
         </span>
+        {hasGaps && (
+          <TooltipIconButton
+            tooltip={allExpanded ? "收起全部" : "展开全部"}
+            side="bottom"
+            className="size-6 shrink-0 self-center !rounded-[6px] text-muted-foreground"
+            onClick={toggleAll}
+          >
+            {allExpanded ? (
+              <FoldVertical className="size-3.5" />
+            ) : (
+              <UnfoldVertical className="size-3.5" />
+            )}
+          </TooltipIconButton>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -199,7 +267,12 @@ export function WorkspaceFileDiffView({
         )}
 
         {data && !isLoading && !error && (
-          <UnifiedDiff before={data.before ?? ""} after={data.after ?? ""} />
+          <UnifiedDiff
+            before={before}
+            after={after}
+            expandedGaps={expandedGaps}
+            onToggleGap={toggleGap}
+          />
         )}
       </div>
     </div>
