@@ -153,12 +153,12 @@ export function AgentSwitcher() {
           if (next) selectAgentType(next as AgentType);
         }}
         aria-label="选择 Agent"
-        className="relative !grid !gap-0 !rounded-full bg-muted"
+        className="relative !grid !gap-0 !rounded-full border border-border/60 bg-muted/70 shadow-xs"
         style={{ gridTemplateColumns: `repeat(${agents.length}, 1fr)` }}
       >
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-background ring-1 ring-border transition-transform duration-200 ease-out"
+          className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-background shadow-[0_2px_8px_-1px_rgba(0,0,0,0.12),0_1px_3px_rgba(0,0,0,0.08)] ring-1 ring-black/10 transition-transform duration-200 ease-out"
           style={{
             width: `${100 / agents.length}%`,
             transform: `translateX(${selectedIndex * 100}%)`,
