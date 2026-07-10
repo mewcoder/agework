@@ -12,7 +12,7 @@ const stubEnvConfig = {
   codex: { executablePath: null, version: null },
   detectedAt: "2026-01-01T00:00:00.000Z",
 };
-vi.mock("../cli/cli-resolver.js", () => ({
+vi.mock("@agework/shared/cli", () => ({
   detectEnvConfig: () => stubEnvConfig,
 }));
 

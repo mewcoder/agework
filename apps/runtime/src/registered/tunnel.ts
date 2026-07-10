@@ -17,7 +17,7 @@ import {
   type RegisteredRuntimeConfig,
   type RuntimeType,
 } from "../config.js";
-import { detectEnvConfig } from "../cli/cli-resolver.js";
+import { detectEnvConfig } from "@agework/shared/cli";
 import { createDirectory, listDirectory } from "../filesystem/directory-browser.js";
 import {
   listFiles as listFilesDirect,

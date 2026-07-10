@@ -10,8 +10,8 @@ import type {
   RunConfig,
   RunStatusPayload,
 } from "@agework/shared/protocol";
+import { findInPath } from "@agework/shared/cli";
 import type { Subscription } from "rxjs";
-import { execSync } from "node:child_process";
 
 type Adapter = ClaudeAgentAdapter | CodexAgentAdapter;
 
@@ -155,19 +155,8 @@ export function resolveCliPaths(
   env: Record<string, string | undefined>
 ): CliPaths {
   const claudeExecutablePath =
-    env.AGEWORK_CLAUDE_CLI_PATH?.trim() || findInPath("claude");
+    env.AGEWORK_CLAUDE_CLI_PATH?.trim() || (findInPath("claude") ?? undefined);
   const codexExecutablePath =
-    env.AGEWORK_CODEX_CLI_PATH?.trim() || findInPath("codex");
+    env.AGEWORK_CODEX_CLI_PATH?.trim() || (findInPath("codex") ?? undefined);
   return { claudeExecutablePath, codexExecutablePath };
-}
-
-function findInPath(name: string): string | undefined {
-  try {
-    const cmd = process.platform === "win32" ? `where ${name}.exe 2>nul` : `which ${name} 2>/dev/null`;
-    const result = execSync(cmd, { encoding: "utf-8", timeout: 3000 }).trim();
-    // `where` on Windows can return multiple lines; take the first match.
-    return result.split(/\r?\n/)[0] || undefined;
-  } catch {
-    return undefined;
-  }
 }

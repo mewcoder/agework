@@ -23,7 +23,7 @@ import {
   readFileDiff as readFileDiffDirect,
 } from "@agework/shared/git";
 import { ConfigService } from "../../config/config.service";
-import { detectEnvConfig } from "../cli/cli-resolver";
+import { detectEnvConfig } from "@agework/shared/cli";
 import { installCli } from "../cli/cli-installer";
 import {
   createDirectory as createDirectoryOnDisk,

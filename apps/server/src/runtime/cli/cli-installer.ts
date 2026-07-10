@@ -8,8 +8,8 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentType } from "@agework/shared";
+import { resolveCliPackageName } from "@agework/shared/cli";
 import { AGEWORK_HOST_CLI_DIR } from "../../config/registry/defaults";
-import { resolveCliPackageName } from "./cli-packages";
 
 const NPM_INSTALL_TIMEOUT_MS = 120_000;
 
