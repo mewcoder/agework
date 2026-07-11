@@ -1,6 +1,5 @@
 import type { ReactElement } from "react";
 import {
-  Bot,
   BookOpen,
   Database,
   File as FileIcon,
@@ -22,65 +21,91 @@ import { cn } from "@/lib/utils";
 /**
  * 文件类型图标组件。
  *
- * 设计参考 Codex 桌面端的实现（自研、非外部库）：
- *   - 精确文件名表 (EXACT) 与扩展名表 (EXT) 两层映射
- *   - 品牌级图标手写内联 SVG（docker / npm / pnpm / yarn / prettier / turbo ...）
- *   - 通用类型用 lucide 图标兜底
- *   - 每个品牌图标带专属配色
+ * 设计对齐 ChatGPT 桌面端（v26.707.41301，原 Codex 能力已并入）的文件树图标实现：
+ *   - 零外部依赖，纯手写内联 SVG + 每品牌专属配色
+ *   - 两层解析：精确文件名表 (EXACT) + 扩展名表 (EXT)
+ *   - 数据来自解包 app.asar 得到的精确名表 `bb`(104 项) 与扩展名表 `xb`(120 项)
+ *   - 图标类别共 50 个（对应源里 --trees-file-icon-color-* 调色板）
+ *
+ * 2026-07-11 重新抓取：相对旧版，移除 pnpm/yarn/turbo/agents（源码已无），
+ * 新增 astro / svelte / graphql / mcp / vscode / vue / wasm / zig / table /
+ * svgo / tailwind / terraform / oxc / postcss / sass / bootstrap / browserslist /
+ * bash 等类别及完整扩展名映射。
  */
 
 type IconName =
-  // 品牌
+  // 品牌 / 工具（源 50 类别）
   | "docker"
   | "npm"
-  | "pnpm"
-  | "yarn"
   | "bun"
   | "prettier"
-  | "turbo"
   | "eslint"
   | "babel"
   | "biome"
   | "claude"
-  | "agents"
   | "git"
+  | "astro"
+  | "graphql"
+  | "vue"
+  | "tailwind"
+  | "terraform"
+  | "react"
+  | "vscode"
+  | "bash"
+  | "browserslist"
+  | "bootstrap"
+  | "c"
+  | "cpp"
+  | "css"
+  | "go"
+  | "html"
+  | "json"
+  | "markdown"
+  | "mcp"
+  | "oxc"
+  | "postcss"
+  | "python"
+  | "ruby"
+  | "rust"
+  | "sass"
+  | "svelte"
+  | "svg"
+  | "svgo"
+  | "swift"
+  | "table"
+  | "vite"
+  | "wasm"
+  | "webpack"
+  | "yml"
+  | "zip"
+  | "zig"
+  | "font"
+  | "nextjs"
+  | "stylelint"
+  // 语言 / 数据（源类别）
+  | "typescript"
+  | "javascript"
+  | "image"
+  | "database"
+  | "text"
+  // agework 额外通用兜底（源码经语言探测也归为通用图标）
   | "readme"
   | "license"
   | "makefile"
   | "env"
   | "editorconfig"
   | "tsconfig"
-  // 通用类别
-  | "typescript"
-  | "javascript"
-  | "react"
-  | "python"
-  | "rust"
-  | "go"
   | "java"
   | "kotlin"
-  | "c"
-  | "cpp"
   | "csharp"
-  | "ruby"
   | "php"
-  | "swift"
-  | "json"
-  | "yaml"
-  | "toml"
-  | "html"
-  | "css"
   | "xml"
   | "code"
-  | "markdown"
-  | "text"
   | "word"
   | "csv"
   | "excel"
   | "pdf"
-  | "image"
   | "archive"
-  | "database"
   | "sql"
   | "shell"
   | "presentation"
@@ -90,168 +115,7 @@ type IconName =
 type IconProps = { size?: number; className?: string };
 type IconComponent = (props: IconProps) => ReactElement;
 
-/* ----------------------------- 精确文件名表 ----------------------------- */
-// 大小写不敏感匹配（lower 后查表）
-const EXACT: Record<string, IconName> = {
-  // git
-  ".gitignore": "git",
-  ".gitattributes": "git",
-  ".gitmodules": "git",
-  ".gitkeep": "git",
-  // docker
-  ".dockerignore": "docker",
-  dockerfile: "docker",
-  "docker-compose.yml": "docker",
-  "docker-compose.yaml": "docker",
-  // npm
-  ".npmrc": "npm",
-  ".npmignore": "npm",
-  "package.json": "npm",
-  "package-lock.json": "npm",
-  // pnpm
-  "pnpm-lock.yaml": "pnpm",
-  "pnpm-workspace.yaml": "pnpm",
-  // yarn
-  "yarn.lock": "yarn",
-  // bun
-  "bun.lock": "bun",
-  "bun.lockb": "bun",
-  // prettier
-  ".prettierrc": "prettier",
-  ".prettierrc.json": "prettier",
-  ".prettierrc.js": "prettier",
-  ".prettierrc.cjs": "prettier",
-  ".prettierrc.mjs": "prettier",
-  ".prettierrc.toml": "prettier",
-  ".prettierrc.yaml": "prettier",
-  ".prettierignore": "prettier",
-  // tsconfig
-  "tsconfig.json": "tsconfig",
-  // eslint
-  ".eslintrc": "eslint",
-  ".eslintrc.js": "eslint",
-  ".eslintrc.json": "eslint",
-  ".eslintrc.cjs": "eslint",
-  ".eslintrc.yaml": "eslint",
-  ".eslintrc.yml": "eslint",
-  ".eslintignore": "eslint",
-  // babel
-  ".babelrc": "babel",
-  "babel.config.js": "babel",
-  "babel.config.json": "babel",
-  // biome
-  "biome.json": "biome",
-  "biome.jsonc": "biome",
-  // turbo
-  "turbo.json": "turbo",
-  // claude / agents
-  ".claude": "claude",
-  "claude.md": "claude",
-  ".agents": "agents",
-  "agents.md": "agents",
-  // readme / license
-  readme: "readme",
-  "readme.md": "readme",
-  license: "license",
-  "license.md": "license",
-  // makefile / env / editorconfig
-  makefile: "makefile",
-  "makefile.am": "makefile",
-  ".env": "env",
-  ".env.example": "env",
-  ".env.local": "env",
-  ".editorconfig": "editorconfig",
-  // rust / go / python
-  "cargo.toml": "rust",
-  "cargo.lock": "rust",
-  "go.mod": "go",
-  "go.sum": "go",
-  "requirements.txt": "python",
-  "pyproject.toml": "python",
-};
-
-/* ----------------------------- 扩展名表 ----------------------------- */
-const EXT: Record<string, IconName> = {
-  ts: "typescript",
-  tsx: "react",
-  js: "javascript",
-  jsx: "react",
-  mjs: "javascript",
-  cjs: "javascript",
-  py: "python",
-  rs: "rust",
-  go: "go",
-  java: "java",
-  kt: "kotlin",
-  kts: "kotlin",
-  c: "c",
-  h: "c",
-  cpp: "cpp",
-  cc: "cpp",
-  cxx: "cpp",
-  hpp: "cpp",
-  cs: "csharp",
-  rb: "ruby",
-  php: "php",
-  swift: "swift",
-  json: "json",
-  jsonc: "json",
-  json5: "json",
-  yaml: "yaml",
-  yml: "yaml",
-  toml: "toml",
-  xml: "code",
-  html: "html",
-  htm: "html",
-  css: "css",
-  scss: "css",
-  sass: "css",
-  less: "css",
-  md: "markdown",
-  mdx: "markdown",
-  markdown: "markdown",
-  txt: "text",
-  log: "text",
-  csv: "csv",
-  tsv: "csv",
-  xls: "excel",
-  xlsx: "excel",
-  pdf: "pdf",
-  png: "image",
-  jpg: "image",
-  jpeg: "image",
-  gif: "image",
-  svg: "image",
-  webp: "image",
-  ico: "image",
-  bmp: "image",
-  zip: "archive",
-  tar: "archive",
-  gz: "archive",
-  rar: "archive",
-  "7z": "archive",
-  sql: "database",
-  sh: "shell",
-  bash: "shell",
-  zsh: "shell",
-  fish: "shell",
-  ppt: "presentation",
-  pptx: "presentation",
-  doc: "word",
-  docx: "word",
-  lock: "lock",
-};
-
-function resolve(name: string): IconName {
-  const lower = name.toLowerCase();
-  if (EXACT[lower]) return EXACT[lower];
-  const dot = lower.lastIndexOf(".");
-  const ext = dot > 0 ? lower.slice(dot + 1) : "";
-  if (ext && EXT[ext]) return EXT[ext];
-  return "default";
-}
-
-/* ----------------------------- 品牌内联 SVG ----------------------------- */
+/* ----------------------------- SVG 基础 ----------------------------- */
 function Svg({
   size = 14,
   className,
@@ -271,6 +135,34 @@ function Svg({
   );
 }
 
+/** 单色圆角方块 + 字母徽标，用于绝大多数品牌/工具图标（与源码“每类一个彩色 sprite”一致） */
+function Mono({
+  size = 14,
+  className,
+  color,
+  label,
+}: IconProps & { color: string; label: string }) {
+  const fs = label.length >= 3 ? 5 : label.length === 2 ? 6.5 : 8;
+  return (
+    <Svg size={size} className={className}>
+      <rect x="2" y="2" width="20" height="20" rx="4.5" fill={color} />
+      <text
+        x="12"
+        y="12"
+        dy="0.35em"
+        textAnchor="middle"
+        fontFamily="Arial, sans-serif"
+        fontWeight="800"
+        fontSize={fs}
+        fill="#fff"
+      >
+        {label}
+      </text>
+    </Svg>
+  );
+}
+
+/* ----------------------------- 手写品牌 SVG ----------------------------- */
 const DockerIcon: IconComponent = ({ size, className }) => (
   <Svg size={size} className={className}>
     <g fill="#2496ED">
@@ -299,35 +191,6 @@ const NpmIcon: IconComponent = ({ size, className }) => (
   </Svg>
 );
 
-const PnpmIcon: IconComponent = ({ size, className }) => (
-  <Svg size={size} className={className}>
-    <circle cx="12" cy="12" r="9" fill="#F9AD00" />
-    <text
-      x="12"
-      y="15.4"
-      textAnchor="middle"
-      fontFamily="Arial, sans-serif"
-      fontWeight="800"
-      fontSize="11"
-      fill="#fff"
-    >
-      p
-    </text>
-  </Svg>
-);
-
-const YarnIcon: IconComponent = ({ size, className }) => (
-  <Svg size={size} className={className}>
-    <circle cx="12" cy="12" r="8.5" fill="#2C8EBB" />
-    <g stroke="#fff" strokeWidth="1" fill="none" opacity="0.9">
-      <path d="M5.5 9 Q12 12 18.5 9" />
-      <path d="M5.5 15 Q12 12 18.5 15" />
-      <path d="M9 5 Q12 12 9 19" />
-      <path d="M15 5 Q12 12 15 19" />
-    </g>
-  </Svg>
-);
-
 const BunIcon: IconComponent = ({ size, className }) => (
   <Svg size={size} className={className}>
     <circle cx="12" cy="12" r="9" fill="#F47216" />
@@ -351,12 +214,6 @@ const PrettierIcon: IconComponent = ({ size, className }) => (
       d="M5 4.5c5-1 11 .5 14 4.5-4-1-8-1-11 1.5 2.5-1 5-.5 7 1-3 1-6 2.5-8 5 4-2.5 8-3 11-2-2.5 2-5 4.5-6 8-2.5-4-6-9-7-15z"
       fill="#764ABC"
     />
-  </Svg>
-);
-
-const TurboIcon: IconComponent = ({ size, className }) => (
-  <Svg size={size} className={className}>
-    <path d="M13 3 L6.5 13 H11 l-1.5 8 9.5 -12 H11.5 z" fill="#EF4444" />
   </Svg>
 );
 
@@ -420,63 +277,478 @@ const ClaudeIcon: IconComponent = ({ size, className }) => (
   </Svg>
 );
 
+const AstroIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <path d="M12 3 L21 19 H3 Z" fill="#BC52EE" />
+    <path d="M12 9 L16.5 17 H7.5 Z" fill="#fff" />
+  </Svg>
+);
+
+const GraphqlIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <path
+      d="M12 2.5 L19.5 6.75 V15.25 L12 19.5 L4.5 15.25 V6.75 Z"
+      fill="none"
+      stroke="#E10098"
+      strokeWidth="1.8"
+      strokeLinejoin="round"
+    />
+    <circle cx="12" cy="11" r="2.2" fill="#E10098" />
+  </Svg>
+);
+
+const VueIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <path d="M3 4 H8.5 L12 11 L15.5 4 H21 L12 20 Z" fill="#42B883" />
+    <path d="M7 4 H9.2 L12 9.5 L14.8 4 H17 L12 13 Z" fill="#35495E" />
+  </Svg>
+);
+
+const TailwindIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <rect x="2" y="2" width="20" height="20" rx="4.5" fill="#38BDF8" />
+    <path
+      d="M7 9c1.2-2 2.5-2 3.5 0s2.3 2 3.5 0 2.5-2 3.5 0"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+    <path
+      d="M7 14c1.2-2 2.5-2 3.5 0s2.3 2 3.5 0 2.5-2 3.5 0"
+      fill="none"
+      stroke="#fff"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+    />
+  </Svg>
+);
+
+const TerraformIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <g fill="#7B42BC">
+      <path d="M4 5 L8 3 V14 L4 16 Z" />
+      <path d="M10 8 L14 6 V17 L10 19 Z" />
+      <path d="M16 5 L20 3 V14 L16 16 Z" />
+    </g>
+  </Svg>
+);
+
+const ReactIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <circle cx="12" cy="12" r="1.8" fill="#61DAFB" />
+    <g fill="none" stroke="#61DAFB" strokeWidth="1.2">
+      <ellipse cx="12" cy="12" rx="10" ry="4" />
+      <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(60 12 12)" />
+      <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(120 12 12)" />
+    </g>
+  </Svg>
+);
+
+const VscodeIcon: IconComponent = ({ size, className }) => (
+  <Svg size={size} className={className}>
+    <rect x="2.5" y="2.5" width="19" height="19" rx="4" fill="#007ACC" />
+    <path
+      d="M16.5 8 L11 12 L16.5 16 L18.5 14 V10 Z"
+      fill="#fff"
+    />
+    <path d="M11 12 L7.5 9.5 L6 12 L7.5 14.5 Z" fill="#fff" opacity="0.85" />
+  </Svg>
+);
+
+/* ----------------------------- 精确文件名表 ----------------------------- */
+// 大小写不敏感匹配（lower 后查表）。来源：ChatGPT 桌面端 `bb` 精确名表 (104 项) + agework 自有补充。
+const EXACT: Record<string, IconName> = {
+  // git
+  ".gitignore": "git",
+  ".gitattributes": "git",
+  ".gitmodules": "git",
+  ".gitkeep": "git",
+  // docker
+  ".dockerignore": "docker",
+  dockerfile: "docker",
+  "docker-compose.yml": "docker",
+  "docker-compose.yaml": "docker",
+  "docker-compose.override.yml": "docker",
+  "compose.yaml": "docker",
+  "compose.yml": "docker",
+  // npm
+  ".npmrc": "npm",
+  ".npmignore": "npm",
+  "package.json": "npm",
+  "package-lock.json": "npm",
+  // bun
+  "bun.lock": "bun",
+  "bun.lockb": "bun",
+  "bunfig.toml": "bun",
+  // prettier
+  ".prettierrc": "prettier",
+  ".prettierrc.json": "prettier",
+  ".prettierrc.js": "prettier",
+  ".prettierrc.cjs": "prettier",
+  ".prettierrc.mjs": "prettier",
+  ".prettierrc.toml": "prettier",
+  ".prettierrc.yaml": "prettier",
+  ".prettierrc.yml": "prettier",
+  ".prettierignore": "prettier",
+  "prettier.config.cjs": "prettier",
+  "prettier.config.js": "prettier",
+  "prettier.config.mjs": "prettier",
+  // tsconfig
+  "tsconfig.json": "tsconfig",
+  // eslint
+  ".eslintrc": "eslint",
+  ".eslintrc.js": "eslint",
+  ".eslintrc.json": "eslint",
+  ".eslintrc.cjs": "eslint",
+  ".eslintrc.yaml": "eslint",
+  ".eslintrc.yml": "eslint",
+  ".eslintignore": "eslint",
+  "eslint.config.cjs": "eslint",
+  "eslint.config.js": "eslint",
+  "eslint.config.mjs": "eslint",
+  "eslint.config.mts": "eslint",
+  "eslint.config.ts": "eslint",
+  // babel
+  ".babelrc": "babel",
+  ".babelrc.json": "babel",
+  "babel.config.js": "babel",
+  "babel.config.json": "babel",
+  "babel.config.cjs": "babel",
+  "babel.config.mjs": "babel",
+  // biome
+  "biome.json": "biome",
+  "biome.jsonc": "biome",
+  // claude
+  ".claude": "claude",
+  "claude.md": "claude",
+  // 构建工具（新源）
+  "next.config.js": "nextjs",
+  "next.config.mjs": "nextjs",
+  "next.config.mts": "nextjs",
+  "next.config.ts": "nextjs",
+  "vite.config.js": "vite",
+  "vite.config.mjs": "vite",
+  "vite.config.mts": "vite",
+  "vite.config.ts": "vite",
+  "webpack.config.js": "webpack",
+  "webpack.config.cjs": "webpack",
+  "webpack.config.mjs": "webpack",
+  "webpack.config.ts": "webpack",
+  "webpack.config.babel.js": "webpack",
+  "tailwind.config.cjs": "tailwind",
+  "tailwind.config.js": "tailwind",
+  "tailwind.config.mjs": "tailwind",
+  "tailwind.config.ts": "tailwind",
+  "postcss.config.cjs": "postcss",
+  "postcss.config.js": "postcss",
+  "postcss.config.mjs": "postcss",
+  "postcss.config.ts": "postcss",
+  "svgo.config.cjs": "svgo",
+  "svgo.config.js": "svgo",
+  "svgo.config.mjs": "svgo",
+  "svgo.config.ts": "svgo",
+  ".terraform.lock.hcl": "terraform",
+  // stylelint
+  ".stylelintrc": "stylelint",
+  ".stylelintrc.cjs": "stylelint",
+  ".stylelintrc.js": "stylelint",
+  ".stylelintrc.json": "stylelint",
+  ".stylelintrc.mjs": "stylelint",
+  ".stylelintrc.yaml": "stylelint",
+  ".stylelintrc.yml": "stylelint",
+  ".stylelintignore": "stylelint",
+  "stylelint.config.cjs": "stylelint",
+  "stylelint.config.js": "stylelint",
+  "stylelint.config.mjs": "stylelint",
+  // oxc
+  ".oxlintrc.json": "oxc",
+  // browserslist
+  ".browserslistrc": "browserslist",
+  // bash / zsh
+  ".bashrc": "bash",
+  ".bash_profile": "bash",
+  ".zshrc": "bash",
+  ".zprofile": "bash",
+  ".zshenv": "bash",
+  // bootstrap
+  "bootstrap.js": "bootstrap",
+  "bootstrap.min.js": "bootstrap",
+  "bootstrap.css": "bootstrap",
+  "bootstrap.min.css": "bootstrap",
+  "bootstrap.bundle.js": "bootstrap",
+  "bootstrap.bundle.min.js": "bootstrap",
+  // ruby
+  gemfile: "ruby",
+  rakefile: "ruby",
+  // readme / license
+  readme: "readme",
+  "readme.md": "markdown",
+  license: "license",
+  "license.md": "license",
+  // makefile / env / editorconfig
+  makefile: "makefile",
+  "makefile.am": "makefile",
+  ".env": "env",
+  ".env.example": "env",
+  ".env.local": "env",
+  ".editorconfig": "editorconfig",
+  // rust / go / python
+  "cargo.toml": "rust",
+  "cargo.lock": "rust",
+  "go.mod": "go",
+  "go.sum": "go",
+  "requirements.txt": "python",
+  "pyproject.toml": "python",
+};
+
+/* ----------------------------- 扩展名表 ----------------------------- */
+// 来源：ChatGPT 桌面端 `xb` 扩展名表 (120 项，按末段扩展名解析) + agework 自有补充。
+const EXT: Record<string, IconName> = {
+  ts: "typescript",
+  tsx: "typescript",
+  cts: "typescript",
+  mts: "typescript",
+  js: "javascript",
+  jsx: "javascript",
+  mjs: "javascript",
+  cjs: "javascript",
+  py: "python",
+  pyi: "python",
+  pyw: "python",
+  pyx: "python",
+  rs: "rust",
+  go: "go",
+  java: "java",
+  kt: "kotlin",
+  kts: "kotlin",
+  c: "c",
+  h: "c",
+  cc: "cpp",
+  cpp: "cpp",
+  cxx: "cpp",
+  hh: "cpp",
+  hpp: "cpp",
+  hxx: "cpp",
+  inl: "cpp",
+  mm: "cpp",
+  cs: "csharp",
+  rb: "ruby",
+  erb: "ruby",
+  gemspec: "ruby",
+  rake: "ruby",
+  php: "php",
+  swift: "swift",
+  json: "json",
+  jsonc: "json",
+  json5: "json",
+  jsonl: "json",
+  yml: "yml",
+  yaml: "yml",
+  toml: "yaml",
+  xml: "code",
+  html: "html",
+  htm: "html",
+  xhtml: "html",
+  css: "css",
+  scss: "css",
+  sass: "css",
+  less: "css",
+  postcss: "css",
+  styl: "css",
+  md: "markdown",
+  mdx: "markdown",
+  markdown: "markdown",
+  txt: "text",
+  text: "text",
+  log: "text",
+  rst: "text",
+  ini: "text",
+  cfg: "text",
+  conf: "text",
+  editorconfig: "text",
+  authors: "text",
+  changelog: "text",
+  contributors: "text",
+  env: "text",
+  "env.development": "text",
+  "env.local": "text",
+  "env.production": "text",
+  csv: "csv",
+  tsv: "table",
+  xls: "excel",
+  xlsx: "excel",
+  ods: "table",
+  pdf: "pdf",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  svg: "svg",
+  webp: "image",
+  ico: "image",
+  icns: "image",
+  bmp: "image",
+  avif: "image",
+  tif: "image",
+  tiff: "image",
+  zip: "zip",
+  "7z": "zip",
+  tar: "zip",
+  gz: "zip",
+  bz2: "zip",
+  tgz: "zip",
+  xz: "zip",
+  jar: "zip",
+  war: "zip",
+  rar: "zip",
+  sql: "database",
+  db: "database",
+  sqlite: "database",
+  sqlite3: "database",
+  sh: "shell",
+  bash: "shell",
+  zsh: "shell",
+  fish: "shell",
+  csh: "shell",
+  ksh: "shell",
+  ppt: "presentation",
+  pptx: "presentation",
+  doc: "word",
+  docx: "word",
+  lock: "lock",
+  // 新源扩展名
+  astro: "astro",
+  vue: "vue",
+  svelte: "svelte",
+  graphql: "graphql",
+  gql: "graphql",
+  wasm: "wasm",
+  wast: "wasm",
+  wat: "wasm",
+  zig: "zig",
+  tf: "terraform",
+  tfstate: "terraform",
+  tfvars: "terraform",
+  mcp: "mcp",
+  "code-workspace": "vscode",
+  eot: "font",
+  otf: "font",
+  ttf: "font",
+  woff: "font",
+  woff2: "font",
+};
+
+function resolve(name: string): IconName {
+  const lower = name.toLowerCase();
+  if (EXACT[lower]) return EXACT[lower];
+  const dot = lower.lastIndexOf(".");
+  const ext = dot > 0 ? lower.slice(dot + 1) : "";
+  if (ext && EXT[ext]) return EXT[ext];
+  return "default";
+}
+
+/* ----------------------------- 品牌 / 类别渲染 ----------------------------- */
 const BRAND: Partial<Record<IconName, IconComponent>> = {
+  // 手写 SVG
   docker: DockerIcon,
   npm: NpmIcon,
-  pnpm: PnpmIcon,
-  yarn: YarnIcon,
   bun: BunIcon,
   prettier: PrettierIcon,
-  turbo: TurboIcon,
   eslint: EslintIcon,
   babel: BabelIcon,
   biome: BiomeIcon,
   claude: ClaudeIcon,
-  agents: (p) => <Bot {...p} />,
+  astro: AstroIcon,
+  graphql: GraphqlIcon,
+  vue: VueIcon,
+  tailwind: TailwindIcon,
+  terraform: TerraformIcon,
+  react: ReactIcon,
+  vscode: VscodeIcon,
   git: (p) => <GitBranch {...p} className={cn(p.className, "text-[#F14E32]")} />,
+  // 字母徽标（单色方块 + 品牌色）
+  bash: (p) => <Mono {...p} color="#4EAA25" label="$" />,
+  browserslist: (p) => <Mono {...p} color="#4B6BF5" label="BL" />,
+  bootstrap: (p) => <Mono {...p} color="#7952B3" label="B" />,
+  c: (p) => <Mono {...p} color="#A8B9CC" label="C" />,
+  cpp: (p) => <Mono {...p} color="#00599C" label="C++" />,
+  css: (p) => <Mono {...p} color="#1572B6" label="#" />,
+  go: (p) => <Mono {...p} color="#00ADD8" label="Go" />,
+  html: (p) => <Mono {...p} color="#E34F26" label="{}" />,
+  json: (p) => <Mono {...p} color="#C9B458" label="{}" />,
+  markdown: (p) => <Mono {...p} color="#083FA1" label="M" />,
+  mcp: (p) => <Mono {...p} color="#7C3AED" label="M" />,
+  nextjs: (p) => <Mono {...p} color="#111827" label="N" />,
+  oxc: (p) => <Mono {...p} color="#FBE212" label="O" />,
+  postcss: (p) => <Mono {...p} color="#DD3A0A" label="P" />,
+  python: (p) => <Mono {...p} color="#3776AB" label="Py" />,
+  ruby: (p) => <Mono {...p} color="#CC342D" label="◆" />,
+  rust: (p) => <Mono {...p} color="#CE422B" label="R" />,
+  sass: (p) => <Mono {...p} color="#CC6699" label="S" />,
+  stylelint: (p) => <Mono {...p} color="#263238" label="S" />,
+  svgo: (p) => <Mono {...p} color="#FF6633" label="S" />,
+  swift: (p) => <Mono {...p} color="#F05138" label="S" />,
+  svg: (p) => <Mono {...p} color="#FFB13B" label="SVG" />,
+  svelte: (p) => <Mono {...p} color="#FF3E00" label="S" />,
+  table: (p) => <Sheet {...p} />,
+  typescript: (p) => <Mono {...p} color="#3178C6" label="TS" />,
+  javascript: (p) => <Mono {...p} color="#F7DF1E" label="JS" />,
+  vite: (p) => <Mono {...p} color="#646CFF" label="V" />,
+  wasm: (p) => <Mono {...p} color="#654FF0" label="W" />,
+  webpack: (p) => <Mono {...p} color="#8DD6F9" label="W" />,
+  yml: (p) => <Mono {...p} color="#CB171E" label="Y" />,
+  zig: (p) => <Mono {...p} color="#F7A41D" label="Z" />,
+  zip: (p) => <Mono {...p} color="#B8860B" label="ZIP" />,
+  font: (p) => <Mono {...p} color="#6B7280" label="F" />,
+  image: (p) => <FileImage {...p} />,
+  database: (p) => <Database {...p} />,
+  text: (p) => <FileText {...p} />,
+  // agework 额外通用兜底
   readme: (p) => <BookOpen {...p} />,
   license: (p) => <Scale {...p} />,
   makefile: (p) => <Wrench {...p} />,
   env: (p) => <FileCog {...p} />,
   editorconfig: (p) => <FileCog {...p} />,
   tsconfig: (p) => <FileCog {...p} />,
+  archive: (p) => <FileArchive {...p} />,
 };
 
 const LUCIDE: Partial<Record<IconName, IconComponent>> = {
+  // 语言 / 通用类型兜底
   typescript: (p) => <FileCode {...p} />,
   javascript: (p) => <FileCode {...p} />,
   react: (p) => <FileCode {...p} />,
   python: (p) => <FileCode {...p} />,
   rust: (p) => <FileCode {...p} />,
   go: (p) => <FileCode {...p} />,
-  java: (p) => <FileCode {...p} />,
-  kotlin: (p) => <FileCode {...p} />,
   c: (p) => <FileCode {...p} />,
   cpp: (p) => <FileCode {...p} />,
-  csharp: (p) => <FileCode {...p} />,
   ruby: (p) => <FileCode {...p} />,
-  php: (p) => <FileCode {...p} />,
   swift: (p) => <FileCode {...p} />,
-  json: (p) => <FileJson {...p} />,
-  yaml: (p) => <FileJson {...p} />,
-  toml: (p) => <FileJson {...p} />,
   html: (p) => <FileCode {...p} />,
   css: (p) => <FileCode {...p} />,
-  xml: (p) => <FileCode {...p} />,
-  code: (p) => <FileCode {...p} />,
+  json: (p) => <FileJson {...p} />,
+  yml: (p) => <FileJson {...p} />,
   markdown: (p) => <FileText {...p} />,
   text: (p) => <FileText {...p} />,
   word: (p) => <FileText {...p} />,
-  csv: (p) => <Sheet {...p} />,
-  excel: (p) => <Sheet {...p} />,
   pdf: (p) => <FileText {...p} />,
   image: (p) => <FileImage {...p} />,
-  archive: (p) => <FileArchive {...p} />,
   database: (p) => <Database {...p} />,
   sql: (p) => <Database {...p} />,
+  csv: (p) => <Sheet {...p} />,
+  excel: (p) => <Sheet {...p} />,
+  table: (p) => <Sheet {...p} />,
   shell: (p) => <Terminal {...p} />,
   presentation: (p) => <Presentation {...p} />,
   lock: (p) => <FileCog {...p} />,
+  java: (p) => <FileCode {...p} />,
+  kotlin: (p) => <FileCode {...p} />,
+  csharp: (p) => <FileCode {...p} />,
+  php: (p) => <FileCode {...p} />,
+  xml: (p) => <FileCode {...p} />,
+  code: (p) => <FileCode {...p} />,
 };
 
 export type FileTypeIconProps = {
