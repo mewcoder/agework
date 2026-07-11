@@ -18,11 +18,20 @@ import { pickSafeEnv } from "./safe-env";
 // ── AskUserQuestion human-in-the-loop ────────────────────────────────────────
 // Keyed by threadId. Stores the pending canUseTool resolver so the answer
 // endpoint can resolve it when the user submits.
+//
+// Terminal model:问题挂起时向 AG-UI 事件流发 RUN_FINISHED{outcome:interrupt}
+// 结束当前 AG-UI run(SDK 的 canUseTool promise 保持挂起,平台 run 不结束);
+// 用户答复经 approval_resolved 命令携带 resumeRunId 回来,onResume 先发
+// RUN_STARTED(新 runId)再解开 promise,后续事件归入续接 run。
 export type PendingQuestion = {
   questions: unknown[];
+  /** interrupt 对象的 id;resume[] 里的 interruptId 与之对应。 */
+  interruptId: string;
   resolveAnswers: (answers: Record<string, string | string[]>) => void;
   reject: (err: Error) => void;
   rejectWithoutCleanup: (err: Error) => void;
+  /** 答复携带续接 runId 时,在 resolveAnswers 之前调用,发出续接 RUN_STARTED。 */
+  onResume?: (resumeRunId: string) => void;
 };
 // 导出仅供测试模拟跨路径竞争（AskUserQuestion vs 权限请求）；生产代码通过
 // resolveQuestion/cancelQuestion/canUseTool/executePermissionRequest 访问。
@@ -46,11 +55,13 @@ export function __resetPermissionQueue(threadId?: string): void {
 
 export function resolveQuestion(
   threadId: string,
-  answers: Record<string, string | string[]>
+  answers: Record<string, string | string[]>,
+  resumeRunId?: string
 ): boolean {
   const pending = pendingQuestions.get(threadId);
   if (!pending) return false;
   pendingQuestions.delete(threadId);
+  if (resumeRunId) pending.onResume?.(resumeRunId);
   pending.resolveAnswers(answers);
   return true;
 }
@@ -88,6 +99,8 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
   private readonly trace?: AgentTraceSink;
   private readonly pendingActionSink?: AgentPendingActionSink;
   private readonly pendingActionUpdates = new Map<string, Promise<void>>();
+  // 问答续接后,同一条 SDK stream 后续事件归属的 AG-UI runId(per thread)。
+  private readonly resumedRunIds = new Map<string, string>();
 
   constructor(opts: ClaudeAdapterConfig = {}) {
     const workdir = opts.cwd;
@@ -175,6 +188,8 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
   ): Partial<Options> {
     const threadId = input.threadId ?? "default";
     const runId = typeof input.runId === "string" ? input.runId : undefined;
+    // 新一轮 run 开始,清掉上一轮遗留的续接 runId 归属。
+    this.resumedRunIds.delete(threadId);
 
     return {
       ...claudeThinkingOption(input),
@@ -203,50 +218,149 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
             subscriber,
           });
         }
-        // Supersede any existing pending question for this thread
-        const existing = pendingQuestions.get(threadId);
-        if (existing) {
-          pendingQuestions.delete(threadId);
-          existing.rejectWithoutCleanup(
-            new Error("Superseded by new question")
-          );
-        }
-        return new Promise<PermissionResult>((resolve, reject) => {
-          const resolvePending = (result: PermissionResult) => {
-            this.emitPendingAction(threadId, null);
-            resolve(result);
-          };
-          const rejectPending = (error: Error) => {
-            this.emitPendingAction(threadId, null);
-            reject(error);
-          };
-          const pending: PendingQuestion = {
-            questions: (toolInput.questions as unknown[]) ?? [],
-            resolveAnswers: (answers) =>
-              resolvePending({
-                behavior: "allow",
-                updatedInput: { questions: toolInput.questions, answers },
-              }),
-            reject: rejectPending,
-            rejectWithoutCleanup: reject,
-          };
-          pendingQuestions.set(threadId, pending);
-          this.emitPendingAction(threadId, "question");
-          opts.signal.addEventListener(
-            "abort",
-            () => {
-              if (pendingQuestions.get(threadId) === pending) {
-                pendingQuestions.delete(threadId);
-                rejectPending(new Error("Aborted"));
-              } else {
-                reject(new Error("Aborted"));
-              }
-            },
-            { once: true }
-          );
-        });
+        // AskUserQuestion 与权限请求共用同一条 per-thread 串行队列:terminal
+        // model 下一次只能有一个 open interrupt(一个 RUN_FINISHED 只发一次),
+        // 排队保证"答完一个才出下一个",并消除并行 tool use 下问题被
+        // supersede 静默覆盖的竞争。
+        return this.enqueueControlRequest(threadId, () =>
+          this.executeAskUserQuestion({
+            threadId,
+            runId,
+            toolInput,
+            options: opts,
+            subscriber,
+          })
+        );
       },
     };
+  }
+
+  private executeAskUserQuestion(input: {
+    threadId: string;
+    runId?: string;
+    toolInput: Record<string, unknown>;
+    options: { signal: AbortSignal; toolUseID?: string };
+    subscriber: unknown;
+  }): Promise<PermissionResult> {
+    const { threadId, runId, toolInput, options, subscriber } = input;
+
+    // 排队期间 run 可能已被 abort,直接拒绝。
+    if (options.signal.aborted) {
+      return Promise.reject(new Error("Aborted"));
+    }
+
+    const eventSink = subscriber as { next(event: unknown): void };
+
+    // Supersede any existing pending question for this thread(串行队列下
+    // 正常不可达,留作安全网)。
+    const existing = pendingQuestions.get(threadId);
+    if (existing) {
+      pendingQuestions.delete(threadId);
+      existing.rejectWithoutCleanup(new Error("Superseded by new question"));
+    }
+    return new Promise<PermissionResult>((resolve, reject) => {
+      const resolvePending = (result: PermissionResult) => {
+        this.emitPendingAction(threadId, null);
+        resolve(result);
+      };
+      const rejectPending = (error: Error) => {
+        this.emitPendingAction(threadId, null);
+        reject(error);
+      };
+      const questions = (toolInput.questions as unknown[]) ?? [];
+      const interruptId = generateId();
+      const pending: PendingQuestion = {
+        questions,
+        interruptId,
+        resolveAnswers: (answers) =>
+          resolvePending({
+            behavior: "allow",
+            updatedInput: { questions: toolInput.questions, answers },
+          }),
+        reject: rejectPending,
+        rejectWithoutCleanup: reject,
+        onResume: this.makeResumeStarter(eventSink, threadId),
+      };
+      pendingQuestions.set(threadId, pending);
+      // 先发 interrupt 终止事件再置 pendingAction:两者走同一条上行通道,
+      // FIFO 保证 server 聚合器先吃到 interrupts,requires_action 触发的
+      // 局部保存才会带上 interrupts metadata。
+      this.emitInterruptFinish(eventSink, {
+        threadId,
+        runId,
+        interrupt: {
+          id: interruptId,
+          reason: "input_required",
+          message: firstQuestionText(questions),
+          ...(options.toolUseID ? { toolCallId: options.toolUseID } : {}),
+          metadata: { questions },
+        },
+      });
+      this.emitPendingAction(threadId, "question");
+      options.signal.addEventListener(
+        "abort",
+        () => {
+          if (pendingQuestions.get(threadId) === pending) {
+            pendingQuestions.delete(threadId);
+            rejectPending(new Error("Aborted"));
+          } else {
+            reject(new Error("Aborted"));
+          }
+        },
+        { once: true }
+      );
+    });
+  }
+
+  /**
+   * 发出 terminal-model 的中断收尾:RUN_FINISHED 携带 interrupt outcome,
+   * 结束当前 AG-UI run。runId 取续接后的最新值(同一 SDK stream 内第二个
+   * 问题属于续接 run,不能再用最初的 runId)。
+   */
+  private emitInterruptFinish(
+    eventSink: { next(event: unknown): void },
+    input: {
+      threadId: string;
+      runId?: string;
+      interrupt: {
+        id: string;
+        reason: string;
+        message?: string;
+        toolCallId?: string;
+        metadata?: Record<string, unknown>;
+      };
+    }
+  ): void {
+    const effectiveRunId =
+      this.resumedRunIds.get(input.threadId) ?? input.runId;
+    eventSink.next({
+      type: EventType.RUN_FINISHED,
+      threadId: input.threadId,
+      ...(effectiveRunId ? { runId: effectiveRunId } : {}),
+      outcome: { type: "interrupt", interrupts: [input.interrupt] },
+    });
+  }
+
+  /** 答复携带 resumeRunId 时:记录归属并发出续接 RUN_STARTED。 */
+  private makeResumeStarter(
+    eventSink: { next(event: unknown): void },
+    threadId: string
+  ): (resumeRunId: string) => void {
+    return (resumeRunId) => {
+      this.resumedRunIds.set(threadId, resumeRunId);
+      eventSink.next({
+        type: EventType.RUN_STARTED,
+        threadId,
+        runId: resumeRunId,
+      });
+    };
+  }
+
+  /** 同一 SDK stream 的收尾事件归属续接 run(如有)。 */
+  protected override finishRunId(threadId: string, runId: string): string {
+    const resumed = this.resumedRunIds.get(threadId);
+    this.resumedRunIds.delete(threadId);
+    return resumed ?? runId;
   }
 
   protected override onBeforeQuery(
@@ -302,15 +416,23 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
     };
     subscriber: unknown;
   }): Promise<PermissionResult> {
-    const { threadId } = input;
+    return this.enqueueControlRequest(input.threadId, () =>
+      this.executePermissionRequest(input)
+    );
+  }
 
-    // 串行化：per-thread 排队。前一个权限请求 resolve/reject 后才处理下一个，
-    // 这样用户视角永远是单个待答卡片，答完一个才出下一个（对齐 Claude Code CLI）。
-    // 前一个失败（deny/abort）不应阻塞后一个，所以用 .catch 吞掉。
+  /**
+   * 串行化：per-thread 排队。前一个控制请求(权限或 AskUserQuestion)
+   * resolve/reject 后才处理下一个，这样用户视角永远是单个待答卡片，答完一个
+   * 才出下一个（对齐 Claude Code CLI），terminal model 下也保证一次只有一个
+   * open interrupt。前一个失败（deny/abort）不应阻塞后一个，所以用 .catch 吞掉。
+   */
+  private enqueueControlRequest(
+    threadId: string,
+    task: () => Promise<PermissionResult>
+  ): Promise<PermissionResult> {
     const prev = permissionQueues.get(threadId) ?? Promise.resolve();
-    const current = prev
-      .catch(() => {})
-      .then(() => this.executePermissionRequest(input));
+    const current = prev.catch(() => {}).then(task);
     permissionQueues.set(threadId, current);
     // cleanup 链单独 catch，避免 current 的 rejection 经 finally 派生出
     // 无人 catch 的 rejected promise（Unhandled Rejection）。
@@ -385,22 +507,24 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
       next(event: unknown): void;
     };
     const argsText = JSON.stringify({ questions });
+    // 同一 SDK stream 内第二个及之后的控制请求发生在续接 run 里,事件要归属
+    // 最新的 AG-UI runId(cleanup 在答复续接之后触发,必须现算)。
+    const currentRunId = () => this.resumedRunIds.get(threadId) ?? runId;
 
     eventSink.next({
       type: EventType.TOOL_CALL_START,
       threadId,
-      ...(runId ? { runId } : {}),
+      ...(currentRunId() ? { runId: currentRunId() } : {}),
       toolCallId,
       toolCallName: "AskUserPermission",
     });
     eventSink.next({
       type: EventType.TOOL_CALL_ARGS,
       threadId,
-      ...(runId ? { runId } : {}),
+      ...(currentRunId() ? { runId: currentRunId() } : {}),
       toolCallId,
       delta: argsText,
     });
-    this.emitPendingAction(threadId, "question");
 
     return new Promise<PermissionResult>((resolve, reject) => {
       // 这条合成工具调用没有真实的 SDK tool_use，不会像模型自己调用的
@@ -415,7 +539,7 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
         eventSink.next({
           type: EventType.TOOL_CALL_RESULT,
           threadId,
-          ...(runId ? { runId } : {}),
+          ...(currentRunId() ? { runId: currentRunId() } : {}),
           messageId: `${toolCallId}-result`,
           toolCallId,
           content: resultContent,
@@ -424,7 +548,7 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
         eventSink.next({
           type: EventType.TOOL_CALL_END,
           threadId,
-          ...(runId ? { runId } : {}),
+          ...(currentRunId() ? { runId: currentRunId() } : {}),
           toolCallId,
         });
       };
@@ -437,8 +561,11 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
         reject(error);
       };
 
+      const interruptId = generateId();
       const pending: PendingQuestion = {
         questions,
+        interruptId,
+        onResume: this.makeResumeStarter(eventSink, threadId),
         resolveAnswers: (answers) => {
           const answer = answers[question.question];
           const value = Array.isArray(answer) ? answer[0] : answer;
@@ -471,6 +598,21 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
         existing.rejectWithoutCleanup(new Error("Superseded by new question"));
       }
       pendingQuestions.set(threadId, pending);
+
+      // 先发 interrupt 收尾再置 pendingAction(同通道 FIFO,保证 server
+      // 局部保存时 interrupts 已在聚合器里)。
+      this.emitInterruptFinish(eventSink, {
+        threadId,
+        runId,
+        interrupt: {
+          id: interruptId,
+          reason: "tool_call",
+          message: question.question,
+          toolCallId,
+          metadata: { questions },
+        },
+      });
+      this.emitPendingAction(threadId, "question");
 
       options.signal.addEventListener(
         "abort",
@@ -552,6 +694,14 @@ function buildToolPermissionQuestion(input: {
     header: "权限请求",
     options,
   };
+}
+
+/** 取第一个问题的文本作为 interrupt.message(可读提示,非结构化数据源)。 */
+function firstQuestionText(questions: unknown[]): string | undefined {
+  const first = questions[0];
+  if (!first || typeof first !== "object") return undefined;
+  const text = (first as Record<string, unknown>).question;
+  return typeof text === "string" && text ? text : undefined;
 }
 
 function summarizeToolInput(input: Record<string, unknown>): string {

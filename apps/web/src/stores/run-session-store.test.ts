@@ -15,7 +15,6 @@ beforeEach(() => {
     userSteeredMessageIdsByConversation: {},
     pendingRunInterruptReasonsByConversation: {},
     queuedUserInputsByConversation: {},
-    pendingQuestionRepliedConversations: new Set(),
   });
 });
 
@@ -151,13 +150,5 @@ describe('useRunSessionStore 排队输入', () => {
     const only = queue('c')[0];
     useRunSessionStore.getState().removeUserInput('c', only.id);
     expect(queue('c')).toHaveLength(0);
-  });
-});
-
-describe('useRunSessionStore pending question 回答标记', () => {
-  it('mark 后 consume 返回 true 并清除', () => {
-    useRunSessionStore.getState().markPendingQuestionReplied('conv-1');
-    expect(useRunSessionStore.getState().consumePendingQuestionReplied('conv-1')).toBe(true);
-    expect(useRunSessionStore.getState().consumePendingQuestionReplied('conv-1')).toBe(false);
   });
 });

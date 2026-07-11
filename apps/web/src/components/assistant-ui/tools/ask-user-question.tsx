@@ -19,9 +19,35 @@ import {
   FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
-import { conversationsApi } from "@/api/conversations";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRunSessionStore } from "@/stores/run-session-store";
+import { getInterruptRuntime } from "@/lib/runtime/interrupt-runtime-registry";
+import { isAwaitingAnswerStatus } from "@/components/assistant-ui/thread-utils";
+
+/**
+ * 提交问答答案:走 AG-UI interrupt 协议——把答案作为 resume entry 交给所属
+ * runtime 的 unstable_submitInterruptResponses,由它发起携带 resume[] 的新 run,
+ * 续接事件经新 SSE 流回。问答单槽,当前只会有一个 open interrupt。
+ */
+async function submitInterruptAnswers(
+  conversationId: string,
+  answers: AskUserQuestionAnswers,
+): Promise<void> {
+  const runtime = getInterruptRuntime(conversationId);
+  if (!runtime) {
+    throw new Error(`no runtime registered for conversation ${conversationId}`);
+  }
+  const pending = runtime.unstable_getPendingInterrupts();
+  if (pending.length === 0) {
+    throw new Error("no pending interrupts to answer");
+  }
+  await runtime.unstable_submitInterruptResponses(
+    pending.map((interrupt) => ({
+      interruptId: interrupt.id,
+      status: "resolved" as const,
+      payload: { answers },
+    })),
+  );
+}
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -273,11 +299,12 @@ function PermissionPromptUI({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<string | null>(null);
 
-  const isInteractive = statusType === "running" && !submitted;
+  const awaiting = isAwaitingAnswerStatus({ type: statusType });
+  const isInteractive = awaiting && !submitted;
   // composer 上方的 panel 渲染时，提交后直接返回 null——让 panel 消失，
-  // 后端会继续推流（TOOL_CALL_END / 后续文本等），正文里的 AskUserQuestion
-  // 会从 running 变成 complete，panel 不应再占位。
-  const inPanel = statusType === "running";
+  // 携带 resume[] 的续接 run 会继续推流（TOOL_CALL_END / 后续文本等），
+  // 正文里的 AskUserQuestion 拿到 result 后变成 complete，panel 不应再占位。
+  const inPanel = awaiting;
   if (!isInteractive && !submitted) return null;
   if (submitted && inPanel) return null;
 
@@ -285,15 +312,10 @@ function PermissionPromptUI({
     if (!conversationId || submitting) return;
     setSubmitting(true);
     try {
-      await conversationsApi.submitQuestionAnswer(conversationId, {
+      await submitInterruptAnswers(conversationId, {
         [item.question]: answer,
       });
       setSubmitted(answer);
-      // 标记此 conversation 已回答 pending question，让 Thread 组件检测到后
-      // 重新 load + resume，接上 worker 继续执行产生的 SSE 流。
-      if (conversationId) {
-        useRunSessionStore.getState().markPendingQuestionReplied(conversationId);
-      }
     } catch (err) {
       console.error("[PermissionPrompt] submit failed:", err);
     } finally {
@@ -391,7 +413,8 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   const [submittedAnswers, setSubmittedAnswers] = useState<AskUserQuestionAnswers | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const isInteractive = statusType === "running" && !submittedAnswers;
+  const isInteractive =
+    isAwaitingAnswerStatus({ type: statusType }) && !submittedAnswers;
 
   const isAnswered = (q: AskUserQuestionItem) => {
     const a = answers[q.question];
@@ -406,11 +429,8 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
     if (!conversationId || !allAnswered) return;
     setSubmitting(true);
     try {
-      await conversationsApi.submitQuestionAnswer(conversationId, answers);
+      await submitInterruptAnswers(conversationId, answers);
       setSubmittedAnswers(answers);
-      if (conversationId) {
-        useRunSessionStore.getState().markPendingQuestionReplied(conversationId);
-      }
     } catch (err) {
       console.error("[AskUserQuestion] submit failed:", err);
     } finally {
@@ -420,10 +440,11 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
 
   const visibleSubmittedAnswers = submittedAnswers ?? input.answers ?? null;
 
-  // composer 上方 panel 渲染时（running 态），提交后直接返回 null——
-  // 让 panel 消失，后端会继续推流，正文里的 AskUserQuestion 从 running
-  // 变成 complete，panel 不应再占位。历史消息（非 running）不归 panel 管。
-  const inPanel = statusType === "running";
+  // composer 上方 panel 渲染时（待答态），提交后直接返回 null——
+  // 让 panel 消失，携带 resume[] 的续接 run 继续推流，正文里的
+  // AskUserQuestion 拿到 result 后变成 complete，panel 不应再占位。
+  // 历史消息（非待答）不归 panel 管。
+  const inPanel = isAwaitingAnswerStatus({ type: statusType });
   if (submittedAnswers && inPanel) return null;
 
   // 历史/已结束态（非 running）且没有任何可见答案时，fallback 到 ToolFallback
@@ -471,7 +492,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
 
   if (visibleSubmittedAnswers) {
     const status =
-      submittedAnswers && part.status?.type === "running"
+      submittedAnswers && isAwaitingAnswerStatus(part.status)
         ? ({ type: "complete" } satisfies ToolCallMessagePartStatus)
         : part.status;
 

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validate } from "class-validator";
-import { AgentConversationIdDto, AgentReplyDto } from "./agent-control.dto";
+import { AgentConversationIdDto } from "./agent-control.dto";
 
 describe("AgentConversationIdDto", () => {
   it("accepts valid id", async () => {
@@ -12,24 +12,5 @@ describe("AgentConversationIdDto", () => {
     const dto = Object.assign(new AgentConversationIdDto(), { id: "" });
     const errors = await validate(dto);
     expect(errors.some((e) => e.property === "id")).toBe(true);
-  });
-});
-
-describe("AgentReplyDto", () => {
-  it("accepts valid input", async () => {
-    const dto = Object.assign(new AgentReplyDto(), {
-      id: "conv-1",
-      answers: { q1: "answer" },
-    });
-    expect(await validate(dto)).toHaveLength(0);
-  });
-
-  it("rejects non-object answers", async () => {
-    const dto = Object.assign(new AgentReplyDto(), {
-      id: "conv-1",
-      answers: "not-an-object",
-    });
-    const errors = await validate(dto);
-    expect(errors.some((e) => e.property === "answers")).toBe(true);
   });
 });

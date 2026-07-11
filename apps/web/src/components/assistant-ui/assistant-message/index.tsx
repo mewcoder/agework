@@ -17,6 +17,7 @@ import {
   type GroupableMessagePart,
   type ToolCallPart,
   getProcessTitleTextParts,
+  isAwaitingAnswerStatus,
   isToolCallPart,
 } from "@/components/assistant-ui/thread-utils";
 import { ToolGroup, ProcessBlock } from "./process-block";
@@ -169,10 +170,13 @@ export const AssistantMessage = memo(function AssistantMessage() {
                         toolPart.toolName === "AskUserQuestion" ||
                         toolPart.toolName === "AskUserPermission"
                       ) {
-                        // running 的 AskUserQuestion 交互卡片由 composer 上方的
+                        // 待答的 AskUserQuestion 交互卡片由 composer 上方的
                         // PendingQuestionPanel 接管，正文里只显示折叠简化态。
                         const status = toolPart.status as { type?: string } | undefined;
-                        if (status?.type === "running") {
+                        if (
+                          toolPart.result === undefined &&
+                          isAwaitingAnswerStatus(status)
+                        ) {
                           return <AskUserQuestionCompact key={i} part={toolPart} />;
                         }
                         return <AskUserQuestionUI key={i} part={toolPart} />;
@@ -202,7 +206,7 @@ export const AssistantMessage = memo(function AssistantMessage() {
                 if (!isToolCallPart(part)) return null;
                 if (part.toolName === "AskUserQuestion" || part.toolName === "AskUserPermission") {
                   const status = part.status as { type?: string } | undefined;
-                  if (status?.type === "running") {
+                  if (part.result === undefined && isAwaitingAnswerStatus(status)) {
                     return <AskUserQuestionCompact part={part} />;
                   }
                   return <AskUserQuestionUI part={part} />;

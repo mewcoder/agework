@@ -63,7 +63,11 @@ class AdapterDriver implements AgentDriver {
 
   resolveControl(command: CommandPayload): boolean {
     if (command.type !== "approval_resolved") return false;
-    return resolveQuestion(command.conversationId, command.answers);
+    return resolveQuestion(
+      command.conversationId,
+      command.answers,
+      command.resumeRunId
+    );
   }
 }
 

@@ -168,7 +168,7 @@ describe("resume 结束时刷新 conversation.runStatus", () => {
 });
 
 describe("409 / 404 处理", () => {
-  it("默认(刷新续接)模式下 409 不重试,直接结束且不回填", async () => {
+  it("409(requires_action)直接结束且不回填", async () => {
     const { qc, setQueryData, invalidateQueries } = makeQc();
     const fetchMock = vi
       .fn()
@@ -197,51 +197,4 @@ describe("409 / 404 处理", () => {
     expect(invalidateQueries).not.toHaveBeenCalled();
   });
 
-  it("重连模式(retryOn409)下 409 退避重试,成功后正常产出快照并回填", async () => {
-    vi.useFakeTimers();
-    const { qc, setQueryData } = makeQc();
-    const fetchMock = vi
-      .fn()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockResolvedValueOnce({ ok: false, status: 409, body: null } as any)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockResolvedValueOnce({ ok: false, status: 409, body: null } as any)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        body: snapshotBody([
-          { content: [], status: { type: "complete", reason: "stop" } },
-        ]),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const collected = collect(openResumeStream("c1", qc, { retryOn409: true }));
-    await vi.runAllTimersAsync();
-    const results = await collected;
-
-    expect(fetchMock).toHaveBeenCalledTimes(3);
-    expect(results).toHaveLength(1);
-    const [, nextData] = setQueryData.mock.calls[0];
-    expect(nextData.conversations[0].runStatus).toBe("idle");
-  });
-
-  it("重连模式下 409 持续,重试耗尽后结束", async () => {
-    vi.useFakeTimers();
-    const { qc, invalidateQueries } = makeQc();
-    const fetchMock = vi
-      .fn()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .mockResolvedValue({ ok: false, status: 409, body: null } as any);
-    vi.stubGlobal("fetch", fetchMock);
-
-    const collected = collect(openResumeStream("c1", qc, { retryOn409: true }));
-    await vi.runAllTimersAsync();
-    const results = await collected;
-
-    // 首次 + 3 次退避重试
-    expect(fetchMock).toHaveBeenCalledTimes(4);
-    expect(results).toHaveLength(0);
-    expect(invalidateQueries).not.toHaveBeenCalled();
-  });
 });

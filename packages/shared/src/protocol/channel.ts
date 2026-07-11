@@ -122,6 +122,8 @@ export type CommandPayload =
       commandId: string;
       conversationId: string;
       answers: Record<string, string | string[]>;
+      /** 续接 run 的 AG-UI runId:adapter 解开挂起后用它发 RUN_STARTED,把后续事件归入新 run。 */
+      resumeRunId?: string;
     }
   | {
       type: "user_message";

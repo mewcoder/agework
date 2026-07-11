@@ -9,7 +9,6 @@ import type {
   CreateConversationRequest,
   StoredMessage,
   StoredMessageListResponse,
-  SubmitQuestionAnswerRequest,
 } from '@agework/shared/api';
 
 export type { ConversationResponse as Conversation };
@@ -60,15 +59,6 @@ export const conversationsApi = {
 
   stopRun: (conversationId: string) =>
     apiPost('/api/v1/agent/stop', { id: conversationId }),
-
-  submitQuestionAnswer: (
-    conversationId: string,
-    answers: SubmitQuestionAnswerRequest['answers'],
-  ) =>
-    apiPost('/api/v1/agent/reply', {
-      id: conversationId,
-      answers,
-    }),
 
   listMessages: async (conversationId: string) => {
     const result = await apiGet<StoredMessageListResponse>(

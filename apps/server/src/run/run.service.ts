@@ -1,7 +1,8 @@
 import {
+  BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
-  NotFoundException,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { generateId } from "@agework/shared";
@@ -119,24 +120,45 @@ export class RunService implements OnApplicationBootstrap {
     });
   }
 
-  /** 把审批结果通过活跃 run 的 worker 通道下发；无活跃 run 时抛 NotFound。 */
-  async reply(
-    conversationId: string,
-    answers: Record<string, string | string[]>
-  ): Promise<void> {
+  /**
+   * Interrupt 答复续接（terminal model）：校验 resume[] 后先把新 SSE 附接到
+   * 活跃 run 的 handle（事件模式，保证续接段的 RUN_STARTED 不漏），再把答案
+   * 经 approval_resolved 命令下发给 worker；adapter 解开挂起后以 resumeRunId
+   * 发 RUN_STARTED，后续事件流入本次 res。
+   * 无活跃 run 或不在待答状态时抛 Conflict，前端 invalidate 后按最新状态走。
+   */
+  async resumeWithAnswers(input: {
+    conversationId: string;
+    resumeRunId: string;
+    resume: unknown;
+    res: Response;
+  }): Promise<void> {
+    const { conversationId, resumeRunId, res } = input;
+    const answers = extractResumeAnswers(input.resume);
+
     const activeRun =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRun ? this.liveRuns.get(activeRun.id) : undefined;
-    if (!handle) {
-      throw new NotFoundException(
-        `No active run for conversation: ${conversationId}`
+    if (!handle || activeRun?.status !== "requires_action") {
+      throw new ConflictException(
+        `No pending question for conversation: ${conversationId}`
       );
     }
+
+    handle.stream.replace(res, "events");
+    handle.stream.onClose(() => {
+      const current = this.liveRuns.get(handle.runId);
+      if (current?.stream.isAttachedTo(res)) {
+        current.stream.detach(res);
+      }
+    });
+
     this.driver.sendCommand(handle.runtimeHandle, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
-      answers: answers ?? {},
+      answers,
+      resumeRunId,
     });
     const runId = handle.runtimeHandle.runId;
     this.runEvents
@@ -175,10 +197,12 @@ export class RunService implements OnApplicationBootstrap {
       return;
     }
 
-    // 等待审批的 run 首版不续接 stream（前端走正常 load 显示历史 + 审批 UI）
+    // Terminal model：问答挂起期间没有可续接的 AG-UI run，前端也不会对
+    // requires_action 发起 resume。防御性兜底：发当前累积快照
+    // （requires-action/interrupt）后收尾，前端按待答 UI 展示。
     if (activeRunRecord?.status === "requires_action") {
       const stream = new RunStream(res);
-      stream.setStatus(409);
+      stream.writeSnapshot(handle.aggregator.build(false, "streaming"));
       stream.end();
       return;
     }
@@ -238,4 +262,47 @@ export class RunService implements OnApplicationBootstrap {
     }
     return true;
   }
+}
+
+/**
+ * 从 AG-UI `RunAgentInput.resume[]` 提取答案。问答当前是单槽(一次只有一个
+ * open interrupt),取第一个 resolved entry 的 `payload.answers`。
+ * interruptId 不做匹配校验——adapter 按 threadId 单槽 resolve,错误 id 无副作用。
+ */
+function extractResumeAnswers(
+  resume: unknown
+): Record<string, string | string[]> {
+  if (!Array.isArray(resume) || resume.length === 0) {
+    throw new BadRequestException("resume must be a non-empty array");
+  }
+  const entry = resume[0] as Record<string, unknown> | null;
+  if (
+    !entry ||
+    typeof entry !== "object" ||
+    typeof entry.interruptId !== "string" ||
+    entry.status !== "resolved"
+  ) {
+    throw new BadRequestException(
+      'resume entry must be { interruptId, status: "resolved", payload }'
+    );
+  }
+  const payload = entry.payload as Record<string, unknown> | undefined;
+  const answers = payload?.answers;
+  if (!isAnswerRecord(answers)) {
+    throw new BadRequestException(
+      "resume payload.answers must be a record of string | string[]"
+    );
+  }
+  return answers;
+}
+
+function isAnswerRecord(
+  value: unknown
+): value is Record<string, string | string[]> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  return Object.values(value).every(
+    (item) =>
+      typeof item === "string" ||
+      (Array.isArray(item) && item.every((inner) => typeof inner === "string"))
+  );
 }

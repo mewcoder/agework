@@ -1,7 +1,6 @@
 import type {
   ThreadHistoryAdapter,
   ChatModelRunResult,
-  ThreadMessage,
 } from "@assistant-ui/react";
 import type { useAui } from "@assistant-ui/react";
 import type { useQueryClient } from "@tanstack/react-query";
@@ -43,40 +42,14 @@ export function createThreadHistoryAdapter(
         pendingUserAction = conv.pendingUserAction ?? undefined;
       }
 
-      // requires_action 的 run：后端 conversation.runStatus 仍是 "running"，
-      // 但 pendingUserAction="question"。这种情况后端 resume 会返回 409 不续接
-      // stream，所以不触发 resume，也不应过滤进行中的 assistant 消息——否则
-      // 刷新后 AskUserQuestion 等内容会从正文消失。把进行中消息的 status
-      // 归一化成 running，让 PendingQuestionPanel 能接管交互（和 resume 流的
-      // normalizeResumeSnapshot 逻辑一致）。
+      // 问答挂起（pendingUserAction="question"）的 run：terminal model 下问题
+      // 消息以 requires-action/interrupt 状态 + interrupts metadata 持久化，
+      // 原样加载即可（PendingQuestionPanel 按 requires-action 判定待答，
+      // 回答走 interrupt resume）。没有活跃的 AG-UI run，不触发 resume。
       const isPendingQuestion = pendingUserAction === "question";
       const isRunning = runStatus === "running" && !isPendingQuestion;
 
-      let items = raw.map(toThreadMessageItem).filter(isThreadMessageItem);
-
-      if (isPendingQuestion) {
-        items = items.map((item) => {
-          if (item.message.role !== "assistant") return item;
-          const status = (item.message as { status?: { type?: string } })
-            .status;
-          if (!status) return item;
-          // 把 requires-action / incomplete-streaming 等非终态归一化成 running，
-          // 让 AskUserQuestion part.status 继承 running，PendingQuestionPanel
-          // 能识别并接管交互。终态（complete/cancelled/error）保持原样。
-          if (
-            status.type === "running" ||
-            status.type === "complete"
-          )
-            return item;
-          return {
-            ...item,
-            message: {
-              ...item.message,
-              status: { type: "running" },
-            } as ThreadMessage,
-          };
-        });
-      }
+      const items = raw.map(toThreadMessageItem).filter(isThreadMessageItem);
 
       // running 时过滤掉「进行中」的 assistant 消息（status 非 complete），
       // 由 resume 快照接管，避免与 resume 初始快照内容重复。

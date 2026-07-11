@@ -59,13 +59,21 @@ export function hasToolContent(part: {
 }
 
 /**
+ * 待答判定:问答走 AG-UI interrupt terminal model,问题挂起时消息状态是
+ * requires-action(reason interrupt),没有 result 的 tool-call part 继承它
+ * (assistant-ui message-runtime 的 toMessagePartStatus)。running 分支覆盖
+ * 事件仍在流入的窗口期(RUN_FINISHED{interrupt} 尚未到达)。
+ * 回答完成后 part.result 被设置,status 固定为 complete,不再命中。
+ */
+export function isAwaitingAnswerStatus(
+  status: { type?: string } | undefined,
+): boolean {
+  return status?.type === "running" || status?.type === "requires-action";
+}
+
+/**
  * 扫描消息列表找出待回答的 AskUserQuestion/AskUserPermission part。
- * 后端串行化后同一时刻只有 1 个 running 的待答 part（权限审批或模型主动问答）。
- *
- * 权限审批这条合成工具调用收尾时会带上 TOOL_CALL_RESULT，所以一旦回答完，
- * part.result 被设置，status 会跟着变成 complete（见 assistant-ui
- * message-runtime 的 toMessagePartStatus：tool-call part 没有 result 时
- * status 跟随所在消息走，否则固定为 complete），不会再被这里命中。
+ * 后端串行化后同一时刻只有 1 个待答 part（权限审批或模型主动问答）。
  */
 export function findPendingQuestionPart(
   messages: readonly { role: string; parts?: unknown }[],
@@ -80,7 +88,7 @@ export function findPendingQuestionPart(
       if (!part || part.type !== "tool-call") continue;
       if (part.toolName !== "AskUserQuestion" && part.toolName !== "AskUserPermission") continue;
       const status = part.status as ToolCallMessagePartStatus | undefined;
-      if (status?.type === "running") {
+      if (part.result === undefined && isAwaitingAnswerStatus(status)) {
         return part;
       }
     }

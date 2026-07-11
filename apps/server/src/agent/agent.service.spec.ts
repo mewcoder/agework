@@ -39,7 +39,7 @@ describe("AgentService", () => {
     mockRunService = {
       start: vi.fn().mockResolvedValue(undefined),
       resume: vi.fn().mockResolvedValue(undefined),
-      reply: vi.fn().mockResolvedValue(undefined),
+      resumeWithAnswers: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn().mockResolvedValue(false),
     };
     mockWorkspaceService = {
@@ -267,16 +267,33 @@ describe("AgentService", () => {
     });
   });
 
-  describe("reply()", () => {
-    it("verifies ownership then delegates to RunService.reply", async () => {
-      await service.reply("conversation-1", { q1: "yes" }, user);
+  describe("run() with resume[] (interrupt 答复续接)", () => {
+    const resumeEntries = [
+      {
+        interruptId: "int-1",
+        status: "resolved",
+        payload: { answers: { q1: "yes" } },
+      },
+    ];
+
+    it("verifies ownership then delegates to RunService.resumeWithAnswers, skipping launch", async () => {
+      await service.run(
+        baseBody({ runId: "run-2", resume: resumeEntries }),
+        res as Response,
+        user
+      );
+
       expect(mockConversationService.findById).toHaveBeenCalledWith(
         "user-1",
         "conversation-1"
       );
-      expect(mockRunService.reply).toHaveBeenCalledWith("conversation-1", {
-        q1: "yes",
+      expect(mockRunService.resumeWithAnswers).toHaveBeenCalledWith({
+        conversationId: "conversation-1",
+        resumeRunId: "run-2",
+        resume: resumeEntries,
+        res,
       });
+      expect(mockRunService.start).not.toHaveBeenCalled();
     });
   });
 
@@ -323,9 +340,24 @@ describe("AgentService", () => {
         .mockRejectedValue(new NotFoundException("对话不存在"));
     });
 
-    it("reply does not resolve approval for a conversation the caller does not own", async () => {
-      await expect(service.reply("conv-x", {}, user)).rejects.toThrow();
-      expect(mockRunService.reply).not.toHaveBeenCalled();
+    it("run() with resume[] does not resolve approval for a conversation the caller does not own", async () => {
+      await expect(
+        service.run(
+          baseBody({
+            threadId: "conv-x",
+            resume: [
+              {
+                interruptId: "int-1",
+                status: "resolved",
+                payload: { answers: {} },
+              },
+            ],
+          }),
+          res as Response,
+          user
+        )
+      ).rejects.toThrow();
+      expect(mockRunService.resumeWithAnswers).not.toHaveBeenCalled();
     });
 
     it("stop does not stop the run for a conversation the caller does not own", async () => {

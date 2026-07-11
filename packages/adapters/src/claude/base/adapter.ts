@@ -368,6 +368,15 @@ export class ClaudeAgentAdapter extends AbstractAgent {
    */
   protected onStreamError(_error: unknown, _input: RunAgentInput): void {}
 
+  /**
+   * Extension point: AG-UI runId stamped on the terminal RUN_FINISHED/RUN_ERROR.
+   * Interrupt 续接后同一条 SDK stream 的收尾属于新的 AG-UI run(resume runId),
+   * business adapter 通过覆写把它换掉。Default: 原样返回。
+   */
+  protected finishRunId(_threadId: string, runId: string): string {
+    return runId;
+  }
+
   private async translateStream(
     input: RunAgentInput,
     messageStream: AsyncIterable<unknown>,
@@ -428,7 +437,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
       subscriber.next({
         type: EventType.RUN_FINISHED,
         threadId,
-        runId,
+        runId: this.finishRunId(threadId, runId),
         result: runCtx.lastResultData,
       });
 
@@ -446,7 +455,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
       subscriber.next({
         type: EventType.RUN_ERROR,
         threadId,
-        runId,
+        runId: this.finishRunId(threadId, runId),
         message: errorMessage,
       });
       subscriber.complete();

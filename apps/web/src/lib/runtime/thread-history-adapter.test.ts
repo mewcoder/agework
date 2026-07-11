@@ -61,14 +61,15 @@ describe("load() requires_action 场景", () => {
     vi.restoreAllMocks();
   });
 
-  it("pendingUserAction=question 时不触发 resume，不过滤进行中消息，status 归一化成 running", async () => {
+  it("pendingUserAction=question 时不触发 resume，不过滤消息，requires-action 状态原样保留", async () => {
     const { adapter } = makeLoadAdapter({
       remoteId: "c1",
       runStatus: "running",
       pendingUserAction: "question",
       messages: [
         userMsg("u1"),
-        // 进行中的 assistant 消息（status=requires-action），不应被过滤
+        // 待答消息以 requires-action/interrupt 持久化,原样加载供
+        // PendingQuestionPanel 判定与 interrupt resume 使用
         assistantMsg("a1", "requires-action"),
       ],
     });
@@ -79,11 +80,11 @@ describe("load() requires_action 场景", () => {
     expect(result.unstable_resume).toBeUndefined();
     // 消息未被过滤
     expect(result.messages).toHaveLength(2);
-    // 进行中 assistant 消息的 status 被归一化成 running
+    // requires-action 状态原样保留(不再归一化成 running)
     const assistantMsgResult = result.messages[1] as unknown as {
       message: { status: { type: string } };
     };
-    expect(assistantMsgResult.message.status.type).toBe("running");
+    expect(assistantMsgResult.message.status.type).toBe("requires-action");
   });
 
   it("正常 running（无 pendingUserAction）时触发 resume，过滤进行中消息", async () => {

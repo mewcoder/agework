@@ -118,6 +118,19 @@ export class AgentService {
       userId,
       conversationId
     );
+
+    // Interrupt 答复续接:resume[] 存在时不 launch 新 run,把答案下发给挂起中
+    // 的活跃 run 并把本次 SSE 附接上去,续接事件以 runId(resumeRunId)流回。
+    if (Array.isArray(body.resume) && body.resume.length > 0) {
+      await this.runService.resumeWithAnswers({
+        conversationId,
+        resumeRunId: runId,
+        resume: body.resume,
+        res,
+      });
+      return;
+    }
+
     const agentType = this.normalizeAgentType(conversation.agentType);
     if (requestedAgentType !== agentType) {
       throw new BadRequestException(
@@ -214,16 +227,6 @@ export class AgentService {
     // 校验归属：找不到会抛 NotFound，等价于官方 assertStreamOwner
     await this.conversationService.findById(user.userId, conversationId);
     await this.runService.resume(conversationId, res);
-  }
-
-  /** 回应一次审批（approval_resolved 控制指令）。 */
-  async reply(
-    conversationId: string,
-    answers: Record<string, string | string[]>,
-    user: JwtUser
-  ): Promise<void> {
-    await this.conversationService.findById(user.userId, conversationId);
-    await this.runService.reply(conversationId, answers);
   }
 
   /** 停止 conversation 的活跃 run；若无内存 handle 但状态仍为 running 则重置为 idle。 */

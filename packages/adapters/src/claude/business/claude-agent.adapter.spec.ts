@@ -558,3 +558,173 @@ describe("ClaudeAgentAdapter run() 端到端", () => {
     expect(events.some((e) => e.type === EventType.RUN_FINISHED)).toBe(true);
   });
 });
+
+// ── Interrupt terminal model ─────────────────────────────────────────────────
+
+type InterruptOutcomeEvent = EmittedEvent & {
+  runId?: string;
+  outcome?: {
+    type: string;
+    interrupts?: Array<{
+      id: string;
+      reason: string;
+      message?: string;
+      toolCallId?: string;
+      metadata?: Record<string, unknown>;
+    }>;
+  };
+};
+
+function findInterruptFinish(events: EmittedEvent[]): InterruptOutcomeEvent | undefined {
+  return events.find(
+    (e) =>
+      e.type === EventType.RUN_FINISHED &&
+      (e as InterruptOutcomeEvent).outcome?.type === "interrupt",
+  ) as InterruptOutcomeEvent | undefined;
+}
+
+describe("ClaudeAgentAdapter interrupt terminal model", () => {
+  it("权限请求挂起时发 RUN_FINISHED{outcome:interrupt},interrupt 关联合成 toolCallId 并带 questions", async () => {
+    const adapter = makeAdapter();
+    const threadId = "t-int-1";
+    const { emitted, subscriber } = makeSubscriber();
+    const ac = new AbortController();
+
+    const p = callPermission(adapter, threadId, "Write", { file_path: "/a" }, ac.signal, subscriber);
+    await flush();
+
+    const finish = findInterruptFinish(emitted);
+    expect(finish).toBeTruthy();
+    const interrupt = finish!.outcome!.interrupts![0];
+    expect(interrupt.reason).toBe("tool_call");
+    expect(typeof interrupt.id).toBe("string");
+    // 关联的是合成的 AskUserPermission toolCallId
+    const start = emitted.find((e) => e.type === EventType.TOOL_CALL_START);
+    expect(interrupt.toolCallId).toBe(start?.toolCallId);
+    // metadata 携带完整 questions,供前端按 interrupt 渲染
+    expect(Array.isArray(interrupt.metadata?.questions)).toBe(true);
+    // pendingQuestions 单槽登记了 interruptId
+    expect(pendingQuestions.get(threadId)?.interruptId).toBe(interrupt.id);
+
+    resolveQuestion(threadId, { [lastPendingQuestion(emitted)!]: "允许" });
+    await p;
+  });
+
+  it("resolveQuestion 带 resumeRunId:先发 RUN_STARTED(新 runId)再补 TOOL_CALL_RESULT/END,且事件归属新 runId", async () => {
+    const adapter = makeAdapter();
+    const threadId = "t-int-2";
+    const { emitted, subscriber } = makeSubscriber();
+    const ac = new AbortController();
+
+    const p = callPermission(adapter, threadId, "Write", { file_path: "/a" }, ac.signal, subscriber);
+    await flush();
+
+    const question = lastPendingQuestion(emitted)!;
+    const before = emitted.length;
+    const resolved = resolveQuestion(threadId, { [question]: "允许" }, "run-resume-1");
+    expect(resolved).toBe(true);
+    await p;
+
+    const after = emitted.slice(before);
+    expect(after[0]).toMatchObject({
+      type: EventType.RUN_STARTED,
+      threadId,
+      runId: "run-resume-1",
+    });
+    const result = after.find((e) => e.type === EventType.TOOL_CALL_RESULT);
+    const end = after.find((e) => e.type === EventType.TOOL_CALL_END);
+    // 续接段里的补发事件归属新 runId
+    expect(result?.runId).toBe("run-resume-1");
+    expect(end?.runId).toBe("run-resume-1");
+  });
+
+  it("resolveQuestion 不带 resumeRunId 时不发 RUN_STARTED(兼容无续接语义的调用方)", async () => {
+    const adapter = makeAdapter();
+    const threadId = "t-int-3";
+    const { emitted, subscriber } = makeSubscriber();
+    const ac = new AbortController();
+
+    const p = callPermission(adapter, threadId, "Read", { file_path: "/a" }, ac.signal, subscriber);
+    await flush();
+    const before = emitted.length;
+    resolveQuestion(threadId, { [lastPendingQuestion(emitted)!]: "允许" });
+    await p;
+
+    expect(emitted.slice(before).some((e) => e.type === EventType.RUN_STARTED)).toBe(false);
+  });
+
+  it("续接后排队中的下一个权限请求,interrupt 收尾归属续接 runId", async () => {
+    const adapter = makeAdapter();
+    const threadId = "t-int-4";
+    const { emitted, subscriber } = makeSubscriber();
+    const ac = new AbortController();
+
+    const p1 = callPermission(adapter, threadId, "Read", { file_path: "/a" }, ac.signal, subscriber);
+    const p2 = callPermission(adapter, threadId, "Read", { file_path: "/b" }, ac.signal, subscriber);
+    await flush();
+
+    resolveQuestion(threadId, { [lastPendingQuestion(emitted)!]: "允许" }, "run-resume-2");
+    await p1;
+    await flush();
+
+    // 第二个请求的 interrupt 收尾(最后一个 interrupt RUN_FINISHED)归属续接 runId
+    const finishes = emitted.filter(
+      (e) =>
+        e.type === EventType.RUN_FINISHED &&
+        (e as InterruptOutcomeEvent).outcome?.type === "interrupt",
+    ) as InterruptOutcomeEvent[];
+    expect(finishes).toHaveLength(2);
+    expect(finishes[1].runId).toBe("run-resume-2");
+
+    resolveQuestion(threadId, { [lastPendingQuestion(emitted)!]: "允许" }, "run-resume-3");
+    await p2;
+  });
+
+  it("模型原生 AskUserQuestion:canUseTool 挂起时发 interrupt 收尾(reason input_required,关联 SDK toolUseID)", async () => {
+    const adapter = new ClaudeAgentAdapter({}) as unknown as {
+      extraQueryOptions(
+        input: unknown,
+        options: unknown,
+        subscriber: unknown,
+      ): {
+        canUseTool: (
+          toolName: string,
+          toolInput: Record<string, unknown>,
+          opts: { signal: AbortSignal; toolUseID?: string },
+        ) => Promise<PermissionResult>;
+      };
+    };
+    const threadId = "t-int-5";
+    const { emitted, subscriber } = makeSubscriber();
+    const ac = new AbortController();
+
+    const { canUseTool } = adapter.extraQueryOptions(
+      { threadId, runId: "run-orig" },
+      {},
+      subscriber,
+    );
+    const questions = [
+      { question: "选哪个?", header: "选择", options: [{ label: "A", description: "" }] },
+    ];
+    const p = canUseTool("AskUserQuestion", { questions }, { signal: ac.signal, toolUseID: "tu-1" });
+    await flush();
+
+    const finish = findInterruptFinish(emitted);
+    expect(finish).toBeTruthy();
+    expect(finish!.runId).toBe("run-orig");
+    const interrupt = finish!.outcome!.interrupts![0];
+    expect(interrupt.reason).toBe("input_required");
+    expect(interrupt.toolCallId).toBe("tu-1");
+    expect(interrupt.message).toBe("选哪个?");
+    expect(interrupt.metadata?.questions).toEqual(questions);
+
+    resolveQuestion(threadId, { "选哪个?": "A" }, "run-resume-5");
+    const result = await p;
+    expect(result).toMatchObject({ behavior: "allow" });
+    expect(
+      emitted.some(
+        (e) => e.type === EventType.RUN_STARTED && (e as { runId?: string }).runId === "run-resume-5",
+      ),
+    ).toBe(true);
+  });
+});

@@ -96,6 +96,7 @@ export type ControlResolveParams = {
   runId?: string;
   conversationId: string;
   answers: Record<string, string | string[]>;
+  resumeRunId?: string;
 };
 
 export type WorkerCommandRpcRequest =
@@ -218,6 +219,7 @@ export function commandMessageToRpcRequest(
           runId: message.runId || undefined,
           conversationId: command.conversationId,
           answers: command.answers,
+          ...(command.resumeRunId ? { resumeRunId: command.resumeRunId } : {}),
         },
         meta,
       };
@@ -267,6 +269,9 @@ export function rpcRequestToCommandPayload(
         commandId,
         conversationId: request.params.conversationId,
         answers: request.params.answers,
+        ...(request.params.resumeRunId
+          ? { resumeRunId: request.params.resumeRunId }
+          : {}),
       };
   }
 }
@@ -630,7 +635,8 @@ function isControlResolveParams(
     isRecord(value) &&
     optionalString(value.runId) &&
     isNonEmptyString(value.conversationId) &&
-    isAnswerMap(value.answers)
+    isAnswerMap(value.answers) &&
+    optionalString(value.resumeRunId)
   );
 }
 

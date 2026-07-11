@@ -27,7 +27,6 @@ import {
   useMessageScroller,
   useMessageScrollerScrollable,
 } from "@/components/ui/message-scroller";
-import { useResumeAfterQuestionReply } from "@/lib/runtime/use-resume-after-question-reply";
 import { cn } from "@/lib/utils";
 
 // 滚动容器用 shadcn message-scroller(@shadcn/react/message-scroller)接管贴底/
@@ -494,9 +493,6 @@ export function Thread() {
     isEmpty,
     mainThreadId,
   ]);
-
-  // 刷新后回答 pending question 时重建 resume SSE 连接(aui 接线 + 数据流见 hook)
-  useResumeAfterQuestionReply(aui);
 
   const navigationItems = useMemo(
     () => buildNavigationItems(aui.thread().getState().messages, turns),

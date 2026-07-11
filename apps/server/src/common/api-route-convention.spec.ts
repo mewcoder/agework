@@ -246,7 +246,6 @@ describe("external API route convention", () => {
     expectRoute(AgentController, "agentOptions", "get", "options");
     expectRoute(AgentController, "runAgent", "post", "run");
     expectRoute(AgentController, "resumeAgent", "get", "resume");
-    expectRoute(AgentController, "replyAgent", "post", "reply");
     expectRoute(AgentController, "stopAgent", "post", "stop");
   });
 

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import {
   type AssistantRuntime,
   useAui,
@@ -11,6 +11,7 @@ import { useRunSessionStore } from "@/stores/run-session-store";
 import { ChatHttpAgent } from "@/lib/runtime/chat-http-agent";
 import { createAgentMiddleware } from "@/lib/runtime/agent-middleware";
 import { createThreadHistoryAdapter } from "@/lib/runtime/thread-history-adapter";
+import { registerInterruptRuntime } from "@/lib/runtime/interrupt-runtime-registry";
 
 // remoteId 即 AgeWork 的 conversationId（assistant-ui 边界命名）
 function findCachedConversation(
@@ -55,7 +56,7 @@ export function useAgentChatRuntime(): AssistantRuntime {
   // （resume 绕过了 agent middleware，RUN_FINISHED 不会自动刷新缓存）。
   const history = useMemo(() => createThreadHistoryAdapter(aui, qc), [aui, qc]);
 
-  return useAgUiRuntime({
+  const runtime = useAgUiRuntime({
     agent,
     adapters: { history },
     showThinking: true,
@@ -68,6 +69,18 @@ export function useAgentChatRuntime(): AssistantRuntime {
       conversationsApi.stopRun(conversationId).catch((e) => console.error("[useAgentChatRuntime] stopRun failed:", e));
     },
   });
+
+  // 供问答 UI 按 conversationId 取到 interrupt API(见 registry 模块注释)。
+  useEffect(
+    () =>
+      registerInterruptRuntime({
+        getConversationId: () => aui.threadListItem().getState().remoteId,
+        runtime,
+      }),
+    [aui, runtime],
+  );
+
+  return runtime;
 }
 
 // 供 AgentChatRuntimeProvider 使用的 findCachedConversation — 导出以避免重复

@@ -14,14 +14,15 @@
 
 ## resume 数据流
 
-「续接一个进行中的 run」的唯一实现:`openResumeStream(conversationId, qc, options)`(`run-session-resume.ts`)。fetch `/agent/resume` SSE + 帧解析 + 快照归一化 + 流结束时 runStatus 回填,全部内聚在这一个 async generator 里。
+「刷新页面后续接一个进行中的 run」的唯一实现:`openResumeStream(conversationId, qc, options)`(`run-session-resume.ts`)。fetch `/agent/resume` SSE + 帧解析 + 快照归一化 + 流结束时 runStatus 回填,全部内聚在这一个 async generator 里。入口是 `lib/runtime/thread-history-adapter.ts` 的 `resume()` 薄 aui 接线,不允许再长出第二份数据流实现。
 
-两个入口都是**薄 aui 接线**,不允许再长出第二份数据流实现:
+## 问答中断(interrupt)
 
-- 刷新续接:`lib/runtime/thread-history-adapter.ts` 的 `resume()`(默认模式,409=requires_action,不重试)。
-- 答题重连:`lib/runtime/use-resume-after-question-reply.ts`(`retryOn409` 模式,409=后端还在处理 reply,退避重试)。
+问答走 AG-UI interrupt terminal model(决策见 [server run ADR-0001](../server/src/run/docs/adr/0001-question-interrupt-terminal-model.md)):问题挂起时 AG-UI run 以 `requires-action`(reason interrupt)结束,interrupts 存在消息 `metadata.custom.agui.interrupts`;回答 = 携带 `resume[]` 的新 run。
 
-同一个 409 在两个入口语义不同——这是 `retryOn409` 选项存在的原因,不是可以合并的重复。
+- 待答判定:`thread-utils.ts` 的 `isAwaitingAnswerStatus` + `findPendingQuestionPart`,不再有独立的重连/标记机制。
+- 提交:`unstable_submitInterruptResponses`,经 `lib/runtime/interrupt-runtime-registry.ts` 按 conversationId 取到所属 runtime(useRemoteThreadListRuntime 会包掉 per-thread runtime,unstable 扩展方法拿不到,registry 是这条缝的唯一过桥)。
+- 刷新页面 = 普通历史加载;答完 = 普通新 run。没有 409 特判、没有手动重连。
 
 ## runStatus 唯一写入面
 

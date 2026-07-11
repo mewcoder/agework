@@ -48,9 +48,6 @@ interface RunSessionStore {
   // ── 排队输入：run 进行中排队、结束后依次发出 ───────────────────────────────
   queuedUserInputsByConversation: Record<ConversationId, QueuedUserInput[]>;
 
-  /** 刷新后回答了 pending question、需要手动 resume 接上 SSE 流的 conversation 集合。 */
-  pendingQuestionRepliedConversations: Set<ConversationId>;
-
   markConversationCancelled: (conversationId: ConversationId) => void;
   clearConversationCancelled: (conversationId: ConversationId) => void;
   markConversationUserSteered: (conversationId: ConversationId, messageId?: string) => void;
@@ -71,8 +68,6 @@ interface RunSessionStore {
   ) => void;
   /** 用户打开了某对话，确认并清除它的完成提示。 */
   acknowledgeCompletion: (conversationId: ConversationId) => void;
-  markPendingQuestionReplied: (conversationId: ConversationId) => void;
-  consumePendingQuestionReplied: (conversationId: ConversationId) => boolean;
 }
 
 export const useRunSessionStore = create<RunSessionStore>((set) => ({
@@ -82,7 +77,6 @@ export const useRunSessionStore = create<RunSessionStore>((set) => ({
   userSteeredMessageIdsByConversation: {},
   pendingRunInterruptReasonsByConversation: {},
   queuedUserInputsByConversation: {},
-  pendingQuestionRepliedConversations: new Set(),
   syncPolledStatuses: (conversations, selectedConversationId) => {
     set((state) => {
       const statusById = new Map<ConversationId, string>();
@@ -276,24 +270,5 @@ export const useRunSessionStore = create<RunSessionStore>((set) => ({
       };
     });
     return shifted;
-  },
-  markPendingQuestionReplied: (conversationId) => {
-    set((state) => {
-      if (state.pendingQuestionRepliedConversations.has(conversationId)) return state;
-      const next = new Set(state.pendingQuestionRepliedConversations);
-      next.add(conversationId);
-      return { pendingQuestionRepliedConversations: next };
-    });
-  },
-  consumePendingQuestionReplied: (conversationId) => {
-    let wasReplied = false;
-    set((state) => {
-      if (!state.pendingQuestionRepliedConversations.has(conversationId)) return state;
-      wasReplied = true;
-      const next = new Set(state.pendingQuestionRepliedConversations);
-      next.delete(conversationId);
-      return { pendingQuestionRepliedConversations: next };
-    });
-    return wasReplied;
   },
 }));

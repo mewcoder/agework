@@ -142,17 +142,6 @@ describe('conversationsApi', () => {
     });
   });
 
-  describe('submitQuestionAnswer', () => {
-    it('发送 reply 请求', async () => {
-      const answers = { q1: 'yes', q2: ['a', 'b'] };
-      await conversationsApi.submitQuestionAnswer('conv-1', answers);
-
-      expect(mockApiPost).toHaveBeenCalledWith(
-        '/api/v1/agent/reply',
-        { id: 'conv-1', answers },
-      );
-    });
-  });
 
   describe('listMessages', () => {
     it('用 query 参数获取消息列表', async () => {

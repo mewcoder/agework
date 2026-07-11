@@ -11,12 +11,16 @@ import {
 
 // ── mocks ────────────────────────────────────────────────────────────────────
 
-const mockApiPost = vi.fn();
+const mockSubmitInterruptResponses = vi.fn();
+const mockGetPendingInterrupts = vi.fn();
 const mockSelectedConversationId = vi.fn(() => "conv-1");
 
-vi.mock("@/lib/http", () => ({
-  apiGet: vi.fn(),
-  apiPost: (...args: unknown[]) => mockApiPost(...args),
+vi.mock("@/lib/runtime/interrupt-runtime-registry", () => ({
+  getInterruptRuntime: () => ({
+    unstable_getPendingInterrupts: () => mockGetPendingInterrupts(),
+    unstable_submitInterruptResponses: (...args: unknown[]) =>
+      mockSubmitInterruptResponses(...args),
+  }),
 }));
 
 vi.mock("@/stores/selection-store", () => ({
@@ -27,7 +31,10 @@ vi.mock("@/stores/selection-store", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   mockSelectedConversationId.mockReturnValue("conv-1");
-  mockApiPost.mockResolvedValue({});
+  mockGetPendingInterrupts.mockReturnValue([
+    { id: "int-1", reason: "tool_call" },
+  ]);
+  mockSubmitInterruptResponses.mockResolvedValue(undefined);
 });
 
 // ── fixtures ─────────────────────────────────────────────────────────────────
@@ -112,13 +119,13 @@ describe("AskUserQuestionUI 权限提交", () => {
     fireEvent.click(screen.getByRole("button", { name: /允许/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/agent/reply",
+      expect(mockSubmitInterruptResponses).toHaveBeenCalledWith([
         {
-          id: "conv-1",
-          answers: { "允许 Claude 使用 Read？": PERMISSION_ALLOW_LABEL },
-        }
-      );
+          interruptId: "int-1",
+          status: "resolved",
+          payload: { answers: { "允许 Claude 使用 Read？": PERMISSION_ALLOW_LABEL } },
+        },
+      ]);
     });
   });
 
@@ -128,13 +135,13 @@ describe("AskUserQuestionUI 权限提交", () => {
     fireEvent.click(screen.getByRole("button", { name: /拒绝/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/agent/reply",
+      expect(mockSubmitInterruptResponses).toHaveBeenCalledWith([
         {
-          id: "conv-1",
-          answers: { "允许 Claude 使用 Read？": PERMISSION_DENY_LABEL },
-        }
-      );
+          interruptId: "int-1",
+          status: "resolved",
+          payload: { answers: { "允许 Claude 使用 Read？": PERMISSION_DENY_LABEL } },
+        },
+      ]);
     });
   });
 
@@ -144,7 +151,7 @@ describe("AskUserQuestionUI 权限提交", () => {
     fireEvent.click(screen.getByRole("button", { name: /允许/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalled();
+      expect(mockSubmitInterruptResponses).toHaveBeenCalled();
     });
 
     await waitFor(() => {
@@ -246,13 +253,13 @@ describe("AskUserQuestionUI 始终允许按钮", () => {
     fireEvent.click(screen.getByRole("button", { name: /始终允许/ }));
 
     await waitFor(() => {
-      expect(mockApiPost).toHaveBeenCalledWith(
-        "/api/v1/agent/reply",
+      expect(mockSubmitInterruptResponses).toHaveBeenCalledWith([
         {
-          id: "conv-1",
-          answers: { "允许 Claude 使用 Write？": PERMISSION_ALWAYS_ALLOW_LABEL },
-        }
-      );
+          interruptId: "int-1",
+          status: "resolved",
+          payload: { answers: { "允许 Claude 使用 Write？": PERMISSION_ALWAYS_ALLOW_LABEL } },
+        },
+      ]);
     });
   });
 });

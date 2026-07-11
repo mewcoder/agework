@@ -100,38 +100,109 @@ describe("RunService", () => {
     });
   });
 
-  describe("reply()", () => {
-    it("should throw NotFoundException when no active run found", async () => {
-      mockRunRepository.findActiveByConversationId = vi
-        .fn()
-        .mockResolvedValue(null);
-      await expect(service.reply("conversation-1", {})).rejects.toThrow();
-    });
+  describe("resumeWithAnswers()", () => {
+    const resumeEntries = [
+      {
+        interruptId: "int-1",
+        status: "resolved",
+        payload: { answers: { decision: "yes" } },
+      },
+    ];
 
-    it("should send approval control through worker execution when an live handle exists", async () => {
-      mockRunRepository.findActiveByConversationId = vi
-        .fn()
-        .mockResolvedValue({ id: "run-1" });
-      const handle = {
+    function makeRes() {
+      return {} as never;
+    }
+
+    function makeHandle() {
+      return {
+        runId: "run-1",
         runtimeHandle: {
           runId: "run-1",
           runtimeType: "native",
           runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
+        stream: {
+          replace: vi.fn(),
+          onClose: vi.fn(),
+          isAttachedTo: vi.fn().mockReturnValue(false),
+          detach: vi.fn(),
+        },
       };
+    }
+
+    it("throws Conflict when no active run found", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue(null);
+      await expect(
+        service.resumeWithAnswers({
+          conversationId: "conversation-1",
+          resumeRunId: "run-2",
+          resume: resumeEntries,
+          res: makeRes(),
+        })
+      ).rejects.toThrow("No pending question");
+    });
+
+    it("throws Conflict when the active run is not awaiting an answer", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1", status: "running" });
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(makeHandle());
+      await expect(
+        service.resumeWithAnswers({
+          conversationId: "conversation-1",
+          resumeRunId: "run-2",
+          resume: resumeEntries,
+          res: makeRes(),
+        })
+      ).rejects.toThrow("No pending question");
+    });
+
+    it("rejects malformed resume entries before touching the run", async () => {
+      await expect(
+        service.resumeWithAnswers({
+          conversationId: "conversation-1",
+          resumeRunId: "run-2",
+          resume: [{ interruptId: "int-1", status: "cancelled" }],
+          res: makeRes(),
+        })
+      ).rejects.toThrow("resume entry");
+      expect(mockRunRepository.findActiveByConversationId).not.toHaveBeenCalled();
+    });
+
+    it("attaches the stream in event mode then dispatches approval with resumeRunId", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1", status: "requires_action" });
+      const handle = makeHandle();
       mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+      const res = makeRes();
 
-      await service.reply("conversation-1", { decision: "yes" });
+      await service.resumeWithAnswers({
+        conversationId: "conversation-1",
+        resumeRunId: "run-2",
+        resume: resumeEntries,
+        res,
+      });
 
+      expect(handle.stream.replace).toHaveBeenCalledWith(res, "events");
       expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
         handle.runtimeHandle,
         expect.objectContaining({
           type: "approval_resolved",
           conversationId: "conversation-1",
           answers: { decision: "yes" },
+          resumeRunId: "run-2",
         })
       );
+      // 附接先于命令下发,续接段的 RUN_STARTED 不会漏
+      const replaceOrder = (handle.stream.replace as ReturnType<typeof vi.fn>)
+        .mock.invocationCallOrder[0];
+      const sendOrder = (mockExecutor.sendCommand as ReturnType<typeof vi.fn>)
+        .mock.invocationCallOrder[0];
+      expect(replaceOrder).toBeLessThan(sendOrder);
       expect(mockRunEvents.append).toHaveBeenCalledWith(
         expect.objectContaining({
           runId: "run-1",
@@ -247,11 +318,18 @@ describe("RunService", () => {
       expect(res.end).toHaveBeenCalled();
     });
 
-    it("requires_action 的 run 返回 409 不接 stream", async () => {
+    it("requires_action 的 run 发当前累积快照(含待答状态)后收尾,不接 stream", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()
         .mockResolvedValue({ id: "run-1", status: "requires_action" });
-      mockLiveRunRegistry.get = vi.fn().mockReturnValue({ runId: "run-1" });
+      const snapshot = {
+        content: [],
+        status: { type: "requires-action", reason: "interrupt" },
+      };
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue({
+        runId: "run-1",
+        aggregator: { build: vi.fn().mockReturnValue(snapshot) },
+      });
       const res = {
         setHeader: vi.fn(),
         write: vi.fn(),
@@ -263,8 +341,11 @@ describe("RunService", () => {
 
       await service.resume("conversation-1", res);
 
-      expect(res.status).toHaveBeenCalledWith(409);
-      expect(res.write).not.toHaveBeenCalled();
+      expect(res.status).not.toHaveBeenCalledWith(409);
+      expect(res.write).toHaveBeenCalledWith(
+        expect.stringContaining("requires-action")
+      );
+      expect(res.end).toHaveBeenCalled();
     });
   });
 });

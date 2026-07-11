@@ -23,6 +23,13 @@ Runtime 的软删除策略、EnvConfig 两层分离、CLI 检测归属、容器 
   - `0003-cli-resolver-in-runtime-not-server.md` — CliResolver 放 apps/runtime，server 不做 CLI 检测
   - `0004-container-cli-path-via-env-not-envconfig.md` — Container CLI 路径不经 envConfig，直接 env 注入
 
+### `apps/server` → run module — run 生命周期编排
+
+问答中断 terminal model(AG-UI interrupt outcome + resume[]),SDK 侧保持 pause model。
+
+- ADRs: [`apps/server/src/run/docs/adr/`](apps/server/src/run/docs/adr/)
+  - `0001-question-interrupt-terminal-model.md` — 问答走 AG-UI interrupt terminal model,worker/SDK 保持 pause model
+
 ### `apps/server` → worker-manager module — worker lifecycle & channels
 
 Worker 为主概念、runtime 载体收尾 stop/destroy、并发防重键、工作空间文件命令独立通道、builtin 文件预览直读。

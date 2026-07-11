@@ -62,11 +62,6 @@ export type ConversationIdRequest = { id: string };
 
 export type QueryConversationRunStatusesRequest = { ids: string[] };
 
-export type SubmitQuestionAnswerRequest = {
-  id: string;
-  answers: Record<string, string | string[]>;
-};
-
 /** 搜索命中的字段来源。 */
 export type ConversationSearchMatchedField = "title" | "message";
 
