@@ -8,7 +8,6 @@ import { ArrowDownIcon } from "lucide-react";
 import {
   type ComponentProps,
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -28,20 +27,8 @@ import {
   useMessageScroller,
   useMessageScrollerScrollable,
 } from "@/components/ui/message-scroller";
-import { useSelectionStore } from "@/stores/selection-store";
-import { useRunSessionStore } from "@/stores/run-session-store";
-import { normalizeResumeSnapshot } from "@/stores/run-session-status-rules";
-import { parseSseSnapshots } from "@/lib/runtime/thread-history-adapter";
-import {
-  dropStalePendingQuestionMessage,
-  needsManualResumeReconnect,
-  toExportedMessageRepository,
-  type ExportedMessageRepositoryLike,
-} from "@/lib/runtime/pending-question-resume";
-import { apiUrl } from "@/lib/http";
-import { useAuthStore } from "@/stores/auth-store";
+import { useResumeAfterQuestionReply } from "@/lib/runtime/use-resume-after-question-reply";
 import { cn } from "@/lib/utils";
-import type { ChatModelRunResult } from "@assistant-ui/react";
 
 // 滚动容器用 shadcn message-scroller(@shadcn/react/message-scroller)接管贴底/
 // 自动跟随/autoScroll 状态机/ResizeObserver 维持,替代原先手写的 stickyRef + onScroll/
@@ -503,117 +490,13 @@ export function Thread() {
   const mainThreadId = useAuiState((s) => s.threads.mainThreadId);
   const isEmpty = useAuiState((s) => s.thread.isEmpty);
   const isRunning = useAuiState((s) => s.thread.isRunning);
-  const selectedConversationId = useSelectionStore((s) => s.selectedConversationId);
   const composerLayoutRef = useLayoutShiftAnimation<HTMLDivElement>([
     isEmpty,
     mainThreadId,
   ]);
 
-  // 刷新后在 requires_action 状态下回答了 pending question 时，前端没有 SSE 连接，
-  // worker 继续执行的事件收不到。检测到标记后，直接在当前 runtime 上调用
-  // resumeRun，建立新的 resume SSE 连接把后续事件接上，不 reload 页面。
-  const pendingQuestionReplied = useRunSessionStore((s) =>
-    selectedConversationId
-      ? s.pendingQuestionRepliedConversations.has(selectedConversationId)
-      : false,
-  );
-  useEffect(() => {
-    if (!pendingQuestionReplied || !selectedConversationId) return;
-    // 注意：不在这里 consume，等 resumeRun 真正发起后再 consume，
-    // 避免 resumeRun 失败时标记丢失、后续无法重试。
-
-    // 短暂延迟让后端处理 reply（worker resolve + emitPendingAction(null) + run 变 running）。
-    const timer = setTimeout(() => {
-      void (async () => {
-        // 没刷新页面时，原始 /agent/run 的 SSE 连接仍然存活，worker resolve 后的
-        // 续接事件会通过它正常到达——不需要、也不能再手动 resumeRun，否则会和正在
-        // 进行的原始 run 同时各建一条助手消息，出现两个"正在处理"。
-        if (!needsManualResumeReconnect(aui.thread().getState().isRunning)) {
-          useRunSessionStore
-            .getState()
-            .consumePendingQuestionReplied(selectedConversationId);
-          return;
-        }
-
-        const threadRuntime = (
-          aui as unknown as {
-            thread: () => {
-              __internal_getRuntime?: () => {
-                resumeRun?: (config: {
-                  parentId: string | null;
-                  stream?: (
-                    options: unknown,
-                  ) => AsyncGenerator<ChatModelRunResult, void, unknown>;
-                }) => void;
-                import?: (
-                  data: ExportedMessageRepositoryLike<unknown>,
-                ) => void;
-              };
-            };
-          }
-        )
-          .thread()
-          .__internal_getRuntime?.();
-
-        if (!threadRuntime?.resumeRun) {
-          console.warn("[Thread] resumeRun not available, falling back to reload");
-          useRunSessionStore
-            .getState()
-            .consumePendingQuestionReplied(selectedConversationId);
-          window.location.reload();
-          return;
-        }
-
-        const token = useAuthStore.getState().token;
-        // 旧的 pending-question 消息还停在 status=running——resumeRun 会无条件
-        // 新建一条占位 assistant 消息，两者都 running 会变成重复的"正在处理"，
-        // 且旧消息永远不会再更新。续接前先把它从消息列表里去掉。
-        const { messages: liveMessages, removed } =
-          dropStalePendingQuestionMessage(aui.thread().getState().messages);
-        if (removed) {
-          threadRuntime.import?.(toExportedMessageRepository(liveMessages));
-        }
-        const parentId = liveMessages.at(-1)?.id ?? null;
-
-        try {
-          threadRuntime.resumeRun({
-            parentId,
-            stream: async function* () {
-              const res = await fetch(
-                apiUrl(
-                  `/api/v1/agent/resume?id=${selectedConversationId}`
-                ),
-                {
-                  headers: {
-                    Accept: "text/event-stream",
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                  },
-                },
-              );
-              // 409 = 仍在 requires_action（后端还没处理完 reply）/ 404 = 无活跃 run
-              if (!res.ok || !res.body) {
-                console.warn("[Thread] resume returned", res.status);
-                return;
-              }
-              for await (const result of parseSseSnapshots(res.body)) {
-                yield normalizeResumeSnapshot(result);
-              }
-            },
-          });
-          // resumeRun 已成功发起，消费标记
-          useRunSessionStore
-            .getState()
-            .consumePendingQuestionReplied(selectedConversationId);
-        } catch (err) {
-          console.error("[Thread] resumeRun failed:", err);
-          useRunSessionStore
-            .getState()
-            .consumePendingQuestionReplied(selectedConversationId);
-        }
-      })();
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [pendingQuestionReplied, selectedConversationId, aui]);
+  // 刷新后回答 pending question 时重建 resume SSE 连接(aui 接线 + 数据流见 hook)
+  useResumeAfterQuestionReply(aui);
 
   const navigationItems = useMemo(
     () => buildNavigationItems(aui.thread().getState().messages, turns),

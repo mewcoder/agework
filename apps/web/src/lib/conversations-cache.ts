@@ -66,6 +66,26 @@ export function setConversationRunStatus(
   mapConversationById(qc, conversationId, (conversation) => ({ ...conversation, runStatus }));
 }
 
+/**
+ * 停止运行这类「后端终态异步落库」场景的运行状态乐观写。
+ *
+ * 后端 stop 返回时 run 只是标成 cancelling，conversation 真正落 idle 要等 worker
+ * 取消回流,中间有最长约一两秒的窗口。此时立即 invalidate 会 refetch 到仍是
+ * running 的旧值,把刚写的乐观状态冲掉(UI 出现 idle→running→idle 闪变)。
+ * 所以这里只做乐观写 + 延迟一次 invalidate 校准权威值,不立即刷新。
+ */
+export function setConversationRunStatusOptimistic(
+  qc: QueryClient,
+  conversationId: string,
+  runStatus: Conversation['runStatus'],
+  options: { revalidateAfterMs: number },
+): void {
+  setConversationRunStatus(qc, conversationId, runStatus);
+  window.setTimeout(() => {
+    void qc.invalidateQueries({ queryKey: ['conversations'] });
+  }, options.revalidateAfterMs);
+}
+
 /** 把一个新会话插到列表最前面；若同 id 已存在（例如乐观创建后又收到一次），去重后再插入。 */
 export function upsertConversationAtFront(qc: QueryClient, conversation: Conversation): void {
   updateConversationCaches(qc, (old) => ({

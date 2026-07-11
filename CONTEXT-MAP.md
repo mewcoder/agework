@@ -34,6 +34,14 @@ Worker 为主概念、runtime 载体收尾 stop/destroy、并发防重键、工�
   - `0004-workspace-file-commands-independent-channel.md` — 工作空间文件命令走独立通道
   - `0005-builtin-file-preview-server-direct-read.md` — builtin runtime 文件预览走 server 直读
 
+### `apps/web` — 前端
+
+RunSession(run 生命周期前端唯一归属,不碰 aui)、resume 数据流、runStatus 唯一写入面、aui 接线层。
+
+- 词汇表:[`apps/web/CONTEXT.md`](apps/web/CONTEXT.md)
+- ADRs: [`apps/web/docs/adr/`](apps/web/docs/adr/)
+  - `0001-stop-optimistic-status-delayed-revalidate.md` — stop 后乐观写 + 延迟单次校准,不立即 invalidate
+
 ### `packages/providers` — runtime provider extension point
 
 Runtime provider 抽为扩展点包，与 agent adapter 对称。

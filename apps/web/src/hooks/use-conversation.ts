@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi, type Conversation } from '@/api/conversations';
 import { useRunSessionStore } from '@/stores/run-session-store';
-import { setConversationRunStatus } from '@/lib/conversations-cache';
+import { setConversationRunStatusOptimistic } from '@/lib/conversations-cache';
 export type { Conversation } from '@/api/conversations';
 export type { ConversationSearchHit } from '@/api/conversations';
 
@@ -101,11 +101,8 @@ export function useStopConversationRun() {
       useRunSessionStore.getState().clearConversationCancelled(id);
     },
     onSuccess: (_data, id) => {
-      setConversationRunStatus(qc, id, 'idle');
-      qc.invalidateQueries({ queryKey: ['conversations'] });
-      window.setTimeout(() => {
-        qc.invalidateQueries({ queryKey: ['conversations'] });
-      }, 1500);
+      // 后端终态异步落库,立即 refetch 会拉回 running 冲掉乐观 idle,延迟校准
+      setConversationRunStatusOptimistic(qc, id, 'idle', { revalidateAfterMs: 1500 });
     },
   });
 }
