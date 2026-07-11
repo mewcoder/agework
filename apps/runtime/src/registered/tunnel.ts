@@ -22,6 +22,7 @@ import { createDirectory, listDirectory } from "../filesystem/directory-browser.
 import {
   listFiles as listFilesDirect,
   readFile as readFileDirect,
+  searchFiles as searchFilesDirect,
   createFsTimeoutSignal,
 } from "@agework/shared/filesystem";
 import {
@@ -31,6 +32,7 @@ import {
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
@@ -184,6 +186,7 @@ export class TunnelClient {
     | { path: string }
     | WorkspaceFileListResponse
     | WorkspaceFileReadResponse
+    | WorkspaceFileSearchResponse
     | WorkspaceChangedFilesResponse
     | WorkspaceFileDiffResponse
     | void
@@ -210,6 +213,8 @@ export class TunnelClient {
         return listChangedFilesDirect(request.params.rootPath);
       case "runtime.read-file-diff":
         return readFileDiffDirect(request.params.rootPath, request.params.path);
+      case "runtime.search-files":
+        return searchFilesDirect(request.params.rootPath);
     }
   }
 

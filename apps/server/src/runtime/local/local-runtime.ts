@@ -9,6 +9,7 @@ import type {
   RuntimeEnvConfig,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
@@ -16,6 +17,7 @@ import type { AgentType } from "@agework/shared";
 import {
   listFiles as listFilesDirect,
   readFile as readFileDirect,
+  searchFiles as searchFilesDirect,
   createFsTimeoutSignal,
 } from "@agework/shared/filesystem";
 import {
@@ -125,6 +127,11 @@ export class LocalRuntime implements Runtime {
    */
   listChangedFiles(rootPath: string): Promise<WorkspaceChangedFilesResponse> {
     return listChangedFilesDirect(rootPath);
+  }
+
+  /** managed native runtime 文件搜索(git ls-files，供 `@` 文件提及)。 */
+  searchFiles(rootPath: string): Promise<WorkspaceFileSearchResponse> {
+    return searchFilesDirect(rootPath);
   }
 
   /** managed native runtime 单文件 diff 直读,同 listChangedFiles。 */

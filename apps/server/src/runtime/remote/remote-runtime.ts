@@ -16,12 +16,15 @@ import type {
   RuntimeListChangedFilesRpcResult,
   RuntimeReadFileDiffRpcParams,
   RuntimeReadFileDiffRpcResult,
+  RuntimeSearchFilesRpcParams,
+  RuntimeSearchFilesRpcResult,
   RuntimeTunnelRpcRequest,
 } from "@agework/shared/protocol";
 import type {
   RuntimeEnvConfig,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
@@ -143,6 +146,18 @@ export class RemoteRuntime implements Runtime {
     return this.tunnel.sendRequest<RuntimeListChangedFilesRpcResult>(
       this.runtimeId,
       this.request("runtime.list-changed-files", params),
+      this.launchTimeoutMs
+    );
+  }
+
+  /** 通过隧道发 search-files RPC,列出远程机器上 rootPath 下所有文件相对路径。 */
+  async searchFiles(
+    rootPath: string
+  ): Promise<WorkspaceFileSearchResponse> {
+    const params: RuntimeSearchFilesRpcParams = { rootPath };
+    return this.tunnel.sendRequest<RuntimeSearchFilesRpcResult>(
+      this.runtimeId,
+      this.request("runtime.search-files", params),
       this.launchTimeoutMs
     );
   }

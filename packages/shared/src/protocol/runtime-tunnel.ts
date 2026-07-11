@@ -4,6 +4,7 @@ import type { RuntimeEnvConfig } from "../api/runtimes";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
 } from "../api/workspace-files";
 import type {
   WorkspaceChangedFilesResponse,
@@ -99,6 +100,9 @@ export type RuntimeListChangedFilesRpcParams = { rootPath: string };
 /** server → manager：读取 rootPath 下 relativePath 的 before/after diff（git）。 */
 export type RuntimeReadFileDiffRpcParams = { rootPath: string; path: string };
 
+/** server → manager：列出 rootPath 下所有文件相对路径（git ls-files，供 `@` 文件提及）。 */
+export type RuntimeSearchFilesRpcParams = { rootPath: string };
+
 export type RuntimeTunnelRpcRequest =
   | RpcRequest<"runtime.launch", RuntimeLaunchRpcParams>
   | RpcRequest<"runtime.stop", RuntimeInstanceRefRpcParams>
@@ -109,7 +113,8 @@ export type RuntimeTunnelRpcRequest =
   | RpcRequest<"runtime.list-files", RuntimeListFilesRpcParams>
   | RpcRequest<"runtime.read-file", RuntimeReadFileRpcParams>
   | RpcRequest<"runtime.list-changed-files", RuntimeListChangedFilesRpcParams>
-  | RpcRequest<"runtime.read-file-diff", RuntimeReadFileDiffRpcParams>;
+  | RpcRequest<"runtime.read-file-diff", RuntimeReadFileDiffRpcParams>
+  | RpcRequest<"runtime.search-files", RuntimeSearchFilesRpcParams>;
 
 export type RuntimeLaunchRpcResult = { runtimeInstanceId: string };
 export type RuntimeDetectEnvRpcResult = { envConfig: RuntimeEnvConfig };
@@ -120,6 +125,7 @@ export type RuntimeListFilesRpcResult = WorkspaceFileListResponse;
 export type RuntimeReadFileRpcResult = WorkspaceFileReadResponse;
 export type RuntimeListChangedFilesRpcResult = WorkspaceChangedFilesResponse;
 export type RuntimeReadFileDiffRpcResult = WorkspaceFileDiffResponse;
+export type RuntimeSearchFilesRpcResult = WorkspaceFileSearchResponse;
 
 export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeLaunchRpcResult>
@@ -130,6 +136,7 @@ export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeReadFileRpcResult>
   | RpcResponse<RuntimeListChangedFilesRpcResult>
   | RpcResponse<RuntimeReadFileDiffRpcResult>
+  | RpcResponse<RuntimeSearchFilesRpcResult>
   | RpcResponse<null>;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,

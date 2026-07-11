@@ -109,6 +109,67 @@ export function withRunSettings(
   };
 }
 
+// ── @ 文件提及 → context 注入 ──────────────────────────────────────
+
+/** 边界规则：`@` 必须在行首或空白后（挡邮箱 `foo@bar.com`）。 */
+const fileMentionRe = /(?:^|\s)@([^\s@]+)/g;
+
+/**
+ * 从文本中提取 `@path` 文件提及，只保留在 `knownFiles` 里存在的路径。
+ * 与 `parseDirectives`（directive-text.tsx）共用同一套边界规则 + 存在性校验（SPEC §4）。
+ */
+export function extractFileMentions(
+  text: string,
+  knownFiles: Set<string>,
+): string[] {
+  const paths: string[] = [];
+  for (const match of text.matchAll(fileMentionRe)) {
+    const path = match[1]!;
+    if (knownFiles.has(path) && !paths.includes(path)) {
+      paths.push(path);
+    }
+  }
+  return paths;
+}
+
+/**
+ * 将 `@path` 文件提及注入 AG-UI `context` 字段（SPEC §6）。
+ *
+ * - 从最后一条 user 消息正文解析 `@path`，经存在性校验后填入 context。
+ * - agent（Claude/Codex）通过 context → systemPrompt 看到「这些文件被用户提及了」。
+ * - 注路径不注内容：agent 自己有 Read 工具，指个路就够（SPEC §6）。
+ * - 两个 adapter 的 `buildStateContextAddendum` 都读 `input.context`，已确认。
+ */
+export function withFileMentions(
+  input: RunAgentInput,
+  knownFiles: Set<string> | undefined,
+): RunAgentInput {
+  if (!knownFiles || knownFiles.size === 0) return input;
+
+  const messages = Array.isArray(input.messages) ? input.messages : [];
+  const lastUserMessage = messages.findLast(
+    (message) => isPlainObject(message) && message.role === "user",
+  );
+  if (!lastUserMessage || !isPlainObject(lastUserMessage)) return input;
+
+  const text = extractRunMessageText(lastUserMessage.content);
+  if (!text) return input;
+
+  const paths = extractFileMentions(text, knownFiles);
+  if (paths.length === 0) return input;
+
+  const existingContext = input.context ?? [];
+  const fileContext = paths.map((path) => ({
+    description: "mentioned-file",
+    value: path,
+  }));
+
+  return {
+    ...input,
+    context: [...existingContext, ...fileContext],
+  };
+}
+
 // ── RUN_ERROR 可见化 ─────────────────────────────────────────────────────────
 function agentLabel(input: RunAgentInput) {
   const agentType = input.forwardedProps?.agentType;

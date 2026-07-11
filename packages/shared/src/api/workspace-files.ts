@@ -13,3 +13,9 @@ export type WorkspaceFileReadResponse = {
   size: number;
   truncated: boolean;
 };
+
+/** GET /api/v1/workspaces/files/search 的响应。list 为相对路径数组。 */
+export type WorkspaceFileSearchResponse = {
+  list: string[];
+  truncated: boolean;
+};

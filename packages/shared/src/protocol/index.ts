@@ -121,6 +121,8 @@ export type {
   RuntimeListChangedFilesRpcResult,
   RuntimeReadFileDiffRpcParams,
   RuntimeReadFileDiffRpcResult,
+  RuntimeSearchFilesRpcParams,
+  RuntimeSearchFilesRpcResult,
   RuntimeTunnelRpcResponse,
 } from "./runtime-tunnel";
 

@@ -32,6 +32,7 @@ import type {
   WorkspaceFileReadResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
+  WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
@@ -230,6 +231,18 @@ export class WorkspaceService {
       ctx.runtimeId,
       ctx.workspaceRootPath,
       path
+    );
+  }
+
+  /** 列出工作空间所有文件相对路径（git ls-files，供 `@` 文件提及）。 */
+  async searchFiles(
+    userId: string,
+    workspaceId: string
+  ): Promise<WorkspaceFileSearchResponse> {
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+    return this.runtimeService.searchFiles(
+      ctx.runtimeId,
+      ctx.workspaceRootPath
     );
   }
 

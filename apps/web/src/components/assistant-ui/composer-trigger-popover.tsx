@@ -9,11 +9,6 @@ import {
   type Unstable_TriggerItem,
 } from "@assistant-ui/react";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 type IconComponent = FC<{ className?: string }>;
@@ -164,27 +159,27 @@ const Items: FC<ItemsProps> = ({
                   className="hover:bg-accent focus:bg-accent data-[highlighted]:bg-accent flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-start transition-colors outline-none"
                 >
                   <Icon className="text-primary size-3.5 shrink-0" />
-                  <span className="shrink-0 text-sm font-medium whitespace-nowrap">
-                    {item.label}
+                  {/*
+                   * Filename / skill name — left side, truncate on the left
+                   * so the end of the name (e.g. extension) stays visible.
+                   */}
+                  <span
+                    className="min-w-0 shrink-0 truncate text-sm font-medium"
+                    dir="rtl"
+                  >
+                    <bdi dir="ltr">{item.label}</bdi>
                   </span>
+                  {/*
+                   * Directory / skill description — right side, truncate on the right
+                   * (default ellipsis direction).
+                   */}
                   {item.description && (
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs">
-                            {item.description}
-                          </span>
-                        }
-                      />
-                      <TooltipContent
-                        side="right"
-                        sideOffset={18}
-                        positionMethod="fixed"
-                        className="max-w-xs text-start text-balance [&]:items-start"
-                      >
-                        {item.description}
-                      </TooltipContent>
-                    </Tooltip>
+                    <span
+                      className="text-muted-foreground min-w-0 flex-1 truncate text-xs"
+                      title={item.description}
+                    >
+                      {item.description}
+                    </span>
                   )}
                 </ComposerPrimitive.Unstable_TriggerPopoverItem>
               );
@@ -233,7 +228,7 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
     <ComposerPrimitive.Unstable_TriggerPopover
       data-slot="composer-trigger-popover"
       className={cn(
-        "aui-composer-trigger-popover bg-popover text-popover-foreground absolute start-0 bottom-full z-50 mb-2 w-96 overflow-hidden rounded-xl border shadow-lg",
+        "aui-composer-trigger-popover bg-popover text-popover-foreground absolute start-0 bottom-full z-50 mb-1 w-full overflow-hidden rounded-xl border shadow-lg",
         className,
       )}
       {...props}

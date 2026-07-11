@@ -17,6 +17,7 @@
 import { open, readdir, realpath, stat } from "node:fs/promises";
 import { lstat, readlink } from "node:fs/promises";
 import { constants } from "node:fs";
+import { execFile } from "node:child_process";
 import { isAbsolute, join, sep } from "node:path";
 import type {
   FileEntry,
@@ -393,6 +394,92 @@ async function withTimeout<T>(
 /** 创建带超时的 AbortSignal，供 listFiles/readFile 内部使用。 */
 export function createFsTimeoutSignal(): AbortSignal {
   return AbortSignal.timeout(FS_TIMEOUT_MS);
+}
+
+// ── searchFiles（`@` 文件提及用） ────────────────────────────────
+
+const SEARCH_FILES_LIMIT = 50_000;
+const SEARCH_GIT_TIMEOUT_MS = 5_000;
+const SEARCH_GIT_MAX_BUFFER = 16 * 1024 * 1024; // 16 MiB
+const WALK_DEPTH_LIMIT = 15;
+const WALK_DENYLIST = new Set([
+  "node_modules", ".git", "dist", "build", ".next",
+  ".venv", "target", "vendor", "coverage",
+]);
+
+/**
+ * 列出工作空间内所有文件相对路径，供 `@` 文件提及使用。
+ *
+ * 优先用 `git ls-files --cached --others --exclude-standard -z`（一条命令拿到
+ * 已跟踪 + 未跟踪新建文件，且完整应用 .gitignore）。非 git 目录回退递归遍历
+ * （denylist + 深度/数量上限截断）。
+ *
+ * 返回相对路径数组（`/` 分隔），与 `git ls-files` 一致。
+ */
+export async function searchFiles(
+  rootPath: string,
+): Promise<{ list: string[]; truncated: boolean }> {
+  // Try git first
+  try {
+    const out = await new Promise<string>((resolve, reject) => {
+      execFile(
+        "git",
+        ["-C", rootPath, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+        { encoding: "utf8", timeout: SEARCH_GIT_TIMEOUT_MS, maxBuffer: SEARCH_GIT_MAX_BUFFER },
+        (err, stdout) => { err ? reject(err) : resolve(stdout as string); },
+      );
+    });
+    const list = out.split("\0").filter((s) => s.length > 0);
+    const truncated = list.length > SEARCH_FILES_LIMIT;
+    return {
+      list: truncated ? list.slice(0, SEARCH_FILES_LIMIT) : list,
+      truncated,
+    };
+  } catch {
+    // Not a git repo or git not available — fall back to walk
+  }
+  return searchByWalk(rootPath);
+}
+
+/** 递归遍历回退（非 git 目录）。denylist + 深度/数量上限。 */
+async function searchByWalk(
+  rootPath: string,
+): Promise<{ list: string[]; truncated: boolean }> {
+  const list: string[] = [];
+  await walkDir(rootPath, "", list);
+  const truncated = list.length >= SEARCH_FILES_LIMIT;
+  return {
+    list: truncated ? list.slice(0, SEARCH_FILES_LIMIT) : list,
+    truncated,
+  };
+}
+
+async function walkDir(
+  rootPath: string,
+  relPath: string,
+  list: string[],
+): Promise<void> {
+  if (list.length >= SEARCH_FILES_LIMIT) return;
+  const absPath = relPath ? join(rootPath, relPath) : rootPath;
+  let entries;
+  try {
+    entries = await readdir(absPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (list.length >= SEARCH_FILES_LIMIT) return;
+    if (entry.name.startsWith(".")) continue;
+    if (WALK_DENYLIST.has(entry.name)) continue;
+    const entryRel = relPath ? `${relPath}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      const depth = entryRel.split("/").length;
+      if (depth >= WALK_DEPTH_LIMIT) continue;
+      await walkDir(rootPath, entryRel, list);
+    } else if (entry.isFile()) {
+      list.push(entryRel);
+    }
+  }
 }
 
 /**

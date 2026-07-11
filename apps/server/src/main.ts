@@ -64,13 +64,5 @@ async function bootstrap() {
   app.enableShutdownHooks();
   const port = configService.getPort();
   await app.listen(port);
-  const protocol = "http";
-  const localUrl = `${protocol}://localhost:${port}${apiBasePath}`;
-  const logger = new Logger("Bootstrap");
-  logger.log(`  ➜  Local:   ${localUrl}`);
-  const lan = getLanAddress();
-  if (lan) {
-    logger.log(`  ➜  Network: ${protocol}://${lan}:${port}${apiBasePath}`);
-  }
 }
 bootstrap();

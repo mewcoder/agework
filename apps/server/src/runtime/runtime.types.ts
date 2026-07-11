@@ -6,6 +6,7 @@ import type {
   RuntimeEnvConfig,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
@@ -71,6 +72,8 @@ export interface Runtime {
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileReadResponse>;
+  /** 列出 rootPath 下所有文件相对路径（git ls-files，供 `@` 文件提及）。 */
+  searchFiles(rootPath: string): Promise<WorkspaceFileSearchResponse>;
   /** 列出 rootPath 下相对 HEAD 的累计变更文件(git-only、只读)。 */
   listChangedFiles(rootPath: string): Promise<WorkspaceChangedFilesResponse>;
   /** 读取 rootPath 下 relativePath 的 before(HEAD)/after(当前)对比(git)。 */

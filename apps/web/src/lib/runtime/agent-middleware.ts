@@ -14,6 +14,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import {
   createFallbackTitle,
   withRunSettings,
+  withFileMentions,
   interceptRunEvents,
 } from "@/lib/runtime/agent-run-interceptor";
 import {
@@ -64,6 +65,19 @@ export function createAgentMiddleware(
         const agentType = custom?.agentType ?? state.selectedAgentType;
         const input = withRunSettings(params, remoteId, agentType, state);
 
+        // Inject @file mentions into context (SPEC §6)
+        // Read file index from TanStack Query cache (workspace-level, loaded by useFileMentionAdapter)
+        const fileIndexQueries = qc.getQueriesData<{ list: string[] }>({
+          queryKey: ["workspace-file-index"],
+        });
+        const knownFiles = new Set<string>();
+        for (const [, data] of fileIndexQueries) {
+          if (data?.list) {
+            for (const path of data.list) knownFiles.add(path);
+          }
+        }
+        const inputWithFiles = withFileMentions(input, knownFiles);
+
         if (isNewConversation && fallbackTitle && workspaceId) {
           const now = new Date().toISOString();
           const newConv = {
@@ -84,7 +98,7 @@ export function createAgentMiddleware(
 
         if (subscriber.closed) return;
 
-        innerSub = interceptRunEvents(input, next.run(input)).subscribe({
+        innerSub = interceptRunEvents(inputWithFiles, next.run(inputWithFiles)).subscribe({
           next: (e) => {
             if (e.type === EventType.RUN_FINISHED) {
               setConversationRunStatus(qc, remoteId, "idle");

@@ -10,6 +10,7 @@ import type {
   UpdateWorkspaceRequest,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from '@agework/shared/api';
@@ -65,5 +66,10 @@ export const workspacesApi = {
   readFileDiff: (id: string, path: string) => {
     const params = new URLSearchParams({ id, path });
     return apiGet<WorkspaceFileDiffResponse>(`/api/v1/workspaces/files/diff?${params.toString()}`);
+  },
+
+  searchFiles: (id: string) => {
+    const params = new URLSearchParams({ id });
+    return apiGet<WorkspaceFileSearchResponse>(`/api/v1/workspaces/files/search?${params.toString()}`);
   },
 };

@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import type { RunAgentInput } from '@ag-ui/client';
 import { useSelectionStore } from '@/stores/selection-store';
-import { extractRunMessageText, createFallbackTitle, withRunSettings } from './agent-run-interceptor';
+import { extractRunMessageText, createFallbackTitle, withRunSettings, extractFileMentions, withFileMentions } from './agent-run-interceptor';
 
 describe('extractRunMessageText', () => {
   it('字符串直接返回', () => {
@@ -159,5 +159,97 @@ describe('withRunSettings', () => {
       model: 'gpt-5',
       modelReasoningEffort: 'high',
     });
+  });
+});
+
+describe('extractFileMentions', () => {
+  const knownFiles = new Set(['src/foo.ts', 'apps/web/src/main.tsx', 'README.md']);
+
+  it('提取存在的 @path', () => {
+    const paths = extractFileMentions('看看 @src/foo.ts 这个文件', knownFiles);
+    expect(paths).toEqual(['src/foo.ts']);
+  });
+
+  it('行首 @ 也匹配', () => {
+    const paths = extractFileMentions('@README.md 是文档', knownFiles);
+    expect(paths).toEqual(['README.md']);
+  });
+
+  it('邮箱不误匹配（@ 前非空白）', () => {
+    const paths = extractFileMentions('联系 foo@bar.com', knownFiles);
+    expect(paths).toEqual([]);
+  });
+
+  it('不存在的路径被过滤', () => {
+    const paths = extractFileMentions('看看 @nonexistent.ts', knownFiles);
+    expect(paths).toEqual([]);
+  });
+
+  it('多个 @path 全部提取', () => {
+    const paths = extractFileMentions(
+      '对比 @src/foo.ts 和 @apps/web/src/main.tsx',
+      knownFiles,
+    );
+    expect(paths).toEqual(['src/foo.ts', 'apps/web/src/main.tsx']);
+  });
+
+  it('重复 @path 去重', () => {
+    const paths = extractFileMentions(
+      '@src/foo.ts 和 @src/foo.ts',
+      knownFiles,
+    );
+    expect(paths).toEqual(['src/foo.ts']);
+  });
+});
+
+describe('withFileMentions', () => {
+  const knownFiles = new Set(['src/foo.ts', 'README.md']);
+
+  it('将 @path 注入 context', () => {
+    const input = {
+      messages: [
+        { role: 'user', content: '看看 @src/foo.ts' },
+      ],
+      context: [{ description: 'system', value: 'system prompt' }],
+    } as unknown as RunAgentInput;
+
+    const result = withFileMentions(input, knownFiles);
+
+    expect(result.context).toEqual([
+      { description: 'system', value: 'system prompt' },
+      { description: 'mentioned-file', value: 'src/foo.ts' },
+    ]);
+  });
+
+  it('无 @path 时不修改 context', () => {
+    const input = {
+      messages: [{ role: 'user', content: '普通消息' }],
+      context: [{ description: 'system', value: 'system prompt' }],
+    } as unknown as RunAgentInput;
+
+    const result = withFileMentions(input, knownFiles);
+    expect(result.context).toEqual([
+      { description: 'system', value: 'system prompt' },
+    ]);
+  });
+
+  it('knownFiles 为空时直接返回原 input', () => {
+    const input = {
+      messages: [{ role: 'user', content: '@src/foo.ts' }],
+      context: [],
+    } as unknown as RunAgentInput;
+
+    const result = withFileMentions(input, undefined);
+    expect(result).toBe(input);
+  });
+
+  it('不存在的 @path 不注入', () => {
+    const input = {
+      messages: [{ role: 'user', content: '@nonexistent.ts' }],
+      context: [],
+    } as unknown as RunAgentInput;
+
+    const result = withFileMentions(input, knownFiles);
+    expect(result.context).toEqual([]);
   });
 });

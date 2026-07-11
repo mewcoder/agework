@@ -22,6 +22,7 @@ import type {
   WorkspaceFileReadResponse,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
+  WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
@@ -361,6 +362,20 @@ export class RuntimeService implements OnApplicationBootstrap {
       return await this.runtimeFor(runtimeId).readFileDiff(rootPath, relativePath);
     } catch (err) {
       throw this.toChangeViewError(err);
+    }
+  }
+
+  /** 文件搜索(git ls-files，供 `@` 文件提及),同 listFiles。 */
+  async searchFiles(
+    runtimeId: string,
+    rootPath: string
+  ): Promise<WorkspaceFileSearchResponse> {
+    try {
+      return await this.runtimeFor(runtimeId).searchFiles(rootPath);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
     }
   }
 

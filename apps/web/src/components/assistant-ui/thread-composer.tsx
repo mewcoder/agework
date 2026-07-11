@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -30,7 +31,9 @@ import { useWorkspaces } from "@/hooks/use-workspace";
 import { useAui, useAuiState, ComposerPrimitive, unstable_useSlashCommandAdapter, type Unstable_DirectiveFormatter } from "@assistant-ui/react";
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
 import { ComposerDirectiveOverlay } from "@/components/assistant-ui/composer-directive-overlay";
+import { slashCommandFormatter, fileMentionFormatter } from "@/components/assistant-ui/directive-text";
 import { useAgentSkills } from "@/hooks/use-agent-skills";
+import { useFileMentionAdapter } from "@/hooks/use-file-mention";
 import { useRunSessionStore, type QueuedUserInput } from "@/stores/run-session-store";
 import { StopConversationRunButton } from "@/components/assistant-ui/stop-conversation-run-button";
 import { Button } from "@/components/ui/button";
@@ -43,10 +46,10 @@ const COMPOSER_SEND_BUTTON_CLASS =
   "aui-composer-send size-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/85 disabled:bg-muted-foreground/20 disabled:text-muted-foreground/40";
 
 /** Custom formatter: serializes skill items as `/skill-name` plain text (no chip syntax). */
-const slashCommandFormatter: Unstable_DirectiveFormatter = {
-  serialize: (item) => `/${item.label}`,
-  parse: (text) => [{ kind: "text", text }],
-};
+const slashFormatter: Unstable_DirectiveFormatter = slashCommandFormatter;
+
+/** File mention formatter: serializes items as `@path` plain text. */
+const mentionFormatter: Unstable_DirectiveFormatter = fileMentionFormatter;
 
 // ── Composer action ────────────────────────────────────────────────────────
 
@@ -329,11 +332,29 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     })),
   });
 
+  // ── File mention (@) picker ─────────────────────────────────────────────
+  const fileMention = useFileMentionAdapter(targetWorkspaceId);
+  const knownFiles = useMemo(
+    () => new Set(fileMention.files),
+    [fileMention.files],
+  );
+
   // The trigger popover derives its open state from the composer's cursor
   // position, which mouse-selecting an item doesn't update (the click blurs the
   // textarea and setText is programmatic). Refocus and move the caret past the
   // inserted command so trigger detection clears and the popover closes.
   const closeSlashPopover = useCallback(() => {
+    requestAnimationFrame(() => {
+      const input = inputRef.current;
+      if (!input) return;
+      input.focus({ preventScroll: true });
+      const end = input.value.length;
+      input.setSelectionRange(end, end);
+      input.dispatchEvent(new Event("select", { bubbles: true }));
+    });
+  }, []);
+
+  const closeMentionPopover = useCallback(() => {
     requestAnimationFrame(() => {
       const input = inputRef.current;
       if (!input) return;
@@ -514,12 +535,6 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
       onSubmit={handleSubmit}
       className="aui-composer-root relative flex w-full flex-col"
     >
-      <ComposerTriggerPopover
-        char="/"
-        adapter={slash.adapter}
-        directive={{ formatter: slashCommandFormatter, onInserted: closeSlashPopover }}
-        fallbackIcon={slash.fallbackIcon}
-      />
       <AgentSwitcher />
       <div
         className={cn(
@@ -538,14 +553,26 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
           <div
             data-slot="aui_composer-shell"
             className={cn(
-              "relative w-full overflow-hidden rounded-(--composer-radius) border bg-background shadow-xs transition-[border-color,background-color] duration-200 focus-within:border-border data-[dragging=true]:border-dashed data-[dragging=true]:border-ring/60 data-[dragging=true]:bg-accent/50",
+              "relative w-full overflow-visible rounded-(--composer-radius) border bg-background shadow-xs transition-[border-color,background-color] duration-200 focus-within:border-border data-[dragging=true]:border-dashed data-[dragging=true]:border-ring/60 data-[dragging=true]:bg-accent/50",
               inputAttentionActive && "composer-input-attention",
             )}
           >
             <div className="flex min-h-28 w-full flex-col gap-3 p-(--composer-padding)">
               <ComposerAttachments />
               <div className="relative">
-                <ComposerDirectiveOverlay ref={overlayRef} />
+                <ComposerTriggerPopover
+                  char="/"
+                  adapter={slash.adapter}
+                  directive={{ formatter: slashFormatter, onInserted: closeSlashPopover }}
+                  fallbackIcon={slash.fallbackIcon}
+                />
+                <ComposerTriggerPopover
+                  char="@"
+                  adapter={fileMention.adapter}
+                  directive={{ formatter: mentionFormatter, onInserted: closeMentionPopover }}
+                  fallbackIcon={fileMention.fallbackIcon}
+                />
+                <ComposerDirectiveOverlay ref={overlayRef} knownFiles={knownFiles} />
                 <ComposerPrimitive.Input
                   ref={inputRef}
                   placeholder={labels.composer.placeholder}

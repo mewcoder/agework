@@ -4,7 +4,7 @@ export const labels = {
     emptyWorkspace: "暂无工作空间",
   },
   composer: {
-    placeholder: "描述任务",
+    placeholder: "描述任务， @引用文件， / 调用技能",
   },
   welcome: {
     title: "Work with Agent",
