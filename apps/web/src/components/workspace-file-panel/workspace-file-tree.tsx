@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import {
   ChevronRight,
   Folder as FolderIcon,
@@ -11,12 +11,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { FileTypeIcon } from "@/components/icons/file-icon";
 import {
-  useWorkspaceFiles,
-} from "@/hooks/use-workspace";
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import { FileTypeIcon } from "@/components/icons/file-icon";
+import { useWorkspaceFiles } from "@/hooks/use-workspace";
 import type { FileEntry } from "@agework/shared/filesystem/types";
 import { cn } from "@/lib/utils";
+import { useAui } from "@assistant-ui/react";
 
 export type FileTreeProps = {
   workspaceId: string;
@@ -155,21 +160,45 @@ function FileEntryNode({
     );
   }
 
+  const aui = useAui();
+
+  const handleAddToConversation = useCallback(() => {
+    const current = aui.composer().getState().text;
+    const prefix = current.length > 0 && !current.endsWith(" ") ? " " : "";
+    aui.composer().setText(current + prefix + "@" + fullPath);
+  }, [aui, fullPath]);
+
+  const handleCopyPath = useCallback(() => {
+    navigator.clipboard.writeText(fullPath).catch(() => {});
+  }, [fullPath]);
+
   // file
   return (
-    <button
-      className={cn(
-        "flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
-        selectedPath === fullPath && "bg-accent",
-      )}
-      style={{ paddingLeft: `${level * 12 + 20}px` }}
-      onClick={() => onSelect(fullPath)}
-    >
-      <FileTypeIcon
-        name={entry.name}
-        className="size-3.5 shrink-0 text-muted-foreground"
-      />
-      <span className="truncate">{entry.name}</span>
-    </button>
+    <ContextMenu>
+      <ContextMenuTrigger>
+        <button
+          className={cn(
+            "flex w-full items-center gap-0.5 rounded px-1 py-0.5 text-xs hover:bg-accent/50",
+            selectedPath === fullPath && "bg-accent",
+          )}
+          style={{ paddingLeft: `${level * 12 + 20}px` }}
+          onClick={() => onSelect(fullPath)}
+        >
+          <FileTypeIcon
+            name={entry.name}
+            className="size-3.5 shrink-0 text-muted-foreground"
+          />
+          <span className="truncate">{entry.name}</span>
+        </button>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem onClick={handleCopyPath}>
+          复制文件路径
+        </ContextMenuItem>
+        <ContextMenuItem onClick={handleAddToConversation}>
+          添加到对话
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
