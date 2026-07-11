@@ -40,7 +40,6 @@ const generateId = () => v7();
 const generateOptimisticId = () => `${optimisticPrefix}${generateId()}`;
 const isOptimisticId = (id: string) => id.startsWith(optimisticPrefix);
 
-const symbolResumeShim = Symbol("agui-resume-shim");
 
 type RunConfig = NonNullable<AppendMessage["runConfig"]>;
 type ResumeStream = (
@@ -95,7 +94,6 @@ export class AgUiThreadRuntimeCore {
     this.onCancel = options.onCancel;
     this.history = options.history;
     this.notifyUpdate = options.notifyUpdate;
-    this.installResumeShim();
   }
 
   updateOptions(options: Omit<CoreOptions, "notifyUpdate">) {
@@ -105,7 +103,6 @@ export class AgUiThreadRuntimeCore {
     this.onError = options.onError;
     this.onCancel = options.onCancel;
     this.history = options.history;
-    this.installResumeShim();
   }
 
   attachRuntime(runtime: AssistantRuntime) {
@@ -710,27 +707,6 @@ export class AgUiThreadRuntimeCore {
         ...(runConfig?.custom ? { runConfig: runConfig.custom } : {}),
       },
       ...(resume !== undefined ? { resume } : {}),
-    };
-  }
-
-  private installResumeShim(): void {
-    const agent = this.agent as any;
-    if (agent[symbolResumeShim]) return;
-    agent[symbolResumeShim] = true;
-    const onInstance = Object.hasOwn(agent, "prepareRunAgentInput");
-    const original = onInstance
-      ? agent.prepareRunAgentInput
-      : Object.getPrototypeOf(agent)?.prepareRunAgentInput;
-    if (typeof original !== "function") return;
-    agent.prepareRunAgentInput = function (
-      this: unknown,
-      params: { resume?: unknown } | undefined,
-    ) {
-      const input = original.call(this, params);
-      if (params?.resume !== undefined && input && typeof input === "object") {
-        return { ...(input as object), resume: params.resume };
-      }
-      return input;
     };
   }
 
