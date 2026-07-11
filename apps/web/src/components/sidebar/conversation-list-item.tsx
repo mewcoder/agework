@@ -28,7 +28,7 @@ import type { Conversation, ConversationSortKey } from "@/hooks/use-conversation
 import { useArchiveConversation } from "@/hooks/use-conversation";
 import { cn } from "@/lib/utils";
 import { formatRelativeTime } from "@/utils/format";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { RenameConversationDialog } from "@/components/rename-conversation-dialog";
 
 interface ConversationListItemProps {
@@ -51,11 +51,10 @@ export const ConversationListItem = memo(function ConversationListItem({
   const isActive = conversation.conversationId === activeConversationId;
   const isPending = conversation.pendingUserAction === "question";
   const isRunning = conversation.runStatus === "running" && !isPending;
-  const runResult = useRuntimeUiStore(
-    (s) => s.runResultByConversation[conversation.conversationId],
+  const hasCompletedRun = useRunSessionStore((s) =>
+    s.unacknowledgedCompletions.has(conversation.conversationId),
   );
-  const hasCompletedRun = runResult === "complete";
-  const hasFailedRun = runResult === "failed" || conversation.runStatus === "error";
+  const hasFailedRun = conversation.runStatus === "error";
   const statusDot = isPending
     ? {
         label: "待处理",

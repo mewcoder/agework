@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import type { ChatModelRunResult } from "@assistant-ui/react";
-import { parseSseSnapshots, normalizeResumeSnapshot, createThreadHistoryAdapter } from "./thread-history-adapter";
+import { parseSseSnapshots, createThreadHistoryAdapter } from "./thread-history-adapter";
 import { conversationsApi } from "@/api/conversations";
 
 type Snapshot = { content: unknown[]; status: { type: string; reason?: string; error?: string } };
@@ -60,50 +60,6 @@ describe("parseSseSnapshots", () => {
     const results: unknown[] = [];
     for await (const r of parseSseSnapshots(body)) results.push(r);
     expect(results).toHaveLength(0);
-  });
-});
-
-describe("normalizeResumeSnapshot", () => {
-  it("把中间快照 incomplete/streaming 归一化成 running", () => {
-    const result = normalizeResumeSnapshot({
-      content: [{ type: "tool-call", toolCallId: "t1", toolName: "Read" }],
-      status: { type: "incomplete", reason: "streaming" },
-    } as unknown as ChatModelRunResult);
-    expect(result.status).toEqual({ type: "running" });
-    // content 等其它字段保留
-    expect(result.content).toHaveLength(1);
-  });
-
-  it("终态快照 complete 保持原样", () => {
-    const result = normalizeResumeSnapshot({
-      content: [{ type: "text", text: "done" }],
-      status: { type: "complete", reason: "stop" },
-    });
-    expect(result.status).toEqual({ type: "complete", reason: "stop" });
-  });
-
-  it("终态快照 cancelled 保持原样（reason 非 streaming）", () => {
-    const result = normalizeResumeSnapshot({
-      content: [],
-      status: { type: "incomplete", reason: "cancelled" },
-    });
-    expect(result.status).toEqual({ type: "incomplete", reason: "cancelled" });
-  });
-
-  it("终态快照 error 保持原样", () => {
-    const result = normalizeResumeSnapshot({
-      content: [],
-      status: { type: "incomplete", reason: "error", error: "boom" },
-    });
-    expect(result.status).toEqual({ type: "incomplete", reason: "error", error: "boom" });
-  });
-
-  it("已经是 running 的快照不变", () => {
-    const result = normalizeResumeSnapshot({
-      content: [],
-      status: { type: "running" },
-    });
-    expect(result.status).toEqual({ type: "running" });
   });
 });
 

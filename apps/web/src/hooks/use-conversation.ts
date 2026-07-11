@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi, type Conversation } from '@/api/conversations';
-import { useRuntimeUiStore } from '@/stores/runtime-ui-store';
+import { useRunSessionStore } from '@/stores/run-session-store';
 import { setConversationRunStatus } from '@/lib/conversations-cache';
 export type { Conversation } from '@/api/conversations';
 export type { ConversationSearchHit } from '@/api/conversations';
@@ -93,12 +93,12 @@ export function useStopConversationRun() {
   return useMutation({
     mutationFn: (id: string) => conversationsApi.stopRun(id),
     onMutate: (id) => {
-      const runtimeUi = useRuntimeUiStore.getState();
-      runtimeUi.clearConversationUserSteered(id);
-      runtimeUi.markConversationCancelled(id);
+      const runSession = useRunSessionStore.getState();
+      runSession.clearConversationUserSteered(id);
+      runSession.markConversationCancelled(id);
     },
     onError: (_error, id) => {
-      useRuntimeUiStore.getState().clearConversationCancelled(id);
+      useRunSessionStore.getState().clearConversationCancelled(id);
     },
     onSuccess: (_data, id) => {
       setConversationRunStatus(qc, id, 'idle');

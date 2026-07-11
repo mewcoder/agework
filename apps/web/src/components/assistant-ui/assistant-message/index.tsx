@@ -11,7 +11,7 @@ import { AgentIcon } from "@/components/icons/agent";
 import { useConversations } from "@/hooks/use-conversation";
 import { agentLabel } from "@/utils/model-provider";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { cn } from "@/lib/utils";
 import {
   type GroupableMessagePart,
@@ -69,11 +69,11 @@ export const AssistantMessage = memo(function AssistantMessage() {
 
   // 三方库在用户取消后会用合成 RUN_FINISHED 覆盖 status 为 complete，
   // 所以除了看 messageStatus，还要看我们自己记录的"用户点过停止"标记。
-  const conversationCancelled = useRuntimeUiStore((s) =>
+  const conversationCancelled = useRunSessionStore((s) =>
     selectedConversationId ? s.cancelledConversations.has(selectedConversationId) : false,
   );
   const messageId = useAuiState((s) => s.message.id);
-  const isUserSteered = useRuntimeUiStore((s) =>
+  const isUserSteered = useRunSessionStore((s) =>
     selectedConversationId && messageId
       ? (s.userSteeredMessageIdsByConversation[selectedConversationId]?.has(messageId) ?? false)
       : false,

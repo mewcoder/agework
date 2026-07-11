@@ -13,7 +13,7 @@ import {
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { type AgentType } from "@/stores/selection-store";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { createThreadListAdapter } from "@/lib/runtime/thread-list-adapter";
 import { useAgentChatRuntime, findCachedConversation } from "@/hooks/use-agent-chat-runtime";
 import { AgentChatContext } from "./agent-chat-context";
@@ -59,7 +59,7 @@ function useSyncSelectedConversationFromUrl(routeConversationId: string | undefi
           ? c.agentType
           : undefined;
       selStore.selectConversation(routeConversationId, agentType, c?.workspaceId);
-      useRuntimeUiStore.getState().clearRunStatusForConversation(routeConversationId);
+      useRunSessionStore.getState().acknowledgeCompletion(routeConversationId);
     } else if (selStore.selectedConversationId !== undefined) {
       // 新会话：清空 selectedConversationId，保留已选 workspace
       useSelectionStore.setState({ selectedConversationId: undefined });

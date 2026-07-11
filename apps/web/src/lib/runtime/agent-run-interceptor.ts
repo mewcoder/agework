@@ -6,7 +6,7 @@ import {
 } from "@ag-ui/client";
 import { type AgentType } from "@/stores/selection-store";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { isPlainObject } from "lodash-es";
 
 type SelectionStoreSnapshot = ReturnType<typeof useSelectionStore.getState>;
@@ -84,7 +84,7 @@ export function withRunSettings(
   const model = modelProviderId
     ? state.selectedModelByProviderIds[modelProviderId]
     : undefined;
-  const interruptReason = useRuntimeUiStore
+  const interruptReason = useRunSessionStore
     .getState()
     .consumePendingRunInterruptReason(conversationId);
 
@@ -151,68 +151,20 @@ function visibleRunErrorEvents(
   ];
 }
 
-// gap loading 状态 + RUN_ERROR 转可见消息
+// 新 run 清 cancelled 标记 + RUN_ERROR 转可见消息
 export function interceptRunEvents(
   input: RunAgentInput,
   events: ReturnType<import("@ag-ui/client").HttpAgent["run"]>,
 ): ReturnType<import("@ag-ui/client").HttpAgent["run"]> {
   return new Observable<BaseEvent>((subscriber) => {
-    let toolGapTimer: ReturnType<typeof setTimeout> | null = null;
-
-    const setGap = (inGap: boolean) => {
-      useRuntimeUiStore.setState({ isAssistantInGap: inGap });
-    };
-
-    const clearToolTimer = () => {
-      if (toolGapTimer) {
-        clearTimeout(toolGapTimer);
-        toolGapTimer = null;
-      }
-    };
-
     const sub = (events as unknown as Observable<BaseEvent>).subscribe({
       next(event) {
         if (event.type === EventType.RUN_STARTED) {
-          setGap(true);
           // 新 run 开始，清除该 conversation 的 cancelled 标记（input.threadId 即 conversationId）
           const conversationId = input.threadId;
           if (conversationId) {
-            const runtimeUi = useRuntimeUiStore.getState();
-            runtimeUi.clearConversationCancelled(conversationId);
+            useRunSessionStore.getState().clearConversationCancelled(conversationId);
           }
-        }
-
-        if (
-          event.type === EventType.REASONING_START ||
-          event.type === EventType.TEXT_MESSAGE_START
-        ) {
-          clearToolTimer();
-          setGap(false);
-        }
-
-        if (event.type === EventType.TOOL_CALL_START) {
-          clearToolTimer();
-          setGap(false);
-        }
-
-        if (event.type === EventType.REASONING_END) {
-          setGap(true);
-        }
-
-        // 工具结束：延迟显示 loading，工具间快速切换时不触发
-        if (event.type === EventType.TOOL_CALL_END) {
-          toolGapTimer = setTimeout(() => {
-            toolGapTimer = null;
-            setGap(true);
-          }, 100);
-        }
-
-        if (
-          event.type === EventType.RUN_FINISHED ||
-          event.type === EventType.RUN_ERROR
-        ) {
-          clearToolTimer();
-          setGap(false);
         }
 
         const nextEvents =
@@ -223,20 +175,14 @@ export function interceptRunEvents(
         for (const nextEvent of nextEvents) subscriber.next(nextEvent);
       },
       error(error) {
-        clearToolTimer();
-        setGap(false);
         subscriber.error(error);
       },
       complete() {
-        clearToolTimer();
-        setGap(false);
         subscriber.complete();
       },
     });
 
     return () => {
-      clearToolTimer();
-      setGap(false);
       sub.unsubscribe();
     };
   }) as unknown as ReturnType<import("@ag-ui/client").HttpAgent["run"]>;

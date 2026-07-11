@@ -8,6 +8,10 @@ import type { useQueryClient } from "@tanstack/react-query";
 import { conversationsApi, type Conversation } from "@/api/conversations";
 import { apiUrl } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth-store";
+import {
+  runStatusFromSnapshot,
+  normalizeResumeSnapshot,
+} from "@/stores/run-session-status-rules";
 import { toThreadMessageItem, isThreadMessageItem } from "./thread-message";
 
 type Aui = ReturnType<typeof useAui>;
@@ -38,29 +42,6 @@ function setConversationRunStatusInCache(
       ),
     });
   }
-}
-
-/**
- * 从终态快照 status 推断 conversation.runStatus。
- *  - complete → idle
- *  - incomplete/cancelled → idle（用户取消，后端也设 idle）
- *  - incomplete/error → error
- *  - 其它（如 incomplete/streaming，理论上不应作为终态）→ undefined，由 invalidate 兜底
- */
-function runStatusFromSnapshot(
-  status: { type?: string; reason?: string } | undefined,
-): Conversation["runStatus"] | undefined {
-  if (!status) return undefined;
-  if (status.type === "complete") return "idle";
-  if (status.type === "incomplete") {
-    if (status.reason === "error") return "error";
-    if (status.reason === "cancelled" || status.reason === "user_steered")
-      return "idle";
-    // streaming 等非终态，不应出现在流结束时；交给 invalidate 兜底
-    return undefined;
-  }
-  if (status.type === "requires-action") return "idle";
-  return undefined;
 }
 
 /**
@@ -204,21 +185,6 @@ export function createThreadHistoryAdapter(
     },
   };
 }
-
-function normalizeResumeSnapshot(
-  result: ChatModelRunResult,
-): ChatModelRunResult {
-  const status = result.status as { type?: string; reason?: string } | undefined;
-  if (
-    status?.type === "incomplete" &&
-    status?.reason === "streaming"
-  ) {
-    return { ...result, status: { type: "running" } };
-  }
-  return result;
-}
-
-export { normalizeResumeSnapshot };
 
 /**
  * 解析 SSE 流：按空行分割事件，取 data: 行 JSON 解析为 ChatModelRunResult。

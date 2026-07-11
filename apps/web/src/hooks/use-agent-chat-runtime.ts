@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 import { apiUrl } from "@/lib/http";
 import { conversationsApi, type Conversation } from "@/api/conversations";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { ChatHttpAgent } from "@/lib/runtime/chat-http-agent";
 import { createAgentMiddleware } from "@/lib/runtime/agent-middleware";
 import { createThreadHistoryAdapter } from "@/lib/runtime/thread-history-adapter";
@@ -62,9 +62,9 @@ export function useAgentChatRuntime(): AssistantRuntime {
     onCancel: () => {
       const conversationId = aui.threadListItem().getState().remoteId;
       if (!conversationId) return;
-      const runtimeUi = useRuntimeUiStore.getState();
-      runtimeUi.clearConversationUserSteered(conversationId);
-      runtimeUi.markConversationCancelled(conversationId);
+      const runSession = useRunSessionStore.getState();
+      runSession.clearConversationUserSteered(conversationId);
+      runSession.markConversationCancelled(conversationId);
       conversationsApi.stopRun(conversationId).catch((e) => console.error("[useAgentChatRuntime] stopRun failed:", e));
     },
   });

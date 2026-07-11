@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/field";
 import { conversationsApi } from "@/api/conversations";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -292,7 +292,7 @@ function PermissionPromptUI({
       // 标记此 conversation 已回答 pending question，让 Thread 组件检测到后
       // 重新 load + resume，接上 worker 继续执行产生的 SSE 流。
       if (conversationId) {
-        useRuntimeUiStore.getState().markPendingQuestionReplied(conversationId);
+        useRunSessionStore.getState().markPendingQuestionReplied(conversationId);
       }
     } catch (err) {
       console.error("[PermissionPrompt] submit failed:", err);
@@ -409,7 +409,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
       await conversationsApi.submitQuestionAnswer(conversationId, answers);
       setSubmittedAnswers(answers);
       if (conversationId) {
-        useRuntimeUiStore.getState().markPendingQuestionReplied(conversationId);
+        useRunSessionStore.getState().markPendingQuestionReplied(conversationId);
       }
     } catch (err) {
       console.error("[AskUserQuestion] submit failed:", err);

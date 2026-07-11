@@ -21,7 +21,6 @@ import {
 import { useDeleteWorkspace, useWorkspaces } from "@/hooks/use-workspace";
 import { useConversations, useConversationRunStatuses, getRegularConversations, type Conversation, type ConversationSortKey } from "@/hooks/use-conversation";
 import { useConversationListView } from "@/hooks/use-conversation-list-view";
-import { useConversationRunStatusMonitor } from "@/hooks/use-conversation-run-status-monitor";
 import { useAgentChatContext } from "@/components/agent-chat-context";
 import { IconActionButton } from "@/components/icon-action-button";
 import { WorkspaceGroup } from "./workspace-group";
@@ -29,6 +28,7 @@ import { ConversationListItem } from "./conversation-list-item";
 import { ConversationListMenu } from "./conversation-list-menu";
 import { WorkspaceDialog } from "@/components/workspace-dialog";
 import { loadSelectedWorkspaceId, useSelectionStore } from "@/stores/selection-store";
+import { useRunSessionStore } from "@/stores/run-session-store";
 import { mergeConversationStatusIfNewer } from "@/lib/conversations-cache";
 
 const EMPTY_CONVERSATIONS: Conversation[] = [];
@@ -80,7 +80,9 @@ export function ConversationList() {
     }
   }, [queryClient, runStatusesData]);
 
-  useConversationRunStatusMonitor(conversations, activeConversationId);
+  useEffect(() => {
+    useRunSessionStore.getState().syncPolledStatuses(conversations, activeConversationId);
+  }, [conversations, activeConversationId]);
 
   const storedWorkspaceId = loadSelectedWorkspaceId();
   const defaultWorkspaceId =

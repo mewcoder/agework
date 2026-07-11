@@ -31,7 +31,7 @@ import { useAui, useAuiState, ComposerPrimitive, unstable_useSlashCommandAdapter
 import { ComposerTriggerPopover } from "@/components/assistant-ui/composer-trigger-popover";
 import { ComposerDirectiveOverlay } from "@/components/assistant-ui/composer-directive-overlay";
 import { useAgentSkills } from "@/hooks/use-agent-skills";
-import { useRuntimeUiStore, type QueuedUserInput } from "@/stores/runtime-ui-store";
+import { useRunSessionStore, type QueuedUserInput } from "@/stores/run-session-store";
 import { StopConversationRunButton } from "@/components/assistant-ui/stop-conversation-run-button";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -298,7 +298,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     ? "沙箱工作空间不能使用系统环境模型配置"
     : "请选择模型配置";
   const queueConversationId = selectedConversationId;
-  const queuedInputs = useRuntimeUiStore((s) =>
+  const queuedInputs = useRunSessionStore((s) =>
     queueConversationId
       ? s.queuedUserInputsByConversation[queueConversationId] ?? EMPTY_QUEUED_INPUTS
       : EMPTY_QUEUED_INPUTS,
@@ -358,7 +358,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     if (!queueConversationId) return;
     const text = composerText.trim();
     if (!text) return;
-    useRuntimeUiStore.getState().enqueueUserInput(queueConversationId, text);
+    useRunSessionStore.getState().enqueueUserInput(queueConversationId, text);
     aui.composer().setText("");
   }, [aui, composerText, queueConversationId]);
 
@@ -366,7 +366,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     (event: FormEvent<HTMLFormElement>) => {
       if (editingQueueItemId && queueConversationId) {
         event.preventDefault();
-        useRuntimeUiStore.getState().updateUserInput(queueConversationId, editingQueueItemId, composerText);
+        useRunSessionStore.getState().updateUserInput(queueConversationId, editingQueueItemId, composerText);
         aui.composer().setText("");
         setEditingQueueItemId(null);
         return;
@@ -408,7 +408,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
       if (editingQueueItemId && queueConversationId) {
         event.preventDefault();
         event.stopPropagation();
-        useRuntimeUiStore.getState().updateUserInput(queueConversationId, editingQueueItemId, composerText);
+        useRunSessionStore.getState().updateUserInput(queueConversationId, editingQueueItemId, composerText);
         aui.composer().setText("");
         setEditingQueueItemId(null);
         return;
@@ -424,11 +424,11 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const handlePrioritizeQueuedInput = useCallback(
     (id: string) => {
       if (!queueConversationId) return;
-      const runtimeUi = useRuntimeUiStore.getState();
-      runtimeUi.prioritizeUserInput(queueConversationId, id);
-      runtimeUi.markConversationUserSteered(queueConversationId, activeAssistantMessageId);
+      const runSession = useRunSessionStore.getState();
+      runSession.prioritizeUserInput(queueConversationId, id);
+      runSession.markConversationUserSteered(queueConversationId, activeAssistantMessageId);
       setPendingPrioritizeId(id);
-      const next = runtimeUi.shiftUserInput(queueConversationId);
+      const next = runSession.shiftUserInput(queueConversationId);
       if (!next) return;
       window.setTimeout(() => {
         aui.thread().append(next.text);
@@ -451,7 +451,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const handleRemoveQueuedInput = useCallback(
     (id: string) => {
       if (!queueConversationId) return;
-      useRuntimeUiStore.getState().removeUserInput(queueConversationId, id);
+      useRunSessionStore.getState().removeUserInput(queueConversationId, id);
     },
     [queueConversationId],
   );
@@ -500,7 +500,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
     wasRunningRef.current = showStop;
     if (!wasRunning || showStop || !queueConversationId) return;
 
-    const next = useRuntimeUiStore.getState().shiftUserInput(queueConversationId);
+    const next = useRunSessionStore.getState().shiftUserInput(queueConversationId);
     if (!next) return;
     window.setTimeout(() => {
       aui.thread().append(next.text);

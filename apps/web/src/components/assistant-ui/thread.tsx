@@ -29,8 +29,9 @@ import {
   useMessageScrollerScrollable,
 } from "@/components/ui/message-scroller";
 import { useSelectionStore } from "@/stores/selection-store";
-import { useRuntimeUiStore } from "@/stores/runtime-ui-store";
-import { parseSseSnapshots, normalizeResumeSnapshot } from "@/lib/runtime/thread-history-adapter";
+import { useRunSessionStore } from "@/stores/run-session-store";
+import { normalizeResumeSnapshot } from "@/stores/run-session-status-rules";
+import { parseSseSnapshots } from "@/lib/runtime/thread-history-adapter";
 import {
   dropStalePendingQuestionMessage,
   needsManualResumeReconnect,
@@ -511,7 +512,7 @@ export function Thread() {
   // 刷新后在 requires_action 状态下回答了 pending question 时，前端没有 SSE 连接，
   // worker 继续执行的事件收不到。检测到标记后，直接在当前 runtime 上调用
   // resumeRun，建立新的 resume SSE 连接把后续事件接上，不 reload 页面。
-  const pendingQuestionReplied = useRuntimeUiStore((s) =>
+  const pendingQuestionReplied = useRunSessionStore((s) =>
     selectedConversationId
       ? s.pendingQuestionRepliedConversations.has(selectedConversationId)
       : false,
@@ -528,7 +529,7 @@ export function Thread() {
         // 续接事件会通过它正常到达——不需要、也不能再手动 resumeRun，否则会和正在
         // 进行的原始 run 同时各建一条助手消息，出现两个"正在处理"。
         if (!needsManualResumeReconnect(aui.thread().getState().isRunning)) {
-          useRuntimeUiStore
+          useRunSessionStore
             .getState()
             .consumePendingQuestionReplied(selectedConversationId);
           return;
@@ -556,7 +557,7 @@ export function Thread() {
 
         if (!threadRuntime?.resumeRun) {
           console.warn("[Thread] resumeRun not available, falling back to reload");
-          useRuntimeUiStore
+          useRunSessionStore
             .getState()
             .consumePendingQuestionReplied(selectedConversationId);
           window.location.reload();
@@ -600,12 +601,12 @@ export function Thread() {
             },
           });
           // resumeRun 已成功发起，消费标记
-          useRuntimeUiStore
+          useRunSessionStore
             .getState()
             .consumePendingQuestionReplied(selectedConversationId);
         } catch (err) {
           console.error("[Thread] resumeRun failed:", err);
-          useRuntimeUiStore
+          useRunSessionStore
             .getState()
             .consumePendingQuestionReplied(selectedConversationId);
         }
