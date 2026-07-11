@@ -61,9 +61,6 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   createSdkMcpServer: vi.fn(() => ({})),
 }));
 
-// Mock the SDK types import
-vi.mock("@anthropic-ai/sdk/resources/beta/messages/messages", () => ({}));
-
 import { ClaudeAgentAdapter } from "./adapter";
 
 describe("ClaudeAgentAdapter headers property", () => {

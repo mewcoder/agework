@@ -15,10 +15,9 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@agework/shared": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "^0.3.158",
-    "@anthropic-ai/sdk": "^0.102.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.207",
     "@nestjs/common": "^11.0.1",
-    "@openai/codex-sdk": "^0.135.0",
+    "@openai/codex-sdk": "^0.144.1",
     "rxjs": "7.8.1",
     "zod": "^4.4.3"
   },

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import type { RunAgentInput, Tool, AssistantMessage, ToolCall, Message } from "@ag-ui/core";
 import type { SDKAssistantMessage, SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
+import type { ToolUseBlock } from "./types";
 import type { RunUsage } from "@agework/shared/protocol";
 import {
   ALLOWED_FORWARDED_PROPS,
@@ -356,7 +356,7 @@ export function buildAguiAssistantMessage(
     if (block.type === "text") {
       textContent += (block as { text: string }).text;
     } else if (block.type === "tool_use") {
-      const toolBlock = block as BetaToolUseBlock;
+      const toolBlock = block as ToolUseBlock;
       const rawName = toolBlock.name ?? "unknown";
 
       // Skip internal state management tool — not part of conversation history

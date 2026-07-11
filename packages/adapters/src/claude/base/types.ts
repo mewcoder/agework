@@ -2,11 +2,25 @@
  * Type definitions for AG-UI Claude SDK integration.
  *
  * Only defines types specific to this adapter.
- * For SDK types, import directly from @anthropic-ai/claude-agent-sdk or @anthropic-ai/sdk.
+ * For SDK types, import directly from @anthropic-ai/claude-agent-sdk.
  */
 
 import type { AgentConfig } from "@ag-ui/client";
 import type { Options } from "@anthropic-ai/claude-agent-sdk";
+
+/**
+ * A `tool_use` content block emitted by the Claude API.
+ *
+ * Minimal structural subset we actually read — matches the shape of Anthropic's
+ * `BetaToolUseBlock` (id / name / input / type) without depending on
+ * `@anthropic-ai/sdk` just for this one type.
+ */
+export interface ToolUseBlock {
+  type: "tool_use";
+  id: string;
+  name: string;
+  input: unknown;
+}
 import type {
   RunStartedEvent,
   RunFinishedEvent,

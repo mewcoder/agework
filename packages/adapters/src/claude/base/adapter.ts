@@ -18,9 +18,7 @@ import type {
   SDKUserMessage,
   ModelUsage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
-
-import type { ClaudeAgentAdapterConfig, ProcessedEvent } from "./types";
+import type { ClaudeAgentAdapterConfig, ProcessedEvent, ToolUseBlock } from "./types";
 import {
   ALLOWED_FORWARDED_PROPS,
   STATE_MANAGEMENT_TOOL_NAME,
@@ -967,7 +965,7 @@ export class ClaudeAgentAdapter extends AbstractAgent {
           // Process any tool_use blocks not already seen via streaming
           for (const block of content) {
             if (block.type !== "tool_use") continue;
-            const toolBlock = block as BetaToolUseBlock;
+            const toolBlock = block as ToolUseBlock;
             if (toolBlock.id && processedToolIds.has(toolBlock.id)) continue;
 
             const { updatedState } = handleToolUseBlock(

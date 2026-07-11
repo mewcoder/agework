@@ -6,10 +6,9 @@
 
 import { Subscriber } from "rxjs";
 import { EventType } from "@ag-ui/client";
-import type { BetaToolUseBlock } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import { generateId } from "@agework/shared";
 import { stripMcpPrefix, isStateManagementTool } from "./utils";
-import type { ProcessedEvent } from "./types";
+import type { ProcessedEvent, ToolUseBlock } from "./types";
 
 /**
  * Result from handling a ToolUseBlock.
@@ -26,7 +25,7 @@ export type HandleToolUseResult = {
  * For regular tools, emits TOOL_CALL_START/ARGS events.
  */
 export function handleToolUseBlock(
-  block: BetaToolUseBlock,
+  block: ToolUseBlock,
   parentToolUseId: string | undefined,
   threadId: string,
   runId: string,
