@@ -1387,6 +1387,20 @@ describe("AGUIThreadRuntimeCore", () => {
       runCount++;
 
       if (runCount === 1) {
+        subscriber.onTextMessageStartEvent?.({
+          event: {
+            type: "TEXT_MESSAGE_START",
+            messageId: "srv-segment-1",
+            role: "assistant",
+          },
+        });
+        subscriber.onTextMessageContentEvent?.({
+          event: {
+            type: "TEXT_MESSAGE_CONTENT",
+            messageId: "srv-segment-1",
+            delta: "Thinking…",
+          },
+        });
         subscriber.onRunFinishedEvent?.({
           event: {
             type: "RUN_FINISHED",
@@ -1407,8 +1421,22 @@ describe("AGUIThreadRuntimeCore", () => {
         subscriber.onRunFinalized?.();
         return;
       }
+      // 续接段带新的 server messageId:整条消息必须沿用 run 1 的 id,
+      // 否则 external-store 仓库把同一 parent 下的新旧 id 当成两个分支
+      // (工具栏出现 2/2 切换器)。
+      subscriber.onTextMessageStartEvent?.({
+        event: {
+          type: "TEXT_MESSAGE_START",
+          messageId: "srv-segment-2",
+          role: "assistant",
+        },
+      });
       subscriber.onTextMessageContentEvent?.({
-        event: { type: "TEXT_MESSAGE_CONTENT", delta: "Done." },
+        event: {
+          type: "TEXT_MESSAGE_CONTENT",
+          messageId: "srv-segment-2",
+          delta: "Done.",
+        },
       });
       subscriber.onRunFinishedEvent?.({
         event: {
@@ -1439,11 +1467,22 @@ describe("AGUIThreadRuntimeCore", () => {
       { interruptId: "int-1", status: "resolved", payload: { ok: true } },
     ]);
 
-    const assistant = core
+    const assistants = core
       .getMessages()
-      .find((m) => m.role === "assistant") as ThreadAssistantMessage;
+      .filter((m) => m.role === "assistant") as ThreadAssistantMessage[];
+    // 续接不产生第二条消息,也不改名(改名 = external-store 分支 = 2/2 切换器)
+    expect(assistants).toHaveLength(1);
+    const assistant = assistants[0]!;
+    expect(assistant.id).toBe("srv-segment-1");
     expect(assistant.status).toMatchObject({ type: "complete" });
     expect(assistant.metadata.custom.agui).toBeUndefined();
+    // run 1 的内容留存,续接内容接在后面
+    expect(assistant.content).toContainEqual(
+      expect.objectContaining({ type: "text", text: "Thinking…" }),
+    );
+    expect(assistant.content).toContainEqual(
+      expect.objectContaining({ type: "text", text: "Done." }),
+    );
   });
 
   it("attaches a TOOL_CALL_RESULT for a prior run's tool call to its owning message", async () => {
@@ -1516,22 +1555,59 @@ describe("AGUIThreadRuntimeCore", () => {
     const assistants = core
       .getMessages()
       .filter((m) => m.role === "assistant") as ThreadAssistantMessage[];
-    expect(assistants).toHaveLength(2);
+    // Interrupt resume reuses the same assistant message — no second message.
+    expect(assistants).toHaveLength(1);
 
-    const [first, second] = assistants;
-    const toolPart = first!.content.find((p) => p.type === "tool-call");
+    const assistant = assistants[0]!;
+    // Tool call from the first run is preserved, with its cross-run result.
+    const toolPart = assistant.content.find((p) => p.type === "tool-call");
     expect(toolPart).toMatchObject({
       toolCallId: "call-1",
       toolName: "ask_question",
       result: { answer: "yes" },
       unstable_toolMessageId: "tool-msg-1",
     });
-    expect(second!.content.filter((p) => p.type === "tool-call")).toHaveLength(
-      0,
-    );
-    expect(second!.content).toContainEqual(
+    // Continuation text from the resumed run is in the same message.
+    expect(assistant.content).toContainEqual(
       expect.objectContaining({ type: "text", text: "Done." }),
     );
+  });
+
+  it("late failure after an interrupt outcome does not clobber the interrupted message", async () => {
+    const onError = vi.fn();
+    const runAgent = vi.fn(async (input: any, subscriber: any) => {
+      subscriber.onRunFinishedEvent?.({
+        event: {
+          type: "RUN_FINISHED",
+          runId: input.runId,
+          outcome: {
+            type: "interrupt",
+            interrupts: [{ id: "int-late", reason: "input_required" }],
+          },
+        },
+      });
+      // 底层 HTTP 流在 interrupt 之后异常关闭:runAgent 以 reject 收场。
+      // 这个迟到错误不能打进消息(续接 run 会在同一条消息上续写),
+      // 也不能经 onError 冒泡。
+      throw new Error("stream closed unexpectedly");
+    });
+    const agent = { runAgent } as unknown as HttpAgent;
+
+    const core = createCore(agent, { onError });
+    await core.append(createAppendMessage());
+
+    expect(onError).not.toHaveBeenCalled();
+    const pending = core.getPendingInterrupts();
+    expect(pending?.interrupts).toEqual([
+      expect.objectContaining({ id: "int-late" }),
+    ]);
+    const assistant = core
+      .getMessages()
+      .find((m) => m.role === "assistant") as ThreadAssistantMessage;
+    expect(assistant.status).toMatchObject({
+      type: "requires-action",
+      reason: "interrupt",
+    });
   });
 
   it("falls back to the aggregator when a TOOL_CALL_RESULT has no owning message", async () => {

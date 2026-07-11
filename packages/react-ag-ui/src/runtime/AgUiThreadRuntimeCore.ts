@@ -10,6 +10,7 @@ import type {
   ChatModelRunResult,
   MessageStatus,
   ThreadAssistantMessage,
+  ThreadAssistantMessagePart,
   ThreadHistoryAdapter,
   ThreadMessage,
   ToolCallMessagePart,
@@ -346,11 +347,26 @@ export class AgUiThreadRuntimeCore {
       );
     }
 
-    this.clearPendingInterrupts(pending.messageId);
-    await this.startRun(pending.messageId, this.lastRunConfig, resume);
+    // Reuse the existing assistant message instead of creating a new one.
+    // clearPendingInterrupts would set status to “complete”, but we want
+    // “running” so the resumed run's events continue the same message.
+    this.resetInterruptedAssistant(pending.messageId);
+    await this.startRun(
+      pending.messageId,
+      this.lastRunConfig,
+      resume,
+      undefined,
+      pending.messageId,
+    );
   }
 
-  private clearPendingInterrupts(messageId: string): void {
+  /**
+   * Resets an interrupted assistant message back to “running” and strips the
+   * interrupts metadata, so the resumed run can continue the same message.
+   * Unlike clearPendingInterrupts (which sets status to “complete”), this
+   * keeps the message alive for the continuation.
+   */
+  private resetInterruptedAssistant(messageId: string): void {
     let touched = false;
     this.messages = this.messages.map((message) => {
       if (message.id !== messageId || message.role !== "assistant")
@@ -375,7 +391,7 @@ export class AgUiThreadRuntimeCore {
       }
       return {
         ...assistant,
-        status: { type: "complete" as const, reason: "unknown" as const },
+        status: { type: "running" as const },
         metadata: { ...assistant.metadata, custom: newCustom },
       };
     });
@@ -498,6 +514,7 @@ export class AgUiThreadRuntimeCore {
     runConfig?: RunConfig,
     resume?: AgUiResumeEntry[],
     resumeStream?: ResumeStream,
+    existingAssistantId?: string,
   ): Promise<void> {
     const normalizedRunConfig = runConfig ?? {};
     this.lastRunConfig = normalizedRunConfig;
@@ -506,7 +523,23 @@ export class AgUiThreadRuntimeCore {
 
     this.pendingError = null;
     const assistantParentId = parentId ?? this.messages.at(-1)?.id ?? null;
-    let assistantMessageId: string | undefined;
+
+    // When resuming after an interrupt, reuse the existing assistant message
+    // instead of creating a new placeholder.  Capture the content produced by
+    // the first run so it can be prepended to every aggregator snapshot —
+    // the aggregator resets on RUN_STARTED and would otherwise wipe it.
+    // preserveToolResults in updateAssistantMessage keeps tool-call results
+    // that were patched by applyCrossRunToolResult across this boundary.
+    const previousParts: ThreadAssistantMessagePart[] =
+      existingAssistantId
+        ? [
+            ...((this.messages.find(
+              (m) => m.id === existingAssistantId,
+            ) as ThreadAssistantMessage | undefined)?.content ?? []),
+          ]
+        : [];
+
+    let assistantMessageId: string | undefined = existingAssistantId;
     const ensureAssistant = () => {
       if (assistantMessageId) return assistantMessageId;
       const created = this.insertAssistantPlaceholder();
@@ -516,6 +549,15 @@ export class AgUiThreadRuntimeCore {
     };
 
     const applyUpdate = (update: ChatModelRunResult) => {
+      if (update.content !== undefined && previousParts.length > 0) {
+        update = {
+          ...update,
+          content: [
+            ...previousParts,
+            ...(update.content as ThreadAssistantMessage["content"]),
+          ] as ThreadAssistantMessage["content"],
+        };
+      }
       const resolved = this.updateAssistantMessage(ensureAssistant(), update);
       if (resolved !== assistantMessageId) {
         assistantMessageId = resolved;
@@ -529,11 +571,29 @@ export class AgUiThreadRuntimeCore {
       onServerMessageId: (serverId) => {
         const placeholder = ensureAssistant();
         if (placeholder === serverId) return;
+        // Interrupt 续接段:整条消息沿用 run 1 的稳定 id(server 持久化也以
+        // 首段 id 为准)。此时改名会让 external-store 仓库把同一 parent 下的
+        // 新旧 id 当成两个分支,工具栏出现 2/2 切换器。
+        if (existingAssistantId && !isOptimisticId(placeholder)) return;
         this.reassignAssistantId(placeholder, serverId);
         assistantMessageId = serverId;
       },
     });
-    const dispatch = (event: AgUiEvent) => this.handleEvent(aggregator, event);
+    // Run 以 interrupt outcome 收尾后,底层 HTTP 流可能到用户答复时才关闭;
+    // 这个窗口里迟到的事件(异常断连的 RUN_ERROR、stop 的 RUN_CANCELLED)
+    // 不能再打进这条消息——续接 run 正在同一条消息上续写,会被覆盖。
+    let finishedByInterrupt = false;
+    const dispatch = (event: AgUiEvent) => {
+      if (finishedByInterrupt) return;
+      this.handleEvent(aggregator, event);
+      if (
+        event.type === "RUN_FINISHED" &&
+        (event as { outcome?: { type?: string } }).outcome?.type ===
+          "interrupt"
+      ) {
+        finishedByInterrupt = true;
+      }
+    };
 
     const abortController = new AbortController();
     const abortSignal = abortController.signal;
@@ -581,6 +641,7 @@ export class AgUiThreadRuntimeCore {
           runId,
           logger: this.logger,
           onRunFailed: (error) => {
+            if (finishedByInterrupt) return;
             this.pendingError = error;
             this.onError?.(error);
           },
@@ -597,7 +658,7 @@ export class AgUiThreadRuntimeCore {
         });
       }
     } catch (error) {
-      if (!abortSignal.aborted) {
+      if (!abortSignal.aborted && !finishedByInterrupt) {
         const err = error instanceof Error ? error : new Error(String(error));
         dispatch({ type: "RUN_ERROR", message: err.message });
         this.onError?.(err);
@@ -606,6 +667,10 @@ export class AgUiThreadRuntimeCore {
     } finally {
       this.finishRun(abortController);
     }
+
+    // Interrupt 收尾的 run 到此为止:pendingError / 延迟续接是续接 run 的事,
+    // 迟到 resolve 的 run 1 不能消费它们(实例字段,可能已属于 run 2)。
+    if (finishedByInterrupt) return;
 
     if (this.pendingError) {
       const err = this.pendingError;
@@ -716,9 +781,12 @@ export class AgUiThreadRuntimeCore {
   }
 
   private finishRun(controller: AbortController | null) {
-    if (this.abortController === controller) {
-      this.abortController = null;
-    }
+    // Guard: only the current run's controller should clear state.
+    // If a newer run has taken over (or this run was already finished
+    // early — e.g. RUN_FINISHED{interrupt}), bail out so we never
+    // clobber the newer run's isRunningFlag / abortController.
+    if (this.abortController !== controller) return;
+    this.abortController = null;
     this.setRunning(false);
   }
 
@@ -829,8 +897,10 @@ export class AgUiThreadRuntimeCore {
 
   // The RunAggregator rebuilds the assistant content from stream events only,
   // so a fresh snapshot omits results injected via addToolResult (frontend tool
-  // execution). Carry those results forward so the aggregator never clobbers
-  // them. Results are only ever added in this flow, so preserving is safe.
+  // execution) or applyCrossRunToolResult (interrupt resume).  Carry those
+  // forward so the aggregator never clobbers them.  Results and their
+  // associated metadata (toolMessageId, artifact, isError) are only ever
+  // added — never modified or removed — so preserving is safe.
   private preserveToolResults(
     previous: ThreadAssistantMessage["content"],
     next: ThreadAssistantMessage["content"],
@@ -859,6 +929,10 @@ export class AgUiThreadRuntimeCore {
         result: prior.result,
         ...(prior.artifact !== undefined ? { artifact: prior.artifact } : {}),
         ...(prior.isError !== undefined ? { isError: prior.isError } : {}),
+        ...("unstable_toolMessageId" in prior &&
+        prior.unstable_toolMessageId !== undefined
+          ? { unstable_toolMessageId: prior.unstable_toolMessageId }
+          : {}),
       };
     });
     return changed ? (merged as ThreadAssistantMessage["content"]) : next;
@@ -930,6 +1004,19 @@ export class AgUiThreadRuntimeCore {
           }
         }
         aggregator.handle(event);
+        return;
+      }
+      case "RUN_FINISHED": {
+        aggregator.handle(event);
+        // When the run finishes with an interrupt outcome, the AG-UI run is
+        // done — the user can now submit interrupt responses.  The underlying
+        // HTTP stream may stay open (the worker keeps running, waiting for
+        // the user's reply), so runAgent won't resolve until much later.
+        // Mark the run as not-running immediately so submitInterruptResponses
+        // doesn't reject with "a run is already in progress".
+        if (event.outcome?.type === "interrupt") {
+          this.setRunning(false);
+        }
         return;
       }
       default:

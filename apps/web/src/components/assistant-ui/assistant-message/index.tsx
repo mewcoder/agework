@@ -33,11 +33,12 @@ const STAGE_LABEL: Record<AssistantStage, string> = {
 };
 
 export const AssistantMessage = memo(function AssistantMessage() {
-  // reserves space for action bar and compensates with `-mb` for consistent msg spacing
-  // keeps hovered action bar from shifting layout (autohide doesn't support absolute positioning well)
-  // for pt-[n] use -mb-[n + 6] & min-h-[n + 6] to preserve compensation
+  // Footer 占据自身高度，不使用负 margin 偏移。
+  // 此前用 -mb-7.5 抵消 min-h-7.5 使 footer 不占布局空间，但 turn 之间
+  // 无额外间距（虚拟化绝对定位），导致 footer 内容溢出到下一个 turn 的
+  // UserMessage 区域，造成操作栏与用户消息显示在同一行。
   const ACTION_BAR_PT = "pt-1.5";
-  const ACTION_BAR_HEIGHT = `-mb-7.5 min-h-7.5 ${ACTION_BAR_PT}`;
+  const ACTION_BAR_HEIGHT = `min-h-7.5 ${ACTION_BAR_PT}`;
   const messageStatus = useAuiState((s) =>
     s.message.role === "assistant"
       ? (s.message.status as { type?: string; reason?: string } | undefined)

@@ -333,6 +333,11 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
   ): void {
     const effectiveRunId =
       this.resumedRunIds.get(input.threadId) ?? input.runId;
+    // SDK 的 handleControlRequest 是 fire-and-forget，canUseTool 与消息流并行。
+    // 发 RUN_FINISHED 前必须先关闭 streamMessages 里仍活跃的 text message /
+    // tool call，否则 AG-UI 验证器会拒绝（"Cannot send RUN_FINISHED while
+    // text messages are still active"）。
+    this.closeActiveStreamEvents?.();
     eventSink.next({
       type: EventType.RUN_FINISHED,
       threadId: input.threadId,
@@ -536,6 +541,10 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
       // 已经回答过的请求又变回待处理（"幽灵卡片"）。
       const cleanup = (resultContent: string) => {
         this.emitPendingAction(threadId, null);
+        // cleanup 在答复续接后触发（onResume → RUN_STARTED → resolveAnswers），
+        // 此时已进入新 run，合成的 TOOL_CALL 已在上一个 run 的 RUN_FINISHED
+        // 前关闭。只补 TOOL_CALL_RESULT 即可——验证器对此事件不检查活跃
+        // tool call，RunAggregator 按工具 ID 匹配留存段里的 tool-call part。
         eventSink.next({
           type: EventType.TOOL_CALL_RESULT,
           threadId,
@@ -544,12 +553,6 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
           toolCallId,
           content: resultContent,
           role: "tool",
-        });
-        eventSink.next({
-          type: EventType.TOOL_CALL_END,
-          threadId,
-          ...(currentRunId() ? { runId: currentRunId() } : {}),
-          toolCallId,
         });
       };
       const resolvePending = (result: PermissionResult, resultContent: string) => {
@@ -599,6 +602,15 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
       }
       pendingQuestions.set(threadId, pending);
 
+      // 关闭合成的 AskUserPermission tool call（由本方法发出，不在
+      // streamMessages 的 activeToolCallIds 里，closeActiveStreamEvents
+      // 不会关它）。必须在 RUN_FINISHED 前关闭，否则验证器拒绝。
+      eventSink.next({
+        type: EventType.TOOL_CALL_END,
+        threadId,
+        ...(currentRunId() ? { runId: currentRunId() } : {}),
+        toolCallId,
+      });
       // 先发 interrupt 收尾再置 pendingAction(同通道 FIFO,保证 server
       // 局部保存时 interrupts 已在聚合器里)。
       this.emitInterruptFinish(eventSink, {

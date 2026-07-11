@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useRef, useId } from "react";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon, XIcon } from "lucide-react";
 import type { ToolCallMessagePartStatus } from "@assistant-ui/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,13 +95,15 @@ type QuestionPanelProps = {
   value: string | string[] | undefined;
   onChange: (value: string | string[]) => void;
   disabled: boolean;
+  /** Called after a single-select answer is picked (known option, not "其他"). Parent can use this to auto-advance. */
+  onAutoAdvance?: () => void;
 };
 
 const OTHER_SENTINEL = "__other__";
 
 // ── Single-select panel (RadioGroup) ─────────────────────────────────────────
 
-function SingleSelectPanel({ item, value, onChange, disabled }: QuestionPanelProps) {
+function SingleSelectPanel({ item, value, onChange, disabled, onAutoAdvance }: QuestionPanelProps) {
   const baseId = useId();
   const otherInputRef = useRef<HTMLInputElement>(null);
 
@@ -117,6 +119,7 @@ function SingleSelectPanel({ item, value, onChange, disabled }: QuestionPanelPro
       setTimeout(() => otherInputRef.current?.focus(), 0);
     } else {
       onChange(val);
+      onAutoAdvance?.();
     }
   };
 
@@ -412,9 +415,16 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   const [submitting, setSubmitting] = useState(false);
   const [submittedAnswers, setSubmittedAnswers] = useState<AskUserQuestionAnswers | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
 
+  // part.result 已设置说明答案已通过 TOOL_CALL_RESULT 补回（interrupt
+  // resume 的跨段结果），无论 status 是否还卡在 running（tool-call 是最后
+  // 一个 part 且 message 仍 running 时 toMessagePartStatus 返回 running），
+  // 都不应再显示交互表单。
   const isInteractive =
-    isAwaitingAnswerStatus({ type: statusType }) && !submittedAnswers;
+    part.result === undefined &&
+    isAwaitingAnswerStatus({ type: statusType }) &&
+    !submittedAnswers;
 
   const isAnswered = (q: AskUserQuestionItem) => {
     const a = answers[q.question];
@@ -423,10 +433,12 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   };
 
   const allAnswered = questions.length > 0 && questions.every(isAnswered);
-  const answeredCount = questions.filter(isAnswered).length;
+  const isResolved = (q: AskUserQuestionItem) => isAnswered(q) || skipped.has(q.question);
+  const allResolved = questions.length > 0 && questions.every(isResolved);
+  const resolvedCount = questions.filter(isResolved).length;
 
   const handleSubmit = async () => {
-    if (!conversationId || !allAnswered) return;
+    if (!conversationId || !allResolved) return;
     setSubmitting(true);
     try {
       await submitInterruptAnswers(conversationId, answers);
@@ -435,6 +447,15 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
       console.error("[AskUserQuestion] submit failed:", err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSkip = () => {
+    const q = questions[currentIndex];
+    if (!q) return;
+    setSkipped((prev) => new Set(prev).add(q.question));
+    if (currentIndex < questions.length - 1) {
+      setCurrentIndex(currentIndex + 1);
     }
   };
 
@@ -520,7 +541,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
             disabled={submitting}
           />
         </div>
-        <div className="flex items-center justify-end border-t border-border/60 bg-muted/20 px-4 py-2.5">
+        <div className="flex items-center justify-start border-t border-border/60 bg-muted/20 px-4 py-2.5">
           <Button
             size="sm"
             onClick={() => void handleSubmit()}
@@ -537,7 +558,19 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   const activeValue = questions[currentIndex]?.question ?? questions[0].question;
 
   const footer = (
-    <div className="flex items-center justify-between border-t border-border/60 bg-muted/20 px-4 py-2.5">
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center border-t border-border/60 bg-muted/20 px-4 py-2.5">
+      {/* Left: 确认 button */}
+      <div className="flex items-center justify-start">
+        <Button
+          size="sm"
+          onClick={() => void handleSubmit()}
+          disabled={!allResolved || submitting}
+          className="h-7 px-4 text-xs"
+        >
+          {submitting ? "提交中…" : "确认"}
+        </Button>
+      </div>
+      {/* Center: page number with nav arrows */}
       <div className="flex items-center gap-1">
         <Button
           variant="ghost"
@@ -561,19 +594,8 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
           <ChevronRightIcon className="size-4" />
         </Button>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted-foreground">
-          {answeredCount} / {questions.length} 已回答
-        </span>
-        <Button
-          size="sm"
-          onClick={() => void handleSubmit()}
-          disabled={!allAnswered || submitting}
-          className="h-7 px-4 text-xs"
-        >
-          {submitting ? "提交中…" : "确认"}
-        </Button>
-      </div>
+      {/* Right: spacer to keep center aligned */}
+      <div />
     </div>
   );
 
@@ -583,7 +605,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
         const idx = questions.findIndex((q) => q.question === v);
         if (idx >= 0) setCurrentIndex(idx);
       }}>
-        <div className="border-b border-border/60 px-3 pt-1">
+        <div className="flex items-center justify-between border-b border-border/60 px-3 pt-1">
           <TabsList variant="line" className="h-9">
             {questions.map((q) => (
               <TabsTrigger key={q.question} value={q.question} className="gap-1.5 text-[12px]">
@@ -593,9 +615,23 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
                     <CheckIcon className="size-2.5 stroke-[3]" />
                   </Badge>
                 )}
+                {!isAnswered(q) && skipped.has(q.question) && (
+                  <Badge variant="outline" className="text-muted-foreground size-3.5 rounded-full p-0 flex items-center justify-center">
+                    <MinusIcon className="size-2.5" />
+                  </Badge>
+                )}
               </TabsTrigger>
             ))}
           </TabsList>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleSkip}
+            disabled={submitting}
+            className="text-muted-foreground h-7 shrink-0 px-2 text-xs"
+          >
+            跳过
+          </Button>
         </div>
 
         {questions.map((q) => (
@@ -603,7 +639,20 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
             <QuestionPanel
               item={q}
               value={answers[q.question]}
-              onChange={(v) => setAnswers((prev) => ({ ...prev, [q.question]: v }))}
+              onChange={(v) => {
+                setAnswers((prev) => ({ ...prev, [q.question]: v }));
+                setSkipped((prev) => {
+                  if (!prev.has(q.question)) return prev;
+                  const next = new Set(prev);
+                  next.delete(q.question);
+                  return next;
+                });
+              }}
+              onAutoAdvance={() => {
+                if (currentIndex < questions.length - 1) {
+                  setCurrentIndex(currentIndex + 1);
+                }
+              }}
               disabled={submitting}
             />
           </TabsContent>

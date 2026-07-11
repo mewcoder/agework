@@ -51,22 +51,29 @@ describe("RunAggregator", () => {
   });
 
   it("exposes getSnapshot() as a non-destructive read, independent of emit", () => {
-    const aggregator = createAggregator(false);
+    // metadata.timing 从 Date.now() 派生,两次 getSnapshot 之间跨毫秒时
+    // totalStreamTime/tokensPerSecond 会抖动,冻结时钟让 deep-equal 稳定。
+    vi.useFakeTimers();
+    try {
+      const aggregator = createAggregator(false);
 
-    aggregator.handle({ type: "RUN_STARTED", runId: "r1" } as AgUiEvent);
-    aggregator.handle({
-      type: "TEXT_MESSAGE_CONTENT",
-      delta: "Hello",
-    } as AgUiEvent);
-    aggregator.handle({ type: "RUN_FINISHED", runId: "r1" } as AgUiEvent);
+      aggregator.handle({ type: "RUN_STARTED", runId: "r1" } as AgUiEvent);
+      aggregator.handle({
+        type: "TEXT_MESSAGE_CONTENT",
+        delta: "Hello",
+      } as AgUiEvent);
+      aggregator.handle({ type: "RUN_FINISHED", runId: "r1" } as AgUiEvent);
 
-    const snapshot = aggregator.getSnapshot();
-    expect(snapshot.status?.type).toBe("complete");
-    const textPart = snapshot.content?.find((part) => part.type === "text");
-    expect((textPart as any).text).toBe("Hello");
+      const snapshot = aggregator.getSnapshot();
+      expect(snapshot.status?.type).toBe("complete");
+      const textPart = snapshot.content?.find((part) => part.type === "text");
+      expect((textPart as any).text).toBe("Hello");
 
-    // Calling it again must not mutate state or change the result.
-    expect(aggregator.getSnapshot()).toEqual(snapshot);
+      // Calling it again must not mutate state or change the result.
+      expect(aggregator.getSnapshot()).toEqual(snapshot);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("maps thinking events to reasoning part when enabled", () => {

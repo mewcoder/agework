@@ -126,13 +126,16 @@ describe("ClaudeAgentAdapter 权限请求事件", () => {
     await p1;
   });
 
-  it("回答后会在 TOOL_CALL_END 之前补发 TOOL_CALL_RESULT，内容是用户选的选项", async () => {
+  it("回答后补发 TOOL_CALL_RESULT，内容是用户选的选项", async () => {
     // 这条合成工具调用没有真实的 SDK tool_use，不会像模型自己调用的
     // AskUserQuestion 那样从 SDK 的 tool_result 自动转出 TOOL_CALL_RESULT。
     // 没有这条 RESULT，前端 ToolCallMessagePart 的 result 永远是 undefined，
     // status 会一直跟着所在消息走而不是变成 complete（见 thread-utils.ts
     // 的 findPendingQuestionPart 注释），已经回答过的请求在 resume 重连等
     // 窗口期会被重新判定成"运行中"。
+    //
+    // Terminal model 下 TOOL_CALL_END 在 RUN_FINISHED 前发出（关闭活跃事件），
+    // TOOL_CALL_RESULT 在续接段里补发（cleanup 不再发 END）。
     const threadId = `t-result-${Math.random().toString(36).slice(2)}`;
     const adapter = makeAdapter();
     const { emitted, subscriber } = makeSubscriber();
@@ -142,18 +145,20 @@ describe("ClaudeAgentAdapter 权限请求事件", () => {
     await flush();
 
     const toolCallId = emitted.find((e) => e.type === EventType.TOOL_CALL_START)!.toolCallId;
+    // TOOL_CALL_END 在 RUN_FINISHED 之前
+    const endIdx = emitted.findIndex((e) => e.type === EventType.TOOL_CALL_END);
+    const finishIdx = emitted.findIndex((e) => e.type === EventType.RUN_FINISHED);
+    expect(endIdx).toBeGreaterThanOrEqual(0);
+    expect(finishIdx).toBeGreaterThan(endIdx);
+
     resolveQuestion(threadId, { [lastPendingQuestion(emitted)!]: "允许" });
     await p;
 
-    const resultIdx = emitted.findIndex((e) => e.type === EventType.TOOL_CALL_RESULT);
-    const endIdx = emitted.findIndex((e) => e.type === EventType.TOOL_CALL_END);
-    expect(resultIdx).toBeGreaterThanOrEqual(0);
-    expect(endIdx).toBeGreaterThan(resultIdx);
-
-    const result = emitted[resultIdx];
-    expect(result.toolCallId).toBe(toolCallId);
-    expect(result.content).toBe("允许");
-    expect(result.role).toBe("tool");
+    const result = emitted.find((e) => e.type === EventType.TOOL_CALL_RESULT);
+    expect(result).toBeTruthy();
+    expect(result!.toolCallId).toBe(toolCallId);
+    expect(result!.content).toBe("允许");
+    expect(result!.role).toBe("tool");
   });
 
   it("拒绝/abort 时也会补发 TOOL_CALL_RESULT，内容是拒绝原因", async () => {
@@ -610,7 +615,7 @@ describe("ClaudeAgentAdapter interrupt terminal model", () => {
     await p;
   });
 
-  it("resolveQuestion 带 resumeRunId:先发 RUN_STARTED(新 runId)再补 TOOL_CALL_RESULT/END,且事件归属新 runId", async () => {
+  it("resolveQuestion 带 resumeRunId:先发 RUN_STARTED(新 runId)再补 TOOL_CALL_RESULT,且事件归属新 runId", async () => {
     const adapter = makeAdapter();
     const threadId = "t-int-2";
     const { emitted, subscriber } = makeSubscriber();
@@ -618,6 +623,12 @@ describe("ClaudeAgentAdapter interrupt terminal model", () => {
 
     const p = callPermission(adapter, threadId, "Write", { file_path: "/a" }, ac.signal, subscriber);
     await flush();
+
+    // TOOL_CALL_END 在 RUN_FINISHED 之前发出（terminal model 关闭活跃事件）
+    const endIdx = emitted.findIndex((e) => e.type === EventType.TOOL_CALL_END);
+    const finishIdx = emitted.findIndex((e) => e.type === EventType.RUN_FINISHED);
+    expect(endIdx).toBeGreaterThanOrEqual(0);
+    expect(finishIdx).toBeGreaterThan(endIdx);
 
     const question = lastPendingQuestion(emitted)!;
     const before = emitted.length;
@@ -632,10 +643,10 @@ describe("ClaudeAgentAdapter interrupt terminal model", () => {
       runId: "run-resume-1",
     });
     const result = after.find((e) => e.type === EventType.TOOL_CALL_RESULT);
-    const end = after.find((e) => e.type === EventType.TOOL_CALL_END);
     // 续接段里的补发事件归属新 runId
     expect(result?.runId).toBe("run-resume-1");
-    expect(end?.runId).toBe("run-resume-1");
+    // TOOL_CALL_END 不在续接段（已在 RUN_FINISHED 前发出）
+    expect(after.some((e) => e.type === EventType.TOOL_CALL_END)).toBe(false);
   });
 
   it("resolveQuestion 不带 resumeRunId 时不发 RUN_STARTED(兼容无续接语义的调用方)", async () => {

@@ -377,6 +377,23 @@ export class ClaudeAgentAdapter extends AbstractAgent {
     return runId;
   }
 
+  /**
+   * 关闭当前活跃的流事件（text message / tool call），由 streamMessages
+   * 在运行期间设置，供 business adapter 的 emitInterruptFinish 在发
+   * RUN_FINISHED 之前调用。reasoning 不用关：canUseTool 只在 assistant
+   * message 完整后触发，thinking block 早在自己的 content_block_stop 关闭。
+   *
+   * 背景：SDK 的 handleControlRequest 是 fire-and-forget（不 await），
+   * canUseTool 回调与消息流并行执行。canUseTool 发出 RUN_FINISHED 时，
+   * content_block_stop / message_stop 尚未被 streamMessages 处理，
+   * 导致 AG-UI 验证器拒绝「有活跃 text message 时发 RUN_FINISHED」。
+   * 此回调在 RUN_FINISHED 之前主动关闭活跃事件，规避该时序问题。
+   *
+   * 实例级单槽：依赖「一个 runner 进程只跑一个 run」的部署事实。若将来
+   * adapter 实例复用多 thread，必须改成按 threadId 键控。
+   */
+  protected closeActiveStreamEvents: (() => void) | null = null;
+
   private async translateStream(
     input: RunAgentInput,
     messageStream: AsyncIterable<unknown>,
@@ -666,6 +683,36 @@ export class ClaudeAgentAdapter extends AbstractAgent {
     };
 
     let messageCount = 0;
+
+    // ── Interrupt 时序修复 ──
+    // SDK 的 handleControlRequest 是 fire-and-forget，canUseTool 回调
+    // 与 streamMessages 的 for-await 循环并行执行。canUseTool 发出
+    // RUN_FINISHED 时，content_block_stop / message_stop 可能尚未到达，
+    // 导致 AG-UI 验证器拒绝。此回调让 emitInterruptFinish 在发
+    // RUN_FINISHED 前先关闭活跃的 text message / tool call。
+    const closeActiveStreamEvents = () => {
+      for (const [toolCallId] of activeToolCallIds) {
+        subscriber.next({
+          type: EventType.TOOL_CALL_END,
+          threadId,
+          runId,
+          toolCallId,
+        });
+      }
+      activeToolCallIds.clear();
+      currentToolCallId = null;
+
+      if (hasStreamedText && currentMessageId) {
+        subscriber.next({
+          type: EventType.TEXT_MESSAGE_END,
+          threadId,
+          runId,
+          messageId: currentMessageId,
+        });
+        currentMessageId = null;
+      }
+    };
+    this.closeActiveStreamEvents = closeActiveStreamEvents;
 
     try {
       for await (const rawMessage of messageStream) {
@@ -1173,6 +1220,14 @@ export class ClaudeAgentAdapter extends AbstractAgent {
       }
 
       flushPendingMsg();
+
+      // Clear the interrupt cleanup callback — streamMessages is done,
+      // no more active events to close. Only clear our own reference:
+      // steer/取消后新 run 可能已经装上了自己的回调,旧 run 迟到的 finally
+      // 不能把它清掉(否则新 run 里的问答关不了活跃事件)。
+      if (this.closeActiveStreamEvents === closeActiveStreamEvents) {
+        this.closeActiveStreamEvents = null;
+      }
 
       // Mark session as idle after run completes and run TTL/LRU eviction.
       this.endSessionUse(threadId);
