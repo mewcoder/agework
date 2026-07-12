@@ -19,34 +19,32 @@ import {
   FieldLegend,
   FieldSet,
 } from "@/components/ui/field";
+import { toast } from "sonner";
 import { useSelectionStore } from "@/stores/selection-store";
 import { getInterruptRuntime } from "@/lib/runtime/interrupt-runtime-registry";
-import { isAwaitingAnswerStatus } from "@/components/assistant-ui/thread-utils";
+import {
+  isAwaitingAnswerStatus,
+  type PendingQuestion,
+} from "@/components/assistant-ui/thread-utils";
 
 /**
  * 提交问答答案:走 AG-UI interrupt 协议——把答案作为 resume entry 交给所属
  * runtime 的 unstable_submitInterruptResponses,由它发起携带 resume[] 的新 run,
- * 续接事件经新 SSE 流回。问答单槽,当前只会有一个 open interrupt。
+ * 续接事件经新 SSE 流回。interruptId 来自 getPendingQuestion 的 open 描述,
+ * 这里不再自己扫 pending(待答判定只有那一份)。
  */
 async function submitInterruptAnswers(
   conversationId: string,
+  interruptId: string,
   answers: AskUserQuestionAnswers,
 ): Promise<void> {
   const runtime = getInterruptRuntime(conversationId);
   if (!runtime) {
     throw new Error(`no runtime registered for conversation ${conversationId}`);
   }
-  const pending = runtime.unstable_getPendingInterrupts();
-  if (pending.length === 0) {
-    throw new Error("no pending interrupts to answer");
-  }
-  await runtime.unstable_submitInterruptResponses(
-    pending.map((interrupt) => ({
-      interruptId: interrupt.id,
-      status: "resolved" as const,
-      payload: { answers },
-    })),
-  );
+  await runtime.unstable_submitInterruptResponses([
+    { interruptId, status: "resolved" as const, payload: { answers } },
+  ]);
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -288,11 +286,11 @@ function SubmittedView({
 function PermissionPromptUI({
   item,
   conversationId,
-  statusType,
+  pending,
 }: {
   item: AskUserQuestionItem;
   conversationId: string | null;
-  statusType: ToolCallMessagePartStatus["type"];
+  pending: PendingQuestion | null;
 }) {
   const allowOption = item.options.find((o) => o.label === PERMISSION_ALLOW_LABEL) ?? item.options[0];
   const denyOption = item.options.find((o) => o.label === PERMISSION_DENY_LABEL) ?? item.options[item.options.length - 1];
@@ -302,25 +300,27 @@ function PermissionPromptUI({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState<string | null>(null);
 
-  const awaiting = isAwaitingAnswerStatus({ type: statusType });
-  const isInteractive = awaiting && !submitted;
+  const isInteractive = Boolean(pending) && !submitted;
+  const canSubmit = pending?.phase === "open";
   // composer 上方的 panel 渲染时，提交后直接返回 null——让 panel 消失，
   // 携带 resume[] 的续接 run 会继续推流（TOOL_CALL_END / 后续文本等），
   // 正文里的 AskUserQuestion 拿到 result 后变成 complete，panel 不应再占位。
-  const inPanel = awaiting;
+  const inPanel = Boolean(pending);
   if (!isInteractive && !submitted) return null;
   if (submitted && inPanel) return null;
 
   const handleSubmit = async (answer: string) => {
-    if (!conversationId || submitting) return;
+    if (!conversationId || submitting || pending?.phase !== "open") return;
     setSubmitting(true);
     try {
-      await submitInterruptAnswers(conversationId, {
+      await submitInterruptAnswers(conversationId, pending.interrupt.id, {
         [item.question]: answer,
       });
       setSubmitted(answer);
     } catch (err) {
-      console.error("[PermissionPrompt] submit failed:", err);
+      toast.error(
+        `提交回答失败:${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -358,7 +358,7 @@ function PermissionPromptUI({
             <Button
               size="sm"
               onClick={() => void handleSubmit(PERMISSION_ALWAYS_ALLOW_LABEL)}
-              disabled={submitting}
+              disabled={submitting || !canSubmit}
               className="h-7 px-3 text-xs"
             >
               {alwaysAllowOption.label}
@@ -367,7 +367,7 @@ function PermissionPromptUI({
           <Button
             size="sm"
             onClick={() => void handleSubmit(PERMISSION_ALLOW_LABEL)}
-            disabled={submitting}
+            disabled={submitting || !canSubmit}
             className="h-7 px-3 text-xs"
           >
             {submitting ? (
@@ -381,7 +381,7 @@ function PermissionPromptUI({
             size="sm"
             variant="outline"
             onClick={() => void handleSubmit(PERMISSION_DENY_LABEL)}
-            disabled={submitting}
+            disabled={submitting || !canSubmit}
             className="h-7 px-3 text-xs"
           >
             {denyOption.label}
@@ -394,7 +394,14 @@ function PermissionPromptUI({
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
-export function AskUserQuestionUI({ part }: { part: ToolPart }) {
+export function AskUserQuestionUI({
+  part,
+  pending,
+}: {
+  part: ToolPart;
+  /** 待答描述(仅 composer 上方 panel 传入);缺席 = 历史渲染,永不交互。 */
+  pending?: PendingQuestion | null;
+}) {
   const conversationId = useSelectionStore((s) => s.selectedConversationId);
   const statusType = part.status?.type ?? "complete";
 
@@ -417,14 +424,11 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
 
-  // part.result 已设置说明答案已通过 TOOL_CALL_RESULT 补回（interrupt
-  // resume 的跨段结果），无论 status 是否还卡在 running（tool-call 是最后
-  // 一个 part 且 message 仍 running 时 toMessagePartStatus 返回 running），
-  // 都不应再显示交互表单。
-  const isInteractive =
-    part.result === undefined &&
-    isAwaitingAnswerStatus({ type: statusType }) &&
-    !submittedAnswers;
+  // 交互性只由 pending 描述决定(getPendingQuestion 已排除 result 回填 /
+  // 非待答态);streaming 窗口期表单可填但不可提交——interrupt id 要等
+  // RUN_FINISHED{interrupt} 写进 metadata 才存在。
+  const isInteractive = Boolean(pending) && !submittedAnswers;
+  const canSubmit = pending?.phase === "open";
 
   const isAnswered = (q: AskUserQuestionItem) => {
     const a = answers[q.question];
@@ -438,13 +442,15 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
   const resolvedCount = questions.filter(isResolved).length;
 
   const handleSubmit = async () => {
-    if (!conversationId || !allResolved) return;
+    if (!conversationId || !allResolved || pending?.phase !== "open") return;
     setSubmitting(true);
     try {
-      await submitInterruptAnswers(conversationId, answers);
+      await submitInterruptAnswers(conversationId, pending.interrupt.id, answers);
       setSubmittedAnswers(answers);
     } catch (err) {
-      console.error("[AskUserQuestion] submit failed:", err);
+      toast.error(
+        `提交回答失败:${err instanceof Error ? err.message : String(err)}`,
+      );
     } finally {
       setSubmitting(false);
     }
@@ -461,11 +467,11 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
 
   const visibleSubmittedAnswers = submittedAnswers ?? input.answers ?? null;
 
-  // composer 上方 panel 渲染时（待答态），提交后直接返回 null——
+  // composer 上方 panel 渲染时（pending 传入），提交后直接返回 null——
   // 让 panel 消失，携带 resume[] 的续接 run 继续推流，正文里的
   // AskUserQuestion 拿到 result 后变成 complete，panel 不应再占位。
-  // 历史消息（非待答）不归 panel 管。
-  const inPanel = isAwaitingAnswerStatus({ type: statusType });
+  // 历史消息（无 pending）不归 panel 管。
+  const inPanel = Boolean(pending);
   if (submittedAnswers && inPanel) return null;
 
   // 历史/已结束态（非 running）且没有任何可见答案时，fallback 到 ToolFallback
@@ -506,7 +512,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
       <PermissionPromptUI
         item={input.questions[0]}
         conversationId={conversationId ?? null}
-        statusType={statusType}
+        pending={pending ?? null}
       />
     );
   }
@@ -545,7 +551,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
           <Button
             size="sm"
             onClick={() => void handleSubmit()}
-            disabled={!allAnswered || submitting}
+            disabled={!allAnswered || submitting || !canSubmit}
             className="h-7 px-4 text-xs"
           >
             {submitting ? "提交中…" : "确认"}
@@ -564,7 +570,7 @@ export function AskUserQuestionUI({ part }: { part: ToolPart }) {
         <Button
           size="sm"
           onClick={() => void handleSubmit()}
-          disabled={!allResolved || submitting}
+          disabled={!allResolved || submitting || !canSubmit}
           className="h-7 px-4 text-xs"
         >
           {submitting ? "提交中…" : "确认"}

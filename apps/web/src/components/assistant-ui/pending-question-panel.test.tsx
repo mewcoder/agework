@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { AskUserQuestionCompact } from "./pending-question-panel";
 import { PERMISSION_ALLOW_LABEL, PERMISSION_DENY_LABEL } from "./tools/ask-user-question";
-import { findPendingQuestionPart } from "./thread-utils";
+import { getPendingQuestion } from "./thread-utils";
 
 const mockApiPost = vi.fn();
 const mockSelectedConversationId = vi.fn(() => "conv-1");
@@ -54,7 +54,7 @@ describe("AskUserQuestionCompact", () => {
   });
 });
 
-describe("findPendingQuestionPart", () => {
+describe("getPendingQuestion(窗口期扫描分支)", () => {
   function assistantMessage(parts: unknown[]) {
     return { role: "assistant", parts };
   }
@@ -69,17 +69,16 @@ describe("findPendingQuestionPart", () => {
   it("跳过已回答（status 不是 running）的 part", () => {
     const messages = [assistantMessage([makeAnsweredPart("tc-already-answered")])];
 
-    const pending = findPendingQuestionPart(messages);
-
-    expect(pending).toBeNull();
+    expect(getPendingQuestion(messages)).toBeNull();
   });
 
-  it("找到真正待回答的 running part", () => {
+  it("找到真正待回答的 running part(窗口期 → streaming)", () => {
     const messages = [assistantMessage([makePart("tc-real-pending")])];
 
-    const pending = findPendingQuestionPart(messages);
+    const pending = getPendingQuestion(messages);
 
-    expect(pending?.toolCallId).toBe("tc-real-pending");
+    expect(pending?.phase).toBe("streaming");
+    expect(pending?.part.toolCallId).toBe("tc-real-pending");
   });
 
   it("一条消息里第一个已回答、第二个未回答时，找到第二个", () => {
@@ -90,8 +89,8 @@ describe("findPendingQuestionPart", () => {
       ]),
     ];
 
-    const pending = findPendingQuestionPart(messages);
+    const pending = getPendingQuestion(messages);
 
-    expect(pending?.toolCallId).toBe("tc-real-pending");
+    expect(pending?.part.toolCallId).toBe("tc-real-pending");
   });
 });

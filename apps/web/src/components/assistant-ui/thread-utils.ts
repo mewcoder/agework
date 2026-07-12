@@ -2,6 +2,10 @@ import {
   type ToolCallMessagePart,
   type ToolCallMessagePartStatus,
 } from "@assistant-ui/react";
+import {
+  readAgUiCustomMetadata,
+  type AgUiInterrupt,
+} from "@assistant-ui/react-ag-ui";
 
 /** Tool-call part with runtime status (from MessagePartState) */
 export type ToolCallPart = ToolCallMessagePart & {
@@ -71,11 +75,75 @@ export function isAwaitingAnswerStatus(
   return status?.type === "running" || status?.type === "requires-action";
 }
 
+type ThreadMessageLike = {
+  role: string;
+  parts?: unknown;
+  status?: { type?: string; reason?: string };
+  metadata?: unknown;
+};
+
 /**
- * 扫描消息列表找出待回答的 AskUserQuestion/AskUserPermission part。
- * 后端串行化后同一时刻只有 1 个待答 part（权限审批或模型主动问答）。
+ * 待答问题的唯一描述。phase 对应问题挂起的两个可观察阶段:
+ *  - streaming:TOOL_CALL_START/ARGS 已到、RUN_FINISHED{interrupt} 未到的窗口期。
+ *    part 已存在(题目可渲染),但 interrupt id 还没写进消息 metadata——
+ *    物理上无法提交,表单可填、提交必须禁用。
+ *  - open:消息以 requires-action(reason interrupt) 收尾,metadata 里有带 id
+ *    的 interrupt(权威状态),可提交。
+ * 回答完成后 part.result 被跨段回填,不再命中任何 phase。
  */
-export function findPendingQuestionPart(
+export type PendingQuestion =
+  | { phase: "streaming"; part: ToolCallPart }
+  | { phase: "open"; part: ToolCallPart; interrupt: AgUiInterrupt };
+
+/**
+ * 扫描消息列表得到待答问题描述;panel / 答题 UI / 提交全部只吃这一份,
+ * 不允许再各自扫 part 形状或 metadata(两套判据会在窗口期互相矛盾)。
+ * 后端串行化保证同一时刻至多 1 个待答问题。
+ */
+export function getPendingQuestion(
+  messages: readonly ThreadMessageLike[],
+): PendingQuestion | null {
+  const message = lastAssistantMessage(messages);
+  if (
+    message?.status?.type === "requires-action" &&
+    message.status.reason === "interrupt"
+  ) {
+    const interrupt = readAgUiCustomMetadata(message.metadata)?.interrupts?.[0];
+    if (interrupt) {
+      const parts = Array.isArray(message.parts) ? message.parts : [];
+      const candidates = parts.filter(isPendingQuestionToolPart);
+      const part =
+        candidates.find((p) => p.toolCallId === interrupt.toolCallId) ??
+        candidates[candidates.length - 1];
+      if (part) return { phase: "open", part, interrupt };
+      // interrupt 挂着但 part 已回填/缺失:落到下面的扫描,自然得 null。
+    }
+  }
+  const part = findPendingQuestionPart(messages);
+  return part ? { phase: "streaming", part } : null;
+}
+
+function lastAssistantMessage(
+  messages: readonly ThreadMessageLike[],
+): ThreadMessageLike | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") return messages[i];
+  }
+  return undefined;
+}
+
+function isPendingQuestionToolPart(part: unknown): part is ToolCallPart {
+  const p = part as ToolCallPart | undefined;
+  return (
+    !!p &&
+    p.type === "tool-call" &&
+    (p.toolName === "AskUserQuestion" || p.toolName === "AskUserPermission") &&
+    p.result === undefined
+  );
+}
+
+/** 扫描待回答的问答 part(内部:getPendingQuestion 的窗口期分支)。 */
+function findPendingQuestionPart(
   messages: readonly { role: string; parts?: unknown }[],
 ): ToolCallPart | null {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -85,10 +153,9 @@ export function findPendingQuestionPart(
     if (!Array.isArray(parts)) continue;
     for (let j = parts.length - 1; j >= 0; j--) {
       const part = parts[j] as ToolCallPart | undefined;
-      if (!part || part.type !== "tool-call") continue;
-      if (part.toolName !== "AskUserQuestion" && part.toolName !== "AskUserPermission") continue;
+      if (!part || !isPendingQuestionToolPart(part)) continue;
       const status = part.status as ToolCallMessagePartStatus | undefined;
-      if (part.result === undefined && isAwaitingAnswerStatus(status)) {
+      if (isAwaitingAnswerStatus(status)) {
         return part;
       }
     }

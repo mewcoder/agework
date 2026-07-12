@@ -20,7 +20,7 @@
 
 问答走 AG-UI interrupt terminal model(决策见 [server run ADR-0001](../server/src/run/docs/adr/0001-question-interrupt-terminal-model.md)):问题挂起时 AG-UI run 以 `requires-action`(reason interrupt)结束,interrupts 存在消息 `metadata.custom.agui.interrupts`;回答 = 携带 `resume[]` 的新 run。
 
-- 待答判定:`thread-utils.ts` 的 `isAwaitingAnswerStatus` + `findPendingQuestionPart`,不再有独立的重连/标记机制。
+- 待答判定:`thread-utils.ts` 的 `getPendingQuestion` 是**唯一** selector,输出 `PendingQuestion`(`streaming` = 窗口期,part 已在、interrupt id 未到,表单可填提交禁用;`open` = metadata interrupt 已到,可提交)。panel / 答题 UI / 提交全部只吃它,禁止再各自扫 part 形状或 metadata——两套判据会在窗口期互相矛盾。提交携带 `pending.interrupt.id`,失败走 toast 不许 console 吞。
 - 提交:`unstable_submitInterruptResponses`,经 `lib/runtime/interrupt-runtime-registry.ts` 按 conversationId 取到所属 runtime(useRemoteThreadListRuntime 会包掉 per-thread runtime,unstable 扩展方法拿不到,registry 是这条缝的唯一过桥)。
 - 刷新页面 = 普通历史加载;答完 = 普通新 run。没有 409 特判、没有手动重连。
 
@@ -28,7 +28,7 @@
 
 `["conversations", ...]` react-query 缓存的写入只走 `src/lib/conversations-cache.ts` 导出的语义操作(合并轮询状态 / 应用运行态 patch / 乐观写+延迟校准 / 插入新会话)。**禁止在别处直接 `setQueryData` 这份缓存**——resume 收拢前 thread-history-adapter 私藏过一份写入实现,别再出现第二次。
 
-「终态 outcome → 会话运行态」的**推导规则**同样只有一份:`run-session-status-rules.ts` 的 `conversationStateFromRunFinished` / `RUN_STARTED_CONVERSATION_STATE` / `runStatusFromSnapshot`,live(agent-middleware)与 resume 都从这里取 patch,交给 `setConversationRunState` 写入。**问答/工具审批挂起 = running + pendingUserAction=question**(镜像后端 run-status.policy:requires_action 不投影 runStatus)——前端任何路径不得为 interrupt outcome 写 idle,否则乐观写会和轮询互相翻转;run 启动(含答题 resume run)写 running 并清掉待答标记。middleware 不允许再出现 inline 状态映射。
+「终态 outcome → 会话运行态」的**推导规则**同样只有一份:`run-session-status-rules.ts` 的 `conversationStateFromRunFinished` / `RUN_STARTED_CONVERSATION_STATE` / `runStatusFromSnapshot`,live(agent-middleware)与 resume 都从这里取 patch,交给 `setConversationRunState` 写入。**问答/工具审批挂起 = running + pendingUserAction=question**(镜像后端 run-status.policy:requires_action 不投影 runStatus)。`pendingUserAction`(`"question" | null`)是「有待处理 HITL」的**粗粒度存在标志,不是种类判别**——Codex 命令/文件/权限审批也复用 `"question"` 这个值;具体是问答还是审批、有哪些选项,由消息上的 `AgUiInterrupt`(reason/responseSchema/metadata)承担,sidebar/派生规则不为种类分叉——前端任何路径不得为 interrupt outcome 写 idle,否则乐观写会和轮询互相翻转;run 启动(含答题 resume run)写 running 并清掉待答标记。middleware 不允许再出现 inline 状态映射。
 
 stop 场景的时序语义见 [ADR-0001](docs/adr/0001-stop-optimistic-status-delayed-revalidate.md)。
 

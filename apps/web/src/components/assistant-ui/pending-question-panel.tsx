@@ -5,14 +5,14 @@ import { useAuiState } from "@assistant-ui/react";
 import { ShieldCheckIcon, MessageCircleQuestionIcon } from "lucide-react";
 import { AskUserQuestionUI } from "@/components/assistant-ui/tools/ask-user-question";
 import {
-  findPendingQuestionPart,
+  getPendingQuestion,
   type ToolCallPart,
 } from "@/components/assistant-ui/thread-utils";
 
 // ── Panel ────────────────────────────────────────────────────────────────────
 
 export function PendingQuestionPanel() {
-  const pending = useAuiState((s) => findPendingQuestionPart(s.thread.messages));
+  const pending = useAuiState((s) => getPendingQuestion(s.thread.messages));
 
   // 卡片出现时自动滚到底部，让用户立刻看到。
   const hasPendingRef = useRef(false);
@@ -28,7 +28,7 @@ export function PendingQuestionPanel() {
   }, [pending]);
 
   if (!pending) return null;
-  return <AskUserQuestionUI part={pending} />;
+  return <AskUserQuestionUI part={pending.part} pending={pending} />;
 }
 
 // ── 正文里的折叠简化态 ──────────────────────────────────────────────────────
