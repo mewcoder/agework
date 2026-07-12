@@ -85,6 +85,8 @@ export type RunConfig = {
   claudeExecutablePath?: string;
   /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
   codexExecutablePath?: string;
+  /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  opencodeExecutablePath?: string;
 };
 
 /**
@@ -121,7 +123,15 @@ export type CommandPayload =
       type: "approval_resolved";
       commandId: string;
       conversationId: string;
-      answers: Record<string, string | string[]>;
+      /**
+       * Provider-agnostic opaque payload（【决策2】 generalized resume contract）.
+       *
+       * - Claude 问答: `{ answers: Record<string, string | string[]> }`
+       * - Codex 命令/文件审批: `{ decision: "accept"|"acceptForSession"|"decline"|"cancel" }`
+       * - Codex 权限审批: `{ permissions: ..., scope: "turn"|"session" }`
+       * - 取消: `{ status: "cancelled" }`
+       */
+      payload: unknown;
       /** 续接 run 的 AG-UI runId:adapter 解开挂起后用它发 RUN_STARTED,把后续事件归入新 run。 */
       resumeRunId?: string;
     }

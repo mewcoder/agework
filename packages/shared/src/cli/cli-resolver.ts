@@ -37,25 +37,30 @@ export function detectEnvConfig(): RuntimeEnvConfig {
   return {
     claude: detectAgent("claude"),
     codex: detectAgent("codex"),
+    opencode: detectAgent("opencode"),
     detectedAt: new Date().toISOString(),
   };
 }
 
-function detectAgent(agentType: "claude" | "codex"): AgentDetectedEnv {
+function detectAgent(agentType: AgentType): AgentDetectedEnv {
   const executablePath = resolveCliPath(agentType);
   const version = executablePath ? getVersion(executablePath) : null;
   return { executablePath, version };
 }
 
 /** PATH 查找 + 已知位置搜索，返回第一个找到的路径。 */
-function resolveCliPath(agentType: "claude" | "codex"): string | null {
+function resolveCliPath(agentType: AgentType): string | null {
   // 1. PATH 查找（which / where）
   const pathResult = findInPath(agentType);
   if (pathResult) return pathResult;
 
   // 2. 已知位置搜索
   const known =
-    agentType === "claude" ? claudeKnownLocations() : codexKnownLocations();
+    agentType === "claude"
+      ? claudeKnownLocations()
+      : agentType === "codex"
+        ? codexKnownLocations()
+        : opencodeKnownLocations();
   return known[0] ?? null;
 }
 
@@ -227,8 +232,49 @@ function codexKnownLocations(): string[] {
   return paths.filter(isExistingFile);
 }
 
+/** OpenCode CLI 已知安装位置。 */
+function opencodeKnownLocations(): string[] {
+  const home = homedir();
+  const isWindows = process.platform === "win32";
+  const paths: string[] = [];
+
+  if (isWindows) {
+    paths.push(join(home, ".opencode", "bin", "opencode.exe"));
+    paths.push(join(home, ".local", "bin", "opencode.exe"));
+    if (process.env.APPDATA) {
+      paths.push(join(process.env.APPDATA, "npm", "opencode.cmd"));
+      paths.push(join(process.env.APPDATA, "npm", "opencode.exe"));
+    }
+    paths.push(join("C:\\ProgramData", "chocolatey", "bin", "opencode.exe"));
+    paths.push(join(home, "scoop", "shims", "opencode.exe"));
+    paths.push(join(home, "scoop", "shims", "opencode.cmd"));
+  }
+
+  // opencode 官方安装脚本默认落到 ~/.opencode/bin。
+  paths.push(join(home, ".opencode", "bin", "opencode"));
+  paths.push(join(home, ".local", "bin", "opencode"));
+  paths.push(join(home, ".volta", "bin", "opencode"));
+  paths.push("/usr/local/bin/opencode");
+  paths.push("/opt/homebrew/bin/opencode");
+  paths.push(join(home, ".npm-global", "bin", "opencode"));
+
+  if (process.env.npm_config_prefix) {
+    paths.push(join(process.env.npm_config_prefix, "bin", "opencode"));
+  }
+
+  return paths.filter(isExistingFile);
+}
+
 /** 返回某个 agent 类型对应的、可通过 npm 安装的独立 CLI 包名
  *  （区别于内嵌调用用的 SDK 包，如 `@anthropic-ai/claude-agent-sdk`）。 */
 export function resolveCliPackageName(agentType: AgentType): string {
-  return agentType === "claude" ? "@anthropic-ai/claude-code" : "@openai/codex";
+  switch (agentType) {
+    case "claude":
+      return "@anthropic-ai/claude-code";
+    case "opencode":
+      return "opencode-ai";
+    case "codex":
+    default:
+      return "@openai/codex";
+  }
 }

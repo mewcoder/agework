@@ -293,6 +293,9 @@ export class WorkerProvisioner {
     if (runConfig.codexExecutablePath) {
       env.AGEWORK_CODEX_CLI_PATH = runConfig.codexExecutablePath;
     }
+    if (runConfig.opencodeExecutablePath) {
+      env.AGEWORK_OPENCODE_CLI_PATH = runConfig.opencodeExecutablePath;
+    }
     return env;
   }
 }

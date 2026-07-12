@@ -44,24 +44,35 @@ export function ModelProviderPanel({
     useAdminModelProviders("claude");
   const { data: codexModelProviders = [], isLoading: isLoadingCodex } =
     useAdminModelProviders("codex");
+  const { data: opencodeModelProviders = [], isLoading: isLoadingOpencode } =
+    useAdminModelProviders("opencode");
   const createClaudeModelProvider = useCreateModelProvider("claude");
   const createCodexModelProvider = useCreateModelProvider("codex");
+  const createOpencodeModelProvider = useCreateModelProvider("opencode");
   const updateClaudeModelProvider = useUpdateModelProvider("claude");
   const updateCodexModelProvider = useUpdateModelProvider("codex");
+  const updateOpencodeModelProvider = useUpdateModelProvider("opencode");
   const setClaudeModelProviderEnabled = useSetModelProviderEnabled("claude");
   const setCodexModelProviderEnabled = useSetModelProviderEnabled("codex");
+  const setOpencodeModelProviderEnabled = useSetModelProviderEnabled("opencode");
   const deleteClaudeModelProvider = useDeleteModelProvider("claude");
   const deleteCodexModelProvider = useDeleteModelProvider("codex");
+  const deleteOpencodeModelProvider = useDeleteModelProvider("opencode");
 
   const formDialog = useFormDialog<ModelProvider>();
   const [dialogAgent, setDialogAgent] = useState<ManagedAgent>("claude");
   const deleteDialog = useConfirmDelete<ModelProvider>();
 
   const modelProviders = useMemo(
-    () => [...claudeModelProviders, ...codexModelProviders].sort(compareModelProviders),
-    [claudeModelProviders, codexModelProviders],
+    () =>
+      [
+        ...claudeModelProviders,
+        ...codexModelProviders,
+        ...opencodeModelProviders,
+      ].sort(compareModelProviders),
+    [claudeModelProviders, codexModelProviders, opencodeModelProviders],
   );
-  const isLoading = isLoadingClaude || isLoadingCodex;
+  const isLoading = isLoadingClaude || isLoadingCodex || isLoadingOpencode;
 
   function openCreateDialog() {
     setDialogAgent("claude");
@@ -75,19 +86,35 @@ export function ModelProviderPanel({
   }
 
   function createMutationFor(agent: ManagedAgent) {
-    return agent === "claude" ? createClaudeModelProvider : createCodexModelProvider;
+    return agent === "claude"
+      ? createClaudeModelProvider
+      : agent === "opencode"
+        ? createOpencodeModelProvider
+        : createCodexModelProvider;
   }
 
   function updateMutationFor(agent: ManagedAgent) {
-    return agent === "claude" ? updateClaudeModelProvider : updateCodexModelProvider;
+    return agent === "claude"
+      ? updateClaudeModelProvider
+      : agent === "opencode"
+        ? updateOpencodeModelProvider
+        : updateCodexModelProvider;
   }
 
   function deleteMutationFor(agentType: string) {
-    return agentType === "claude" ? deleteClaudeModelProvider : deleteCodexModelProvider;
+    return agentType === "claude"
+      ? deleteClaudeModelProvider
+      : agentType === "opencode"
+        ? deleteOpencodeModelProvider
+        : deleteCodexModelProvider;
   }
 
   function setEnabledMutationFor(agentType: string) {
-    return agentType === "claude" ? setClaudeModelProviderEnabled : setCodexModelProviderEnabled;
+    return agentType === "claude"
+      ? setClaudeModelProviderEnabled
+      : agentType === "opencode"
+        ? setOpencodeModelProviderEnabled
+        : setCodexModelProviderEnabled;
   }
 
   async function handleSave(

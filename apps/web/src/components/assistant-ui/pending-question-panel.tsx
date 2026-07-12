@@ -1,9 +1,13 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAuiState } from "@assistant-ui/react";
 import { ShieldCheckIcon, MessageCircleQuestionIcon } from "lucide-react";
-import { AskUserQuestionUI } from "@/components/assistant-ui/tools/ask-user-question";
+import {
+  AskUserQuestionUI,
+  ConfirmationApprovalUI,
+  AcpPermissionUI,
+} from "@/components/assistant-ui/tools/ask-user-question";
 import {
   getPendingQuestion,
   type ToolCallPart,
@@ -12,7 +16,10 @@ import {
 // ── Panel ────────────────────────────────────────────────────────────────────
 
 export function PendingQuestionPanel() {
-  const pending = useAuiState((s) => getPendingQuestion(s.thread.messages));
+  // 选原始 messages(引用稳定,store 状态不变时不会触发重渲染),
+  // 再用 useMemo 派生 pending——避免 selector 内返回新对象导致无限循环。
+  const messages = useAuiState((s) => s.thread.messages);
+  const pending = useMemo(() => getPendingQuestion(messages), [messages]);
 
   // 卡片出现时自动滚到底部，让用户立刻看到。
   const hasPendingRef = useRef(false);
@@ -28,6 +35,21 @@ export function PendingQuestionPanel() {
   }, [pending]);
 
   if (!pending) return null;
+
+  // Confirmation interrupt (Codex command/file approval) — 不依赖 part,
+  // 数据全部来自 pending.interrupt.metadata。
+  if ("confirmation" in pending && pending.confirmation) {
+    return <ConfirmationApprovalUI pending={pending} />;
+  }
+
+  // ACP permission interrupt (generic ACP agent, e.g. OpenCode).
+  if ("acpPermission" in pending && pending.acpPermission) {
+    return <AcpPermissionUI pending={pending} />;
+  }
+
+  // part 可能为 null (confirmation 已在上面处理,这里 part 一定存在)
+  if (!pending.part) return null;
+
   return <AskUserQuestionUI part={pending.part} pending={pending} />;
 }
 

@@ -139,7 +139,7 @@ export class ModelProviderService {
 
     const cliPaths = await this.runtimeService.getResolvedCliPaths(runtimeId);
     if (!cliPaths) return false;
-    const resolvedPath = cliPaths[agentType as "claude" | "codex"];
+    const resolvedPath = cliPaths[agentType];
     return !!resolvedPath;
   }
 

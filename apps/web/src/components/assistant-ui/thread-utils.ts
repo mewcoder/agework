@@ -90,10 +90,18 @@ type ThreadMessageLike = {
  *  - open:消息以 requires-action(reason interrupt) 收尾,metadata 里有带 id
  *    的 interrupt(权威状态),可提交。
  * 回答完成后 part.result 被跨段回填,不再命中任何 phase。
+ *
+ * confirmation 变体:Codex app-server 的命令执行/文件变更审批
+ * (interrupt.reason === "confirmation")。与 AskUserQuestion 的 input_required
+ * 不同,审批的 toolCallId 是 app-server raw itemId(如 exec-xxx),
+ * 与 TOOL_CALL_START 的 `${runId}-${itemId}` 格式不同,part 可能为 null
+ * (窗口期)或通过后缀匹配找到。
  */
 export type PendingQuestion =
   | { phase: "streaming"; part: ToolCallPart }
-  | { phase: "open"; part: ToolCallPart; interrupt: AgUiInterrupt };
+  | { phase: "open"; part: ToolCallPart; interrupt: AgUiInterrupt }
+  | { phase: "open"; part: ToolCallPart | null; interrupt: AgUiInterrupt; confirmation: true }
+  | { phase: "open"; part: ToolCallPart | null; interrupt: AgUiInterrupt; acpPermission: true };
 
 /**
  * 扫描消息列表得到待答问题描述;panel / 答题 UI / 提交全部只吃这一份,
@@ -110,6 +118,20 @@ export function getPendingQuestion(
   ) {
     const interrupt = readAgUiCustomMetadata(message.metadata)?.interrupts?.[0];
     if (interrupt) {
+      // Confirmation interrupt (command/file approval from Codex app-server)
+      if (interrupt.reason === "confirmation") {
+        const parts = Array.isArray(message.parts) ? message.parts : [];
+        const part = findConfirmationToolPart(parts, interrupt.toolCallId);
+        return { phase: "open", part, interrupt, confirmation: true };
+      }
+
+      // ACP permission interrupt (generic ACP agent, e.g. OpenCode) — 数据全在
+      // metadata.options,无 tool part。
+      if (interrupt.reason === "approval_required") {
+        return { phase: "open", part: null, interrupt, acpPermission: true };
+      }
+
+      // Regular AskUserQuestion / AskUserPermission interrupt
       const parts = Array.isArray(message.parts) ? message.parts : [];
       const candidates = parts.filter(isPendingQuestionToolPart);
       const part =
@@ -159,6 +181,27 @@ function findPendingQuestionPart(
         return part;
       }
     }
+  }
+  return null;
+}
+
+/**
+ * 匹配 confirmation interrupt 对应的 tool-call part。
+ *
+ * interrupt.toolCallId 是 app-server raw itemId(如 `exec-xxx`),
+ * 而 part.toolCallId 是 `${runId}-${itemId}`(如 `019f...-exec-xxx`)。
+ * 通过后缀匹配找到对应的 part;找不到时返回 null(part 可能尚未到达)。
+ */
+function findConfirmationToolPart(
+  parts: readonly unknown[],
+  interruptToolCallId?: string,
+): ToolCallPart | null {
+  if (!interruptToolCallId) return null;
+  const suffix = `-${interruptToolCallId}`;
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i] as ToolCallPart | undefined;
+    if (!p || p.type !== "tool-call" || p.result !== undefined) continue;
+    if (p.toolCallId?.endsWith(suffix)) return p;
   }
   return null;
 }

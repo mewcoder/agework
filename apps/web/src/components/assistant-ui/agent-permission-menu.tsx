@@ -143,6 +143,11 @@ export function AgentPermissionMenu() {
       claudePermissionMode === "bypassPermissions") ||
     (selectedAgentType === "codex" && codexPermissionMode === "full-access");
 
+  // OpenCode(及其它 ACP agent)没有可配置的权限模式,不渲染该菜单。
+  if (selectedAgentType !== "claude" && selectedAgentType !== "codex") {
+    return null;
+  }
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger render={

@@ -193,6 +193,7 @@ export class AgentService {
         cliPaths = {};
         if (resolved.claude) cliPaths.claude = resolved.claude;
         if (resolved.codex) cliPaths.codex = resolved.codex;
+        if (resolved.opencode) cliPaths.opencode = resolved.opencode;
       }
     }
 

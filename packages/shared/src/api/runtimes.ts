@@ -17,6 +17,7 @@ export type AgentDetectedEnv = {
 export type RuntimeEnvConfig = {
   claude: AgentDetectedEnv;
   codex: AgentDetectedEnv;
+  opencode: AgentDetectedEnv;
   /** 检测时间戳（ISO 8601），供前端判断新鲜度。 */
   detectedAt: string;
 };
@@ -25,6 +26,7 @@ export type RuntimeEnvConfig = {
 export type RuntimeEnvConfigOverride = {
   claude?: { executablePath: string };
   codex?: { executablePath: string };
+  opencode?: { executablePath: string };
 };
 
 /** resolved CLI path 的来源标记，实时派生不持久化（见 ADR-0002）。 */
@@ -46,6 +48,7 @@ export type AgentEnvStatus = {
 export type RuntimeEnvStatus = {
   claude: AgentEnvStatus;
   codex: AgentEnvStatus;
+  opencode: AgentEnvStatus;
   /** 检测时间戳（ISO 8601）。 */
   detectedAt: string | null;
 };

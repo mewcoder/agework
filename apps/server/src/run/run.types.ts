@@ -4,7 +4,7 @@ import type { AssistantUserMessage } from "../conversation/conversation.types";
 import type { WorkspaceRunContext } from "../workspace/workspace.types";
 
 /** Local runtime 的 CLI 可执行文件路径。 */
-export type RunCliPaths = { claude?: string; codex?: string };
+export type RunCliPaths = { claude?: string; codex?: string; opencode?: string };
 
 /**
  * RunService.start 的唯一入参：意图级。agent 层只负责把请求翻成它——

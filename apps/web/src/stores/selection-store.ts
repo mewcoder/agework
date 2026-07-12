@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AgentType } from '@agework/shared';
+import { AGENT_TYPES } from '@agework/shared';
 import type {
   ClaudePermissionMode,
   CodexPermissionMode,
@@ -107,7 +108,7 @@ const initialCodexPermissionMode = loadInitial(
   'auto-review' as CodexPermissionMode,
 );
 const initialModelProviders: Partial<Record<AgentType, string>> = {};
-for (const agent of ['claude', 'codex'] as AgentType[]) {
+for (const agent of AGENT_TYPES) {
   try {
     const v = localStorage.getItem(`selected-model-provider-id:${agent}`);
     if (v?.trim()) initialModelProviders[agent] = v.trim();

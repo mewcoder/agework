@@ -47,6 +47,27 @@ async function submitInterruptAnswers(
   ]);
 }
 
+/**
+ * 提交审批决策(confirmation interrupt)。
+ *
+ * 与 submitInterruptAnswers 的区别:payload 是 { decision } 而非 { answers },
+ * 对应 Codex app-server 的 item/commandExecution/requestApproval 等
+ * server request 的响应格式。
+ */
+async function submitApprovalDecision(
+  conversationId: string,
+  interruptId: string,
+  decision: string,
+): Promise<void> {
+  const runtime = getInterruptRuntime(conversationId);
+  if (!runtime) {
+    throw new Error(`no runtime registered for conversation ${conversationId}`);
+  }
+  await runtime.unstable_submitInterruptResponses([
+    { interruptId, status: "resolved" as const, payload: { decision } },
+  ]);
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type AskUserQuestionOption = {
@@ -276,6 +297,217 @@ function SubmittedView({
       );
     })}
   </dl>
+  );
+}
+
+// ── Confirmation approval (Codex command/file) ──────────────────────────────
+// Codex app-server 的命令执行/文件变更审批,走与 PermissionPromptUI 相同的
+// 单行样式,但从 interrupt.metadata 读取命令/文件信息,提交 payload 是
+// { decision } 而非 { answers }。
+
+export function ConfirmationApprovalUI({
+  pending,
+}: {
+  pending: Extract<PendingQuestion, { confirmation: true }>;
+}) {
+  const conversationId = useSelectionStore((s) => s.selectedConversationId);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState<string | null>(null);
+
+  const metadata = (pending.interrupt.metadata ?? {}) as Record<string, unknown>;
+  const kind = typeof metadata.kind === "string" ? metadata.kind : "command";
+  const isCommand = kind === "command";
+  const title = isCommand ? "命令执行审批" : kind === "file" ? "文件变更审批" : "操作审批";
+  const commandText =
+    typeof metadata.command === "string" ? metadata.command : null;
+  const cwd = typeof metadata.cwd === "string" ? metadata.cwd : null;
+  const reasonText =
+    typeof metadata.reason === "string"
+      ? metadata.reason
+      : typeof pending.interrupt.message === "string"
+        ? pending.interrupt.message
+        : null;
+
+  const rawDecisions = metadata.availableDecisions;
+  const availableDecisions = Array.isArray(rawDecisions)
+    ? rawDecisions.filter((d): d is string => typeof d === "string")
+    : ["accept", "cancel"];
+  const canAccept = availableDecisions.includes("accept");
+  const canCancel =
+    availableDecisions.includes("cancel") ||
+    availableDecisions.includes("decline");
+
+  const handleSubmit = async (decision: string) => {
+    if (!conversationId || submitting) return;
+    setSubmitting(true);
+    try {
+      await submitApprovalDecision(conversationId, pending.interrupt.id, decision);
+      setSubmitted(decision);
+    } catch (err) {
+      toast.error(
+        `审批失败:${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // composer 上方的 panel 渲染时,提交后直接返回 null——让 panel 消失。
+  if (submitted) {
+    const isAccepted = submitted === "accept";
+    return (
+      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
+        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
+          {isAccepted ? (
+            <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          ) : (
+            <XIcon className="size-3.5 shrink-0 text-destructive" />
+          )}
+          <span className="truncate">{isAccepted ? "已允许" : "已拒绝"}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+      <div className="flex items-start gap-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium leading-5 text-foreground">{title}</p>
+          {commandText ? (
+            <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted/60 px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">
+              <code className="break-all whitespace-pre-wrap">{commandText}</code>
+            </pre>
+          ) : reasonText ? (
+            <p className="mt-0.5 truncate text-[12px] leading-5 text-muted-foreground">
+              {reasonText}
+            </p>
+          ) : null}
+          {cwd && (
+            <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/70">
+              {cwd}
+            </p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {canAccept && (
+            <Button
+              size="sm"
+              onClick={() => void handleSubmit("accept")}
+              disabled={submitting}
+              className="h-7 px-3 text-xs"
+            >
+              {submitting ? (
+                <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : (
+                <CheckIcon className="size-3.5" />
+              )}
+              {PERMISSION_ALLOW_LABEL}
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSubmit(canCancel ? "cancel" : "decline")}
+              disabled={submitting}
+              className="h-7 px-3 text-xs"
+            >
+              {PERMISSION_DENY_LABEL}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── ACP permission (generic ACP agent, e.g. OpenCode) ───────────────────────
+// ACP 的 session/request_permission 中断:按 Agent 提供的原始 options 渲染,
+// 按钮文字用 option.name,提交值用 option.optionId(走与 confirmation 相同的
+// { decision } 通道,decision = optionId)。不把选项压成允许/拒绝(见文档 §17.3)。
+
+export function AcpPermissionUI({
+  pending,
+}: {
+  pending: Extract<PendingQuestion, { acpPermission: true }>;
+}) {
+  const conversationId = useSelectionStore((s) => s.selectedConversationId);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState<string | null>(null);
+
+  const metadata = (pending.interrupt.metadata ?? {}) as Record<string, unknown>;
+  const rawOptions = Array.isArray(metadata.options) ? metadata.options : [];
+  const options = rawOptions
+    .map((o) => (o && typeof o === "object" ? (o as Record<string, unknown>) : null))
+    .filter(
+      (o): o is Record<string, unknown> =>
+        !!o && typeof o.optionId === "string" && typeof o.name === "string"
+    )
+    .map((o) => ({
+      optionId: o.optionId as string,
+      name: o.name as string,
+      kind: typeof o.kind === "string" ? (o.kind as string) : undefined,
+    }));
+
+  const title =
+    typeof pending.interrupt.message === "string" && pending.interrupt.message
+      ? pending.interrupt.message
+      : "Agent 请求权限";
+
+  const handleSubmit = async (optionId: string, label: string) => {
+    if (!conversationId || submitting) return;
+    setSubmitting(true);
+    try {
+      await submitApprovalDecision(conversationId, pending.interrupt.id, optionId);
+      setSubmitted(label);
+    } catch (err) {
+      toast.error(
+        `审批失败:${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
+        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
+          <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span className="truncate">{submitted}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+      <div className="flex items-start gap-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-medium leading-5 text-foreground">
+            {title}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {options.map((option) => {
+            const isReject = option.kind?.startsWith("reject");
+            return (
+              <Button
+                key={option.optionId}
+                size="sm"
+                variant={isReject ? "outline" : "default"}
+                onClick={() => void handleSubmit(option.optionId, option.name)}
+                disabled={submitting}
+                className="h-7 px-3 text-xs"
+              >
+                {option.name}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

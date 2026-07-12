@@ -82,6 +82,8 @@ export function getAgentOptionsByType(): AgentOptionsByType {
         ],
       },
     },
+    // OpenCode 权限在运行时由 ACP 提供，第一阶段无可配置项。
+    opencode: {},
   };
 }
 

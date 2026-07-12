@@ -1,8 +1,11 @@
 import {
   ClaudeAgentAdapter,
-  CodexAgentAdapter,
+  createCodexAdapter,
+  type CodexAgentInstance,
   cancelQuestion,
-  resolveQuestion,
+  AcpAgentAdapter,
+  createAcpAdapter,
+  getAcpProfile,
 } from "@agework/adapters";
 import type {
   AgentTraceSink,
@@ -13,7 +16,7 @@ import type {
 import { findInPath } from "@agework/shared/cli";
 import type { Subscription } from "rxjs";
 
-type Adapter = ClaudeAgentAdapter | CodexAgentAdapter;
+type Adapter = ClaudeAgentAdapter | CodexAgentInstance | AcpAgentAdapter;
 
 export type AgentRunPayload = { threadId: string } & Record<string, unknown>;
 
@@ -41,6 +44,7 @@ export type AgentDriver = {
 type CliPaths = {
   claudeExecutablePath?: string;
   codexExecutablePath?: string;
+  opencodeExecutablePath?: string;
 };
 
 class AdapterDriver implements AgentDriver {
@@ -63,10 +67,12 @@ class AdapterDriver implements AgentDriver {
 
   resolveControl(command: CommandPayload): boolean {
     if (command.type !== "approval_resolved") return false;
-    return resolveQuestion(
+    // Both Claude and Codex adapters implement resolveApproval (【决策2】).
+    // The adapter interprets the opaque payload provider-specifically.
+    return this.adapter.resolveApproval(
       command.conversationId,
-      command.answers,
-      command.resumeRunId
+      command.payload,
+      command.resumeRunId,
     );
   }
 }
@@ -86,6 +92,8 @@ export function createAgentDriver(
     config.claudeExecutablePath ?? envCliPaths.claudeExecutablePath;
   const codexExecutablePath =
     config.codexExecutablePath ?? envCliPaths.codexExecutablePath;
+  const opencodeExecutablePath =
+    config.opencodeExecutablePath ?? envCliPaths.opencodeExecutablePath;
 
   const pendingActionSink = (event: {
     threadId: string;
@@ -123,12 +131,32 @@ export function createAgentDriver(
     );
   }
 
+  if (agentProviderConfig.agentType === "opencode") {
+    const profile = getAcpProfile("opencode");
+    if (!profile) {
+      throw new Error("OpenCode ACP profile not registered");
+    }
+    return new AdapterDriver(
+      createAcpAdapter(profile, {
+        source: agentProviderConfig.source,
+        cwd: runtimePath,
+        ...credentials,
+        trace,
+        pendingActionSink,
+        ...(opencodeExecutablePath
+          ? { executablePath: opencodeExecutablePath }
+          : {}),
+      })
+    );
+  }
+
   return new AdapterDriver(
-    new CodexAgentAdapter({
+    createCodexAdapter({
       ...credentials,
       cwd: runtimePath,
       trace,
-      ...(codexExecutablePath ? { codexPathOverride: codexExecutablePath } : {}),
+      pendingActionSink,
+      ...(codexExecutablePath ? { codexPath: codexExecutablePath } : {}),
     })
   );
 }
@@ -162,5 +190,8 @@ export function resolveCliPaths(
     env.AGEWORK_CLAUDE_CLI_PATH?.trim() || (findInPath("claude") ?? undefined);
   const codexExecutablePath =
     env.AGEWORK_CODEX_CLI_PATH?.trim() || (findInPath("codex") ?? undefined);
-  return { claudeExecutablePath, codexExecutablePath };
+  const opencodeExecutablePath =
+    env.AGEWORK_OPENCODE_CLI_PATH?.trim() ||
+    (findInPath("opencode") ?? undefined);
+  return { claudeExecutablePath, codexExecutablePath, opencodeExecutablePath };
 }

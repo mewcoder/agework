@@ -286,9 +286,11 @@ export class RunLauncher {
       // container 不走此链路（镜像固定路径，经 env 注入，见 ADR-0004）。
       let claudeExecutablePath: string | undefined;
       let codexExecutablePath: string | undefined;
+      let opencodeExecutablePath: string | undefined;
       if (runtimeType === "native" && cliPaths) {
         claudeExecutablePath = cliPaths.claude;
         codexExecutablePath = cliPaths.codex;
+        opencodeExecutablePath = cliPaths.opencode;
       }
 
       return {
@@ -310,6 +312,7 @@ export class RunLauncher {
         workerLogFilePath: logPaths.workerRuntimeFilePath,
         ...(claudeExecutablePath ? { claudeExecutablePath } : {}),
         ...(codexExecutablePath ? { codexExecutablePath } : {}),
+        ...(opencodeExecutablePath ? { opencodeExecutablePath } : {}),
       };
     } catch (err) {
       throw new BadRequestException(

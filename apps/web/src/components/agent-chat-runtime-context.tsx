@@ -12,6 +12,7 @@ import {
 } from "@assistant-ui/react";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { type AgentType } from "@/stores/selection-store";
+import { isAgentType } from "@agework/shared";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useRunSessionStore } from "@/stores/run-session-store";
 import { createThreadListAdapter } from "@/lib/runtime/thread-list-adapter";
@@ -54,10 +55,8 @@ function useSyncSelectedConversationFromUrl(routeConversationId: string | undefi
     const selStore = useSelectionStore.getState();
     if (routeConversationId) {
       const c = findCachedConversation(qc, routeConversationId);
-      const agentType =
-        c?.agentType === "claude" || c?.agentType === "codex"
-          ? c.agentType
-          : undefined;
+      const rawAgentType = c?.agentType;
+      const agentType = isAgentType(rawAgentType) ? rawAgentType : undefined;
       selStore.selectConversation(routeConversationId, agentType, c?.workspaceId);
       useRunSessionStore.getState().acknowledgeCompletion(routeConversationId);
     } else if (selStore.selectedConversationId !== undefined) {

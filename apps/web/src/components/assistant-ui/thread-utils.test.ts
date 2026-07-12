@@ -42,7 +42,12 @@ describe("getPendingQuestion", () => {
   it("metadata interrupts + 匹配 part → open,带 interrupt id", () => {
     const pending = getPendingQuestion([interruptedMessage()]);
     expect(pending?.phase).toBe("open");
-    if (pending?.phase === "open") {
+    if (
+      pending?.phase === "open" &&
+      !("confirmation" in pending) &&
+      !("acpPermission" in pending) &&
+      pending.part
+    ) {
       expect(pending.interrupt.id).toBe("int-1");
       expect(pending.part.toolCallId).toBe("tc-1");
     }

@@ -11,3 +11,16 @@ export {
   CodexAgentAdapter,
   type CodexAdapterConfig,
 } from "./codex/business/codex-agent.adapter";
+
+export {
+  AcpAgentAdapter,
+  type AcpAgentAdapterConfig,
+  createAcpAdapter,
+  type CreateAcpAdapterOptions,
+  getAcpProfile,
+  isAcpAgent,
+  openCodeAcpProfile,
+  type AcpAgentProfile,
+  AcpError,
+  type AcpErrorCode,
+} from "./acp";

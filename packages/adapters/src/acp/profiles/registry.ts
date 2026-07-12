@@ -1,0 +1,16 @@
+import type { AcpAgentProfile } from "./profile";
+import { openCodeAcpProfile } from "./opencode.profile";
+
+const PROFILES: ReadonlyMap<string, AcpAgentProfile> = new Map([
+  [openCodeAcpProfile.agentType, openCodeAcpProfile],
+]);
+
+/** Look up the ACP profile for an agentType, or undefined if it is not ACP-backed. */
+export function getAcpProfile(agentType: string): AcpAgentProfile | undefined {
+  return PROFILES.get(agentType);
+}
+
+/** Whether the given agentType is served by a generic ACP profile. */
+export function isAcpAgent(agentType: string): boolean {
+  return PROFILES.has(agentType);
+}

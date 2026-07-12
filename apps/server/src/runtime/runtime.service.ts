@@ -408,7 +408,11 @@ export class RuntimeService implements OnApplicationBootstrap {
    */
   async getResolvedCliPaths(
     id: string
-  ): Promise<{ claude: string | null; codex: string | null } | null> {
+  ): Promise<{
+    claude: string | null;
+    codex: string | null;
+    opencode: string | null;
+  } | null> {
     const row = await this.repository.findById(id);
     if (!row) return null;
     const envConfig = row.envConfig as RuntimeEnvConfig | null;
@@ -421,6 +425,10 @@ export class RuntimeService implements OnApplicationBootstrap {
       codex: resolveAgentPath(
         override?.codex?.executablePath,
         envConfig?.codex.executablePath ?? null
+      ),
+      opencode: resolveAgentPath(
+        override?.opencode?.executablePath,
+        envConfig?.opencode?.executablePath ?? null
       ),
     };
   }
@@ -454,6 +462,10 @@ function computeEnvStatus(
   return {
     claude: mergeAgent(detected.claude, override?.claude?.executablePath ?? null),
     codex: mergeAgent(detected.codex, override?.codex?.executablePath ?? null),
+    opencode: mergeAgent(
+      detected.opencode,
+      override?.opencode?.executablePath ?? null
+    ),
     detectedAt: detected.detectedAt,
   };
 }
@@ -493,7 +505,7 @@ function mergeOverride(
   executablePath: string
 ): RuntimeEnvConfigOverride {
   const result: RuntimeEnvConfigOverride = { ...(current ?? {}) };
-  const key = agentType as "claude" | "codex";
+  const key = agentType;
   if (!executablePath) {
     delete result[key];
   } else {

@@ -22,18 +22,20 @@ export function generateId(): string {
 }
 
 /** 支持的 agent 类型。 */
-export const AGENT_TYPES = ["claude", "codex"] as const;
+export const AGENT_TYPES = ["claude", "codex", "opencode"] as const;
 export type AgentType = (typeof AGENT_TYPES)[number];
 
 export const AGENT_LABELS: Record<AgentType, string> = {
   claude: "Claude",
   codex: "Codex",
+  opencode: "OpenCode",
 };
 
 /** agent 在工作空间目录下的配置目录前缀，用于定位 skills 等资源。 */
 export const AGENT_DIR_PREFIX: Record<AgentType, string> = {
   claude: ".claude",
   codex: ".codex",
+  opencode: ".opencode",
 };
 
 export function isAgentType(value: unknown): value is AgentType {

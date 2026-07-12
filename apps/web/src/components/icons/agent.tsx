@@ -1,4 +1,5 @@
 import { useId, useMemo } from "react";
+import { OpenCode } from "@lobehub/icons";
 import type { AgentType } from "@/stores/selection-store";
 
 type AgentIconProps = {
@@ -77,6 +78,10 @@ export function AgentIcon({
 }: AgentIconProps) {
   if (agent === "codex") {
     return <CodexIcon size={size} className={className} />;
+  }
+
+  if (agent === "opencode") {
+    return <OpenCode.Avatar size={size} className={className} />;
   }
 
   return <ClaudeIcon size={size} className={className} />;
