@@ -17,9 +17,9 @@ import type {
 import { swallow } from "../common/swallow";
 import { ConversationRepository } from "./conversation.repository";
 import { TitleGenerator } from "./title/title-generator";
-import type { AssistantUserMessage } from "./conversation.types";
 import type {
-  ConversationMessageInput,
+  AssistantMessageSnapshot,
+  AssistantUserMessage,
 } from "./conversation.types";
 
 // 从 assistant-ui 消息 content(string / part 数组 / { role, content } 对象)提取纯文本。
@@ -442,6 +442,34 @@ export class ConversationService {
   }
 
   /**
+   * 落库一条 run 的 assistant 消息快照(同一 run 反复调用 = upsert 覆盖)。
+   * 已存 assistant-ui 消息的信封(role / content id 回退 runId / status /
+   * metadata、消息行 id=runId、format)在这里唯一构造,与 `saveUserMessage`
+   * 的 user 信封同一 owner;空快照(尚无任何 part)不落库。
+   * 调用方:`RunLauncher`(saveRun 链)。
+   */
+  async saveAssistantMessage(
+    conversationId: string,
+    runId: string,
+    snapshot: AssistantMessageSnapshot
+  ): Promise<void> {
+    if (snapshot.content.length === 0) return;
+    await this.upsertMessage(conversationId, {
+      id: runId,
+      runId,
+      parent_id: null,
+      format: "assistant-ui",
+      content: {
+        role: "assistant",
+        id: snapshot.messageId ?? runId,
+        content: snapshot.content,
+        status: snapshot.status,
+        ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
+      },
+    });
+  }
+
+  /**
    * 将已落库的消息与 run 关联,便于后续按 run 级联查询 / 操作消息。
    * 调用方:`RunLauncher`。
    */
@@ -563,38 +591,6 @@ export class ConversationService {
     }
   ) {
     await this.repo.upsertMessage(conversationId, data);
-  }
-
-  /**
-   * ConversationEffectsPort 实现:按消息类型分发到对应的落库方法。
-   * 调用方:`RunLauncher`,经 Port 回流,run 模块不直接依赖本 Service。
-   */
-  async persistConversationMessage(
-    conversationId: string,
-    message: ConversationMessageInput
-  ): Promise<void> {
-    switch (message.type) {
-      case "saveUserMessage":
-        await this.saveUserMessage(
-          conversationId,
-          message.userMessage,
-          message.titleContext
-        );
-        break;
-      case "upsertMessage":
-        await this.upsertMessage(conversationId, message.data);
-        break;
-      case "attachMessageToRun":
-        await this.attachMessageToRun(
-          conversationId,
-          message.messageId,
-          message.runId
-        );
-        break;
-      case "setAgentSessionId":
-        await this.setAgentSessionId(conversationId, message.sessionId);
-        break;
-    }
   }
 
   private normalizeMessageFormat(format: string, content: unknown) {

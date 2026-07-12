@@ -101,6 +101,63 @@ describe("ConversationService", () => {
     );
   });
 
+  it("saves assistant snapshots with the envelope built here (row id = runId)", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await service.saveAssistantMessage("conversation-1", "run-1", {
+      messageId: "srv-msg-1",
+      content: [{ type: "text", text: "hi" }],
+      status: { type: "complete" },
+      metadata: { custom: { agui: {} } },
+    });
+
+    expect(repo.upsertMessage).toHaveBeenCalledWith("conversation-1", {
+      id: "run-1",
+      runId: "run-1",
+      parent_id: null,
+      format: "assistant-ui",
+      content: {
+        role: "assistant",
+        id: "srv-msg-1",
+        content: [{ type: "text", text: "hi" }],
+        status: { type: "complete" },
+        metadata: { custom: { agui: {} } },
+      },
+    });
+  });
+
+  it("falls back to runId as the content id when the snapshot has no messageId", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await service.saveAssistantMessage("conversation-1", "run-1", {
+      messageId: undefined,
+      content: [{ type: "text", text: "hi" }],
+      status: { type: "running" },
+    });
+
+    expect(repo.upsertMessage).toHaveBeenCalledWith(
+      "conversation-1",
+      expect.objectContaining({
+        content: expect.objectContaining({ id: "run-1" }),
+      })
+    );
+  });
+
+  it("skips persisting empty assistant snapshots", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await service.saveAssistantMessage("conversation-1", "run-1", {
+      messageId: undefined,
+      content: [],
+      status: { type: "running" },
+    });
+
+    expect(repo.upsertMessage).not.toHaveBeenCalled();
+  });
+
   it("attaches an existing message to a run", async () => {
     const repo = makeRepo();
     const service = new ConversationService(repo as never);

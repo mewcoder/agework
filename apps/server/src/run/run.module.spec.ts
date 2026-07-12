@@ -19,7 +19,10 @@ import { RunModule } from "./run.module";
 const MOCK_CONVERSATION_SERVICE = {
   activateConversation: vi.fn().mockResolvedValue(true),
   setConversationRunState: vi.fn().mockResolvedValue(undefined),
-  persistConversationMessage: vi.fn().mockResolvedValue(undefined),
+  saveUserMessage: vi.fn().mockResolvedValue(undefined),
+  saveAssistantMessage: vi.fn().mockResolvedValue(undefined),
+  attachMessageToRun: vi.fn().mockResolvedValue(undefined),
+  setAgentSessionId: vi.fn().mockResolvedValue(undefined),
 };
 
 @Injectable()

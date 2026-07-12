@@ -162,7 +162,10 @@ describe("RunLauncher", () => {
     mockConversationEffects = {
       activateConversation: vi.fn().mockResolvedValue(true),
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
-      persistConversationMessage: vi.fn().mockResolvedValue(undefined),
+      saveUserMessage: vi.fn().mockResolvedValue(undefined),
+      saveAssistantMessage: vi.fn().mockResolvedValue(undefined),
+      attachMessageToRun: vi.fn().mockResolvedValue(undefined),
+      setAgentSessionId: vi.fn().mockResolvedValue(undefined),
     };
     mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -273,15 +276,10 @@ describe("RunLauncher", () => {
     } satisfies Record<string, unknown>;
     await launch(makeStartInput({ userMessage, userMessageId: "msg-1" }));
 
-    expect(
-      mockConversationEffects.persistConversationMessage
-    ).toHaveBeenCalledWith(
+    expect(mockConversationEffects.saveUserMessage).toHaveBeenCalledWith(
       "conversation-1",
-      expect.objectContaining({
-        type: "saveUserMessage",
-        userMessage,
-        titleContext: { agentType: "claude", modelProviderId: "mp-1" },
-      })
+      userMessage,
+      { agentType: "claude", modelProviderId: "mp-1" }
     );
   });
 
@@ -303,15 +301,10 @@ describe("RunLauncher", () => {
   it("attaches the accepted user message to the created run", async () => {
     await launch(makeStartInput({ userMessageId: "msg-1" }));
 
-    expect(
-      mockConversationEffects.persistConversationMessage
-    ).toHaveBeenCalledWith(
+    expect(mockConversationEffects.attachMessageToRun).toHaveBeenCalledWith(
       "conversation-1",
-      expect.objectContaining({
-        type: "attachMessageToRun",
-        messageId: "msg-1",
-        runId: "run-1",
-      })
+      "msg-1",
+      "run-1"
     );
     expect(mockRunEvents.append).toHaveBeenCalledWith(
       expect.objectContaining({

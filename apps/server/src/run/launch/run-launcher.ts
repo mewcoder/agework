@@ -382,10 +382,9 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.conversationService.persistConversationMessage(conversationId, {
-      type: "saveUserMessage",
-      userMessage,
-      titleContext: { agentType, modelProviderId },
+    await this.conversationService.saveUserMessage(conversationId, userMessage, {
+      agentType,
+      modelProviderId,
     });
   }
 
@@ -399,30 +398,14 @@ export class RunLauncher {
 
     return (complete, incompleteReason) => {
       saveChain = saveChain
-        .then(() => {
-          const snap = aggregator.build(complete, incompleteReason);
-          if (snap.content.length === 0) return;
-          const contentId = snap.messageId ?? runId;
-          return this.conversationService.persistConversationMessage(
+        .then(() =>
+          // 信封形状归 conversation 领域,这里只交快照本体。
+          this.conversationService.saveAssistantMessage(
             conversationId,
-            {
-              type: "upsertMessage",
-              data: {
-                id: runId,
-                runId,
-                parent_id: null,
-                format: "assistant-ui",
-                content: {
-                  role: "assistant",
-                  id: contentId,
-                  content: snap.content,
-                  status: snap.status,
-                  ...(snap.metadata ? { metadata: snap.metadata } : {}),
-                },
-              },
-            }
-          );
-        })
+            runId,
+            aggregator.build(complete, incompleteReason)
+          )
+        )
         .catch((err: unknown) => {
           this.logger.warn(
             `persist assistant message for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`
@@ -434,10 +417,7 @@ export class RunLauncher {
   private saveSession(conversationId: string): (sessionId: string) => void {
     return (sessionId) => {
       this.conversationService
-        .persistConversationMessage(conversationId, {
-          type: "setAgentSessionId",
-          sessionId,
-        })
+        .setAgentSessionId(conversationId, sessionId)
         .catch(
           swallow(this.logger, `persist agent session for ${conversationId}`)
         );
@@ -487,11 +467,7 @@ export class RunLauncher {
       );
       if (userMessageId) {
         await this.conversationService
-          .persistConversationMessage(conversationId, {
-            type: "attachMessageToRun",
-            messageId: userMessageId,
-            runId,
-          })
+          .attachMessageToRun(conversationId, userMessageId, runId)
           .catch(
             swallow(
               this.logger,
