@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import type { SandboxRuntimeSpec } from "@agework/shared/protocol";
 import { safePathPart } from "./util";
 import type {
@@ -14,6 +15,12 @@ const HOST_GATEWAY = "host.docker.internal";
  * runtime(docker/opensandbox)把 loopback host 换成宿主网关名 host.docker.internal。
  * 非 loopback 地址(远程覆盖的真实 IP/域名)原样返回。
  */
+function assertAbsoluteMountPath(hostPath: string): void {
+  if (!isAbsolute(hostPath)) {
+    throw new Error(`Sandbox mount path must be absolute: ${hostPath}`);
+  }
+}
+
 function toContainerReachableUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -38,6 +45,13 @@ export function buildSandboxStartInput(
   cfg: RuntimeConfig
 ): SandboxStartInput {
   const placement = ctx.placement as SandboxRuntimeSpec;
+  // 挂载路径校验在共享构造点做一次,docker / opensandbox 不再各自把关。
+  if (placement.hostPath) {
+    assertAbsoluteMountPath(placement.hostPath);
+  }
+  if (cfg.runtimeLogHostPath) {
+    assertAbsoluteMountPath(cfg.runtimeLogHostPath);
+  }
   const runtimeLogDir = placement.runtimeLogDir;
   const serverBaseUrl = toContainerReachableUrl(cfg.serverBaseUrl);
   const sandboxPlacement: SandboxPlacement = {

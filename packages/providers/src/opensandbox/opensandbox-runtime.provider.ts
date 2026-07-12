@@ -1,5 +1,4 @@
 import { Logger } from "@nestjs/common";
-import { isAbsolute } from "node:path";
 import type {
   RuntimeConfig,
   RuntimeProvider,
@@ -57,37 +56,19 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   private async createSandbox(
     input: SandboxStartInput
   ): Promise<OpenSandboxSandboxLike> {
-    const { placement, image, apiBaseUrl, env, metadata } = input;
-    const { workspaceHostPath, workspaceMountPath, ownerId, isolationScope } =
-      placement;
+    const { placement, image, env, metadata } = input;
+    const { workspaceHostPath, workspaceMountPath, ownerId } = placement;
 
-    if (workspaceHostPath) {
-      this.assertSafeMountPath(workspaceHostPath);
-    }
-    if (input.runtimeLogHostPath) {
-      this.assertSafeMountPath(input.runtimeLogHostPath);
-    }
-
+    // env / metadata / 挂载路径校验都由 buildSandboxStartInput 唯一构造,这里只透传。
     const sandbox = await this.client.createSandbox({
       image,
-      env: {
-        AGEWORK_WORKER_ROLE: "worker",
-        AGEWORK_WORKER_CHANNEL: "http",
-        AGEWORK_WORKER_API_BASE: apiBaseUrl,
-        AGEWORK_WORKER_OWNER_ID: ownerId,
-        AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
-        ...env,
-      },
+      env,
       timeoutSeconds: null,
       workspaceHostPath: workspaceHostPath || undefined,
       workspaceMountPath,
       runtimeLogHostPath: input.runtimeLogHostPath,
       runtimeLogMountPath: input.runtimeLogMountPath,
-      metadata: {
-        "agework.io/runtime-owner-id": ownerId,
-        "agework.io/isolation-scope": isolationScope,
-        ...metadata,
-      },
+      metadata,
     });
 
     this.logger.log(
@@ -98,31 +79,16 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
     return sandbox;
   }
 
-  private assertSafeMountPath(hostPath: string): void {
-    if (!isAbsolute(hostPath)) {
-      throw new Error(`OpenSandbox mount path must be absolute: ${hostPath}`);
-    }
-  }
-
   private async startWorkerInSandbox(
     sandbox: OpenSandboxSandboxLike,
     input: SandboxStartInput
   ): Promise<void> {
-    const { placement, apiBaseUrl, env } = input;
-    const { ownerId, isolationScope, workspaceMountPath } = placement;
+    const { placement, env } = input;
+    const { workspaceMountPath } = placement;
 
     try {
-      const envs: Record<string, string> = {
-        AGEWORK_WORKER_ROLE: "worker",
-        AGEWORK_WORKER_CHANNEL: "http",
-        AGEWORK_WORKER_OWNER_ID: ownerId,
-        AGEWORK_WORKER_API_BASE: apiBaseUrl,
-        AGEWORK_WORKER_ISOLATION_SCOPE: isolationScope,
-        ...env,
-      };
-
       await sandbox.runCommand("node /app/dist/main.js", {
-        envs,
+        envs: env,
         background: true,
         workingDirectory: workspaceMountPath,
       });

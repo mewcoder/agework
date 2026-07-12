@@ -1,6 +1,5 @@
 import { Logger } from "@nestjs/common";
 import { execFile } from "node:child_process";
-import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
 import type {
   RuntimeConfig,
@@ -72,14 +71,12 @@ export class DockerRuntimeProvider implements RuntimeProvider {
       args.push("-e", `${key}=${value}`);
     }
 
-    // Mount workspace if specified
+    // Mount workspace if specified(路径绝对性已在 buildSandboxStartInput 校验)
     if (workspaceHostPath) {
-      this.assertSafeMountPath(workspaceHostPath);
       args.push("-v", `${workspaceHostPath}:${workspaceMountPath}`);
     }
 
     if (input.runtimeLogHostPath && input.runtimeLogMountPath) {
-      this.assertSafeMountPath(input.runtimeLogHostPath);
       args.push(
         "-v",
         `${input.runtimeLogHostPath}:${input.runtimeLogMountPath}`
@@ -174,11 +171,6 @@ export class DockerRuntimeProvider implements RuntimeProvider {
     return inspectedId;
   }
 
-  private assertSafeMountPath(hostPath: string): void {
-    if (!isAbsolute(hostPath)) {
-      throw new Error(`Docker mount path must be absolute: ${hostPath}`);
-    }
-  }
 }
 
 function parseDockerNameConflictContainerId(err: unknown): string | undefined {
