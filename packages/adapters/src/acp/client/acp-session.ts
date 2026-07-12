@@ -54,23 +54,25 @@ export class AcpSession {
     }
 
     const caps = opts.connection.capabilities;
+    // Resuming an existing session may stream prior history back as
+    // `session/update` (some agents replay after the load/resume RPC resolves,
+    // not just during it). Suppress everything until our own prompt is sent —
+    // any update before that is history, not this turn's output. The window
+    // closes in prompt().
     if (caps.resumeSession) {
-      // Resume returns immediately without replaying history.
-      session.bind(opts.existingSessionId, false);
+      session.bind(opts.existingSessionId, true);
       await opts.connection.resumeSession({
         sessionId: opts.existingSessionId,
         cwd: opts.cwd,
         mcpServers,
       });
     } else if (caps.loadSession) {
-      // Load streams prior history back as `session/update`; suppress it.
       session.bind(opts.existingSessionId, true);
       await opts.connection.loadSession({
         sessionId: opts.existingSessionId,
         cwd: opts.cwd,
         mcpServers,
       });
-      session.replayPhase = false;
     } else {
       throw new AcpError(
         "ACP_SESSION_RESUME_UNSUPPORTED",
@@ -81,6 +83,9 @@ export class AcpSession {
   }
 
   prompt(prompt: ContentBlock[]): Promise<PromptResponse> {
+    // Our prompt begins the live turn: updates from here on are real output,
+    // not replayed history.
+    this.replayPhase = false;
     return this.opts.connection.prompt({
       sessionId: this.sessionIdValue,
       prompt,

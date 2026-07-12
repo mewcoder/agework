@@ -11,6 +11,8 @@ export type FakeScenario = {
   emitTool?: boolean;
   /** Emit user/agent history chunks during `session/load` (to test replay suppression). */
   loadEmitsHistory?: boolean;
+  /** Emit a prior-answer history chunk during `session/resume` (to test replay suppression). */
+  resumeEmitsHistory?: boolean;
   /** Make `session/load` and `session/resume` fail. */
   sessionNotFound?: boolean;
   /** Request permission during the prompt turn before replying. */
@@ -78,10 +80,19 @@ export function createFakeAgentApp(sdk: AcpSdk, scenario: FakeScenario = {}): Ag
       }
       return {};
     })
-    .onRequest(methods.agent.session.resume, async () => {
+    .onRequest(methods.agent.session.resume, async (ctx) => {
       track("session/resume");
       if (scenario.sessionNotFound) {
         throw new RequestError(-32000, "session not found");
+      }
+      if (scenario.resumeEmitsHistory) {
+        await ctx.client.notify(methods.client.session.update, {
+          sessionId: ctx.params.sessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "prior answer" },
+          },
+        });
       }
       return {};
     })

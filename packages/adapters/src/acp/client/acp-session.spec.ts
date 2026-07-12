@@ -91,6 +91,32 @@ describe("AcpSession", () => {
     }
   });
 
+  it("suppresses history replayed on session/resume until our prompt is sent", async () => {
+    const conn = await connect({ resume: true, resumeEmitsHistory: true, reply: "new answer" });
+    try {
+      const c = collector();
+      const session = await AcpSession.start({
+        connection: conn,
+        cwd: "/tmp",
+        existingSessionId: "prev-1",
+        onUpdate: c.onUpdate,
+        onReplayUpdate: c.onReplayUpdate,
+      });
+      // The prior answer replayed on resume must NOT leak as live output.
+      expect(c.live.length).toBe(0);
+      expect(c.replay.length).toBe(1);
+
+      await session.prompt([{ type: "text", text: "second question" }]);
+      const liveTexts = c.live
+        .filter((u) => u.sessionUpdate === "agent_message_chunk")
+        .map((u) => (u as { content: { text: string } }).content.text);
+      expect(liveTexts).toEqual(["new answer"]);
+    } finally {
+      conn.close();
+      await conn.closed;
+    }
+  });
+
   it("fails with ACP_SESSION_NOT_FOUND when resume/load rejects", async () => {
     const conn = await connect({ resume: true, sessionNotFound: true });
     try {
