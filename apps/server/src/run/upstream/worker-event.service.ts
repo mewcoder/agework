@@ -16,10 +16,8 @@ import {
 } from "../live-run/live-run.registry";
 import { RunDriver } from "../driver/run-driver";
 import { swallow } from "../../common/swallow";
-import {
-  TERMINAL_RUN_STATUSES,
-  type RunStatusDecision,
-} from "../status/run-status.policy";
+import { isTerminalRunStatus } from "@agework/shared";
+import { type RunStatusDecision } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
 import { WorkerSeqStore } from "./worker-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -86,7 +84,7 @@ export class WorkerEventService
 
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
-      if (TERMINAL_RUN_STATUSES.includes(status) && handle) {
+      if (isTerminalRunStatus(status) && handle) {
         this.driver.cleanup(handle.runtimeHandle.runId);
       }
     }

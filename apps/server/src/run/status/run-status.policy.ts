@@ -91,19 +91,9 @@ const RUN_STATUS_EFFECTS: Record<RunStatus, RunStatusEffect> = {
   },
 };
 
-export const TERMINAL_RUN_STATUSES: RunStatus[] = Object.values(
-  RUN_STATUS_EFFECTS
-)
-  .filter((effect) => effect.isTerminal)
-  .map((effect) => effect.status);
-
 export type RunStatusDecision =
   | { action: "apply"; effect: RunStatusEffect }
   | { action: "ignore"; reason: "terminal_already_recorded" };
-
-export function isTerminalRunStatus(status: RunStatus): boolean {
-  return runStatusEffect(status).isTerminal;
-}
 
 export function runStatusEffect(status: RunStatus): RunStatusEffect {
   return RUN_STATUS_EFFECTS[status];

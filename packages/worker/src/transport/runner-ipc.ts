@@ -2,6 +2,7 @@ import type {
   RuntimeChannel,
   RunConfig,
   UpstreamMessage,
+  UpstreamMessageInput,
   CommandPayload,
   CommandResultPayload,
   RunChannelMessage,
@@ -54,13 +55,13 @@ export class RunnerIpcTransport implements RuntimeChannel {
     });
   }
 
-  async emit(msg: UpstreamMessage): Promise<void> {
+  async emit(msg: UpstreamMessageInput): Promise<void> {
     const message = {
       ...msg,
       runId: this.runId,
       seq: ++this.seq,
       ts: new Date().toISOString(),
-    };
+    } as UpstreamMessage;
     const wireMessage = encodeUpstreamMessageForIpc(message);
     return new Promise<void>((resolve, reject) => {
       process.send!(wireMessage, (err: Error | null) => {

@@ -9,7 +9,9 @@ import {
   type UpstreamMessage,
   type WorkerCommandResult,
   type RpcResponse,
+  type UpstreamMessageInput,
 } from "@agework/shared/protocol";
+import { isTerminalRunStatus } from "@agework/shared";
 import {
   commandMessageToRpcRequest,
   isWorkerCommandResultRpcResponse,
@@ -39,7 +41,7 @@ type ApprovalResolvedCommand = Extract<
 
 export type RunnerManagerClient = {
   fetchRunConfig(runId: string): Promise<RunConfig>;
-  emit(runId: string, msg: UpstreamMessage): Promise<void>;
+  emit(runId: string, msg: UpstreamMessageInput): Promise<void>;
   cleanup(runId: string): void;
 };
 
@@ -453,13 +455,7 @@ export class RunnerManager {
     runId: string,
     payload: RunStatusPayload
   ): Promise<void> {
-    return this.client.emit(runId, {
-      runId,
-      seq: 0,
-      type: "run.status",
-      payload,
-      ts: "",
-    } satisfies RunChannelMessage<RunStatusPayload>);
+    return this.client.emit(runId, { type: "run.status", payload });
   }
 
   private async emitRunStatusSafely(
@@ -496,8 +492,7 @@ function upstreamMessageFromRunner(
 
 function isTerminalStatus(msg: UpstreamMessage): boolean {
   if (msg.type !== "run.status") return false;
-  const status = (msg.payload as RunStatusPayload).status;
-  return status === "finished" || status === "error" || status === "cancelled";
+  return isTerminalRunStatus((msg.payload as RunStatusPayload).status);
 }
 
 /** runner 是 worker 入口的兄弟产物(dist/main.js → dist/runner.js),不是同一个文件。 */

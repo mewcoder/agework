@@ -65,6 +65,7 @@ export type {
   CommandResultPayload,
   CommandTracePayload,
   UpstreamMessage,
+  UpstreamMessageInput,
   Unsubscribe,
   RuntimeChannel,
   WorkerExecutionHandle,

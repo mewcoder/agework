@@ -1,10 +1,21 @@
 import { describe, expect, it } from "vitest";
+import { isTerminalRunStatus, type RunStatus } from "@agework/shared";
 import {
   decideRunStatusUpdate,
-  isTerminalRunStatus,
   RUNNING_MUTABLE_STATUSES,
   runStatusEffect,
 } from "./run-status.policy";
+
+const ALL_RUN_STATUSES: RunStatus[] = [
+  "queued",
+  "preparing",
+  "running",
+  "requires_action",
+  "cancelling",
+  "finished",
+  "error",
+  "cancelled",
+];
 
 describe("run lifecycle policy", () => {
   it("classifies terminal run statuses", () => {
@@ -13,6 +24,15 @@ describe("run lifecycle policy", () => {
     expect(isTerminalRunStatus("cancelled")).toBe(true);
     expect(isTerminalRunStatus("running")).toBe(false);
     expect(isTerminalRunStatus("requires_action")).toBe(false);
+  });
+
+  it("effect 表的 isTerminal 标志与 shared 终态集合双向一致(漂移守卫)", () => {
+    for (const status of ALL_RUN_STATUSES) {
+      expect(
+        runStatusEffect(status).isTerminal,
+        `effect table vs shared TERMINAL_RUN_STATUSES: ${status}`,
+      ).toBe(isTerminalRunStatus(status));
+    }
   });
 
   it("ignores every late status after a terminal status is recorded", () => {

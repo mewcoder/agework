@@ -3,7 +3,7 @@ import type {
   CommandResultPayload,
   CommandTracePayload,
   RunChannelMessage,
-  UpstreamMessage,
+  UpstreamMessageInput,
 } from "@agework/shared/protocol";
 
 export type CommandPollResult = {
@@ -15,7 +15,7 @@ export type CommandSource = {
 };
 
 export type CommandSink = {
-  emit(runId: string, msg: UpstreamMessage): Promise<void>;
+  emit(runId: string, msg: UpstreamMessageInput): Promise<void>;
 };
 
 export type CommandClient = CommandSource & CommandSink;
@@ -112,17 +112,14 @@ export class WorkerCommands {
   ): void {
     void this.client
       .emit(runId, {
-        runId,
-        seq: 0,
         type: "command.trace",
         payload: {
           phase,
           commandId: command.commandId,
           commandType: command.type,
           ...(error ? { error } : {}),
-        },
-        ts: "",
-      } satisfies RunChannelMessage<CommandTracePayload>)
+        } satisfies CommandTracePayload,
+      })
       .catch(() => {});
   }
 
@@ -134,17 +131,14 @@ export class WorkerCommands {
   ): void {
     void this.client
       .emit(runId, {
-        runId,
-        seq: 0,
         type: "command.result",
         payload: {
           commandId: command.commandId,
           commandType: command.type,
           status,
           ...(error ? { error } : {}),
-        },
-        ts: "",
-      } satisfies RunChannelMessage<CommandResultPayload>)
+        } satisfies CommandResultPayload,
+      })
       .catch(() => {});
   }
 }

@@ -168,6 +168,17 @@ export type UpstreamMessage =
   | RunChannelMessage<CommandTracePayload>
   | RunChannelMessage<CommandResultPayload>;
 
+/**
+ * 上行消息的 producer 入参:只带业务事件（type + payload），信封字段
+ * （runId / seq / ts）由 transport 在 emit 时盖章，producer 不接触。
+ * 逐成员 Omit 以保住 type↔payload 配对。
+ */
+export type UpstreamMessageInput = UpstreamMessage extends infer M
+  ? M extends RunChannelMessage
+    ? Omit<M, "runId" | "seq" | "ts">
+    : never
+  : never;
+
 export type Unsubscribe = () => void;
 
 /**
@@ -177,7 +188,7 @@ export type Unsubscribe = () => void;
  */
 export interface RuntimeChannel {
   fetchRunConfig(): Promise<RunConfig>;
-  emit(msg: UpstreamMessage): Promise<void>;
+  emit(msg: UpstreamMessageInput): Promise<void>;
   subscribeCommands(cb: (command: RunChannelMessage<CommandPayload>) => void): Unsubscribe;
   close(): Promise<void>;
 }

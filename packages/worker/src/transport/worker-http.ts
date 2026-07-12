@@ -4,6 +4,7 @@ import type {
   CommandResultPayload,
   RunChannelMessage,
   UpstreamMessage,
+  UpstreamMessageInput,
   WorkerCommandRpcRequest,
   WorkerRegisterRequest,
 } from "@agework/shared/protocol";
@@ -244,13 +245,13 @@ export class WorkerHttpTransport {
     }
   }
 
-  async emit(runId: string, msg: UpstreamMessage): Promise<void> {
+  async emit(runId: string, msg: UpstreamMessageInput): Promise<void> {
     const message = {
       ...msg,
       runId,
       seq: this.nextEventSeq(runId),
       ts: new Date().toISOString(),
-    };
+    } as UpstreamMessage;
     if (shouldLogEmit(message)) {
       workerLog("emit event", summarizeUpstreamMessage(message), "debug");
     }

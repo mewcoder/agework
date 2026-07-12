@@ -7,6 +7,7 @@ import type {
   CommandResultPayload,
   RuntimeChannel,
 } from "@agework/shared/protocol";
+import type { TerminalRunStatus } from "@agework/shared";
 import { WorkerCommands } from "./commands.js";
 import { WorkerHttpTransport } from "./transport/worker-http.js";
 import { RunnerIpcTransport } from "./transport/runner-ipc.js";
@@ -46,11 +47,11 @@ export async function runRunner() {
     config,
     trace.sink(),
     (_threadId, payload) => {
-      void emitStatus(transport, runId, payload);
+      void emitStatus(transport, payload);
     }
   );
 
-  await emitStatus(transport, runId, { status: "running" });
+  await emitStatus(transport, { status: "running" });
 
   const processedCommands = new Set<string>();
   let stopRequested = false;
@@ -67,42 +68,42 @@ export async function runRunner() {
       source: "command",
       eventType: command.type,
     });
-    emitCommandTrace(transport, runId, "received", command);
+    emitCommandTrace(transport, "received", command);
 
     switch (command.type) {
       case "cancel":
         stopRequested = true;
         void driver.cancel(conversationId).catch((err) => {
           const error = String(err);
-          emitCommandTrace(transport, runId, "failed", command, error);
+          emitCommandTrace(transport, "failed", command, error);
         });
-        emitCommandTrace(transport, runId, "handled", command);
-        emitCommandResult(transport, runId, command, "ok");
+        emitCommandTrace(transport, "handled", command);
+        emitCommandResult(transport, command, "ok");
         break;
       case "interrupt":
         void driver.interrupt().catch((err) => {
           const error = String(err);
-          emitCommandTrace(transport, runId, "failed", command, error);
+          emitCommandTrace(transport, "failed", command, error);
         });
-        emitCommandTrace(transport, runId, "handled", command);
-        emitCommandResult(transport, runId, command, "ok");
+        emitCommandTrace(transport, "handled", command);
+        emitCommandResult(transport, command, "ok");
         break;
       case "approval_resolved":
         void Promise.resolve(driver.resolveControl(command))
           .then((resolved) => {
             if (resolved) {
-              emitCommandTrace(transport, runId, "handled", command);
-              emitCommandResult(transport, runId, command, "ok");
+              emitCommandTrace(transport, "handled", command);
+              emitCommandResult(transport, command, "ok");
             } else {
               const error = "no pending control matched";
-              emitCommandTrace(transport, runId, "failed", command, error);
-              emitCommandResult(transport, runId, command, "error", error);
+              emitCommandTrace(transport, "failed", command, error);
+              emitCommandResult(transport, command, "error", error);
             }
           })
           .catch((err) => {
             const error = String(err);
-            emitCommandTrace(transport, runId, "failed", command, error);
-            emitCommandResult(transport, runId, command, "error", error);
+            emitCommandTrace(transport, "failed", command, error);
+            emitCommandResult(transport, command, "error", error);
           });
         break;
       case "user_message":
@@ -115,13 +116,7 @@ export async function runRunner() {
     next: (event: unknown) => {
       trace.writeAgui(event);
       transport
-        .emit({
-          runId,
-          seq: 0,
-          type: "agui.event",
-          payload: event as AGUIEvent,
-          ts: "",
-        })
+        .emit({ type: "agui.event", payload: event as AGUIEvent })
         .catch(() => {});
     },
     complete: () => {
@@ -178,24 +173,18 @@ export async function runRunner() {
     }
   }
 
-  async function finalize(
-    status: "finished" | "error" | "cancelled",
-    error?: string
-  ) {
+  async function finalize(status: TerminalRunStatus, error?: string) {
     if (forcedExitRequested) return;
     finalizePromise ??= doFinalize(status, error);
     return finalizePromise;
   }
 
-  async function doFinalize(
-    status: "finished" | "error" | "cancelled",
-    error?: string
-  ) {
+  async function doFinalize(status: TerminalRunStatus, error?: string) {
     // Final status must be reported; otherwise the API run can remain running
     // until timeout. Exit non-zero so NativeRuntimeProvider can mark it failed.
     let statusReported = false;
     try {
-      await emitStatus(transport, runId, {
+      await emitStatus(transport, {
         status,
         ...(error ? { error } : {}),
       });
@@ -340,31 +329,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function emitStatus(
-  transport: RuntimeChannel,
-  runId: string,
-  payload: RunStatusPayload
-) {
-  return transport.emit({
-    runId,
-    seq: 0,
-    type: "run.status",
-    payload,
-    ts: "",
-  });
+function emitStatus(transport: RuntimeChannel, payload: RunStatusPayload) {
+  return transport.emit({ type: "run.status", payload });
 }
 
 function emitCommandTrace(
   transport: RuntimeChannel,
-  runId: string,
   phase: "received" | "handled" | "failed",
   command: CommandPayload,
   error?: string
 ) {
   transport
     .emit({
-      runId,
-      seq: 0,
       type: "command.trace",
       payload: {
         phase,
@@ -372,22 +348,18 @@ function emitCommandTrace(
         commandType: command.type,
         ...(error ? { error } : {}),
       },
-      ts: "",
     })
     .catch(() => {});
 }
 
 function emitCommandResult(
   transport: RuntimeChannel,
-  runId: string,
   command: CommandPayload,
   status: CommandResultPayload["status"],
   error?: string
 ) {
   transport
     .emit({
-      runId,
-      seq: 0,
       type: "command.result",
       payload: {
         commandId: command.commandId,
@@ -395,7 +367,6 @@ function emitCommandResult(
         status,
         ...(error ? { error } : {}),
       },
-      ts: "",
     })
     .catch(() => {});
 }

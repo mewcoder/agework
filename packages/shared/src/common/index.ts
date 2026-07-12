@@ -54,6 +54,24 @@ export type RunStatus =
   | "error"
   | "cancelled";
 
+/**
+ * run 终态集合的唯一定义。server 状态机、worker 收尾、runner 清理都从这里取,
+ * 不允许在任何一端再手写 finished|error|cancelled 集合。
+ */
+export const TERMINAL_RUN_STATUSES = [
+  "finished",
+  "error",
+  "cancelled",
+] as const;
+
+export type TerminalRunStatus = (typeof TERMINAL_RUN_STATUSES)[number];
+
+export function isTerminalRunStatus(
+  status: RunStatus,
+): status is TerminalRunStatus {
+  return (TERMINAL_RUN_STATUSES as readonly RunStatus[]).includes(status);
+}
+
 /** Run/Conversation 等待人工操作时标记的动作类型。 */
 export type PendingAction = "question" | null;
 
