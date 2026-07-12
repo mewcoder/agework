@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import type { ChatModelRunResult } from "@assistant-ui/react";
-import { normalizeResumeSnapshot, runStatusFromSnapshot } from "./run-session-status-rules";
+import {
+  normalizeResumeSnapshot,
+  runStatusFromSnapshot,
+  conversationStateFromRunFinished,
+  RUN_STARTED_CONVERSATION_STATE,
+} from "./run-session-status-rules";
 
 describe("normalizeResumeSnapshot", () => {
   it("把中间快照 incomplete/streaming 归一化成 running", () => {
@@ -67,11 +72,40 @@ describe("runStatusFromSnapshot", () => {
     expect(runStatusFromSnapshot({ type: "incomplete", reason: "streaming" })).toBeUndefined();
   });
 
-  it("requires-action → idle", () => {
-    expect(runStatusFromSnapshot({ type: "requires-action" })).toBe("idle");
+  it("requires-action → undefined(挂起非终态:后端真相是 running+question,规则不重复写)", () => {
+    expect(runStatusFromSnapshot({ type: "requires-action" })).toBeUndefined();
   });
 
   it("缺省 → undefined", () => {
     expect(runStatusFromSnapshot(undefined)).toBeUndefined();
+  });
+});
+
+describe("conversationStateFromRunFinished", () => {
+  it("interrupt outcome → 只写 pendingUserAction=question,不动 runStatus", () => {
+    expect(conversationStateFromRunFinished({ type: "interrupt" })).toEqual({
+      pendingUserAction: "question",
+    });
+  });
+
+  it("success outcome → idle", () => {
+    expect(conversationStateFromRunFinished({ type: "success" })).toEqual({
+      runStatus: "idle",
+    });
+  });
+
+  it("无 outcome → idle", () => {
+    expect(conversationStateFromRunFinished(undefined)).toEqual({
+      runStatus: "idle",
+    });
+  });
+});
+
+describe("RUN_STARTED_CONVERSATION_STATE", () => {
+  it("run 启动(含答题 resume run)= running + 清掉待答标记", () => {
+    expect(RUN_STARTED_CONVERSATION_STATE).toEqual({
+      runStatus: "running",
+      pendingUserAction: null,
+    });
   });
 });

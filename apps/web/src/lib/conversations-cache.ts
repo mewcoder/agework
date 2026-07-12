@@ -57,13 +57,26 @@ export function mergeConversationStatusIfNewer(
   );
 }
 
-/** 无条件设置一个会话的运行状态（stop/running/error 等场景共用）。 */
+/**
+ * 无条件应用一个会话运行态 patch（runStatus / pendingUserAction 的任意子集）。
+ * 与后端 ConversationService.setConversationRunState 同名同义；patch 的取值
+ * 规则收在 RunSession 的 run-session-status-rules，这里只做写入。
+ */
+export function setConversationRunState(
+  qc: QueryClient,
+  conversationId: string,
+  patch: Partial<Pick<Conversation, 'runStatus' | 'pendingUserAction'>>,
+): void {
+  mapConversationById(qc, conversationId, (conversation) => ({ ...conversation, ...patch }));
+}
+
+/** 无条件设置一个会话的运行状态（stop/resume 回填等只动 runStatus 的场景）。 */
 export function setConversationRunStatus(
   qc: QueryClient,
   conversationId: string,
   runStatus: Conversation['runStatus'],
 ): void {
-  mapConversationById(qc, conversationId, (conversation) => ({ ...conversation, runStatus }));
+  setConversationRunState(qc, conversationId, { runStatus });
 }
 
 /**

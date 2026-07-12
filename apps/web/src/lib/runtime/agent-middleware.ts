@@ -22,9 +22,13 @@ import {
   setPendingInitializeTitle,
 } from "@/lib/runtime/thread-list-adapter";
 import {
-  setConversationRunStatus,
+  setConversationRunState,
   upsertConversationAtFront,
 } from "@/lib/conversations-cache";
+import {
+  conversationStateFromRunFinished,
+  RUN_STARTED_CONVERSATION_STATE,
+} from "@/stores/run-session-status-rules";
 
 type Aui = ReturnType<typeof useAui>;
 type QC = ReturnType<typeof useQueryClient>;
@@ -85,15 +89,14 @@ export function createAgentMiddleware(
             title: fallbackTitle,
             workspaceId,
             agentType,
-            runStatus: "running" as const,
-            pendingUserAction: null,
+            ...RUN_STARTED_CONVERSATION_STATE,
             status: "regular" as const,
             createdAt: now,
             updatedAt: now,
           } satisfies Conversation;
           upsertConversationAtFront(qc, newConv);
         } else {
-          setConversationRunStatus(qc, remoteId, "running");
+          setConversationRunState(qc, remoteId, RUN_STARTED_CONVERSATION_STATE);
         }
 
         if (subscriber.closed) return;
@@ -101,9 +104,15 @@ export function createAgentMiddleware(
         innerSub = interceptRunEvents(inputWithFiles, next.run(inputWithFiles)).subscribe({
           next: (e) => {
             if (e.type === EventType.RUN_FINISHED) {
-              setConversationRunStatus(qc, remoteId, "idle");
+              setConversationRunState(
+                qc,
+                remoteId,
+                conversationStateFromRunFinished(
+                  (e as { outcome?: { type?: string } }).outcome,
+                ),
+              );
             } else if (e.type === EventType.RUN_ERROR) {
-              setConversationRunStatus(qc, remoteId, "error");
+              setConversationRunState(qc, remoteId, { runStatus: "error" });
             }
             subscriber.next(e);
           },
