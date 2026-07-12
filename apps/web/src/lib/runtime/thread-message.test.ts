@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readAgUiCustomMetadata } from '@assistant-ui/react-ag-ui';
 import { toThreadMessageItem, isThreadMessageItem } from './thread-message';
 import type { StoredMessage } from '@/api/conversations';
 
@@ -44,6 +45,38 @@ describe('toThreadMessageItem', () => {
     expect(result!.message.role).toBe('assistant');
     expect(result!.message.status).toEqual({ type: 'complete', reason: 'unknown' });
     expect(result!.message.metadata).toHaveProperty('steps');
+  });
+
+  it('assistant 消息的 contextUsage 注入 agui metadata,经包的 read 访问器可取回', () => {
+    const contextUsage = { usedTokens: 1200, maxTokens: 200000, percentage: 0.6 };
+    const msg: StoredMessage = {
+      id: 'm2',
+      parent_id: null,
+      format: 'assistant-ui',
+      content: { id: 'm2', role: 'assistant', content: 'hi' },
+      contextUsage,
+    };
+
+    const result = toThreadMessageItem(msg);
+
+    // 嵌套形状归 react-ag-ui 所有(契约测试在包内),这里只断言经访问器可读。
+    expect(readAgUiCustomMetadata(result!.message.metadata)?.contextUsage).toEqual(
+      contextUsage,
+    );
+  });
+
+  it('user 消息不注入 agui metadata', () => {
+    const msg: StoredMessage = {
+      id: 'm1',
+      parent_id: null,
+      format: 'assistant-ui',
+      content: { id: 'm1', role: 'user', content: 'hi' },
+      contextUsage: { usedTokens: 1, maxTokens: 2, percentage: 0.5 },
+    };
+
+    const result = toThreadMessageItem(msg);
+
+    expect(readAgUiCustomMetadata(result!.message.metadata)).toBeUndefined();
   });
 
   it('assistant 消息已有 status 时不覆盖', () => {

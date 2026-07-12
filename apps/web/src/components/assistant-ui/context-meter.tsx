@@ -1,8 +1,5 @@
 import { useAuiState } from "@assistant-ui/react";
-import {
-  AG_UI_METADATA_NAMESPACE,
-  type AgUiCustomMetadata,
-} from "@assistant-ui/react-ag-ui";
+import { readAgUiCustomMetadata } from "@assistant-ui/react-ag-ui";
 import {
   Context,
   ContextContent,
@@ -20,10 +17,7 @@ export function ContextMeter() {
     const last = s.thread.messages.findLast(
       (message) => message.role === "assistant",
     );
-    const custom = last?.metadata?.custom?.[AG_UI_METADATA_NAMESPACE] as
-      | AgUiCustomMetadata
-      | undefined;
-    return custom?.contextUsage;
+    return readAgUiCustomMetadata(last?.metadata)?.contextUsage;
   });
 
   if (!contextUsage) return null;

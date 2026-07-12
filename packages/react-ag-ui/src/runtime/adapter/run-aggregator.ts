@@ -17,6 +17,50 @@ export type AgUiCustomMetadata = {
   contextUsage?: AgUiContextUsage;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * 把一份 AgUiCustomMetadata patch 合并进消息 metadata 的 custom.agui 命名空间。
+ *
+ * custom.agui 的嵌套形状是本包的 implementation 细节:live(RunAggregator)与
+ * 消费方冷加载注入都必须经这里构造,不要在包外手写嵌套。merge 语义:保留
+ * metadata 其它字段、custom 其它命名空间、agui 已有字段;patch 里 undefined
+ * 的字段视同缺席;有效字段为空时原样返回,不创建空的 custom.agui。
+ */
+export function withAgUiCustomMetadata(
+  metadata: Record<string, unknown> | undefined,
+  patch: AgUiCustomMetadata,
+): Record<string, unknown> {
+  const defined = Object.fromEntries(
+    Object.entries(patch).filter(([, value]) => value !== undefined),
+  );
+  const base = metadata ?? {};
+  if (Object.keys(defined).length === 0) return base;
+
+  const custom = isRecord(base.custom) ? base.custom : {};
+  const existing = isRecord(custom[AG_UI_METADATA_NAMESPACE])
+    ? custom[AG_UI_METADATA_NAMESPACE]
+    : {};
+  return {
+    ...base,
+    custom: {
+      ...custom,
+      [AG_UI_METADATA_NAMESPACE]: { ...existing, ...defined },
+    },
+  };
+}
+
+/** 读方向唯一入口:从消息 metadata 取 custom.agui,缺失或形状不对返回 undefined。 */
+export function readAgUiCustomMetadata(
+  metadata: unknown,
+): AgUiCustomMetadata | undefined {
+  if (!isRecord(metadata) || !isRecord(metadata.custom)) return undefined;
+  const agui = metadata.custom[AG_UI_METADATA_NAMESPACE];
+  return isRecord(agui) ? (agui as AgUiCustomMetadata) : undefined;
+}
+
 type Emit = (update: ChatModelRunResult) => void;
 
 type ToolCallState = {
@@ -449,16 +493,10 @@ export class RunAggregator {
     }
 
     const timing = this.getTiming();
-    const customMetadata: AgUiCustomMetadata = {
+    const metadata = withAgUiCustomMetadata(timing ? { timing } : {}, {
       ...(this.interrupts ? { interrupts: this.interrupts } : {}),
       ...(this.contextUsage ? { contextUsage: this.contextUsage } : {}),
-    };
-    const metadata = {
-      ...(timing ? { timing } : {}),
-      ...(Object.keys(customMetadata).length > 0
-        ? { custom: { [AG_UI_METADATA_NAMESPACE]: customMetadata } }
-        : {}),
-    };
+    });
     return {
       content: snapshot,
       ...(this.status ? { status: this.status } : undefined),

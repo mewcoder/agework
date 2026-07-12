@@ -6,6 +6,8 @@ export { RunAggregator } from "./runtime/adapter/run-aggregator";
 export type { RunAggregatorOptions } from "./runtime/adapter/run-aggregator";
 export {
   AG_UI_METADATA_NAMESPACE,
+  withAgUiCustomMetadata,
+  readAgUiCustomMetadata,
   type AgUiCustomMetadata,
 } from "./runtime/adapter/run-aggregator";
 export type {

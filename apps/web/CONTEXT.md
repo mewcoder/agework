@@ -26,10 +26,14 @@
 
 ## runStatus 唯一写入面
 
-`["conversations", ...]` react-query 缓存的写入只走 `src/lib/conversations-cache.ts` 导出的语义操作(合并轮询状态 / 设置运行状态 / 乐观写+延迟校准 / 插入新会话)。**禁止在别处直接 `setQueryData` 这份缓存**——resume 收拢前 thread-history-adapter 私藏过一份写入实现,别再出现第二次。
+`["conversations", ...]` react-query 缓存的写入只走 `src/lib/conversations-cache.ts` 导出的语义操作(合并轮询状态 / 应用运行态 patch / 乐观写+延迟校准 / 插入新会话)。**禁止在别处直接 `setQueryData` 这份缓存**——resume 收拢前 thread-history-adapter 私藏过一份写入实现,别再出现第二次。
+
+「终态 outcome → 会话运行态」的**推导规则**同样只有一份:`run-session-status-rules.ts` 的 `conversationStateFromRunFinished` / `RUN_STARTED_CONVERSATION_STATE` / `runStatusFromSnapshot`,live(agent-middleware)与 resume 都从这里取 patch,交给 `setConversationRunState` 写入。**问答/工具审批挂起 = running + pendingUserAction=question**(镜像后端 run-status.policy:requires_action 不投影 runStatus)——前端任何路径不得为 interrupt outcome 写 idle,否则乐观写会和轮询互相翻转;run 启动(含答题 resume run)写 running 并清掉待答标记。middleware 不允许再出现 inline 状态映射。
 
 stop 场景的时序语义见 [ADR-0001](docs/adr/0001-stop-optimistic-status-delayed-revalidate.md)。
 
 ## aui 接线层
 
 `src/lib/runtime/`:agent middleware、history adapter、答题重连 hook 等一切需要触碰 assistant-ui runtime 的胶水。允许够 aui 的私有 API(`__internal_getRuntime` 等),但业务数据流必须委托给 RunSession,不在接线层内联。
+
+消息 metadata 的 `custom.agui` 嵌套形状归 `@assistant-ui/react-ag-ui` 所有:写经 `withAgUiCustomMetadata`、读经 `readAgUiCustomMetadata`,web 里不允许手写这层嵌套(形状断言只活在包的契约测试 `agui-custom-metadata.spec.ts` 里)。
