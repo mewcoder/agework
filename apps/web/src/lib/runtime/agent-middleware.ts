@@ -11,6 +11,7 @@ import type { useQueryClient } from "@tanstack/react-query";
 import type { AgentType } from "@/stores/selection-store";
 import type { Conversation } from "@/api/conversations";
 import { useSelectionStore } from "@/stores/selection-store";
+import { FILE_INDEX_KEY } from "@/hooks/use-file-mention";
 import {
   createFallbackTitle,
   withRunSettings,
@@ -22,6 +23,7 @@ import {
   setPendingInitializeTitle,
 } from "@/lib/runtime/thread-list-adapter";
 import {
+  conversationKeys,
   setConversationRunState,
   upsertConversationAtFront,
 } from "@/lib/conversations-cache";
@@ -40,7 +42,7 @@ export function createAgentMiddleware(
   aui: Aui,
   qc: QC,
 ): MiddlewareFunction {
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["conversations"] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: conversationKeys.all });
 
   return ((params: RunAgentInput, next: AbstractAgent) =>
     new Observable<BaseEvent>((subscriber) => {
@@ -72,7 +74,7 @@ export function createAgentMiddleware(
         // Inject @file mentions into context (SPEC §6)
         // Read file index from TanStack Query cache (workspace-level, loaded by useFileMentionAdapter)
         const fileIndexQueries = qc.getQueriesData<{ list: string[] }>({
-          queryKey: ["workspace-file-index"],
+          queryKey: FILE_INDEX_KEY,
         });
         const knownFiles = new Set<string>();
         for (const [, data] of fileIndexQueries) {

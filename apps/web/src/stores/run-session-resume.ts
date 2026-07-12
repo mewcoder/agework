@@ -2,7 +2,10 @@ import type { ChatModelRunResult } from "@assistant-ui/react";
 import type { QueryClient } from "@tanstack/react-query";
 import { apiUrl } from "@/lib/http";
 import { useAuthStore } from "@/stores/auth-store";
-import { setConversationRunStatus } from "@/lib/conversations-cache";
+import {
+  conversationKeys,
+  setConversationRunStatus,
+} from "@/lib/conversations-cache";
 import {
   runStatusFromSnapshot,
   normalizeResumeSnapshot,
@@ -57,7 +60,7 @@ export async function* openResumeStream(
       if (inferred) {
         setConversationRunStatus(qc, conversationId, inferred);
       }
-      qc.invalidateQueries({ queryKey: ["conversations"] });
+      qc.invalidateQueries({ queryKey: conversationKeys.all });
     }
   }
 }

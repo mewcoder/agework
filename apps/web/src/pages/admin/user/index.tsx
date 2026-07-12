@@ -41,6 +41,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { adminUserKeys } from "./admin-user-keys";
 import { CreateUserDialogForm } from "./create-user-dialog";
 import { IssuedPasswordDialog } from "./issued-password-dialog";
 
@@ -72,7 +73,7 @@ export function UserPanel({
   const { pageNo, pageSize, goPrev, goNext } = usePagination();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "users", pageNo],
+    queryKey: adminUserKeys.list(pageNo),
     queryFn: () => usersApi.list({ pageNo, pageSize }),
   });
 
@@ -84,7 +85,7 @@ export function UserPanel({
   const [issuedPassword, setIssuedPassword] =
     useState<PasswordIssueResponse | null>(null);
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["admin", "users"] });
+  const invalidate = () => qc.invalidateQueries({ queryKey: adminUserKeys.all });
 
   const approveMutation = useMutation({
     mutationFn: (id: string) => usersApi.approve({ id }),

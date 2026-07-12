@@ -8,7 +8,7 @@ import { useCallback } from "react";
 
 // ── Query key ──────────────────────────────────────────────────────────────
 
-const FILE_INDEX_KEY = ["workspace-file-index"] as const;
+export const FILE_INDEX_KEY = ["workspace-file-index"] as const;
 
 // ── Adapter type ───────────────────────────────────────────────────────────
 

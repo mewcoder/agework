@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { setConversationRunStatusOptimistic } from "./conversations-cache";
+import {
+  conversationKeys,
+  setConversationRunStatus,
+  setConversationRunStatusOptimistic,
+} from "./conversations-cache";
 
 function makeQc() {
   const setQueryData = vi.fn();
@@ -17,6 +21,52 @@ function makeQc() {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("conversationKeys", () => {
+  it("list / search 变体都在 all 前缀下(invalidate(all) 必能命中)", () => {
+    expect(conversationKeys.list("regular", "updatedAt").slice(0, 1)).toEqual([
+      ...conversationKeys.all,
+    ]);
+    expect(conversationKeys.search("q", 20).slice(0, 1)).toEqual([
+      ...conversationKeys.all,
+    ]);
+  });
+
+  it("archived 列表变体由 factory 判定(位置语义不外泄)", () => {
+    expect(
+      conversationKeys.isArchivedList(conversationKeys.list("archived", "updatedAt")),
+    ).toBe(true);
+    expect(
+      conversationKeys.isArchivedList(conversationKeys.list("regular", "updatedAt")),
+    ).toBe(false);
+    expect(conversationKeys.isArchivedList(conversationKeys.list(undefined))).toBe(
+      false,
+    );
+  });
+
+  it("运行状态写入跳过 archived 列表变体", () => {
+    const setQueryData = vi.fn();
+    const getQueriesData = vi.fn().mockReturnValue([
+      [
+        conversationKeys.list("archived", "updatedAt"),
+        { conversations: [{ conversationId: "c1", runStatus: "running" }] },
+      ],
+      [
+        conversationKeys.list("regular", "updatedAt"),
+        { conversations: [{ conversationId: "c1", runStatus: "running" }] },
+      ],
+    ]);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const qc = { getQueriesData, setQueryData } as any;
+
+    setConversationRunStatus(qc, "c1", "idle");
+
+    expect(setQueryData).toHaveBeenCalledTimes(1);
+    expect(setQueryData.mock.calls[0]![0]).toEqual(
+      conversationKeys.list("regular", "updatedAt"),
+    );
+  });
 });
 
 describe("setConversationRunStatusOptimistic", () => {

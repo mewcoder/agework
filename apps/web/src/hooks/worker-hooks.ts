@@ -2,23 +2,32 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { workerApi } from '@/api/worker';
 import { DEFAULT_PAGE_SIZE } from '@/hooks/use-pagination';
 
+/** admin runtime 资源相关 react-query 键的唯一 factory:define 与 invalidate 共用。 */
+const adminRuntimeKeys = {
+  policy: ['admin', 'runtime', 'policy'] as const,
+  stats: ['admin', 'runtime', 'stats'] as const,
+  resourcesRoot: ['admin', 'runtime', 'resources'] as const,
+  resources: (status: string | undefined, page: number, pageSize: number) =>
+    ['admin', 'runtime', 'resources', status, page, pageSize],
+};
+
 export function useRuntimePolicy() {
   return useQuery({
-    queryKey: ['admin', 'runtime', 'policy'],
+    queryKey: adminRuntimeKeys.policy,
     queryFn: () => workerApi.policy(),
   });
 }
 
 export function useWorkerStats() {
   return useQuery({
-    queryKey: ['admin', 'runtime', 'stats'],
+    queryKey: adminRuntimeKeys.stats,
     queryFn: () => workerApi.stats(),
   });
 }
 
 export function useWorkerResources(status?: string, page = 1, pageSize = DEFAULT_PAGE_SIZE) {
   return useQuery({
-    queryKey: ['admin', 'runtime', 'resources', status, page, pageSize],
+    queryKey: adminRuntimeKeys.resources(status, page, pageSize),
     queryFn: () => workerApi.listResources({ status: status || undefined, pageNo: page, pageSize }),
   });
 }
@@ -28,8 +37,8 @@ export function useStopWorkerResource() {
   return useMutation({
     mutationFn: (id: string) => workerApi.stopResource(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin', 'runtime', 'resources'] });
-      qc.invalidateQueries({ queryKey: ['admin', 'runtime', 'stats'] });
+      qc.invalidateQueries({ queryKey: adminRuntimeKeys.resourcesRoot });
+      qc.invalidateQueries({ queryKey: adminRuntimeKeys.stats });
     },
   });
 }

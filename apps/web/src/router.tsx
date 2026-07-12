@@ -14,6 +14,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { authApi } from "@/api/auth";
 import { conversationsApi } from "@/api/conversations";
 import { queryClient } from "@/lib/query-client";
+import { conversationKeys } from "@/lib/conversations-cache";
 import { normalizeBasePath } from "@/utils/path";
 import WorkbenchPage, { WorkbenchRuntimeLayout } from "@/pages/workbench";
 import type { Conversation } from "@/api/conversations";
@@ -189,7 +190,7 @@ const conversationRoute = createRoute({
   path: "/c/$conversationId",
   loader: async ({ params }) => {
     const cachedConversations = queryClient.getQueriesData<{ conversations: Conversation[] }>({
-      queryKey: ["conversations"],
+      queryKey: conversationKeys.all,
     });
     if (
       cachedConversations.some(([, data]) =>

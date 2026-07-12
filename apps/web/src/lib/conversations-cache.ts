@@ -11,6 +11,23 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { Conversation } from '@/api/conversations';
 
+/**
+ * conversation 相关 react-query 键的唯一 factory:define / invalidate /
+ * 缓存遍历都从这里取,键的位置语义(status 在第几位、archived 变体长什么样)
+ * 不允许在别处手写数组字面量重现。
+ */
+export const conversationKeys = {
+  /** 所有会话列表/搜索缓存的公共前缀(invalidate / 遍历用)。 */
+  all: ['conversations'] as const,
+  list: (status?: 'regular' | 'archived', sort?: string) =>
+    status ? ['conversations', status, sort] : ['conversations', sort],
+  search: (q: string, limit: number) => ['conversations', 'search', q, limit],
+  /** 独立缓存(轮询运行状态),不在 all 前缀下,invalidate(all) 不会打到它。 */
+  runStatuses: (ids: string[]) => ['conversation-run-statuses', ids],
+  /** archived 列表变体判定:运行状态更新不应刷新归档列表。 */
+  isArchivedList: (queryKey: readonly unknown[]) => queryKey[1] === 'archived',
+};
+
 type ConversationsCache = { conversations: Conversation[] };
 
 /**
@@ -22,9 +39,9 @@ function updateConversationCaches(
   updater: (old: ConversationsCache) => ConversationsCache,
 ): void {
   for (const [queryKey, old] of qc.getQueriesData<ConversationsCache>({
-    queryKey: ['conversations'],
+    queryKey: conversationKeys.all,
   })) {
-    if (queryKey[1] === 'archived') continue;
+    if (conversationKeys.isArchivedList(queryKey)) continue;
     if (!old) continue;
     qc.setQueryData<ConversationsCache>(queryKey, updater(old));
   }
@@ -95,7 +112,7 @@ export function setConversationRunStatusOptimistic(
 ): void {
   setConversationRunStatus(qc, conversationId, runStatus);
   window.setTimeout(() => {
-    void qc.invalidateQueries({ queryKey: ['conversations'] });
+    void qc.invalidateQueries({ queryKey: conversationKeys.all });
   }, options.revalidateAfterMs);
 }
 

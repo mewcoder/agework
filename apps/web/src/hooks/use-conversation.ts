@@ -1,7 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { conversationsApi, type Conversation } from '@/api/conversations';
 import { useRunSessionStore } from '@/stores/run-session-store';
-import { setConversationRunStatusOptimistic } from '@/lib/conversations-cache';
+import {
+  conversationKeys,
+  setConversationRunStatusOptimistic,
+} from '@/lib/conversations-cache';
 export type { Conversation } from '@/api/conversations';
 export type { ConversationSearchHit } from '@/api/conversations';
 
@@ -16,7 +19,7 @@ export function useConversations(
   sort?: ConversationSortKey,
 ) {
   return useQuery({
-    queryKey: status ? ['conversations', status, sort] : ['conversations', sort],
+    queryKey: conversationKeys.list(status, sort),
     queryFn: () => conversationsApi.list(undefined, status, sort),
   });
 }
@@ -24,7 +27,7 @@ export function useConversations(
 export function useConversationRunStatuses(conversationIds: string[]) {
   const ids = [...new Set(conversationIds)].filter(Boolean).sort();
   return useQuery({
-    queryKey: ['conversation-run-statuses', ids],
+    queryKey: conversationKeys.runStatuses(ids),
     queryFn: () => conversationsApi.statuses(ids),
     enabled: ids.length > 0,
     refetchInterval: ids.length > 0 ? 5000 : false,
@@ -35,7 +38,7 @@ export function useRenameConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, title }: { id: string; title: string }) => conversationsApi.rename(id, title),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: conversationKeys.all }),
   });
 }
 
@@ -43,7 +46,7 @@ export function useArchiveConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => conversationsApi.archive(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: conversationKeys.all }),
   });
 }
 
@@ -51,7 +54,7 @@ export function useUnarchiveConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => conversationsApi.unarchive(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: conversationKeys.all }),
   });
 }
 
@@ -59,7 +62,7 @@ export function useDeleteConversation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => conversationsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: conversationKeys.all }),
   });
 }
 
@@ -67,7 +70,7 @@ export function useClearArchived() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => conversationsApi.clearArchived(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: conversationKeys.all }),
   });
 }
 
@@ -79,7 +82,7 @@ export function useClearArchived() {
 export function useConversationSearch(q: string, limit = 20) {
   const trimmed = q.trim();
   return useQuery({
-    queryKey: ['conversations', 'search', trimmed, limit],
+    queryKey: conversationKeys.search(trimmed, limit),
     queryFn: () => conversationsApi.search(trimmed, limit),
     enabled: trimmed.length > 0,
     staleTime: 30_000,

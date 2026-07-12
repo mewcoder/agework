@@ -8,6 +8,7 @@ import { useAgUiRuntime } from "@assistant-ui/react-ag-ui";
 import { apiUrl } from "@/lib/http";
 import { conversationsApi, type Conversation } from "@/api/conversations";
 import { useRunSessionStore } from "@/stores/run-session-store";
+import { conversationKeys } from "@/lib/conversations-cache";
 import { ChatHttpAgent } from "@/lib/runtime/chat-http-agent";
 import { createAgentMiddleware } from "@/lib/runtime/agent-middleware";
 import { createThreadHistoryAdapter } from "@/lib/runtime/thread-history-adapter";
@@ -19,7 +20,7 @@ function findCachedConversation(
   remoteId: string,
 ) {
   const conversationQueries = qc.getQueriesData<{ conversations: Conversation[] }>({
-    queryKey: ["conversations"],
+    queryKey: conversationKeys.all,
   });
 
   for (const [, data] of conversationQueries) {

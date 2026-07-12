@@ -1,12 +1,26 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { workspacesApi } from '@/api/workspaces';
+import { conversationKeys } from '@/lib/conversations-cache';
 import type { UpdateWorkspaceInput } from '@/api/workspaces';
 import type { CreateWorkspaceRequest } from '@agework/shared/api';
 export type { Workspace, WorkspaceWithUser } from '@/api/workspaces';
 
+/** workspace 相关 react-query 键的唯一 factory:define 与 invalidate 共用,不再各写一遍数组字面量。 */
+const workspaceKeys = {
+  all: ['workspaces'] as const,
+  capabilities: ['workspaces', 'capabilities'] as const,
+  files: (id: string | undefined, path: string) => ['workspace-files', id, path],
+  filesRoot: (id: string | undefined) => ['workspace-files', id],
+  file: (id: string | undefined, path: string | undefined) => ['workspace-file', id, path],
+  fileRoot: (id: string | undefined) => ['workspace-file', id],
+  changes: (id: string | undefined) => ['workspace-changes', id],
+  diff: (id: string | undefined, path: string | undefined) => ['workspace-file-diff', id, path],
+  diffRoot: (id: string | undefined) => ['workspace-file-diff', id],
+};
+
 export function useWorkspaces() {
   return useQuery({
-    queryKey: ['workspaces'],
+    queryKey: workspaceKeys.all,
     queryFn: () => workspacesApi.list(),
     select: (data) => data.list,
   });
@@ -14,7 +28,7 @@ export function useWorkspaces() {
 
 export function useWorkspaceCapabilities() {
   return useQuery({
-    queryKey: ['workspaces', 'capabilities'],
+    queryKey: workspaceKeys.capabilities,
     queryFn: () => workspacesApi.capabilities(),
   });
 }
@@ -24,7 +38,7 @@ export function useCreateWorkspace() {
   return useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: CreateWorkspaceRequest) => workspacesApi.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workspaceKeys.all }),
   });
 }
 
@@ -34,7 +48,7 @@ export function useRenameWorkspace() {
     meta: { suppressGlobalError: true },
     mutationFn: ({ id, ...data }: { id: string } & UpdateWorkspaceInput) =>
       workspacesApi.rename(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workspaces'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: workspaceKeys.all }),
   });
 }
 
@@ -43,8 +57,8 @@ export function useDeleteWorkspace() {
   return useMutation({
     mutationFn: (id: string) => workspacesApi.delete(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['workspaces'] });
-      qc.invalidateQueries({ queryKey: ['conversations'] });
+      qc.invalidateQueries({ queryKey: workspaceKeys.all });
+      qc.invalidateQueries({ queryKey: conversationKeys.all });
     },
   });
 }
@@ -58,7 +72,7 @@ export function useWorkspaceFiles(
   enabled: boolean,
 ) {
   return useQuery({
-    queryKey: ['workspace-files', workspaceId, path],
+    queryKey: workspaceKeys.files(workspaceId, path),
     queryFn: () => workspacesApi.listFiles(workspaceId!, path),
     enabled: !!workspaceId && enabled,
     retry: false,
@@ -71,7 +85,7 @@ export function useWorkspaceFileContent(
   path: string | undefined,
 ) {
   return useQuery({
-    queryKey: ['workspace-file', workspaceId, path],
+    queryKey: workspaceKeys.file(workspaceId, path),
     queryFn: () => workspacesApi.readFile(workspaceId!, path!),
     enabled: !!workspaceId && !!path,
     retry: false,
@@ -82,8 +96,8 @@ export function useWorkspaceFileContent(
 export function useRefreshWorkspaceFiles(workspaceId: string | undefined) {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: ['workspace-files', workspaceId] });
-    qc.invalidateQueries({ queryKey: ['workspace-file', workspaceId] });
+    qc.invalidateQueries({ queryKey: workspaceKeys.filesRoot(workspaceId) });
+    qc.invalidateQueries({ queryKey: workspaceKeys.fileRoot(workspaceId) });
   };
 }
 
@@ -95,7 +109,7 @@ export function useWorkspaceChanges(
   enabled: boolean,
 ) {
   return useQuery({
-    queryKey: ['workspace-changes', workspaceId],
+    queryKey: workspaceKeys.changes(workspaceId),
     queryFn: () => workspacesApi.listChangedFiles(workspaceId!),
     enabled: !!workspaceId && enabled,
     retry: false,
@@ -108,7 +122,7 @@ export function useWorkspaceFileDiff(
   path: string | undefined,
 ) {
   return useQuery({
-    queryKey: ['workspace-file-diff', workspaceId, path],
+    queryKey: workspaceKeys.diff(workspaceId, path),
     queryFn: () => workspacesApi.readFileDiff(workspaceId!, path!),
     enabled: !!workspaceId && !!path,
     retry: false,
@@ -119,7 +133,7 @@ export function useWorkspaceFileDiff(
 export function useRefreshWorkspaceChanges(workspaceId: string | undefined) {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: ['workspace-changes', workspaceId] });
-    qc.invalidateQueries({ queryKey: ['workspace-file-diff', workspaceId] });
+    qc.invalidateQueries({ queryKey: workspaceKeys.changes(workspaceId) });
+    qc.invalidateQueries({ queryKey: workspaceKeys.diffRoot(workspaceId) });
   };
 }

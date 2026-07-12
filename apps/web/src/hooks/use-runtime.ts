@@ -8,9 +8,17 @@ import type {
 } from '@agework/shared/api';
 export type { Runtime, CreateRuntimeResponse } from '@/api/runtimes';
 
+/** runtime 相关 react-query 键的唯一 factory:define 与 invalidate 共用。 */
+const runtimeKeys = {
+  all: ['runtimes'] as const,
+  adminAll: ['admin-runtimes'] as const,
+  directory: (runtimeId: string | undefined, path: string | undefined) =>
+    ['runtime-directory', runtimeId, path ?? null],
+};
+
 export function useRuntimes() {
   return useQuery({
-    queryKey: ['runtimes'],
+    queryKey: runtimeKeys.all,
     queryFn: () => runtimesApi.list(),
     select: (data) => data.list,
   });
@@ -19,7 +27,7 @@ export function useRuntimes() {
 /** admin: 列出全部 Runtime（managed + 所有用户的 registered）。 */
 export function useAdminRuntimes() {
   return useQuery({
-    queryKey: ['admin-runtimes'],
+    queryKey: runtimeKeys.adminAll,
     queryFn: () => runtimesApi.adminList(),
     select: (data) => data.list,
   });
@@ -30,7 +38,7 @@ export function useCreateRuntime() {
   return useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: CreateRuntimeRequest) => runtimesApi.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.all }),
   });
 }
 
@@ -38,7 +46,7 @@ export function useDeleteRuntime() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => runtimesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.all }),
   });
 }
 
@@ -48,7 +56,7 @@ export function useUpdateEnvConfigOverride() {
   return useMutation({
     mutationFn: (data: UpdateEnvConfigOverrideRequest) =>
       runtimesApi.updateEnvConfigOverride(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
   });
 }
 
@@ -57,7 +65,7 @@ export function useDetectEnv() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => runtimesApi.detectEnv(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
   });
 }
 
@@ -67,7 +75,7 @@ export function useInstallCli() {
   return useMutation({
     meta: { suppressGlobalError: true },
     mutationFn: (data: InstallCliRequest) => runtimesApi.installCli(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-runtimes'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
   });
 }
 
@@ -78,7 +86,7 @@ export function useRuntimeDirectory(
   enabled: boolean
 ) {
   return useQuery({
-    queryKey: ['runtime-directory', runtimeId, path ?? null],
+    queryKey: runtimeKeys.directory(runtimeId, path),
     queryFn: () => runtimesApi.listDirectory({ runtimeId: runtimeId!, path }),
     enabled: enabled && !!runtimeId,
     // 导航时保留上一个目录的数据，避免闪烁

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/select";
 import { errorMessage } from "@/utils/error";
 import { usernameSchema } from "@/utils/validation";
+import { adminUserKeys } from "./admin-user-keys";
 
 const createUserFormSchema = z.object({
   username: usernameSchema,
@@ -62,7 +63,7 @@ export function CreateUserDialogForm({
 
     try {
       const result = await createUser.mutateAsync(values);
-      await qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      await qc.invalidateQueries({ queryKey: adminUserKeys.all });
       onOpenChange(false);
       onCreated(result);
     } catch (error) {
