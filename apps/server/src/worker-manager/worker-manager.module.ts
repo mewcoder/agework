@@ -3,7 +3,6 @@ import { Module } from "@nestjs/common";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { WorkerConfigStore } from "./connection/worker-config.store";
 import { WorkerCommandQueue } from "./connection/command-queue";
-import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerRunController } from "./worker-run.controller";
@@ -43,7 +42,6 @@ import { OwnerRunStore } from "./instance/owner-run.store";
   providers: [
     WorkerConfigStore,
     WorkerCommandQueue,
-    WorkerUpstreamRegistry,
     WorkerCommandDispatcher,
     WorkerEndpointHandler,
     WorkerRegistryRepository,

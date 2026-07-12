@@ -1,7 +1,6 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import type { RunConfig, CommandPayload } from "@agework/shared/protocol";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
-import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-manager.types";
 import { WorkerManagerService } from "./worker-manager.service";
@@ -18,8 +17,6 @@ function makeService() {
     pollCommands: vi.fn(),
     getRunConfig: vi.fn(),
     postEvent: vi.fn(),
-  };
-  const upstream = {
     setUpstreamPort: vi.fn(),
   };
   const commandDispatcher = {
@@ -49,7 +46,6 @@ function makeService() {
   };
   const service = new WorkerManagerService(
     endpointHandler as unknown as WorkerEndpointHandler,
-    upstream as unknown as WorkerUpstreamRegistry,
     commandDispatcher as unknown as WorkerCommandDispatcher,
     {} as unknown as WorkerRegistryRepository,
     runtimeService as never,
@@ -61,7 +57,6 @@ function makeService() {
   return {
     service,
     endpointHandler,
-    upstream,
     commandDispatcher,
     provisioner,
     runtimeService,
@@ -181,15 +176,15 @@ describe("WorkerManagerService — facade routing", () => {
     expect(commandDispatcher.cleanupByWorkerId).toHaveBeenCalledWith("worker-1");
   });
 
-  it("routes setUpstreamPort to the upstream registry", () => {
-    const { service, upstream } = makeService();
+  it("routes setUpstreamPort to the endpoint handler", () => {
+    const { service, endpointHandler } = makeService();
     const receiver = {
       sendEvent: vi.fn(),
     } as unknown as WorkerUpstreamPort;
 
     service.setUpstreamPort(receiver);
 
-    expect(upstream.setUpstreamPort).toHaveBeenCalledWith(receiver);
+    expect(endpointHandler.setUpstreamPort).toHaveBeenCalledWith(receiver);
   });
 
   it("routes resolveRuntimeSpec to RuntimeService", () => {
@@ -240,7 +235,6 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
     service = new WorkerManagerService(
       {} as any,
       {} as any,
-      {} as any,
       repository,
       {} as any,
       {} as any,
@@ -273,7 +267,6 @@ describe("WorkerManagerService runtime policy", () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
       runtimeService as never,
       {} as never,
       {} as never,
@@ -298,7 +291,6 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
     };
     const provisioner = { stop: vi.fn().mockResolvedValue(undefined) };
     const service = new WorkerManagerService(
-      {} as never,
       {} as never,
       {} as never,
       registry as never,
@@ -399,7 +391,6 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
       provisioner as never,
       {} as never,
       {} as never,
@@ -463,7 +454,6 @@ describe("WorkerManagerService.registerWorker", () => {
   function makeService() {
     const handshakeStore = { registerWorker: vi.fn() };
     const service = new WorkerManagerService(
-      {} as never,
       {} as never,
       {} as never,
       {} as never,

@@ -12,17 +12,22 @@ import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { WorkerCommandQueue } from "./command-queue";
 import { WorkerConfigStore } from "./worker-config.store";
 import { parseWorkerEventPostBody } from "./worker-event.parser";
-import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
+import type { WorkerUpstreamPort } from "../worker-manager.types";
 
 @Injectable()
 export class WorkerEndpointHandler {
   private readonly logger = new Logger(WorkerEndpointHandler.name);
+  /** run 层实现的上行事件 Port,由 run startup 经 WorkerManagerService 接线;接线前上报静默丢弃。 */
+  private upstreamPort?: WorkerUpstreamPort;
 
   constructor(
     private readonly commandQueue: WorkerCommandQueue,
-    private readonly configStore: WorkerConfigStore,
-    private readonly upstream: WorkerUpstreamRegistry
+    private readonly configStore: WorkerConfigStore
   ) {}
+
+  setUpstreamPort(receiver: WorkerUpstreamPort): void {
+    this.upstreamPort = receiver;
+  }
 
   async pollCommands(
     workerId: string,
@@ -80,7 +85,7 @@ export class WorkerEndpointHandler {
       throw new BadRequestException("Worker event runId mismatch");
     }
     for (const event of events) {
-      await this.upstream.sendEvent(runId, event);
+      await this.upstreamPort?.sendEvent(runId, event);
     }
     return { ok: true };
   }

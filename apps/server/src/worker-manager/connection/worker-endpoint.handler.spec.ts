@@ -3,13 +3,13 @@ import { BadRequestException, NotFoundException } from "@nestjs/common";
 import type { RunConfig } from "@agework/shared/protocol";
 import { WorkerCommandQueue } from "./command-queue";
 import { WorkerConfigStore } from "./worker-config.store";
-import { WorkerUpstreamRegistry } from "./worker-upstream.registry";
+import type { WorkerUpstreamPort } from "../worker-manager.types";
 import { WorkerEndpointHandler } from "./worker-endpoint.handler";
 
 function makeHandler(opts: {
   commandQueue?: Partial<WorkerCommandQueue>;
   configStore?: Partial<WorkerConfigStore>;
-  upstream?: Partial<WorkerUpstreamRegistry>;
+  upstream?: Partial<WorkerUpstreamPort>;
 }) {
   const commandQueue = {
     epochFor: vi.fn().mockReturnValue(0),
@@ -18,8 +18,11 @@ function makeHandler(opts: {
     ...opts.commandQueue,
   } as unknown as WorkerCommandQueue;
   const configStore = (opts.configStore ?? {}) as WorkerConfigStore;
-  const upstream = (opts.upstream ?? {}) as WorkerUpstreamRegistry;
-  return new WorkerEndpointHandler(commandQueue, configStore, upstream);
+  const handler = new WorkerEndpointHandler(commandQueue, configStore);
+  if (opts.upstream) {
+    handler.setUpstreamPort(opts.upstream as WorkerUpstreamPort);
+  }
+  return handler;
 }
 
 const commandMessage = {

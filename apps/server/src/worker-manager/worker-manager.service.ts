@@ -19,7 +19,6 @@ import {
   type RuntimeInstanceRef,
 } from "@agework/providers";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
-import { WorkerUpstreamRegistry } from "./connection/worker-upstream.registry";
 import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
 import type { WorkerUpstreamPort } from "./worker-manager.types";
 import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
@@ -45,7 +44,6 @@ export class WorkerManagerService {
 
   constructor(
     private readonly endpointHandler: WorkerEndpointHandler,
-    private readonly upstream: WorkerUpstreamRegistry,
     private readonly commandDispatcher: WorkerCommandDispatcher,
     private readonly registry: WorkerRegistryRepository,
     private readonly runtimeService: RuntimeService,
@@ -151,7 +149,7 @@ export class WorkerManagerService {
 
   /** 接线 `run` 模块实现的上行事件 Port，供上报事件时反向回流。 */
   setUpstreamPort(receiver: WorkerUpstreamPort): void {
-    this.upstream.setUpstreamPort(receiver);
+    this.endpointHandler.setUpstreamPort(receiver);
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker)。直通转发 runtime 模块。 */
