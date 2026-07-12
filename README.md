@@ -129,7 +129,7 @@ Web UI
 - Monorepo: pnpm workspace + Turborepo
 - Web: React 19, Vite, Tailwind CSS v4, TanStack Router, TanStack Query, assistant-ui
 - API: NestJS 11, Prisma, SQLite / PostgreSQL driver adapter
-- Worker / Adapters: Claude Agent SDK, Codex SDK, AG-UI
+- Worker / Adapters: Claude Agent SDK, Codex app-server (JSON-RPC), AG-UI
 - Desktop: Electron
 - Test: Vitest, Playwright
 

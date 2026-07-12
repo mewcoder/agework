@@ -78,7 +78,7 @@ describe("getPendingQuestion(窗口期扫描分支)", () => {
     const pending = getPendingQuestion(messages);
 
     expect(pending?.phase).toBe("streaming");
-    expect(pending?.part.toolCallId).toBe("tc-real-pending");
+    expect(pending?.part?.toolCallId).toBe("tc-real-pending");
   });
 
   it("一条消息里第一个已回答、第二个未回答时，找到第二个", () => {
@@ -91,6 +91,6 @@ describe("getPendingQuestion(窗口期扫描分支)", () => {
 
     const pending = getPendingQuestion(messages);
 
-    expect(pending?.part.toolCallId).toBe("tc-real-pending");
+    expect(pending?.part?.toolCallId).toBe("tc-real-pending");
   });
 });

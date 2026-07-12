@@ -168,8 +168,8 @@ describe("RunService", () => {
           resume: [{ interruptId: "int-1", status: "cancelled" }],
           res: makeRes(),
         })
-      ).rejects.toThrow("resume entry");
-      expect(mockRunRepository.findActiveByConversationId).not.toHaveBeenCalled();
+      ).rejects.toThrow("No pending question");
+      expect(mockRunRepository.findActiveByConversationId).toHaveBeenCalled();
     });
 
     it("attaches the stream in event mode then dispatches approval with resumeRunId", async () => {
@@ -193,7 +193,7 @@ describe("RunService", () => {
         expect.objectContaining({
           type: "approval_resolved",
           conversationId: "conversation-1",
-          answers: { decision: "yes" },
+          payload: { answers: { decision: "yes" } },
           resumeRunId: "run-2",
         })
       );
@@ -207,6 +207,93 @@ describe("RunService", () => {
         expect.objectContaining({
           runId: "run-1",
           type: "permission.resolved",
+        })
+      );
+    });
+
+    it("dispatches approval_resolved with opaque payload for Codex decision", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1", status: "requires_action" });
+      const handle = makeHandle();
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+
+      await service.resumeWithAnswers({
+        conversationId: "conversation-1",
+        resumeRunId: "run-2",
+        resume: [
+          {
+            interruptId: "int-1",
+            status: "resolved",
+            payload: { decision: "accept" },
+          },
+        ],
+        res: makeRes(),
+      });
+
+      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
+        handle.runtimeHandle,
+        expect.objectContaining({
+          type: "approval_resolved",
+          payload: { decision: "accept" },
+        })
+      );
+    });
+
+    it("dispatches approval_resolved with {status: cancelled} when user cancels", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1", status: "requires_action" });
+      const handle = makeHandle();
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+
+      await service.resumeWithAnswers({
+        conversationId: "conversation-1",
+        resumeRunId: "run-2",
+        resume: [
+          {
+            interruptId: "int-1",
+            status: "cancelled",
+          },
+        ],
+        res: makeRes(),
+      });
+
+      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
+        handle.runtimeHandle,
+        expect.objectContaining({
+          type: "approval_resolved",
+          payload: { status: "cancelled" },
+        })
+      );
+    });
+
+    it("dispatches approval_resolved with permission payload for Codex permissions", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue({ id: "run-1", status: "requires_action" });
+      const handle = makeHandle();
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(handle);
+
+      const permPayload = { permissions: { network: true }, scope: "session" };
+      await service.resumeWithAnswers({
+        conversationId: "conversation-1",
+        resumeRunId: "run-2",
+        resume: [
+          {
+            interruptId: "int-1",
+            status: "resolved",
+            payload: permPayload,
+          },
+        ],
+        res: makeRes(),
+      });
+
+      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
+        handle.runtimeHandle,
+        expect.objectContaining({
+          type: "approval_resolved",
+          payload: permPayload,
         })
       );
     });

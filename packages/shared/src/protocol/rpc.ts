@@ -95,7 +95,8 @@ export type RunInterruptParams = {
 export type ControlResolveParams = {
   runId?: string;
   conversationId: string;
-  answers: Record<string, string | string[]>;
+  /** Provider-agnostic opaque payload（【决策2】）. */
+  payload: unknown;
   resumeRunId?: string;
 };
 
@@ -218,7 +219,7 @@ export function commandMessageToRpcRequest(
         params: {
           runId: message.runId || undefined,
           conversationId: command.conversationId,
-          answers: command.answers,
+          payload: command.payload,
           ...(command.resumeRunId ? { resumeRunId: command.resumeRunId } : {}),
         },
         meta,
@@ -268,7 +269,7 @@ export function rpcRequestToCommandPayload(
         type: "approval_resolved",
         commandId,
         conversationId: request.params.conversationId,
-        answers: request.params.answers,
+        payload: request.params.payload,
         ...(request.params.resumeRunId
           ? { resumeRunId: request.params.resumeRunId }
           : {}),
@@ -635,7 +636,7 @@ function isControlResolveParams(
     isRecord(value) &&
     optionalString(value.runId) &&
     isNonEmptyString(value.conversationId) &&
-    isAnswerMap(value.answers) &&
+    value.payload !== undefined &&
     optionalString(value.resumeRunId)
   );
 }
@@ -792,19 +793,6 @@ function isCommandTracePayload(value: unknown): value is CommandTracePayload {
   );
 }
 
-function isAnswerMap(
-  value: unknown
-): value is Record<string, string | string[]> {
-  return (
-    isRecord(value) &&
-    Object.values(value).every(
-      (answer) =>
-        typeof answer === "string" ||
-        (Array.isArray(answer) &&
-          answer.every((item) => typeof item === "string"))
-    )
-  );
-}
 
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (

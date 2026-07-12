@@ -122,6 +122,40 @@ describe("RunnerManager", () => {
     expect(options.env.AGEWORK_WORKER_LOG_LEVEL).toBe("debug");
   });
 
+  it("passes AGEWORK_CODEX_BACKEND to the runner env (SDK fallback)", async () => {
+    vi.stubEnv("AGEWORK_CODEX_BACKEND", "sdk");
+
+    const client = makeClient();
+    const manager = makeManager(client);
+
+    await manager.handle(userMessage);
+
+    const [, , options] = forkMock.mock.calls[0] as [
+      string,
+      unknown,
+      { env: NodeJS.ProcessEnv },
+    ];
+    expect(options.env.AGEWORK_CODEX_BACKEND).toBe("sdk");
+  });
+
+  it("passes AGEWORK_CODEX_APP_SERVER_* timeout env vars to the runner", async () => {
+    vi.stubEnv("AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS", "15000");
+    vi.stubEnv("AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS", "3000");
+
+    const client = makeClient();
+    const manager = makeManager(client);
+
+    await manager.handle(userMessage);
+
+    const [, , options] = forkMock.mock.calls[0] as [
+      string,
+      unknown,
+      { env: NodeJS.ProcessEnv },
+    ];
+    expect(options.env.AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS).toBe("15000");
+    expect(options.env.AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS).toBe("3000");
+  });
+
   it("starts one runner process for a user_message command", async () => {
     const config = makeRunConfig();
     const client = makeClient(config);

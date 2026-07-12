@@ -76,4 +76,13 @@ export class CodexAgentAdapter extends AgUiCodexAgentAdapter {
       },
     });
   }
+
+  /**
+   * SDK backend does not support HITL approvals (【决策8】 — SDK is a
+   * fallback with auto-approve only). This method always returns false
+   * to indicate no pending approval was found.
+   */
+  resolveApproval(): boolean {
+    return false;
+  }
 }

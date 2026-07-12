@@ -29,6 +29,7 @@ Runtime 的软删除策略、EnvConfig 两层分离、CLI 检测归属、容器 
 
 - ADRs: [`apps/server/src/run/docs/adr/`](apps/server/src/run/docs/adr/)
   - `0001-question-interrupt-terminal-model.md` — 问答走 AG-UI interrupt terminal model,worker/SDK 保持 pause model
+  - `0002-resume-payload-generalization.md` — resume 契约泛化为 provider 无关 payload + 接受 cancelled(为 Codex 审批 decision/decline,顺带解锁 Claude 权限拒绝)
 
 ### `apps/server` → worker-manager module — worker lifecycle & channels
 
@@ -62,6 +63,14 @@ Runner 独立入口 + 显式 env 白名单。
 
 - ADRs: [`packages/worker/docs/adr/`](packages/worker/docs/adr/)
   - `0001-runner-independent-entry.md` — Runner 独立入口 + 显式 env 白名单
+
+### `packages/adapters` → codex adapter — Codex 接入后端
+
+Codex First-class 后端从单向 SDK 迁到双向 `codex app-server`(为拿到用户级命令/文件/权限审批)。默认 backend 为 app-server,SDK 保留为回退。
+
+- 执行文档:[`docs/agework-codex-app-server-migration.md`](docs/agework-codex-app-server-migration.md);协议源真相:[`docs/codex-app-server.md`](docs/codex-app-server.md)
+- ADRs: [`packages/adapters/src/codex/docs/adr/`](packages/adapters/src/codex/docs/adr/)
+  - `0001-codex-app-server-first-class-backend.md` — 迁 app-server;每 Runner 一个 app-server;锁 Managed 版本+握手 gate+capability 降级;保留 SDK 回退
 
 ## How to use this map
 

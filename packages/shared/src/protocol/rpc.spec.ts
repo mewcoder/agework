@@ -58,7 +58,7 @@ describe("worker JSON-RPC protocol helpers", () => {
       params: {
         runId: "run-1",
         conversationId: "conv-1",
-        answers: { allowed: "yes" },
+        payload: { answers: { allowed: "yes" } },
       },
       meta: {
         runId: "run-1",
@@ -75,7 +75,7 @@ describe("worker JSON-RPC protocol helpers", () => {
         type: "approval_resolved",
         commandId: "cmd-1",
         conversationId: "conv-1",
-        answers: { allowed: "yes" },
+        payload: { answers: { allowed: "yes" }, },
       },
       ts: "2026-06-27T00:00:00.000Z",
     });

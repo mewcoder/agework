@@ -515,6 +515,13 @@ const RUNNER_ENV_PASSTHROUGH_KEYS = [
   "AGEWORK_WORKER_RUNTIME_RESOURCE_NAME",
   "AGEWORK_CLAUDE_CLI_PATH",
   "AGEWORK_CODEX_CLI_PATH",
+  // Codex backend selection (【决策8】 SDK fallback): the runner process
+  // needs to know which backend to use — without this it always defaults
+  // to "app-server", breaking the SDK fallback path.
+  "AGEWORK_CODEX_BACKEND",
+  // App-server tuning (§12 of migration doc):
+  "AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS",
+  "AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS",
 ] as const;
 
 function buildRunnerEnv(config: RunConfig): NodeJS.ProcessEnv {

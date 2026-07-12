@@ -53,11 +53,29 @@ export function __resetPermissionQueue(threadId?: string): void {
 }
 
 
+/**
+ * Resolve a pending question with the user's response.
+ *
+ * Accepts the generalized provider-agnostic payload（【决策2】）:
+ * - `{ answers: Record<string, string | string[]> }` → resolve with answers
+ * - `{ status: "cancelled" }` → cancel the question
+ * - `Record<string, string | string[]>` (bare answers, backward compat) → resolve
+ */
 export function resolveQuestion(
   threadId: string,
-  answers: Record<string, string | string[]>,
+  payload: unknown,
   resumeRunId?: string
 ): boolean {
+  // Handle cancelled status
+  if (isCancelledPayload(payload)) {
+    cancelQuestion(threadId);
+    return true;
+  }
+
+  // Extract answers from the payload
+  const answers = extractAnswersFromPayload(payload);
+  if (!answers) return false;
+
   const pending = pendingQuestions.get(threadId);
   if (!pending) return false;
   pendingQuestions.delete(threadId);
@@ -71,6 +89,48 @@ export function cancelQuestion(threadId: string): void {
   if (!pending) return;
   pendingQuestions.delete(threadId);
   pending.reject(new Error("Question cancelled"));
+}
+
+// ── Payload helpers (【决策2】 generalized resume contract) ────────────────
+
+function isCancelledPayload(payload: unknown): boolean {
+  return (
+    payload !== null &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    (payload as Record<string, unknown>).status === "cancelled"
+  );
+}
+
+function extractAnswersFromPayload(
+  payload: unknown,
+): Record<string, string | string[]> | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  // Shape 1: { answers: Record<string, string | string[]> }
+  if (record.answers && typeof record.answers === "object" && !Array.isArray(record.answers)) {
+    const answers = record.answers as Record<string, unknown>;
+    if (isAnswerRecord(answers)) {
+      return answers as Record<string, string | string[]>;
+    }
+  }
+  // Shape 2: bare Record<string, string | string[]> (backward compat)
+  if (isAnswerRecord(record)) {
+    return record as Record<string, string | string[]>;
+  }
+  return null;
+}
+
+function isAnswerRecord(
+  value: Record<string, unknown>,
+): boolean {
+  return Object.values(value).every(
+    (item) =>
+      typeof item === "string" ||
+      (Array.isArray(item) && item.every((inner) => typeof inner === "string"))
+  );
 }
 
 const logger = new Logger("ClaudeAgentAdapter");
@@ -639,6 +699,21 @@ export class ClaudeAgentAdapter extends AgUiClaudeAgentAdapter {
         { once: true }
       );
     });
+  }
+
+  /**
+   * Resolve a pending approval — delegates to `resolveQuestion` (【决策2】).
+   *
+   * This method provides a uniform interface for the worker driver to call
+   * regardless of adapter type. Claude's payload is `{ answers }` or
+   * `{ status: "cancelled" }`.
+   */
+  resolveApproval(
+    threadId: string,
+    payload: unknown,
+    resumeRunId?: string,
+  ): boolean {
+    return resolveQuestion(threadId, payload, resumeRunId);
   }
 
   private emitTrace(

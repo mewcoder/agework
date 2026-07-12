@@ -140,3 +140,17 @@ POST /api/v1/admin/config/reset    body: { key }
 | Claude | `CLAUDE_CONFIG_DIR`    | Claude CLI 配置目录，仅系统环境透传时使用。 |
 | Codex  | `OPENAI_API_KEY`       | OpenAI/Codex API key。                       |
 | Codex  | `CODEX_API_KEY`        | Codex API key fallback。                     |
+
+---
+
+## Codex Backend 配置
+
+Codex adapter 支持两种 backend，经 `AGEWORK_CODEX_BACKEND` 环境变量切换：
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `AGEWORK_CODEX_BACKEND` | `app-server` | Codex adapter 后端选择。`app-server`（默认）使用 `codex app-server` 双向 JSON-RPC 协议，支持用户级命令/文件/权限审批。`sdk` 回退到旧 `@openai/codex-sdk`（单向，仅自动审批）。 |
+| `AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS` | `30000` | app-server JSON-RPC 请求超时（毫秒）。超时后清 pending 并报错。 |
+| `AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS` | `5000` | app-server 子进程关闭超时（毫秒）。超时后 SIGKILL。 |
+
+这些变量由 worker 进程读取，经 `runner-manager.ts` 白名单传递给 runner 子进程。详见 [`packages/adapters/src/codex/factory.ts`](packages/adapters/src/codex/factory.ts) 和 ADR [`packages/adapters/src/codex/docs/adr/0001-codex-app-server-first-class-backend.md`](packages/adapters/src/codex/docs/adr/0001-codex-app-server-first-class-backend.md)。

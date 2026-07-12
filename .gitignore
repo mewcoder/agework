@@ -52,3 +52,4 @@ coverage
 # check-module 报告输出
 reports/
 .codebuddy/settings.local.json
+packages/adapters/src/codex/base/app-server/generated/

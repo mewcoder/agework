@@ -13,6 +13,12 @@ export {
 } from "./codex/business/codex-agent.adapter";
 
 export {
+  createCodexAdapter,
+  type CodexAgentInstance,
+  type CodexBackendConfig,
+} from "./codex/factory";
+
+export {
   AcpAgentAdapter,
   type AcpAgentAdapterConfig,
   createAcpAdapter,

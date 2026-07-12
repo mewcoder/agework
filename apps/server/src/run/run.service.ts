@@ -122,9 +122,10 @@ export class RunService implements OnApplicationBootstrap {
 
   /**
    * Interrupt 答复续接（terminal model）：校验 resume[] 后先把新 SSE 附接到
-   * 活跃 run 的 handle（事件模式，保证续接段的 RUN_STARTED 不漏），再把答案
-   * 经 approval_resolved 命令下发给 worker；adapter 解开挂起后以 resumeRunId
-   * 发 RUN_STARTED，后续事件流入本次 res。
+   * 活跃 run 的 handle（事件模式，保证续接段的 RUN_STARTED 不漏），再把
+   * provider-agnostic payload 经 approval_resolved 命令下发给 worker；
+   * adapter 自解 payload（【决策2】），解开挂起后以 resumeRunId 发 RUN_STARTED，
+   * 后续事件流入本次 res。
    * 无活跃 run 或不在待答状态时抛 Conflict，前端 invalidate 后按最新状态走。
    */
   async resumeWithAnswers(input: {
@@ -134,7 +135,7 @@ export class RunService implements OnApplicationBootstrap {
     res: Response;
   }): Promise<void> {
     const { conversationId, resumeRunId, res } = input;
-    const answers = extractResumeAnswers(input.resume);
+    const { status, payload } = extractResumePayload(input.resume);
 
     const activeRun =
       await this.runRepository.findActiveByConversationId(conversationId);
@@ -157,7 +158,7 @@ export class RunService implements OnApplicationBootstrap {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
-      answers,
+      payload: status === "cancelled" ? { status: "cancelled" } : payload,
       resumeRunId,
     });
     const runId = handle.runtimeHandle.runId;
@@ -265,13 +266,19 @@ export class RunService implements OnApplicationBootstrap {
 }
 
 /**
- * 从 AG-UI `RunAgentInput.resume[]` 提取答案。问答当前是单槽(一次只有一个
- * open interrupt),取第一个 resolved entry 的 `payload.answers`。
- * interruptId 不做匹配校验——adapter 按 threadId 单槽 resolve,错误 id 无副作用。
+ * 从 AG-UI `RunAgentInput.resume[]` 提取 provider-agnostic payload（【决策2】）。
+ *
+ * 接受 `status: "resolved"` 和 `status: "cancelled"` 两种状态:
+ * - `resolved` → 透传不透明 `payload`（Claude 问答的 `{answers}`、Codex 审批的
+ *   `{decision}` 或 `{permissions,scope}` 等）。
+ * - `cancelled` → payload 统一替换为 `{ status: "cancelled" }`，由 adapter 映射为
+ *   decline/cancel。
+ *
+ * interruptId 不做匹配校验——adapter 按 threadId 单槽 resolve，错误 id 无副作用。
  */
-function extractResumeAnswers(
+function extractResumePayload(
   resume: unknown
-): Record<string, string | string[]> {
+): { status: "resolved" | "cancelled"; payload: unknown } {
   if (!Array.isArray(resume) || resume.length === 0) {
     throw new BadRequestException("resume must be a non-empty array");
   }
@@ -279,30 +286,22 @@ function extractResumeAnswers(
   if (
     !entry ||
     typeof entry !== "object" ||
-    typeof entry.interruptId !== "string" ||
-    entry.status !== "resolved"
+    typeof entry.interruptId !== "string"
   ) {
     throw new BadRequestException(
-      'resume entry must be { interruptId, status: "resolved", payload }'
+      'resume entry must be { interruptId, status: "resolved"|"cancelled", payload? }'
     );
   }
-  const payload = entry.payload as Record<string, unknown> | undefined;
-  const answers = payload?.answers;
-  if (!isAnswerRecord(answers)) {
+  const status = entry.status;
+  if (status !== "resolved" && status !== "cancelled") {
     throw new BadRequestException(
-      "resume payload.answers must be a record of string | string[]"
+      'resume entry status must be "resolved" or "cancelled"'
     );
   }
-  return answers;
-}
-
-function isAnswerRecord(
-  value: unknown
-): value is Record<string, string | string[]> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  return Object.values(value).every(
-    (item) =>
-      typeof item === "string" ||
-      (Array.isArray(item) && item.every((inner) => typeof inner === "string"))
-  );
+  // cancelled → normalize payload to { status: "cancelled" }
+  if (status === "cancelled") {
+    return { status: "cancelled", payload: { status: "cancelled" } };
+  }
+  // resolved → pass through opaque payload
+  return { status: "resolved", payload: entry.payload };
 }
