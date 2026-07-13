@@ -130,6 +130,19 @@ function FileEntryNode({
 }) {
   const fullPath = parentPath === "" ? entry.name : `${parentPath}/${entry.name}`;
 
+  // Hooks must be called unconditionally — before any early return.
+  const aui = useAui();
+
+  const handleAddToConversation = useCallback(() => {
+    const current = aui.composer().getState().text;
+    const prefix = current.length > 0 && !current.endsWith(" ") ? " " : "";
+    aui.composer().setText(current + prefix + "@" + fullPath);
+  }, [aui, fullPath]);
+
+  const handleCopyPath = useCallback(() => {
+    navigator.clipboard.writeText(fullPath).catch(() => {});
+  }, [fullPath]);
+
   if (entry.type === "directory") {
     return (
       <FileTreeNode
@@ -159,18 +172,6 @@ function FileEntryNode({
       </button>
     );
   }
-
-  const aui = useAui();
-
-  const handleAddToConversation = useCallback(() => {
-    const current = aui.composer().getState().text;
-    const prefix = current.length > 0 && !current.endsWith(" ") ? " " : "";
-    aui.composer().setText(current + prefix + "@" + fullPath);
-  }, [aui, fullPath]);
-
-  const handleCopyPath = useCallback(() => {
-    navigator.clipboard.writeText(fullPath).catch(() => {});
-  }, [fullPath]);
 
   // file
   return (

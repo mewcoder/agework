@@ -143,6 +143,7 @@ export function DirectoryPicker({
   // 路径变化时请求目录列表
   useEffect(() => {
     const reqId = ++reqIdRef.current;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading 状态是 fetch 副作用，必须在请求开始时同步设置
     setLoading(true);
     setLoadError(null);
     listDirectories(path)

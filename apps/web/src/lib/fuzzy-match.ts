@@ -36,7 +36,6 @@ function isBoundary(s: string, i: number): boolean {
 function scoreFuzzy(
   lowerQuery: string,
   lowerTarget: string,
-  _originalTarget: string,
 ): number | null {
   if (lowerQuery.length === 0) return 0;
 
@@ -109,7 +108,7 @@ export function fuzzyMatch(
 
   for (const path of paths) {
     const lowerPath = path.toLowerCase();
-    const score = scoreFuzzy(lowerQuery, lowerPath, path);
+    const score = scoreFuzzy(lowerQuery, lowerPath);
     if (score !== null) {
       const lastSlash = path.lastIndexOf("/");
       results.push({

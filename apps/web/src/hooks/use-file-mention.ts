@@ -1,4 +1,4 @@
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FileIcon } from "lucide-react";
 import type { Unstable_TriggerItem } from "@assistant-ui/react";
@@ -60,16 +60,14 @@ export function useFileMentionAdapter(
     qc.invalidateQueries({ queryKey: [...FILE_INDEX_KEY, workspaceId] });
   }, [qc, workspaceId]);
 
-  const files = data ?? [];
-  const filesRef = useRef(files);
-  filesRef.current = files;
+  const files = useMemo(() => data ?? [], [data]);
 
   const adapter = useMemo(
     () => ({
       categories: () => [],
       categoryItems: () => [],
       search: (query: string) => {
-        const results = fuzzyMatch(query, filesRef.current, 20);
+        const results = fuzzyMatch(query, files, 20);
         return results.map(
           ({ path, filename, dir }): Unstable_TriggerItem => ({
             id: path,
@@ -80,7 +78,7 @@ export function useFileMentionAdapter(
         );
       },
     }),
-    [],
+    [files],
   );
 
   return { adapter, fallbackIcon: FileIcon, files, isLoading, refresh };

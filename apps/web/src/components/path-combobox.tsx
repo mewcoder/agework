@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- 路径工具函数与组件紧耦合 */
 import {
   useEffect,
   useRef,
@@ -145,6 +146,7 @@ export function PathCombobox({
   useEffect(() => {
     if (!open || !listDirectories) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loading 状态是 fetch 副作用，必须在请求开始时同步设置
     setLoading(true);
     listDirectories(dir)
       .then((result) => {

@@ -1,5 +1,5 @@
 "use client";
-
+/* eslint-disable react-refresh/only-export-components -- 解析器、格式化器和组件紧耦合，拆分文件意义不大 */
 import { memo } from "react";
 import type { TextMessagePartComponent } from "@assistant-ui/react";
 

@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- 薄壳同时导出组件与 re-export 的 hooks,与上游 shadcn registry 结构一致 */
 "use client"
 
 import * as React from "react"

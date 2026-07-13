@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { diffLines } from "diff";
 import { AlertCircle, ChevronsUpDown, FoldVertical, UnfoldVertical } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -208,10 +208,12 @@ export function WorkspaceFileDiffView({
     [items],
   );
   const [expandedGaps, setExpandedGaps] = useState<Set<number>>(() => new Set());
-  // 切换文件时重置展开状态
-  useEffect(() => {
+  // 切换文件时重置展开状态（render 期间调整，避免 effect cascade render）
+  const [prevPath, setPrevPath] = useState(entry.path);
+  if (prevPath !== entry.path) {
+    setPrevPath(entry.path);
     setExpandedGaps(new Set());
-  }, [entry.path]);
+  }
   const hasGaps = gapIndices.length > 0;
   const allExpanded = hasGaps && gapIndices.every((i) => expandedGaps.has(i));
 

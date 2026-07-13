@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useRef, type ComponentPropsWithoutRef, type FC } from "react";
+import { memo, useEffect, useRef, type ComponentPropsWithoutRef, type FC } from "react";
 import {
   ComposerPrimitive,
   unstable_defaultDirectiveFormatter,
@@ -213,16 +213,18 @@ const ComposerTriggerPopoverImpl: FC<ComposerTriggerPopoverProps> = ({
   ...props
 }) => {
   const warnedRef = useRef(false);
-  if (
-    import.meta.env.DEV &&
-    !warnedRef.current &&
-    Boolean(directive) === Boolean(action)
-  ) {
-    warnedRef.current = true;
-    console.warn(
-      "[assistant-ui] ComposerTriggerPopover requires exactly one of `directive` or `action` props.",
-    );
-  }
+  useEffect(() => {
+    if (
+      import.meta.env.DEV &&
+      !warnedRef.current &&
+      Boolean(directive) === Boolean(action)
+    ) {
+      warnedRef.current = true;
+      console.warn(
+        "[assistant-ui] ComposerTriggerPopover requires exactly one of `directive` or `action` props.",
+      );
+    }
+  }, [directive, action]);
 
   return (
     <ComposerPrimitive.Unstable_TriggerPopover
