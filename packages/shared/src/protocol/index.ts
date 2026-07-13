@@ -185,6 +185,13 @@ export type {
   RuntimeSearchFilesRpcParams,
   RuntimeSearchFilesRpcResult,
   RuntimeTunnelRpcResponse,
+  HostSubmitRunRpcParams,
+  HostCommandRpcParams,
+  HostReleaseOwnerRpcParams,
+  HostUpstreamNotification,
+  RuntimeTunnelHostRpcRequest,
+  RuntimeTunnelHostNotification,
+  RuntimeTunnelAllRpcRequest,
 } from "./runtime-tunnel";
 
 /** 隧道 WS 关闭码:runtime 已被删除(撤 token),manager 收到后应退出而不是重连。

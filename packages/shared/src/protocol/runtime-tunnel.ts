@@ -1,5 +1,11 @@
-import type { RpcRequest, RpcResponse } from "./rpc";
-import type { RuntimeSpec } from "./channel";
+import type { RpcRequest, RpcResponse, RpcNotification } from "./rpc";
+import type { RuntimeSpec, CommandPayload } from "./channel";
+import type { RunChannelMessage } from "./run-channel-message";
+import type {
+  SubmitRunInput,
+  OwnerKey,
+  ExecutionRef,
+} from "./runtime-host";
 import type { RuntimeEnvConfig } from "../api/runtimes";
 import type {
   WorkspaceFileListResponse,
@@ -48,6 +54,9 @@ export interface RuntimeTunnelRegisteredMessage {
   type: "registered";
   runtimeId: string;
   heartbeatIntervalSeconds: number;
+  /** Phase 2: 隧道会话的单调递增 epoch。server 重启后新 epoch 开始，
+   *  旧 epoch 的消息一律丢弃（防脑裂）。builtin 场景（进程内）无隧道，不使用。 */
+  epoch?: number;
 }
 
 export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
@@ -138,6 +147,47 @@ export type RuntimeTunnelRpcResponse =
   | RpcResponse<RuntimeReadFileDiffRpcResult>
   | RpcResponse<RuntimeSearchFilesRpcResult>
   | RpcResponse<null>;
+
+// ── Phase 2: 执行面隧道协议扩展 ──────────────────────────────────────
+//
+// server → Host:submitRun / command / releaseOwner(有去有回,ACK 语义)。
+// Host → server:host.upstream(单向通知,承载事件流与终态事实)。
+// 所有 Phase 2 消息在 meta 中携带 epoch,server 重启后旧 epoch 消息丢弃。
+
+/** server → Host:提交一次 run。params 就是 RuntimeHostContract.submitRun 的入参。 */
+export type HostSubmitRunRpcParams = SubmitRunInput;
+
+/** server → Host:下发 run 级命令。 */
+export type HostCommandRpcParams = {
+  runId: string;
+  payload: CommandPayload;
+};
+
+/** server → Host:owner 级释放。 */
+export type HostReleaseOwnerRpcParams = {
+  owner: OwnerKey;
+};
+
+/** Host → server:上行事件/终态事实通知(单向)。 */
+export type HostUpstreamNotification =
+  | { kind: "emit"; runId: string; message: RunChannelMessage }
+  | { kind: "runFailed"; runId: string; error: string }
+  | { kind: "runCancelled"; runId: string }
+  | { kind: "workerLost"; runId: string; reason: string }
+  | { kind: "executionRef"; runId: string; ref: ExecutionRef };
+
+export type RuntimeTunnelHostRpcRequest =
+  | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>
+  | RpcRequest<"host.command", HostCommandRpcParams>
+  | RpcRequest<"host.releaseOwner", HostReleaseOwnerRpcParams>;
+
+export type RuntimeTunnelHostNotification =
+  | RpcNotification<"host.upstream", HostUpstreamNotification>;
+
+/** Phase 2 扩展后的全量 RPC 请求类型。 */
+export type RuntimeTunnelAllRpcRequest =
+  | RuntimeTunnelRpcRequest
+  | RuntimeTunnelHostRpcRequest;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,
 // 内联在 protocol/index.ts(shared 源码直连消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。
