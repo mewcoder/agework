@@ -41,7 +41,7 @@ server 的代码和数据库里不再出现。
 | **Run** | 一次 agent 执行：有输入、有事件流输出、有终态。业务事实。 | server |
 | **Runtime Host** | 部署在一台执行机器上的常驻执行节点。**一台机器 = 一个 Host = 一行注册 = 一条隧道**。builtin（server 本机、进程内）或 registered（远程注册）。上报能力矩阵。 | 注册表在 server，执行面在 Host |
 | **Worker** | Host 上的一个**隔离执行代理**：一个常驻进程，接命令、fork runner、回事件。 | Host 内部 |
-| **Scope / Owner** | worker 的服务范围，一体两面：对用户是隔离承诺（`workspace`=项目独享环境，`user`=同用户项目共享），对 Host 是**复用粒度**（worker 池键的粗细）。owner 键 = `workspace:X` 或 `user:Y`。"隔离多硬"由 isolation 决定，"边界圈住谁"由 scope 决定，两者正交。 | workspace 上存 scope（创建时定死），owner 键由 Host 计算使用 |
+| **Scope / Owner** | worker 的服务范围，一体两面：对用户是**独享/共享承诺**（`workspace`=项目独享环境，`user`=同用户项目共享），对 Host 是**复用粒度**（worker 池键的粗细）。owner 键 = `workspace:X` 或 `user:Y`。安全隔离强度只由 isolation 决定——native 下的"独享"是进程与复用边界、不是安全边界；"边界圈住谁"由 scope 决定，两者正交。 | workspace 上存 scope（创建时定死），owner 键由 Host 计算使用 |
 | **Runner** | worker 为每个 run fork 的执行子进程，内跑 adapter，run 结束即退出。 | Host 内部 |
 
 配置维度（不是实体）：**isolation（隔离实现）**，值如 `native` / `docker` / `opensandbox`。
@@ -67,6 +67,12 @@ server 的代码和数据库里不再出现。
    契约里出现其中任何一个，即为设计回退。
 5. **每个 Host 声明能力矩阵**：提供哪些 isolation、各支持哪些 scope、当前是否可用。
    native 只支持 `workspace`（裸进程无安全边界）不是特例，是矩阵里的一格。
+6. **runId 是全链路路由键**（server → Host → worker → runner 一路用它寻址）；
+   每个 run 一条**逻辑信道**，复用物理连接（一 Host 一条隧道，按 runId 多路复用），
+   runner 不独占物理连接。
+7. **Host 不理解 Workspace 的业务语义。** `workspaceId` 对 Host 只是不透明的
+   路由/复用/收尾键（placement 与 releaseWorkspace 携带），Host 永远不会也不能
+   拿它解引用任何业务数据——与"server 不知道 container id"是对称的两句话。
 
 ### 3.3 从领域语言里删除的词
 
@@ -100,10 +106,13 @@ server 的代码和数据库里不再出现。
    各自 workspace 目录下跑。
 3. **native**：workspace 创建时 scope 可选项只有 `workspace`（能力矩阵约束，UI 不给别的选项）→
    provider 起裸进程 worker。与场景 1 完全同一代码路径，仅隔离实现不同。
-4. **删除 workspace（user-scope 下）**：server 停掉该 workspace 的活跃 run →
-   `releaseWorkspace(workspaceId)` → Host 内部解除该 workspace 与 user-scope worker 的关联，
-   **worker 继续活着服务同用户其他 workspace**；若是 workspace-scope 则直接收掉该 worker。
-   载体销不销毁是 provider 缓存策略。owner 模型天然覆盖这两种分支，无需特判。
+4. **删除 workspace / 注销 user**：server 编排两步——先 cancel 目标名下活跃 run，
+   再 `releaseOwner(ownerKey)`（两步均幂等、可重试；删除后的新 submit 由 placement
+   校验直接拒绝）。workspace 删除调 `releaseOwner("workspace:X")`：workspace-scope
+   有 worker 则收掉；user-scope 下该键无 worker，调用是幂等空操作，**共享 worker
+   继续活着服务同用户其他 workspace**。user 注销/禁用调 `releaseOwner("user:Y")`
+   收掉共享 worker。Host 离线时无需补偿——其 worker 走孤儿清理路径消亡。
+   载体销不销毁是 provider 缓存策略。owner 模型天然覆盖全部分支，无需特判。
 
 四个场景没有任何 if-native / if-container 的领域级分叉——分叉全部压进 provider。
 
@@ -118,13 +127,18 @@ server 的代码和数据库里不再出现。
   （Host 死 → 其上所有 run 判败，这是 server 仅剩的执行相关兜底）。
 - 放置决策：run 提交到 workspace 绑定的那个 Host（一次查表，不是状态机），
   提交前按能力矩阵校验目标 isolation 当前可用。
+- 选择层拍平：注册层一机一行多能力（数据对机器诚实），但 workspace 创建 UI 把
+  host × 可用 isolation 拍平成确定条目（"我的电脑 · Docker"），**用户面前的每个
+  选项都是一种明确的 backend**，选完即锁定 `(runtimeHostId, isolation)`
+  （产品对用户诚实）。单/多是两层各自的答案，不互相迁就。
 
 **Server 明确不做（否定清单）：**
 不起容器、不管载体、不管 worker/runner 生命周期、不调 agent SDK、不做执行机文件系统操作；
 不知道 container id / worker pid / runner pid / docker 命令 / 镜像名。
 
 **Runtime Host 独占：**
-- worker 池（内存 `Map<ownerKey, Worker>`）、owner 去重、scope 落实。
+- worker 池（内存 `Map<WorkerKey, Worker>`，`WorkerKey = owner # isolation`，见不变量 2）、
+  去重、scope 落实。池、观测、stopWorker、fence 全部用同一个 WorkerKey，不出现裸 ownerKey。
 - worker 生命周期：拉起（provider 选隔离实现）、握手、心跳判死（fence）、空闲回收。
 - 命令信箱与事件转发：worker 长轮询自己的 Host，事件经它回流 server。
 - provider 缓存策略（留不留容器）、CLI 环境检测、能力矩阵上报。
@@ -150,8 +164,9 @@ interface RuntimeHostContract {
   command(runId: string, payload: RunCommandPayload): Promise<void>;
 
   // —— 业务级收尾（只有业务动词，没有 stopContainer 之类的基础设施动词） ——
-  /** workspace 被删除：Host 解除其关联并收尾（见 §3.5 场景 4）。 */
-  releaseWorkspace(workspaceId: string): Promise<void>;
+  /** owner 级释放：workspace 删除传 workspace:X，user 注销/禁用传 user:Y。
+      幂等、可重试；目标键无 worker 时为空操作（见 §3.5 场景 4）。 */
+  releaseOwner(owner: OwnerKey): Promise<void>;
 
   // —— 环境 ——
   /** 每种 isolation 的可用性 + CLI 检测结果，构成能力矩阵的动态部分。 */
@@ -167,9 +182,9 @@ interface RuntimeHostContract {
   searchFiles(input: SearchFilesInput): Promise<FileEntry[]>;
   listChangedFiles(input: WorkspaceFileQuery): Promise<ChangedFile[]>;
 
-  // —— 观测（admin，现场查询，不落库） ——
+  // —— 观测（admin 诊断面，显式例外，见下方要点；现场查询，不落库） ——
   listWorkers(): Promise<WorkerSnapshot[]>;
-  stopWorker(ownerKey: OwnerKey): Promise<void>;
+  stopWorker(key: WorkerKey): Promise<void>;
 }
 
 /** Runtime Host → server 的唯一上行流（收编现状 UpstreamMessage）。 */
@@ -180,6 +195,8 @@ interface RuntimeHostUpstream {
 
 type OwnerKey = `workspace:${string}` | `user:${string}`;
 type Isolation = string; // "native" | "docker" | "opensandbox"，providers 扩展点决定取值
+/** 池、观测、stopWorker、fence 统一用它（不变量 2），杜绝裸 ownerKey 撞车/误停。 */
+type WorkerKey = `${OwnerKey}#${Isolation}`;
 
 interface SubmitRunInput {
   runId: string;
@@ -211,6 +228,33 @@ type HostCapabilityStatus = Record<Isolation, {
 - `listWorkers` 是 admin 观测入口：现场问 Host，不再读 Worker 表。
 - **能力不可用 ≠ Host 死**：docker daemon 停了但 native 还好使时，Host 在线、
   仅 `docker` 能力 `available: false`——只拦新 run 的放置校验，不触发判死。
+- **可靠性协议**：per-run 单调 seq + **ACK 高水位** + 幂等 + 补发。ACK 的精确语义：
+  上行通道回发 `ack{runId, seq}`，表示 **RunEvent 已落库的连续前缀**——有 gap 不推进
+  （现状内存 seq 闸门"跳 gap 继续"的行为不能沿用为 ACK 依据）；cursor 不单独持久化，
+  server 重启后从 RunEvent 表最大连续 seq 派生；落库去重靠 `(runId, seq)` 唯一索引。
+  Host 只裁剪 ≤ ACK 的缓冲，重连后从 ACK+1 补发。`submitRun` 以 runId 幂等，
+  受理即返回，进度全走 `run.status` 事件流（冷启动几十秒不挂 RPC）。
+- **Host epoch fencing（防脑裂）**：每次隧道会话握手分配单调递增 epoch，上行消息携带之。
+  run 终态一旦写入，该 run 的事件流即关闭——迟到事件不论 epoch 一律丢弃（只进 raw
+  诊断日志）；被判死的旧 epoch 连接重连无效，必须以新 epoch 重新握手。
+- **观测面是显式例外**：`listWorkers`/`stopWorker` 是 admin 诊断通道，WorkerSnapshot
+  允许携带执行细节供排障，但只许 admin 展示消费——server 业务代码（run/workspace 编排）
+  禁止读它做决策。不变量 4 约束的是业务面，不禁诊断面。
+- 契约不感知底下有几条物理连接（Transport 层接缝）：当前一 Host 一条 WebSocket，
+  将来控制/事件连接分离、大文件走独立 HTTP 通道都只动 transport，不动契约。
+
+字段级决策（2026-07-12 grilling 定）：
+
+- **RunConfig 只装业务输入**：prompt / resume payload / agent 类型与配置 / 模型凭证。
+  placement 只存在于 `SubmitRunInput` 顶层，不重复进 RunConfig。log 目录、mount 路径、
+  cwd、trace 配置等执行机细节全部由 Host 派生，不进契约——契约第一版就干净，
+  Phase 2 搬家时不再改协议。
+- **CLI 路径由 Host 合成**：server 只存并下发 admin 的 override 配置；Host 用自己
+  detectEnv 的结果 + override 算出 resolved 路径，拉起 runner 时注入。现状四处摊派
+  （agent.service 取 → RunConfig 塞 → worker env 拷 → runner 重解析）收敛为 Host 一处。
+- **模型凭证随 submitRun 一次性下发**：作为 RunConfig 业务输入的一部分随命令流下行，
+  Host/worker 内存短暂驻留、不落盘。不做回查协议；LLM 流量经 server 代理留作
+  未来企业版选项，不在本设计。
 
 ### 4.3 数据归属
 
@@ -240,9 +284,12 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
 
 ### 4.5 崩溃与恢复语义
 
-- **server 重启**：执行面完全不受影响。Host 与 worker 继续跑，
-  隧道重连后事件续传（seq 去重兜住重放）。run 状态由投影自然追平。
-  现状"startToken 入库→重启复用"机制作废——不再需要。
+- **server 重启**：**对 registered Host 完全无感**——Host 与 worker 继续跑，隧道重连后
+  从 ACK 水位续传，run 状态由投影自然追平。**builtin Host 与 server 同生共死**（进程内库，
+  无法幸免）：其 worker/容器成为孤儿，由重启后的 builtin Host 按 provider 标记清理——
+  语义等同"Host 重启"。"重启无感"只对 registered 承诺，builtin 不承诺（代价：builtin
+  容器不再跨 server 重启复用，接受，换取执行面零持久化）。现状"startToken 入库→重启
+  复用"机制两种场景下都作废。
 - **Host 重启**（registered 机器上）：内存 worker 池丢失。
   策略：启动时按 provider 标记（容器 label）发现孤儿并**一律 destroy**——
   孤儿 worker 关联的 run 必已被 server 的 Host 判死路径终结，没有续接价值，
@@ -252,6 +299,9 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
   索引（`owner-run.store.ts` 随协议下沉）。
 - **Host 判死**：server 的 Host 级心跳 watchdog 保留，Host 超时 →
   其上所有 run 判败。这是两级判死：server 判 Host，Host 判 worker。
+  合成判败是"真相与投影分离"（§5 理念一）的**唯一权威例外**——server 可产生的执行状态
+  只有这一种，且一旦写入即关闭该 run 的事件流；旧执行者的迟到补发由 epoch fencing
+  （§4.2 要点）拒收，防网络分区/Host 快速重启造成的脑裂。
 
 ## 5. 设计理念（本设计遵循的四条判断标准）
 
@@ -287,7 +337,10 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
 
 1. 在 `packages/shared` 定死 `RuntimeHostContract` / `RuntimeHostUpstream` / `OwnerKey` /
    `HostCapabilityStatus` 类型。
-2. server 内做一个契约实现（内部委托现有 `WorkerManagerService`/`RuntimeService`，代码不搬家）。
+2. server 内做一个契约实现，**住 worker-manager 模块**（internal provider，以 DI token
+   导出契约接口给 run 注入；内部委托现有 `WorkerManagerService`/`RuntimeService`，
+   代码不搬家、不改名）。**不能放 runtime 模块**——worker-manager 已依赖 runtime，
+   放那边会成 `runtime → worker-manager → runtime` 环（2026-07-12 评审纠正原 grilling 结论）。
 3. `run` 模块（launcher/driver/upstream）改为只依赖 `RuntimeHostContract`：
    - `resolveRuntimeSpec` 等透传链在此一并砍掉（owner 键、isolation 由 server 算好传入契约）。
    - `run-driver` 对 worker-manager 的直接注入全部收敛到契约后面。
@@ -295,26 +348,35 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
 **出口判据**：`apps/server/src/run/` 内无任何 `worker-manager` import；
 `pnpm test:server` + e2e 冒烟绿。此时 server 业务代码已"看不见 worker"，但物理拓扑未变。
 
-### Phase 2 — 执行面搬家（动协议与拓扑）
+### Phase 2 — 执行面搬家（动协议与拓扑，expand 阶段）
 
-1. worker-manager 的 `connection/`、`instance/` 逻辑迁入 `apps/runtime`，
-   组装成 `RuntimeHostContract` 的真正实现（worker 池 + 信箱 + 握手 + fence）。
-2. `packages/worker` 的 `WorkerHttpTransport` 对端从 server 换成 Host；
-   server 的 `/worker/*` 数据面端点族删除。
-3. registered 链路：隧道协议扩展承载 submitRun/command/事件流（收编现状 UpstreamMessage），
-   注册协议从上报单个 runtimeType 改为上报 capabilities 能力矩阵。
-4. Worker 表停写（保留表结构以便回滚，读路径全部切走）。
-5. admin"运行资源"改走 `listWorkers` 现场查询。
+1. **schema expand 前移**（评审纠正：本期出口判据依赖新列，不能等 Phase 3）：新增
+   `Workspace.isolation` 列（按旧 runtimeType 快照回填）、RuntimeHost 一机一行所需的
+   新列/新行；旧列旧表保留、双读兼容。dev-only 阶段回填可用 `db push --force-reset`
+   简化，但结构上仍按 expand → contract 走。
+2. worker-manager 的 `connection/`、`instance/` 逻辑迁入 `apps/runtime`，
+   组装成 `RuntimeHostContract` 的真正实现（worker 池 + 信箱 + 握手 + fence + epoch）。
+3. **双栈切流**：Host 与 server 先同时支持新旧两条链路（隧道握手协商版本/能力；
+   server 暂留 `/worker/*` 旧端点），按 Host 粒度切流——registered Host 是独立部署的
+   二进制，必须容忍升级时间差。全部 Host 切完并稳定后再删旧端点。
+   回滚 = 把该 Host 切回旧链路，不涉及数据回滚。
+4. registered 链路：隧道协议扩展承载 submitRun / command / 事件流 / ACK / epoch
+   （收编现状 UpstreamMessage），注册协议从上报单个 runtimeType 改为上报 capabilities。
+   `packages/worker` 的 `WorkerHttpTransport` 对端从 server 换成 Host。
+5. Worker 表停写（保留表结构以便回滚，读路径全部切走）。
+6. admin"运行资源"改走 `listWorkers` 现场查询。
 
 **出口判据**：三种 isolation（native/docker/opensandbox）× 两档 scope 的组合各跑通一次
-完整 run（含 cancel、resume 答题、fence 判死注入测试）；server 重启后进行中的 run
-事件续传成功；一台 Host 同时上报多能力并被两个不同 isolation 的 workspace 使用。
+完整 run（含 cancel、resume 答题、fence 判死注入测试）；server 重启后 registered Host
+上进行中的 run 从 ACK 水位续传成功、builtin 孤儿清理正确；一台 Host 同时上报多能力
+并被两个不同 isolation 的 workspace 使用（依赖第 1 步 expand 列）。
 
 ### Phase 3 — 清尾（删除与正名）
 
-1. 删 Worker / WorkerWorkspaceBinding 表与 `registry/`（dev-only 阶段，`db push --force-reset`）。
-2. Runtime 表改造为 RuntimeHost 一机一行（builtin 三行合一行，能力矩阵落 capabilities 列）；
-   Workspace 加 `isolation` 列、`isolationScope` 改名 `scope`、`runtimeId` 改名 `runtimeHostId`。
+1. 删 Worker / WorkerWorkspaceBinding 表与 `registry/`；删除 Phase 2 双栈期的
+   旧端点与旧链路残留。
+2. schema **contract** 收尾（expand 部分已在 Phase 2 落）：删旧列 `runtimeType`、
+   `isolationScope` 改名 `scope`、`runtimeId` 改名 `runtimeHostId`，builtin 假行清并。
 3. 全量正名：`runtimeType` → `isolation`，`WorkerInstance` 等旧词清除。
 4. 合并文件双通道，删除被取代的 owner-command 文件命令；补 `releaseWorkspace` 收尾链路
    （删 workspace 流程见 §3.5 场景 4）。
@@ -344,3 +406,8 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
 5. registered Host 永久消失后其名下 workspace 的命运（能否重绑到新 Host）——**特意待定**
    （2026-07-12 grilling 决定）。实施护栏：Phase 3 改表时 `runtimeHostId` 做普通列，
    "不可改"只做应用层校验、不做 DB 约束，给未来重绑留路，不用再动表。
+6. 事件缓冲窗口（ACK 水位之上）也溢出时的策略——倾向：丢弃最旧的 agui 中间事件、
+   永远保留 `run.status` 终态（聊天流可断档、run 生死真相不丢，断档可由 runner
+   raw jsonl 日志事后补查），不做 Host 落盘、不做背压暂停 runner。Phase 2 实施时定。
+7. Transport 演进：控制连接与事件连接分离、大文件走独立 HTTP 通道——
+   当前一条 WebSocket 够用，接缝已留在 transport 层（见 §4.2 要点），有性能证据再做。
