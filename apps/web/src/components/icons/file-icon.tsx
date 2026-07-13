@@ -327,7 +327,7 @@ const EXT: Record<string, IconName> = {
   jsonl: "json",
   yml: "yml",
   yaml: "yml",
-  toml: "yaml",
+  toml: "yml",
   xml: "code",
   html: "html",
   htm: "html",

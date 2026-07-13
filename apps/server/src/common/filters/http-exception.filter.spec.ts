@@ -145,15 +145,14 @@ describe("AllExceptionsFilter", () => {
     expect(response.json).not.toHaveBeenCalled();
   });
 
-  it("logs 5xx exceptions with request context and redacted sensitive values", () => {
+  // 脱敏由全局 RedactingConsoleLogger 统一做(见 logging.spec.ts),filter 只负责带上请求上下文
+  it("logs 5xx exceptions with request context", () => {
     const filter = new AllExceptionsFilter();
     const response = mockResponse();
     const logger = mockFilterLogger(filter);
 
     filter.catch(
-      new Error(
-        "boom password=hunter2 token=abc apiKey=key-123 cookie=session"
-      ),
+      new Error("boom"),
       mockHost({
         response,
         headers: {},
@@ -164,19 +163,15 @@ describe("AllExceptionsFilter", () => {
 
     expect(response.status).toHaveBeenCalledWith(500);
     expect(logger.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('"method":"POST"')
+      "request failed",
+      expect.objectContaining({
+        method: "POST",
+        path: "/api/v1/runs",
+        status: 500,
+        requestId: expect.any(String),
+        errorMessage: "boom",
+      })
     );
-    expect(logger.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('"path":"/api/v1/runs"')
-    );
-    expect(logger.logger.error).toHaveBeenCalledWith(
-      expect.stringContaining('"errorMessage":"boom password=[redacted]')
-    );
-    const logMessage = logger.logger.error.mock.calls[0][0];
-    expect(logMessage).not.toContain("hunter2");
-    expect(logMessage).not.toContain("abc");
-    expect(logMessage).not.toContain("key-123");
-    expect(logMessage).not.toContain("session");
   });
 
   it("uses expected log levels for common 4xx statuses", () => {
@@ -199,7 +194,8 @@ describe("AllExceptionsFilter", () => {
       );
 
       expect(logger.logger[item.level]).toHaveBeenCalledWith(
-        expect.stringContaining("request rejected")
+        "request rejected",
+        expect.any(Object)
       );
       for (const otherLevel of ["debug", "warn", "error"] as const) {
         if (otherLevel !== item.level) {

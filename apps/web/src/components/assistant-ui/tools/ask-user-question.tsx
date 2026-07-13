@@ -671,7 +671,6 @@ export function AskUserQuestionUI({
   const allAnswered = questions.length > 0 && questions.every(isAnswered);
   const isResolved = (q: AskUserQuestionItem) => isAnswered(q) || skipped.has(q.question);
   const allResolved = questions.length > 0 && questions.every(isResolved);
-  const resolvedCount = questions.filter(isResolved).length;
 
   const handleSubmit = async () => {
     if (!conversationId || !allResolved || pending?.phase !== "open") return;
