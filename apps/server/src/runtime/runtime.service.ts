@@ -403,6 +403,15 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /**
+   * 按 id 查 Runtime 行（无 owner 校验——内部/Host 契约用）。
+   * Phase 2 expand：RuntimeHostAdapter.detectEnv 需要读取 runtimeType/capabilities/envConfig
+   * 来构造 HostCapabilityStatus。
+   */
+  getRuntimeRow(id: string): Promise<RuntimeRow | null> {
+    return this.repository.findById(id);
+  }
+
+  /**
    * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
    * 供 RunLauncher 对 local 类型提取 CLI 路径写入 RunConfig。
    */

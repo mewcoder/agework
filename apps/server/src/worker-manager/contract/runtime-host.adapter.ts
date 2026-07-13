@@ -2,18 +2,41 @@ import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { join, posix } from "node:path";
 import { generateId } from "@agework/shared";
+import { parseOwnerKey } from "@agework/shared/protocol";
 import type {
   AcquireInstanceResult,
   CommandPayload,
+  CreateDirectoryInput,
+  DirectoryListing,
   ExecutionRef,
+  HostCapabilityStatus,
+  InstallCliInput,
+  InstallCliResult,
+  ListChangedFilesInput,
+  ListDirectoryInput,
+  OwnerKey,
+  ReadFileDiffInput,
+  ReadFileInput,
   RunConfig,
   RunPlacement,
   RuntimeHostContract,
   RuntimeHostUpstream,
   RuntimeSpec,
+  SearchFilesInput,
   SubmitRunInput,
+  WorkerKey,
+  WorkerScope,
   WorkerSnapshot,
+  WorkspaceFileQuery,
 } from "@agework/shared/protocol";
+import type {
+  RuntimeEnvConfig,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
+} from "@agework/shared/api";
 import { isRuntimeType } from "@agework/providers";
 import { WorkerManagerService } from "../worker-manager.service";
 import { RuntimeService } from "../../runtime/runtime.service";
@@ -147,6 +170,151 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       ref.runtimeType,
       ref.runtimeInstanceId
     );
+  }
+
+  // ── Phase 2 expand: 环境 / 文件 / 观测 契约方法 ─────────────────────
+  //
+  // 过渡委托实现：直接调 RuntimeService.runtimeFor(id) 拿到 Runtime 接口实例，
+  // 调其文件/环境方法。authorization 在 server controller 层完成，这里不做 owner 校验。
+  // Phase 2 per-Host 实例就绪后，这些方法由 Host 自身实现，不经过 RuntimeService。
+
+  async releaseOwner(owner: OwnerKey): Promise<void> {
+    const { scope, id } = parseOwnerKey(owner);
+    // 过渡：owner key 的 id 部分就是旧模型的 ownerId（workspaceId 或 userId）。
+    // 找到该 owner 名下所有 running worker 并 stop。幂等——无 worker 时空操作。
+    const resources = await this.workerManager.listResources({
+      status: "running",
+      pageSize: 1000,
+    });
+    const matching = resources.list.filter((r) => r.ownerId === id);
+    for (const resource of matching) {
+      try {
+        await this.workerManager.stopWorkerInstance(resource.id);
+      } catch (err) {
+        this.logger.warn(`stopWorkerInstance failed during releaseOwner: ${String(err)}`);
+      }
+    }
+    void scope; // scope 过渡期不参与路由——旧模型按 ownerId 直查
+  }
+
+  async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
+    const row = await this.runtimeService.getRuntimeRow(runtimeHostId);
+    if (!row) {
+      throw new Error(`runtime host not found: ${runtimeHostId}`);
+    }
+    const runtimeType = row.runtimeType ?? "native";
+    const caps = row.capabilities as { isolationScopes?: string[] } | null;
+    const scopes = (caps?.isolationScopes ?? ["workspace"]).filter(
+      (s): s is WorkerScope => s === "workspace" || s === "user"
+    );
+    const envConfig = row.envConfig as RuntimeEnvConfig | null;
+
+    // 过渡：当前一 Runtime 行只代表一种 runtimeType，构造单条目 HostCapabilityStatus。
+    // Phase 2 per-Host 实例会返回完整能力矩阵（多 isolation）。
+    const status: HostCapabilityStatus = {
+      [runtimeType]: {
+        available: true,
+        scopes: scopes.length > 0 ? scopes : ["workspace"],
+        ...(runtimeType === "native" && envConfig
+          ? { cli: envConfig }
+          : {}),
+      },
+    };
+    return status;
+  }
+
+  async installCli(input: InstallCliInput): Promise<InstallCliResult> {
+    const { runtimeHostId, agentType } = input;
+    const result = await this.runtimeService.installCli(runtimeHostId, agentType);
+    if (!result.envConfig) {
+      throw new Error(`installCli failed: no envConfig returned for ${runtimeHostId}`);
+    }
+    return { envConfig: result.envConfig };
+  }
+
+  async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
+    const { runtimeHostId, path } = input;
+    const result = await this.runtimeService
+      .runtimeFor(runtimeHostId)
+      .listDirectory(path);
+    return { path: result.path, entries: result.entries };
+  }
+
+  async createDirectory(input: CreateDirectoryInput): Promise<void> {
+    const { runtimeHostId, path } = input;
+    await this.runtimeService.runtimeFor(runtimeHostId).createDirectory(path);
+  }
+
+  async listFiles(input: WorkspaceFileQuery): Promise<WorkspaceFileListResponse> {
+    return this.runtimeService
+      .runtimeFor(input.runtimeHostId)
+      .listFiles(input.rootPath, input.path);
+  }
+
+  async readFile(input: ReadFileInput): Promise<WorkspaceFileReadResponse> {
+    return this.runtimeService
+      .runtimeFor(input.runtimeHostId)
+      .readFile(input.rootPath, input.path);
+  }
+
+  async readFileDiff(input: ReadFileDiffInput): Promise<WorkspaceFileDiffResponse> {
+    return this.runtimeService
+      .runtimeFor(input.runtimeHostId)
+      .readFileDiff(input.rootPath, input.path);
+  }
+
+  async searchFiles(input: SearchFilesInput): Promise<WorkspaceFileSearchResponse> {
+    return this.runtimeService
+      .runtimeFor(input.runtimeHostId)
+      .searchFiles(input.rootPath);
+  }
+
+  async listChangedFiles(
+    input: ListChangedFilesInput
+  ): Promise<WorkspaceChangedFilesResponse> {
+    return this.runtimeService
+      .runtimeFor(input.runtimeHostId)
+      .listChangedFiles(input.rootPath);
+  }
+
+  async listWorkers(): Promise<WorkerSnapshot[]> {
+    const resources = await this.workerManager.listResources({
+      pageSize: 1000,
+    });
+    return resources.list.map((r) => ({
+      id: r.id,
+      runtimeType: r.runtimeType,
+      isolationScope: r.isolationScope,
+      ownerId: r.ownerId,
+      runtimeInstanceId: r.runtimeInstanceId,
+      status: r.status,
+      expiresAt: r.expiresAt,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+      workspaceBindings: r.workspaceBindings ?? [],
+    }));
+  }
+
+  async stopWorker(key: WorkerKey): Promise<void> {
+    // WorkerKey = `${OwnerKey}#${Isolation}`。过渡：从 listWorkers 找匹配的 worker 停掉。
+    // Phase 2 per-Host 实例直接从内存池按 key 查。
+    const workers = await this.listWorkers();
+    const ownerPart = key.split("#")[0];
+    const isolationPart = key.split("#")[1];
+    const { id: ownerId } = parseOwnerKey(
+      ownerPart as OwnerKey
+    );
+    const matching = workers.filter(
+      (w) =>
+        w.ownerId === ownerId && w.runtimeType === isolationPart
+    );
+    for (const worker of matching) {
+      try {
+        await this.workerManager.stopWorkerInstance(worker.id);
+      } catch (err) {
+        this.logger.warn(`stopWorker failed for ${key}: ${String(err)}`);
+      }
+    }
   }
 
   /** fence 判死的事实转发给上行端口。best-effort：失败仅记日志，不影响 fence 本身。 */

@@ -81,6 +81,11 @@ model Workspace {
   // 派生——Worker 是瞬态行，没有活跃 Worker 时无处可派生。runtimeType 不单独存，
   // 用 runtime.runtimeType 派生。
   isolationScope String
+  // Phase 2 expand：隔离实现（native / docker / opensandbox），创建时从 Host 能力
+  // 列表选定。按旧 runtimeType 快照回填。Phase 3 删旧 runtimeType 派生链后此列成为
+  // 唯一真相。nullable 容忍回填窗口——旧 workspace 在 expand 时回填，新 workspace
+  // 创建时即写入。
+  isolation      String?
   // 绑定的 Runtime（managed 或 registered）；创建时写入，不可改（要换 = 删了重建）。
   // 必填——managed Runtime 保证每个 Workspace 创建时都能落到一个真实存在的 Runtime 行。
   // registered Runtime 被注销（removedAt 有值）后行仍在，runtimeId 不变，但 Workspace

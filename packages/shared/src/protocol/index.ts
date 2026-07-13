@@ -89,6 +89,18 @@ export type {
   WorkerSnapshot,
   RuntimeHostContract,
   RuntimeHostUpstream,
+  HostCapabilityStatus,
+  AgentCliStatus,
+  ListDirectoryInput,
+  DirectoryListing,
+  CreateDirectoryInput,
+  WorkspaceFileQuery,
+  ReadFileInput,
+  ReadFileDiffInput,
+  SearchFilesInput,
+  ListChangedFilesInput,
+  InstallCliInput,
+  InstallCliResult,
 } from "./runtime-host";
 
 // ── owner/worker key 构造器(运行时值必须内联在本入口文件,原因见
