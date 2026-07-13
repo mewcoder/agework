@@ -10,6 +10,10 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { SkipThrottle, ThrottlerGuard } from "@nestjs/throttler";
+import {
+  AUTH_THROTTLER_IP,
+  AUTH_THROTTLER_IP_USERNAME,
+} from "./guards/auth-throttler";
 import { AuthService } from "./auth.service";
 import { ConfigService } from "../config/config.service";
 import { Public } from "./decorators/public.decorator";
@@ -26,6 +30,14 @@ import {
 } from "./session/refresh-cookie";
 
 type SessionResult = { token: string; refreshToken: string; user: unknown };
+
+// 裸 @SkipThrottle() 只跳过名为 default 的桶;本控制器用的是两个命名桶,
+// 必须按名字逐个跳过,否则 config/query 这类高频只读端点照样进防爆破计数
+// (曾在 e2e 全量跑时被 20 次/分钟的 auth-ip 桶误伤成 429)。
+const SKIP_AUTH_THROTTLERS = {
+  [AUTH_THROTTLER_IP]: true,
+  [AUTH_THROTTLER_IP_USERNAME]: true,
+};
 
 @UseGuards(ThrottlerGuard)
 @Controller("auth")
@@ -87,7 +99,7 @@ export class AuthController {
     return { ok: true };
   }
 
-  @SkipThrottle()
+  @SkipThrottle(SKIP_AUTH_THROTTLERS)
   @Get("query")
   me(@CurrentUser() user: JwtUser) {
     return this.authService.getUserInfo(user.userId);
@@ -113,7 +125,7 @@ export class AuthController {
     return this.issueSession(res, result);
   }
 
-  @SkipThrottle()
+  @SkipThrottle(SKIP_AUTH_THROTTLERS)
   @Public()
   @Get("config")
   config() {
