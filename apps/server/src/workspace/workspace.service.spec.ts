@@ -694,6 +694,44 @@ describe("WorkspaceService", () => {
       });
     });
 
+    it("prefers the isolation snapshot column over runtime.runtimeType (Phase 2 双读)", async () => {
+      const repo = makeRepo({
+        findRunView: vi.fn().mockResolvedValue({
+          id: "ws-1",
+          isolation: "docker",
+          runtime: { runtimeType: "native", source: "managed" },
+          isolationScope: "workspace",
+          runtimeId: "managed-docker",
+          directory: { rootPath: "/tmp/ws" },
+          user: { username: "mew" },
+        }),
+      });
+      const service = makeService(repo, makeConfig());
+
+      const view = await service.getRunContext("ws-1");
+
+      expect(view.runtimeType).toBe("docker");
+    });
+
+    it("falls back to runtime.runtimeType when isolation is not backfilled yet", async () => {
+      const repo = makeRepo({
+        findRunView: vi.fn().mockResolvedValue({
+          id: "ws-1",
+          isolation: null,
+          runtime: { runtimeType: "docker", source: "managed" },
+          isolationScope: "workspace",
+          runtimeId: "managed-docker",
+          directory: { rootPath: "/tmp/ws" },
+          user: { username: "mew" },
+        }),
+      });
+      const service = makeService(repo, makeConfig());
+
+      const view = await service.getRunContext("ws-1");
+
+      expect(view.runtimeType).toBe("docker");
+    });
+
     it("carries the bound runtimeId through for Registered runtime workspaces", async () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({

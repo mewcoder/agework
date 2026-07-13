@@ -31,6 +31,8 @@ export type WorkspaceCreateInput = {
   description: string | null;
   userId: string;
   isolationScope: string;
+  /** 隔离实现(native/docker/opensandbox),创建时快照写入(Phase 2 expand 列)。 */
+  isolation: string;
   rootPath: string;
   directorySource: string;
 /** 绑定的 Runtime(managed 或 registered)，必填。 */
@@ -95,6 +97,7 @@ export class WorkspaceRepository {
           description: input.description,
           userId: input.userId,
           isolationScope: input.isolationScope,
+          isolation: input.isolation,
           runtimeId: input.runtimeId,
         },
       });
@@ -185,5 +188,27 @@ export class WorkspaceRepository {
       select: { username: true },
     });
     return user?.username ?? null;
+  }
+
+  /**
+   * Phase 2 expand 回填:isolation 为空的旧 workspace 按绑定 Runtime 的
+   * runtimeType 快照补齐。幂等——已回填的行不再触碰;Runtime 尚未配对
+   * (runtimeType 为 null)的跳过,等配对后下次启动再补。返回回填行数。
+   */
+  async backfillIsolationFromRuntime(): Promise<number> {
+    const pending = await this.prisma.workspace.findMany({
+      where: { isolation: null },
+      select: { id: true, runtime: { select: { runtimeType: true } } },
+    });
+    let updated = 0;
+    for (const row of pending) {
+      if (!row.runtime.runtimeType) continue;
+      await this.prisma.workspace.update({
+        where: { id: row.id },
+        data: { isolation: row.runtime.runtimeType },
+      });
+      updated += 1;
+    }
+    return updated;
   }
 }

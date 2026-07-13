@@ -63,6 +63,7 @@ describe("WorkspaceRepository", () => {
       description: null,
       userId: "admin-1",
       isolationScope: "workspace",
+      isolation: "native",
       rootPath: "/tmp/ws-1",
       directorySource: "managed",
       runtimeId: "managed-native",
@@ -73,6 +74,7 @@ describe("WorkspaceRepository", () => {
       name: "Local workspace",
       userId: "admin-1",
       isolationScope: "workspace",
+      isolation: "native",
       runtimeId: "managed-native",
     });
     expect(directoryCreate).toHaveBeenCalledWith({

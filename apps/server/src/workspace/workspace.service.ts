@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
+  type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -57,7 +59,9 @@ type CreateWorkspaceInput = {
 };
 
 @Injectable()
-export class WorkspaceService {
+export class WorkspaceService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(WorkspaceService.name);
+
   constructor(
     private readonly repo: WorkspaceRepository,
     private readonly conversations: ConversationService,
@@ -67,6 +71,14 @@ export class WorkspaceService {
     private readonly runtimeService: RuntimeService,
     private readonly workerManager: WorkerManagerService
   ) {}
+
+  /** Phase 2 expand:启动期幂等回填旧 workspace 的 isolation 快照列。 */
+  async onApplicationBootstrap(): Promise<void> {
+    const updated = await this.repo.backfillIsolationFromRuntime();
+    if (updated > 0) {
+      this.logger.log(`backfilled workspace.isolation for ${updated} rows`);
+    }
+  }
 
   /**
    * 查询工作空间是否存在且属于该用户;返回 null 表示不存在或非属主。
@@ -118,9 +130,11 @@ export class WorkspaceService {
     return {
       workspaceId: workspace.id,
       workspaceRootPath: workspace.directory.rootPath,
-      // Runtime 行必然存在,runtimeType 在配对完成前才可能为空(见
+      // Phase 2 双读:isolation 快照列优先,旧 runtime.runtimeType 派生兜底
+      // (Runtime 行必然存在,runtimeType 在配对完成前才可能为空,见
       // WorkspaceService.resolveRegisteredPlacement,创建时已经校验过)。
-      runtimeType: workspace.runtime.runtimeType as string,
+      runtimeType: (workspace.isolation ??
+        workspace.runtime.runtimeType) as string,
       isolationScope: workspace.isolationScope,
       username: workspace.user.username,
       runtimeId: workspace.runtimeId,
@@ -319,6 +333,8 @@ export class WorkspaceService {
         description: workspaceDescription,
         userId,
         isolationScope: storedIsolationScope,
+        // Phase 2 expand:创建时即写隔离实现快照,Phase 3 后成为唯一真相。
+        isolation: runtimeType,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
         runtimeId: targetRuntimeId,
@@ -475,12 +491,14 @@ export class WorkspaceService {
       } | null;
       runtime: { runtimeType: string | null };
       isolationScope: string;
+      isolation?: string | null;
     },
   >(workspace: T) {
     const {
       directory,
       runtime,
       isolationScope: storedIsolationScope,
+      isolation,
       ...rest
     } = workspace;
     if (!directory) {
@@ -488,8 +506,11 @@ export class WorkspaceService {
         `Workspace ${(rest as { id?: string }).id ?? "unknown"} has no directory binding`
       );
     }
+    // Phase 2 双读:isolation 快照列优先,旧 runtime.runtimeType 派生兜底。
     const runtimeType =
-      runtime.runtimeType ?? this.runtimePolicy.defaultRuntimeType();
+      isolation ??
+      runtime.runtimeType ??
+      this.runtimePolicy.defaultRuntimeType();
     const workspaceIsolationScope =
       runtimeType !== "native"
         ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)
