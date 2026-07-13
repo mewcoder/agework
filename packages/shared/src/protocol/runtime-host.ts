@@ -26,31 +26,10 @@ export type OwnerKey = `workspace:${string}` | `user:${string}`;
  */
 export type WorkerKey = `${OwnerKey}#${string}`;
 
-export function workspaceOwnerKey(workspaceId: string): OwnerKey {
-  return `workspace:${workspaceId}`;
-}
-
-export function userOwnerKey(userId: string): OwnerKey {
-  return `user:${userId}`;
-}
-
-export function workerKey(owner: OwnerKey, isolation: Isolation): WorkerKey {
-  return `${owner}#${isolation}`;
-}
-
-/** 拆 owner 键。仅接受本文件构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
-export function parseOwnerKey(owner: OwnerKey): {
-  scope: WorkerScope;
-  id: string;
-} {
-  const sep = owner.indexOf(":");
-  const scope = owner.slice(0, sep);
-  const id = owner.slice(sep + 1);
-  if ((scope !== "workspace" && scope !== "user") || !id) {
-    throw new Error(`invalid owner key: ${owner}`);
-  }
-  return { scope, id };
-}
+// 注意:本文件只放类型。owner/worker key 的构造函数(运行时值)内联在
+// protocol/index.ts——原因见该文件 RUNTIME_TUNNEL_CLOSE_GONE 旁注释与
+// common/index.ts 的 generateId 注释(type-stripping 消费方擦掉 type-only
+// 导入后,无扩展名的运行时相对导入无法解析)。
 
 /**
  * 一次 run 的放置决策：server 按 workspace 配置算好传入，Host 不解引用任何业务数据

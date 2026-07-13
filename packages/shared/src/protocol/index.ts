@@ -78,12 +78,6 @@ export type {
   SandboxRuntimeSpec,
   SandboxPlacementInfo,
 } from "./channel";
-export {
-  workspaceOwnerKey,
-  userOwnerKey,
-  workerKey,
-  parseOwnerKey,
-} from "./runtime-host";
 export type {
   WorkerScope,
   Isolation,
@@ -96,6 +90,42 @@ export type {
   RuntimeHostContract,
   RuntimeHostUpstream,
 } from "./runtime-host";
+
+// ── owner/worker key 构造器(运行时值必须内联在本入口文件,原因见
+//    common/index.ts 的 generateId 注释;类型定义在 runtime-host.ts) ──
+
+export function workspaceOwnerKey(
+  workspaceId: string
+): `workspace:${string}` {
+  return `workspace:${workspaceId}`;
+}
+
+export function userOwnerKey(userId: string): `user:${string}` {
+  return `user:${userId}`;
+}
+
+export function workerKey(
+  owner: `workspace:${string}` | `user:${string}`,
+  isolation: string
+): `${"workspace" | "user"}:${string}#${string}` {
+  return `${owner}#${isolation}` as `${"workspace" | "user"}:${string}#${string}`;
+}
+
+/** 拆 owner 键。仅接受上面构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
+export function parseOwnerKey(
+  owner: `workspace:${string}` | `user:${string}`
+): {
+  scope: "workspace" | "user";
+  id: string;
+} {
+  const sep = owner.indexOf(":");
+  const scope = owner.slice(0, sep);
+  const id = owner.slice(sep + 1);
+  if ((scope !== "workspace" && scope !== "user") || !id) {
+    throw new Error(`invalid owner key: ${String(owner)}`);
+  }
+  return { scope, id };
+}
 export type {
   RpcBatch,
   RpcError,

@@ -4,7 +4,7 @@ import {
   userOwnerKey,
   workerKey,
   workspaceOwnerKey,
-} from "./runtime-host";
+} from "./index";
 
 describe("owner/worker key builders", () => {
   it("builds workspace owner key", () => {
