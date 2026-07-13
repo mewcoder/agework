@@ -156,7 +156,6 @@ export class WorkerManagerService {
     return this.registry.findActiveByWorkspace(workspaceId);
   }
 
-
   /** run 结束时清理该 run 在命令队列里的残留状态。 */
   cleanupRun(runId: string): void {
     this.ownerRunStore.unregisterRun(runId);
@@ -204,10 +203,7 @@ export class WorkerManagerService {
   ): Promise<AcquireInstanceResult> {
     const result = await this.provisioner.acquireInstanceForRun(input);
     if (result.outcome === "ready") {
-      this.ownerRunStore.registerRun(
-        input.runConfig.runId,
-        result.workerId
-      );
+      this.ownerRunStore.registerRun(input.runConfig.runId, result.workerId);
     }
     return result;
   }

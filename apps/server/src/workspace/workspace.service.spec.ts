@@ -844,7 +844,12 @@ describe("WorkspaceService", () => {
       });
       const runtimeService = makeRuntimeService();
       const workerManager = makeWorkerManager();
-      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+      const service = makeService(
+        repo,
+        makeConfig(),
+        runtimeService,
+        workerManager
+      );
 
       const result = await service.listFiles("mew", "ws-1", "src");
 
@@ -868,7 +873,12 @@ describe("WorkspaceService", () => {
       });
       const runtimeService = makeRuntimeService();
       const workerManager = makeWorkerManager();
-      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+      const service = makeService(
+        repo,
+        makeConfig(),
+        runtimeService,
+        workerManager
+      );
 
       const result = await service.readFile("mew", "ws-1", "a.ts");
 
@@ -894,7 +904,12 @@ describe("WorkspaceService", () => {
       });
       const runtimeService = makeRuntimeService();
       const workerManager = makeWorkerManager();
-      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+      const service = makeService(
+        repo,
+        makeConfig(),
+        runtimeService,
+        workerManager
+      );
 
       await service.listFiles("mew", "ws-1", "src");
 
@@ -914,7 +929,12 @@ describe("WorkspaceService", () => {
       });
       const runtimeService = makeRuntimeService();
       const workerManager = makeWorkerManager();
-      const service = makeService(repo, makeConfig(), runtimeService, workerManager);
+      const service = makeService(
+        repo,
+        makeConfig(),
+        runtimeService,
+        workerManager
+      );
 
       const result = await service.readFile("mew", "ws-1", "a.ts");
 
@@ -1012,9 +1032,9 @@ describe("WorkspaceService", () => {
       });
       const service = makeService(repo, makeConfig());
 
-      await expect(service.readFile("intruder", "ws-x", "a.ts")).rejects.toThrow(
-        "Workspace ws-x not found"
-      );
+      await expect(
+        service.readFile("intruder", "ws-x", "a.ts")
+      ).rejects.toThrow("Workspace ws-x not found");
     });
   });
 });

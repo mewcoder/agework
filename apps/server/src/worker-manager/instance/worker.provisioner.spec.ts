@@ -9,7 +9,9 @@ function deps() {
       destroy: vi.fn().mockResolvedValue(undefined),
     },
     registry: {
-      insertStarting: vi.fn().mockResolvedValue({ ok: true, workerId: "worker-1" }),
+      insertStarting: vi
+        .fn()
+        .mockResolvedValue({ ok: true, workerId: "worker-1" }),
       upsertRunning: vi.fn().mockResolvedValue(undefined),
       markErrorByOwner: vi.fn().mockResolvedValue(undefined),
       markStoppedByOwner: vi.fn().mockResolvedValue(undefined),
@@ -80,7 +82,11 @@ describe("WorkerProvisioner", () => {
     expect(d.runtime.start).toHaveBeenCalledOnce();
     expect(d.handshake.waitForRegister).toHaveBeenCalledOnce();
     expect(d.registry.upsertRunning).toHaveBeenCalledOnce();
-    expect(res).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
+    expect(res).toEqual({
+      outcome: "ready",
+      workerId: expect.any(String),
+      runtimeInstanceId: "c1",
+    });
   });
 
   describe("targetRuntimeId routing", () => {
@@ -234,8 +240,16 @@ describe("WorkerProvisioner", () => {
       p.acquireInstanceForRun(input("r1")),
       p.acquireInstanceForRun(input("r2")),
     ]);
-    expect(a).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
-    expect(b).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
+    expect(a).toEqual({
+      outcome: "ready",
+      workerId: expect.any(String),
+      runtimeInstanceId: "c1",
+    });
+    expect(b).toEqual({
+      outcome: "ready",
+      workerId: expect.any(String),
+      runtimeInstanceId: "c1",
+    });
     expect(d.runtime.start).toHaveBeenCalledOnce();
   });
 
@@ -251,10 +265,18 @@ describe("WorkerProvisioner", () => {
     const d = deps();
     d.registry.insertStarting.mockResolvedValueOnce({
       ok: false,
-      existing: { workerId: "existing-worker", runtimeInstanceId: "old", status: "running" },
+      existing: {
+        workerId: "existing-worker",
+        runtimeInstanceId: "old",
+        status: "running",
+      },
     });
     const res = await make(d).provisioner.acquireInstanceForRun(input());
-    expect(res).toEqual({ outcome: "ready", workerId: "existing-worker", runtimeInstanceId: "old" });
+    expect(res).toEqual({
+      outcome: "ready",
+      workerId: "existing-worker",
+      runtimeInstanceId: "old",
+    });
     expect(d.runtime.start).not.toHaveBeenCalled();
   });
 
@@ -267,7 +289,11 @@ describe("WorkerProvisioner", () => {
     expect(res.outcome).toBe("error");
 
     const res2 = await p.acquireInstanceForRun(input("r2"));
-    expect(res2).toEqual({ outcome: "ready", workerId: expect.any(String), runtimeInstanceId: "c1" });
+    expect(res2).toEqual({
+      outcome: "ready",
+      workerId: expect.any(String),
+      runtimeInstanceId: "c1",
+    });
     expect(d.registry.insertStarting).toHaveBeenCalledTimes(2);
     expect(d.runtime.start).toHaveBeenCalledOnce();
   });

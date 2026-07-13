@@ -1,9 +1,8 @@
 import "dotenv/config";
 import { NestFactory, Reflector } from "@nestjs/core";
-import { Logger, ValidationPipe } from "@nestjs/common";
+import { ValidationPipe } from "@nestjs/common";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import cookieParser from "cookie-parser";
-import { networkInterfaces } from "node:os";
 import { AppModule } from "./app.module";
 import { securityHeaders } from "./common/security-headers";
 import { requestIdMiddleware } from "./common/request-id";
@@ -13,20 +12,6 @@ import { resolveApiBasePath } from "./common/api-path";
 import { ConfigService, getApiContext } from "./config/config.service";
 import { resolveNestLogLevels } from "./common/logging";
 import { RedactingConsoleLogger } from "./common/redacting-console.logger";
-
-function getLanAddress(): string | undefined {
-  const interfaces = networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    const net = interfaces[name];
-    if (!net) continue;
-    for (const addr of net) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        return addr.address;
-      }
-    }
-  }
-  return undefined;
-}
 
 async function bootstrap() {
   const isProd = process.env.NODE_ENV === "production";
@@ -65,4 +50,4 @@ async function bootstrap() {
   const port = configService.getPort();
   await app.listen(port);
 }
-bootstrap();
+void bootstrap();

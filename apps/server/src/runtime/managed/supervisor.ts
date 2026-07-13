@@ -201,10 +201,7 @@ export class ManagedRuntimeSupervisor implements OnApplicationShutdown {
   }
 
   /** 重启:用同一 token + 入口重新 spawn,挂载 handler。 */
-  private respawn(
-    runtimeType: RuntimeType,
-    state: ManagedProcessState
-  ): void {
+  private respawn(runtimeType: RuntimeType, state: ManagedProcessState): void {
     if (state.stopped) return;
     state.restartTimer = undefined;
     this.spawnAndAttach(runtimeType, state);

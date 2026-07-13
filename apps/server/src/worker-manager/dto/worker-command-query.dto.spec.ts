@@ -10,7 +10,9 @@ import {
 
 describe("WorkerWorkerIdParamDto", () => {
   it("trims and requires workerId", async () => {
-    const dto = plainToInstance(WorkerWorkerIdParamDto, { workerId: " worker-1 " });
+    const dto = plainToInstance(WorkerWorkerIdParamDto, {
+      workerId: " worker-1 ",
+    });
 
     expect(dto.workerId).toBe("worker-1");
     expect(await validate(dto)).toHaveLength(0);

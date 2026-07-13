@@ -198,7 +198,9 @@ export class WorkerProvisioner {
       );
       await this.registry
         .markErrorByOwner(runtimeType, isolationScope, ownerId)
-        .catch(swallow(this.logger, `mark launch error for worker ${workerId}`));
+        .catch(
+          swallow(this.logger, `mark launch error for worker ${workerId}`)
+        );
       this.owners.delete(key);
       this.logger.warn("worker launch failed", {
         workerId,
@@ -245,7 +247,9 @@ export class WorkerProvisioner {
     // 执行,同步 throw 才会正确变成 rejected promise、被 .catch() 吞掉。
     await Promise.resolve()
       .then(() => runtimeAction(ref))
-      .catch(swallow(this.logger, `provider teardown for worker ${ref.workerId}`));
+      .catch(
+        swallow(this.logger, `provider teardown for worker ${ref.workerId}`)
+      );
     await this.registry
       .markStoppedByOwner(ref.runtimeType, ref.isolationScope, ref.ownerId)
       .catch(swallow(this.logger, `mark stopped for worker ${ref.workerId}`));

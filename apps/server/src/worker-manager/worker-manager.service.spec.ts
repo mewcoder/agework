@@ -210,7 +210,9 @@ describe("WorkerManagerService — facade routing(旧执行栈,Phase 3 清尾)",
 
     service.cleanupByWorkerId("worker-1");
 
-    expect(commandDispatcher.cleanupByWorkerId).toHaveBeenCalledWith("worker-1");
+    expect(commandDispatcher.cleanupByWorkerId).toHaveBeenCalledWith(
+      "worker-1"
+    );
   });
 
   it("routes setUpstreamPort to the endpoint handler", () => {

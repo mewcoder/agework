@@ -16,7 +16,10 @@ export type UpsertRunningInput = {
 
 export type InsertStartingResult =
   | { ok: true; workerId: string }
-  | { ok: false; existing: { workerId: string; runtimeInstanceId: string; status: string } };
+  | {
+      ok: false;
+      existing: { workerId: string; runtimeInstanceId: string; status: string };
+    };
 
 function isPrismaUniqueError(err: unknown): boolean {
   return (

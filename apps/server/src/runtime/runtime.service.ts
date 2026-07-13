@@ -40,7 +40,11 @@ import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import type { Runtime } from "./runtime.types";
-import { managedRuntimeId, isManagedRuntimeId, isManagedNativeRuntimeId } from "./runtime.types";
+import {
+  managedRuntimeId,
+  isManagedRuntimeId,
+  isManagedNativeRuntimeId,
+} from "./runtime.types";
 
 /**
  * Runtime 领域门面:解析目标 `Runtime` 实现 + placement 计算 + 运行时策略
@@ -366,7 +370,10 @@ export class RuntimeService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return await this.runtimeFor(runtimeId).readFileDiff(rootPath, relativePath);
+      return await this.runtimeFor(runtimeId).readFileDiff(
+        rootPath,
+        relativePath
+      );
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -437,7 +444,11 @@ export class RuntimeService implements OnApplicationBootstrap {
     request: RuntimeTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
-    return this.tunnelHandler.sendRequest<Result>(runtimeId, request, timeoutMs);
+    return this.tunnelHandler.sendRequest<Result>(
+      runtimeId,
+      request,
+      timeoutMs
+    );
   }
 
   /** 列出所有隧道在线的 runtime id(managed-native 不走隧道,不会出现在结果里)。 */
@@ -468,9 +479,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
    * 供 RunLauncher 对 local 类型提取 CLI 路径写入 RunConfig。
    */
-  async getResolvedCliPaths(
-    id: string
-  ): Promise<{
+  async getResolvedCliPaths(id: string): Promise<{
     claude: string | null;
     codex: string | null;
     opencode: string | null;
@@ -522,7 +531,10 @@ function computeEnvStatus(
   override: RuntimeEnvConfigOverride | null
 ): RuntimeResponse["envStatus"] {
   return {
-    claude: mergeAgent(detected.claude, override?.claude?.executablePath ?? null),
+    claude: mergeAgent(
+      detected.claude,
+      override?.claude?.executablePath ?? null
+    ),
     codex: mergeAgent(detected.codex, override?.codex?.executablePath ?? null),
     opencode: mergeAgent(
       detected.opencode,

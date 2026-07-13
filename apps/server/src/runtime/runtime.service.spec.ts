@@ -78,12 +78,11 @@ describe("RuntimeService", () => {
       stop: vi.fn(),
       destroy: vi.fn(),
       detectEnv: vi.fn().mockResolvedValue(mockEnvConfig),
-      listDirectory: vi
-        .fn()
-        .mockResolvedValue({ path: "/home/agework", entries: ["/home/agework/foo"] }),
-      createDirectory: vi
-        .fn()
-        .mockResolvedValue({ path: "/home/agework/new" }),
+      listDirectory: vi.fn().mockResolvedValue({
+        path: "/home/agework",
+        entries: ["/home/agework/foo"],
+      }),
+      createDirectory: vi.fn().mockResolvedValue({ path: "/home/agework/new" }),
       listFiles: vi.fn().mockResolvedValue({
         path: "src",
         list: [{ name: "a.ts", type: "file", size: 10 }],
@@ -97,7 +96,9 @@ describe("RuntimeService", () => {
         truncated: false,
       }),
       listChangedFiles: vi.fn().mockResolvedValue({
-        list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
+        list: [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 0 },
+        ],
         truncated: false,
       }),
       readFileDiff: vi.fn().mockResolvedValue({
@@ -138,7 +139,9 @@ describe("RuntimeService", () => {
   it("runtimeFor(managed-native) resolves LocalRuntime; managed-docker/opensandbox resolve RemoteRuntime", () => {
     expect(service.runtimeFor("managed-native")).toBe(localRuntime);
     expect(service.runtimeFor("managed-docker")).toBeInstanceOf(RemoteRuntime);
-    expect(service.runtimeFor("managed-opensandbox")).toBeInstanceOf(RemoteRuntime);
+    expect(service.runtimeFor("managed-opensandbox")).toBeInstanceOf(
+      RemoteRuntime
+    );
   });
 
   it("runtimeFor(registered id) resolves a RemoteRuntime bound to that id", () => {
@@ -238,7 +241,11 @@ describe("RuntimeService", () => {
   it("detectEnv for managed docker runtime uses tunnel when connected", async () => {
     tunnelHandler.isConnected.mockReturnValue(true);
     const mockEnvConfig = {
-      claude: { executablePath: "/bin/claude", version: "2.0", authAvailable: true },
+      claude: {
+        executablePath: "/bin/claude",
+        version: "2.0",
+        authAvailable: true,
+      },
       codex: { executablePath: null, version: null, authAvailable: false },
       detectedAt: "2026-07-06T01:00:00.000Z",
     };
@@ -262,7 +269,11 @@ describe("RuntimeService", () => {
   it("detectEnv for registered runtime uses tunnel when connected", async () => {
     tunnelHandler.isConnected.mockReturnValue(true);
     const mockEnvConfig = {
-      claude: { executablePath: "/bin/claude", version: "2.0", authAvailable: true },
+      claude: {
+        executablePath: "/bin/claude",
+        version: "2.0",
+        authAvailable: true,
+      },
       codex: { executablePath: null, version: null, authAvailable: false },
       detectedAt: "2026-07-06T01:00:00.000Z",
     };
@@ -270,7 +281,10 @@ describe("RuntimeService", () => {
 
     const result = await service.detectEnv("rt-1");
     expect(result.envConfig).toEqual(mockEnvConfig);
-    expect(repository.updateEnvConfig).toHaveBeenCalledWith("rt-1", mockEnvConfig);
+    expect(repository.updateEnvConfig).toHaveBeenCalledWith(
+      "rt-1",
+      mockEnvConfig
+    );
   });
 
   it("detectEnv for disconnected registered runtime returns null", async () => {
@@ -350,7 +364,11 @@ describe("RuntimeService", () => {
   });
 
   it("listDirectory for managed runtime delegates to LocalRuntime and maps entries to list", async () => {
-    const result = await service.listDirectory("u-1", "managed-native", "/home/agework");
+    const result = await service.listDirectory(
+      "u-1",
+      "managed-native",
+      "/home/agework"
+    );
     expect(localRuntime.listDirectory).toHaveBeenCalledWith("/home/agework");
     expect(result).toEqual({
       path: "/home/agework",
@@ -373,9 +391,9 @@ describe("RuntimeService", () => {
   });
 
   it("listDirectory wraps underlying filesystem errors as BadRequestException", async () => {
-    (localRuntime.listDirectory as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-      new Error("目录不存在或不可访问")
-    );
+    (
+      localRuntime.listDirectory as ReturnType<typeof vi.fn>
+    ).mockRejectedValueOnce(new Error("目录不存在或不可访问"));
     await expect(
       service.listDirectory("u-1", "managed-native", "/no/such/dir")
     ).rejects.toThrow("目录不存在或不可访问");
@@ -502,7 +520,9 @@ describe("RuntimeService", () => {
 
   it("listChangedFiles for registered runtime delegates to RemoteRuntime over the tunnel", async () => {
     tunnelHandler.sendRequest.mockResolvedValue({
-      list: [{ path: "b.ts", status: "added", additions: null, deletions: null }],
+      list: [
+        { path: "b.ts", status: "added", additions: null, deletions: null },
+      ],
       truncated: false,
     });
     const result = await service.listChangedFiles("rt-1", "/remote/ws");
@@ -515,7 +535,11 @@ describe("RuntimeService", () => {
   });
 
   it("readFileDiff for managed native delegates to LocalRuntime", async () => {
-    const result = await service.readFileDiff("managed-native", "/tmp/ws", "a.ts");
+    const result = await service.readFileDiff(
+      "managed-native",
+      "/tmp/ws",
+      "a.ts"
+    );
     expect(localRuntime.readFileDiff).toHaveBeenCalledWith("/tmp/ws", "a.ts");
     expect(result).toEqual({
       path: "a.ts",

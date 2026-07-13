@@ -7,7 +7,7 @@
 import { execSync } from "node:child_process";
 import { mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, sep } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 export type ListDirectoryResult = { path: string; entries: string[] };
 export type CreateDirectoryResult = { path: string };

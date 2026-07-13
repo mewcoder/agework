@@ -4,7 +4,6 @@ import {
   InternalServerErrorException,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { execFile } from "child_process";
@@ -27,7 +26,6 @@ import {
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerManagerService } from "../worker-manager/worker-manager.service";
-import { withTimeout } from "../common/with-timeout";
 import type { RuntimeType, IsolationScope } from "../config/config.service";
 import type {
   WorkspaceFileListResponse,

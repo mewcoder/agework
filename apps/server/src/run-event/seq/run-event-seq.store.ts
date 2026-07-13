@@ -43,7 +43,7 @@ export class RunEventSeqStore {
     const next = previous.catch(() => undefined).then(fn);
     const stored = next.catch(() => undefined);
     this.runLocks.set(runId, stored);
-    stored.finally(() => {
+    void stored.finally(() => {
       if (this.runLocks.get(runId) === stored) {
         this.runLocks.delete(runId);
       }

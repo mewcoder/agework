@@ -19,13 +19,13 @@ export class AgentSkillsScanner {
 
   constructor(
     private readonly workspaceService: WorkspaceService,
-    private readonly runtimeService: RuntimeService,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   async scan(
     userId: string,
     workspaceId: string,
-    agentType: string,
+    agentType: string
   ): Promise<SlashCommandItem[]> {
     if (!isAgentType(agentType)) return [];
     if (agentType !== "claude") return [];
@@ -41,7 +41,7 @@ export class AgentSkillsScanner {
       const result = await this.runtimeService.listFiles(
         ctx.runtimeId,
         ctx.workspaceRootPath,
-        skillsDir,
+        skillsDir
       );
       dirEntries = result.list;
     } catch {
@@ -62,16 +62,16 @@ export class AgentSkillsScanner {
           const result = await this.runtimeService.readFile(
             ctx.runtimeId,
             ctx.workspaceRootPath,
-            filePath,
+            filePath
           );
 
           if (result.encoding !== "utf8") return;
 
           const parsed = matter(result.content);
-          const name = parsed.data?.name;
+          const name: unknown = parsed.data?.name;
           if (typeof name !== "string" || !name.trim()) {
             this.logger.warn(
-              `Skill "${dirName}" has invalid frontmatter (missing or empty name), skipping`,
+              `Skill "${dirName}" has invalid frontmatter (missing or empty name), skipping`
             );
             return;
           }
@@ -84,10 +84,10 @@ export class AgentSkillsScanner {
           items.push({ name, description });
         } catch (err) {
           this.logger.warn(
-            `Failed to read skill "${dirName}": ${err instanceof Error ? err.message : String(err)}`,
+            `Failed to read skill "${dirName}": ${err instanceof Error ? err.message : String(err)}`
           );
         }
-      }),
+      })
     );
 
     return items;

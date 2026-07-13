@@ -13,7 +13,6 @@ import {
   RUNTIME_TUNNEL_CLOSE_GONE,
   type RuntimeTunnelClientMessage,
   type RuntimeTunnelRegisteredMessage,
-  type RuntimeTunnelRpcRequest,
   type RuntimeTunnelAllRpcRequest,
   type RuntimeTunnelHostNotification,
   type HostUpstreamNotification,
@@ -357,20 +356,17 @@ export class RuntimeTunnelHandler
     if (envelope.notification === undefined) {
       const legacy = envelope as unknown as HostUpstreamNotification;
       if ("kind" in legacy) {
-        void Promise.resolve(
-          this.upstreamHandler?.(runtimeId, legacy)
-        ).catch((err: unknown) => {
-          this.logger.warn(
-            `legacy upstream handler failed for runtime ${runtimeId}: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
+        void Promise.resolve(this.upstreamHandler?.(runtimeId, legacy)).catch(
+          (err: unknown) => {
+            this.logger.warn(
+              `legacy upstream handler failed for runtime ${runtimeId}: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        );
       }
       return;
     }
-    if (
-      envelope.epoch !== undefined &&
-      envelope.epoch !== session?.epoch
-    ) {
+    if (envelope.epoch !== undefined && envelope.epoch !== session?.epoch) {
       this.logger.warn(
         `dropped stale-epoch upstream from runtime ${runtimeId}: epoch=${envelope.epoch} current=${session?.epoch ?? "none"}`
       );
@@ -391,11 +387,7 @@ export class RuntimeTunnelHandler
       .catch(() => {});
   }
 
-  private sendUpstreamAck(
-    runtimeId: string,
-    ws: WebSocket,
-    seq: number
-  ): void {
+  private sendUpstreamAck(runtimeId: string, ws: WebSocket, seq: number): void {
     if (ws.readyState !== ws.OPEN) return;
     if (this.connections.get(runtimeId) !== ws) return;
     ws.send(

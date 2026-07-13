@@ -31,11 +31,12 @@ export class AgentController {
   }
 
   @Get("skills")
-  agentSkills(
-    @Query() query: AgentSkillsDto,
-    @CurrentUser() user: JwtUser
-  ) {
-    return this.agentService.getSkills(user.userId, query.workspaceId, query.agentType);
+  agentSkills(@Query() query: AgentSkillsDto, @CurrentUser() user: JwtUser) {
+    return this.agentService.getSkills(
+      user.userId,
+      query.workspaceId,
+      query.agentType
+    );
   }
 
   @Post("run")

@@ -92,10 +92,7 @@ export class WorkspaceController {
   }
 
   @Get("files/search")
-  searchFiles(
-    @Query("id") id: string,
-    @CurrentUser() user: JwtUser
-  ) {
+  searchFiles(@Query("id") id: string, @CurrentUser() user: JwtUser) {
     return this.workspaceService.searchFiles(user.userId, id);
   }
 }

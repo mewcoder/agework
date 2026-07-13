@@ -48,7 +48,11 @@ export class WorkerTokenGuard implements CanActivate {
     const workerId =
       request.params?.workerId ?? request.headers[WORKER_ID_HEADER];
     const token = request.headers[WORKER_TOKEN_HEADER];
-    if (!workerId || typeof workerId !== "string" || typeof token !== "string") {
+    if (
+      !workerId ||
+      typeof workerId !== "string" ||
+      typeof token !== "string"
+    ) {
       throw new HttpException(
         "missing worker token or worker id",
         HttpStatus.GONE

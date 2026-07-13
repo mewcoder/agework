@@ -97,10 +97,9 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       "run-1",
       "服务重启导致运行中断"
     );
-    expect(deps.conversationService.setConversationRunState).toHaveBeenCalledWith(
-      "conversation-1",
-      { runStatus: "error" }
-    );
+    expect(
+      deps.conversationService.setConversationRunState
+    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 
   it("skips the recovery cancel when a run has no persisted runtimeInstanceId", async () => {
@@ -165,7 +164,10 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     vi.useRealTimers();
   });
 
-  async function runOneSweep(deps: ReturnType<typeof makeDeps>, runtimeHost: Partial<RuntimeHostContract>) {
+  async function runOneSweep(
+    deps: ReturnType<typeof makeDeps>,
+    runtimeHost: Partial<RuntimeHostContract>
+  ) {
     vi.useFakeTimers();
     service = makeService(deps, runtimeHost);
     await service.failInterruptedRuns(); // 启动 sweep 定时器
@@ -221,9 +223,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
   });
 
   it("never sweeps managed runs (they are handled at boot)", async () => {
-    const deps = makeDeps([
-      makeActiveRun({ runtimeHostId: "managed-native" }),
-    ]);
+    const deps = makeDeps([makeActiveRun({ runtimeHostId: "managed-native" })]);
 
     await runOneSweep(deps, makeRuntimeHost());
 

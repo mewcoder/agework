@@ -68,7 +68,11 @@ export class RunRecoveryService implements OnApplicationShutdown {
               swallow(this.logger, `send cancel for interrupted run ${run.id}`)
             );
           }
-          await this.failRun(run.id, run.conversationId, "服务重启导致运行中断");
+          await this.failRun(
+            run.id,
+            run.conversationId,
+            "服务重启导致运行中断"
+          );
           this.logger.log(`Marked interrupted run ${run.id} as error`);
         }
       }

@@ -84,7 +84,11 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
 
   it("getRunConfig reaches the controller when the worker-id header token matches", async () => {
     const host = {
-      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
+      validateWorkerToken: vi
+        .fn()
+        .mockImplementation(
+          (_id: string, token: string) => token === "token-1"
+        ),
     };
     const { baseUrl, workerManager } = await startApp(host);
 
@@ -96,7 +100,10 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(host.validateWorkerToken).toHaveBeenCalledWith("worker-1", "token-1");
+    expect(host.validateWorkerToken).toHaveBeenCalledWith(
+      "worker-1",
+      "token-1"
+    );
     expect(workerManager.getRunConfig).toHaveBeenCalledWith("run-1");
   });
 
@@ -114,7 +121,11 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
 
   it("postEvent returns 410 and never reaches the controller when the token mismatches", async () => {
     const host = {
-      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
+      validateWorkerToken: vi
+        .fn()
+        .mockImplementation(
+          (_id: string, token: string) => token === "token-1"
+        ),
     };
     const { baseUrl, workerManager } = await startApp(host);
 

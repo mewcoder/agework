@@ -82,7 +82,9 @@ export class RemoteRuntime implements Runtime {
 
   /** 通过隧道发 detect-env RPC,远程 manager 重检后返回 envConfig。 */
   async detectEnv(): Promise<RuntimeEnvConfig> {
-    const result = await this.tunnel.sendRequest<{ envConfig: RuntimeEnvConfig }>(
+    const result = await this.tunnel.sendRequest<{
+      envConfig: RuntimeEnvConfig;
+    }>(
       this.runtimeId,
       this.request("runtime.detect-env", {}),
       this.launchTimeoutMs
@@ -151,9 +153,7 @@ export class RemoteRuntime implements Runtime {
   }
 
   /** 通过隧道发 search-files RPC,列出远程机器上 rootPath 下所有文件相对路径。 */
-  async searchFiles(
-    rootPath: string
-  ): Promise<WorkspaceFileSearchResponse> {
+  async searchFiles(rootPath: string): Promise<WorkspaceFileSearchResponse> {
     const params: RuntimeSearchFilesRpcParams = { rootPath };
     return this.tunnel.sendRequest<RuntimeSearchFilesRpcResult>(
       this.runtimeId,
@@ -167,7 +167,10 @@ export class RemoteRuntime implements Runtime {
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
-    const params: RuntimeReadFileDiffRpcParams = { rootPath, path: relativePath };
+    const params: RuntimeReadFileDiffRpcParams = {
+      rootPath,
+      path: relativePath,
+    };
     return this.tunnel.sendRequest<RuntimeReadFileDiffRpcResult>(
       this.runtimeId,
       this.request("runtime.read-file-diff", params),

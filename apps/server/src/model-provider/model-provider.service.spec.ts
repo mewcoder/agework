@@ -58,7 +58,9 @@ describe("ModelProviderService", () => {
     const result = await service.listEnabled("claude");
 
     // list[0] is the virtual system provider, list[1] is the custom one
-    const customProvider = result.list.find((p) => p.modelProviderId === "mp-1");
+    const customProvider = result.list.find(
+      (p) => p.modelProviderId === "mp-1"
+    );
     expect(JSON.parse(customProvider!.providerConfig)).toEqual({
       baseUrl: "https://example.com/anthropic",
       apiKey: "",
@@ -103,7 +105,9 @@ describe("ModelProviderService", () => {
 
     const result = await service.listEnabled("claude");
 
-    const systemProvider = result.list.find((p) => p.modelProviderId === "system");
+    const systemProvider = result.list.find(
+      (p) => p.modelProviderId === "system"
+    );
     expect(systemProvider).toBeDefined();
     expect(systemProvider!.scope).toBe("system");
     expect(systemProvider!.name).toBe("系统环境");
@@ -116,7 +120,9 @@ describe("ModelProviderService", () => {
 
     const result = await service.listEnabled("claude");
 
-    const systemProvider = result.list.find((p) => p.modelProviderId === "system");
+    const systemProvider = result.list.find(
+      (p) => p.modelProviderId === "system"
+    );
     expect(systemProvider).toBeUndefined();
   });
 

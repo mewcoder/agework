@@ -69,7 +69,7 @@ function makePlacement(
     username: "admin-1",
     workspacePath: "/tmp/ws-1",
     ...overrides,
-  } as RunPlacement;
+  };
 }
 
 function makeSubmitInput(runtimeHostId: string): SubmitRunInput {
@@ -79,7 +79,7 @@ function makeSubmitInput(runtimeHostId: string): SubmitRunInput {
     placement: makePlacement(runtimeHostId),
     agentProviderConfig: { agentType: "claude", source: "system" },
     input: { messages: [{ id: "msg-1" }] },
-  } as SubmitRunInput;
+  };
 }
 
 describe("RuntimeHostAdapter (Phase 2 路由)", () => {
@@ -187,7 +187,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       await adapter.command("run-1", cancel as never);
 
       const call = runtimeService.sendTunnelRequest.mock.calls.find(
-        ([, request]) => (request as { method: string }).method === "host.command"
+        ([, request]) =>
+          (request as { method: string }).method === "host.command"
       );
       expect(call?.[0]).toBe("rt-registered-1");
       expect(runEvents.commandSent).toHaveBeenCalledWith({
@@ -235,7 +236,13 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       await handler("rt-registered-1", {
         kind: "emit",
         runId: "run-9",
-        message: { runId: "run-9", seq: 1, type: "agui.event", payload: {}, ts: "t" },
+        message: {
+          runId: "run-9",
+          seq: 1,
+          type: "agui.event",
+          payload: {},
+          ts: "t",
+        },
       });
       await handler("rt-registered-1", {
         kind: "runFailed",
@@ -252,7 +259,13 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       await handler("rt-registered-1", {
         kind: "emit",
         runId: "run-9",
-        message: { runId: "run-9", seq: 1, type: "agui.event", payload: {}, ts: "t" },
+        message: {
+          runId: "run-9",
+          seq: 1,
+          type: "agui.event",
+          payload: {},
+          ts: "t",
+        },
       });
 
       await adapter.command("run-9", {
@@ -262,7 +275,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       } as never);
 
       const call = runtimeService.sendTunnelRequest.mock.calls.find(
-        ([, request]) => (request as { method: string }).method === "host.command"
+        ([, request]) =>
+          (request as { method: string }).method === "host.command"
       );
       expect(call?.[0]).toBe("rt-registered-1");
     });
@@ -293,15 +307,15 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       runtimeService.listConnectedRuntimeIds.mockReturnValue(["rt-dead"]);
       runtimeService.sendTunnelRequest.mockRejectedValue(new Error("timeout"));
 
-      await expect(adapter.listWorkers()).resolves.toEqual([
-        { id: "w-local" },
-      ]);
+      await expect(adapter.listWorkers()).resolves.toEqual([{ id: "w-local" }]);
     });
 
     it("stopWorker hits the in-process host and broadcasts to tunnel hosts", async () => {
-      runtimeService.listConnectedRuntimeIds.mockReturnValue(["managed-docker"]);
+      runtimeService.listConnectedRuntimeIds.mockReturnValue([
+        "managed-docker",
+      ]);
 
-      await adapter.stopWorker("workspace:ws-1#native" as never);
+      await adapter.stopWorker("workspace:ws-1#native");
 
       expect(managedHost.stopWorker).toHaveBeenCalledWith(
         "workspace:ws-1#native"
@@ -314,9 +328,11 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     });
 
     it("releaseOwner hits the in-process host and broadcasts to tunnel hosts", async () => {
-      runtimeService.listConnectedRuntimeIds.mockReturnValue(["rt-registered-1"]);
+      runtimeService.listConnectedRuntimeIds.mockReturnValue([
+        "rt-registered-1",
+      ]);
 
-      await adapter.releaseOwner("workspace:ws-1" as never);
+      await adapter.releaseOwner("workspace:ws-1");
 
       expect(managedHost.releaseOwner).toHaveBeenCalledWith("workspace:ws-1");
       const call = runtimeService.sendTunnelRequest.mock.calls.find(
@@ -364,9 +380,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     it("throws when the runtime host row is missing", async () => {
       runtimeService.getRuntimeRow.mockResolvedValue(null);
 
-      await expect(adapter.detectEnv("missing")).rejects.toThrow(
-        /not found/
-      );
+      await expect(adapter.detectEnv("missing")).rejects.toThrow(/not found/);
     });
   });
 });

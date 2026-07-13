@@ -1,7 +1,10 @@
 import { Injectable } from "@nestjs/common";
 import { generateId } from "@agework/shared";
 import type { RuntimeCapabilities } from "@agework/shared/protocol";
-import type { RuntimeEnvConfig, RuntimeEnvConfigOverride } from "@agework/shared/api";
+import type {
+  RuntimeEnvConfig,
+  RuntimeEnvConfigOverride,
+} from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 
 export type RuntimeRow = {

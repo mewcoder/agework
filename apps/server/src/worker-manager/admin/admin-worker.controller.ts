@@ -12,7 +12,8 @@ import type { RuntimeHostContract, WorkerKey } from "@agework/shared/protocol";
 export class AdminWorkerController {
   constructor(
     private readonly workerManager: WorkerManagerService,
-    @Inject(RUNTIME_HOST_CONTRACT) private readonly hostContract: RuntimeHostContract
+    @Inject(RUNTIME_HOST_CONTRACT)
+    private readonly hostContract: RuntimeHostContract
   ) {}
 
   @Get("policy")

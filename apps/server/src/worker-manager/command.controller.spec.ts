@@ -84,7 +84,11 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
 
   it("lets the request through and reaches the controller when the token matches", async () => {
     const host = {
-      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
+      validateWorkerToken: vi
+        .fn()
+        .mockImplementation(
+          (_id: string, token: string) => token === "token-1"
+        ),
     };
     const { baseUrl, workerManager } = await startApp(host);
 
@@ -109,7 +113,11 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
 
   it("returns 410 and never reaches the controller when the token does not match", async () => {
     const host = {
-      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
+      validateWorkerToken: vi
+        .fn()
+        .mockImplementation(
+          (_id: string, token: string) => token === "token-1"
+        ),
     };
     const { baseUrl, workerManager } = await startApp(host);
 

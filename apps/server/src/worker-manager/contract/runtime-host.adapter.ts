@@ -185,7 +185,9 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
         timeoutMs
       );
     } catch (err) {
-      this.logger.warn(`tunnel command failed for run ${runId}: ${String(err)}`);
+      this.logger.warn(
+        `tunnel command failed for run ${runId}: ${String(err)}`
+      );
     }
   }
 
@@ -213,7 +215,10 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
         await upstream.notifyRunCancelled(notification.runId);
         break;
       case "workerLost":
-        await upstream.notifyWorkerLost(notification.runId, notification.reason);
+        await upstream.notifyWorkerLost(
+          notification.runId,
+          notification.reason
+        );
         break;
       case "executionRef":
         upstream.notifyExecutionRef(notification.runId, notification.ref);
@@ -230,7 +235,9 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     // 旧容器里的 worker 回连时 token 校验 410,自行退出(孤儿自清)。无需补发 cancel。
   }
 
-  async getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null> {
+  async getWorkerSnapshotForAdmin(
+    ref: ExecutionRef
+  ): Promise<WorkerSnapshot | null> {
     const workers = await this.listWorkers();
     return (
       workers.find((w) => w.runtimeInstanceId === ref.runtimeInstanceId) ?? null
@@ -283,9 +290,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       [runtimeType]: {
         available: true,
         scopes: scopes.length > 0 ? scopes : ["workspace"],
-        ...(runtimeType === "native" && envConfig
-          ? { cli: envConfig }
-          : {}),
+        ...(runtimeType === "native" && envConfig ? { cli: envConfig } : {}),
       },
     };
     return status;
@@ -293,9 +298,14 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
     const { runtimeHostId, agentType } = input;
-    const result = await this.runtimeService.installCli(runtimeHostId, agentType);
+    const result = await this.runtimeService.installCli(
+      runtimeHostId,
+      agentType
+    );
     if (!result.envConfig) {
-      throw new Error(`installCli failed: no envConfig returned for ${runtimeHostId}`);
+      throw new Error(
+        `installCli failed: no envConfig returned for ${runtimeHostId}`
+      );
     }
     return { envConfig: result.envConfig };
   }
@@ -313,7 +323,9 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     await this.runtimeService.runtimeFor(runtimeHostId).createDirectory(path);
   }
 
-  async listFiles(input: WorkspaceFileQuery): Promise<WorkspaceFileListResponse> {
+  async listFiles(
+    input: WorkspaceFileQuery
+  ): Promise<WorkspaceFileListResponse> {
     return this.runtimeService
       .runtimeFor(input.runtimeHostId)
       .listFiles(input.rootPath, input.path);
@@ -325,13 +337,17 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       .readFile(input.rootPath, input.path);
   }
 
-  async readFileDiff(input: ReadFileDiffInput): Promise<WorkspaceFileDiffResponse> {
+  async readFileDiff(
+    input: ReadFileDiffInput
+  ): Promise<WorkspaceFileDiffResponse> {
     return this.runtimeService
       .runtimeFor(input.runtimeHostId)
       .readFileDiff(input.rootPath, input.path);
   }
 
-  async searchFiles(input: SearchFilesInput): Promise<WorkspaceFileSearchResponse> {
+  async searchFiles(
+    input: SearchFilesInput
+  ): Promise<WorkspaceFileSearchResponse> {
     return this.runtimeService
       .runtimeFor(input.runtimeHostId)
       .searchFiles(input.rootPath);
@@ -352,17 +368,22 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     for (const runtimeId of this.runtimeService.listConnectedRuntimeIds()) {
       try {
         const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-        const hostResult = await this.runtimeService.sendTunnelRequest<
-          HostListWorkersRpcResult
-        >(runtimeId, {
-          jsonrpc: "2.0",
-          id: generateId(),
-          method: "host.listWorkers",
-          params: {},
-        }, timeoutMs);
+        const hostResult =
+          await this.runtimeService.sendTunnelRequest<HostListWorkersRpcResult>(
+            runtimeId,
+            {
+              jsonrpc: "2.0",
+              id: generateId(),
+              method: "host.listWorkers",
+              params: {},
+            },
+            timeoutMs
+          );
         result.push(...hostResult.workers);
       } catch (err) {
-        this.logger.warn(`host.listWorkers failed for ${runtimeId}: ${String(err)}`);
+        this.logger.warn(
+          `host.listWorkers failed for ${runtimeId}: ${String(err)}`
+        );
       }
     }
     return result;
@@ -375,14 +396,20 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     for (const runtimeId of this.runtimeService.listConnectedRuntimeIds()) {
       try {
         const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-        await this.runtimeService.sendTunnelRequest<never>(runtimeId, {
-          jsonrpc: "2.0",
-          id: generateId(),
-          method: "host.stopWorker",
-          params: { key },
-        }, timeoutMs);
+        await this.runtimeService.sendTunnelRequest<never>(
+          runtimeId,
+          {
+            jsonrpc: "2.0",
+            id: generateId(),
+            method: "host.stopWorker",
+            params: { key },
+          },
+          timeoutMs
+        );
       } catch (err) {
-        this.logger.warn(`host.stopWorker failed for ${key} on host ${runtimeId}: ${String(err)}`);
+        this.logger.warn(
+          `host.stopWorker failed for ${key} on host ${runtimeId}: ${String(err)}`
+        );
       }
     }
   }

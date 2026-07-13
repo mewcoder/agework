@@ -9,7 +9,10 @@ export class ModelProviderController {
 
   @Get("list")
   list(@Query() query: ModelProviderAgentQueryDto) {
-    return this.modelProviderService.listEnabled(query.agentType, query.runtimeId);
+    return this.modelProviderService.listEnabled(
+      query.agentType,
+      query.runtimeId
+    );
   }
 
   @Post("ping")

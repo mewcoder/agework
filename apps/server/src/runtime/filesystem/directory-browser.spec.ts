@@ -16,7 +16,9 @@ describe("directory-browser", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = realpathSync(mkdtempSync(join(tmpdir(), "directory-browser-test-")));
+    tmpDir = realpathSync(
+      mkdtempSync(join(tmpdir(), "directory-browser-test-"))
+    );
   });
 
   afterEach(() => {

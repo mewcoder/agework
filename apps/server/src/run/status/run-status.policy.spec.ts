@@ -30,7 +30,7 @@ describe("run lifecycle policy", () => {
     for (const status of ALL_RUN_STATUSES) {
       expect(
         runStatusEffect(status).isTerminal,
-        `effect table vs shared TERMINAL_RUN_STATUSES: ${status}`,
+        `effect table vs shared TERMINAL_RUN_STATUSES: ${status}`
       ).toBe(isTerminalRunStatus(status));
     }
   });

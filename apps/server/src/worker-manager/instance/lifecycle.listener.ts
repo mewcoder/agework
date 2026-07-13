@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import type { OwnerKey, RuntimeHostContract } from "@agework/shared/protocol";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RUNTIME_HOST_CONTRACT } from "../worker-manager.types";
 import {
   WORKSPACE_DELETED_EVENT,
@@ -35,7 +35,7 @@ export class WorkerLifecycleListener {
     workspaceId,
   }: WorkspaceDeletedEvent): Promise<void> {
     try {
-      await this.runtimeHost.releaseOwner(`workspace:${workspaceId}` as OwnerKey);
+      await this.runtimeHost.releaseOwner(`workspace:${workspaceId}`);
     } catch (err) {
       this.logger.warn(
         `releaseOwner failed for workspace ${workspaceId}: ${err instanceof Error ? err.message : String(err)}`
@@ -48,7 +48,7 @@ export class WorkerLifecycleListener {
     userId,
   }: UserDeletedEvent | UserDisabledEvent): Promise<void> {
     try {
-      await this.runtimeHost.releaseOwner(`user:${userId}` as OwnerKey);
+      await this.runtimeHost.releaseOwner(`user:${userId}`);
     } catch (err) {
       this.logger.warn(
         `releaseOwner failed for user ${userId}: ${err instanceof Error ? err.message : String(err)}`

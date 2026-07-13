@@ -88,9 +88,7 @@ export class AssistantMessageAggregator {
   }
 
   /** 跨段 tool result:目标 tool call 在留存段里时补结果,返回是否命中。 */
-  private patchRetainedToolResult(event: {
-    [key: string]: unknown;
-  }): boolean {
+  private patchRetainedToolResult(event: { [key: string]: unknown }): boolean {
     const index = this.previousParts.findIndex(
       (part) =>
         part.type === "tool-call" && part.toolCallId === event.toolCallId

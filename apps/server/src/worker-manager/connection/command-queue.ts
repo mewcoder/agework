@@ -52,7 +52,6 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     });
   }
 
-
   waitForWorkerId(
     workerId: string,
     afterSeq: number,
@@ -114,7 +113,9 @@ export class WorkerCommandQueue implements OnApplicationShutdown {
     this.workerWaiters.clear();
     this.workerQueues.clear();
     if (drained > 0) {
-      this.logger.log(`drained ${drained} worker command waiter(s) on shutdown`);
+      this.logger.log(
+        `drained ${drained} worker command waiter(s) on shutdown`
+      );
     }
   }
 

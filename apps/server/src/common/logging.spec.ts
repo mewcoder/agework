@@ -164,12 +164,7 @@ describe("resolveNestLogLevels", () => {
   it("defaults to info regardless of NODE_ENV", () => {
     delete process.env.AGEWORK_LOG_LEVEL;
     process.env.NODE_ENV = "development";
-    expect(resolveNestLogLevels()).toEqual([
-      "fatal",
-      "error",
-      "warn",
-      "log",
-    ]);
+    expect(resolveNestLogLevels()).toEqual(["fatal", "error", "warn", "log"]);
   });
 });
 

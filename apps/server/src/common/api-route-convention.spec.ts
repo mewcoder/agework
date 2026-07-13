@@ -319,7 +319,9 @@ describe("external API route convention", () => {
     expect(
       CONTROLLERS.filter((controller) => {
         const p = controllerPath(controller);
-        return p !== "worker" && !p.startsWith("worker/") && isPublic(controller);
+        return (
+          p !== "worker" && !p.startsWith("worker/") && isPublic(controller)
+        );
       }).map(controllerPath)
     ).toEqual([]);
   });
