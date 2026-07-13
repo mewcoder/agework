@@ -1,6 +1,6 @@
-import { useState } from "react";
-import type { WorkerInstanceResponse } from "@/api/worker";
-import { useWorkerResources, useStopWorkerResource } from "@/hooks/worker-hooks";
+import { useMemo, useState } from "react";
+import type { WorkerSnapshot } from "@/api/worker";
+import { useLiveWorkers, useStopLiveWorker } from "@/hooks/worker-hooks";
 import {
   DataTable,
   DataTableActions,
@@ -41,39 +41,45 @@ function statusVariant(status: string) {
 
 export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
   const [status, setStatus] = useState<string>("all");
-  const [stoppingId, setStoppingId] = useState<string | null>(null);
+  const [stoppingKey, setStoppingKey] = useState<string | null>(null);
   const stopDialog = useBooleanConfirmDelete();
-  const [pendingStopId, setPendingStopId] = useState<string | null>(null);
+  const [pendingStopKey, setPendingStopKey] = useState<string | null>(null);
   const { pageNo, setPageNo, pageSize, goPrev, goNext } = usePagination();
 
-  const { data, isLoading } = useWorkerResources(
-    status === "all" ? undefined : status,
-    pageNo,
-    pageSize,
-  );
-  const stopMutation = useStopWorkerResource();
+  const { data, isLoading } = useLiveWorkers();
+  const stopMutation = useStopLiveWorker();
 
-  const items = data?.list ?? [];
-  const total = data?.total ?? 0;
+  // 客户端筛选 + 分页（live 数据无服务端分页）
+  const filtered = useMemo(() => {
+    const all = data?.list ?? [];
+    if (status === "all") return all;
+    return all.filter((w) => w.status === status);
+  }, [data, status]);
 
-  function handleStop(id: string) {
-    setPendingStopId(id);
+  const total = filtered.length;
+  const items = useMemo(() => {
+    const start = (pageNo - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, pageNo, pageSize]);
+
+  function handleStop(workerKey: string) {
+    setPendingStopKey(workerKey);
     stopDialog.open();
   }
 
   async function confirmStop() {
-    if (!pendingStopId) return;
-    setStoppingId(pendingStopId);
+    if (!pendingStopKey) return;
+    setStoppingKey(pendingStopKey);
     stopDialog.close();
     try {
-      await stopMutation.mutateAsync(pendingStopId);
+      await stopMutation.mutateAsync(pendingStopKey);
     } finally {
-      setStoppingId(null);
-      setPendingStopId(null);
+      setStoppingKey(null);
+      setPendingStopKey(null);
     }
   }
 
-  const columns: DataTableColumnDef<WorkerInstanceResponse>[] = [
+  const columns: DataTableColumnDef<WorkerSnapshot>[] = [
     {
       id: "isolationScope",
       header: "隔离级别",
@@ -139,10 +145,10 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
         <DataTableActions>
           {row.original.status === "running" && (
             <DataTableButton
-              disabled={stoppingId === row.original.id}
-              onClick={() => handleStop(row.original.id)}
+              disabled={stoppingKey === row.original.workerKey}
+              onClick={() => handleStop(row.original.workerKey)}
             >
-              {stoppingId === row.original.id ? "停止中…" : "停止"}
+              {stoppingKey === row.original.workerKey ? "停止中…" : "停止"}
             </DataTableButton>
           )}
         </DataTableActions>
@@ -189,7 +195,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
         isLoading={isLoading}
         emptyText="暂无运行中的 Worker"
         tableClassName="min-w-[960px]"
-        getRowId={(resource) => resource.id}
+        getRowId={(resource) => resource.workerKey}
       />
 
       <PaginationBar

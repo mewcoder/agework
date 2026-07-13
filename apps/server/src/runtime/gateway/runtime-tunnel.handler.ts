@@ -102,6 +102,11 @@ export class RuntimeTunnelHandler
     return this.connections.has(runtimeId);
   }
 
+  /** Phase 2: 列出所有在线（隧道连接存在）的 runtime id。 */
+  listConnected(): string[] {
+    return [...this.connections.keys()];
+  }
+
   /** Phase 2: 注册 host.upstream 通知回调。 */
   setUpstreamHandler(
     handler: (runtimeId: string, notification: HostUpstreamNotification) => void

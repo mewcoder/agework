@@ -262,6 +262,7 @@ export class RuntimeHost implements RuntimeHostContract {
   async listWorkers(): Promise<WorkerSnapshot[]> {
     return this.pool.list().map((w) => ({
       id: w.workerId,
+      workerKey: w.key,
       runtimeType: w.key.split("#")[1] ?? "unknown",
       isolationScope: parseOwnerKey(w.key.split("#")[0] as OwnerKey).scope,
       ownerId: parseOwnerKey(w.key.split("#")[0] as OwnerKey).id,

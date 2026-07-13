@@ -2,7 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import { join, posix } from "node:path";
 import { generateId } from "@agework/shared";
-import { parseOwnerKey } from "@agework/shared/protocol";
+import { parseOwnerKey, workerKey } from "@agework/shared/protocol";
 import type {
   AcquireInstanceResult,
   CommandPayload,
@@ -11,6 +11,7 @@ import type {
   ExecutionRef,
   HostCapabilityStatus,
   HostUpstreamNotification,
+  HostListWorkersRpcResult,
   InstallCliInput,
   InstallCliResult,
   ListChangedFilesInput,
@@ -269,11 +270,19 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     });
   }
 
-  getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null> {
-    return this.workerManager.getWorkerInstanceForAdmin(
+  async getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null> {
+    const instance = await this.workerManager.getWorkerInstanceForAdmin(
       ref.runtimeType,
       ref.runtimeInstanceId
     );
+    if (!instance) return null;
+    return {
+      ...instance,
+      workerKey: workerKey(
+        `${instance.isolationScope}:${instance.ownerId}` as OwnerKey,
+        instance.runtimeType
+      ),
+    };
   }
 
   // ── Phase 2 expand: 环境 / 文件 / 观测 契约方法 ─────────────────────
@@ -382,11 +391,16 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async listWorkers(): Promise<WorkerSnapshot[]> {
-    const resources = await this.workerManager.listResources({
+    // Phase 2: 本地 Worker 表（managed Host）+ 隧道查询（registered Host）
+    const localWorkers = await this.workerManager.listResources({
       pageSize: 1000,
     });
-    return resources.list.map((r) => ({
+    const localResult = localWorkers.list.map((r) => ({
       id: r.id,
+      workerKey: workerKey(
+        `${r.isolationScope}:${r.ownerId}` as OwnerKey,
+        r.runtimeType
+      ),
       runtimeType: r.runtimeType,
       isolationScope: r.isolationScope,
       ownerId: r.ownerId,
@@ -397,11 +411,51 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       updatedAt: r.updatedAt,
       workspaceBindings: r.workspaceBindings ?? [],
     }));
+    // 查询所有已连接的 registered Host 并发 host.listWorkers RPC
+    const registeredIds = this.tunnelHandler.listConnected().filter(
+      (id) => !isManagedRuntimeId(id)
+    );
+    for (const runtimeId of registeredIds) {
+      try {
+        const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+        const result = await this.tunnelHandler.sendRequest<
+          HostListWorkersRpcResult
+        >(runtimeId, {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.listWorkers",
+          params: {},
+        }, timeoutMs);
+        localResult.push(...result.workers);
+      } catch (err) {
+        this.logger.warn(`host.listWorkers failed for ${runtimeId}: ${String(err)}`, "warn");
+      }
+    }
+    return localResult;
   }
 
   async stopWorker(key: WorkerKey): Promise<void> {
-    // WorkerKey = `${OwnerKey}#${Isolation}`。过渡：从 listWorkers 找匹配的 worker 停掉。
+    // WorkerKey = `${OwnerKey}#${Isolation}`。
     // Phase 2 per-Host 实例直接从内存池按 key 查。
+    // 先处理 registered Host：遍历所有已连接的 Host，找到该 key 的 Host，发 host.stopWorker RPC
+    const registeredIds = this.tunnelHandler.listConnected().filter(
+      (id) => !isManagedRuntimeId(id)
+    );
+    for (const runtimeId of registeredIds) {
+      try {
+        const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+        await this.tunnelHandler.sendRequest<never>(runtimeId, {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.stopWorker",
+          params: { key },
+        }, timeoutMs);
+        // registered Host 返回 void，null，错误抛异常
+      } catch (err) {
+        this.logger.warn(`host.stopWorker failed for ${key} on host ${runtimeId}: ${String(err)}`, "warn");
+      }
+    }
+    // managed Host（本地）：从 listWorkers 找匹配的 worker 停掉（本地 registry 已停写，当前只返回本地 managed Host 的 worker）。
     const workers = await this.listWorkers();
     const ownerPart = key.split("#")[0];
     const isolationPart = key.split("#")[1];

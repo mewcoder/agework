@@ -85,6 +85,8 @@ export type ExecutionRef = {
 /** admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。 */
 export type WorkerSnapshot = {
   id: string;
+  /** Phase 2: 池键 `OwnerKey#Isolation`，stopWorker 用。 */
+  workerKey: WorkerKey;
   runtimeType: string;
   isolationScope: string;
   ownerId: string;

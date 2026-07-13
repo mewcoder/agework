@@ -6,6 +6,7 @@ import {
   type RuntimeTunnelRpcRequest,
   type RuntimeTunnelAllRpcRequest,
   type RuntimeHostContract,
+  type HostListWorkersRpcResult,
 } from "@agework/shared/protocol";
 import {
   isRpcRequest,
@@ -201,12 +202,13 @@ export class TunnelClient {
     | WorkspaceFileSearchResponse
     | WorkspaceChangedFilesResponse
     | WorkspaceFileDiffResponse
+    | HostListWorkersRpcResult
     | void
   > {
     const dispatcher = this.options.dispatcher;
     const hostContract = this.options.hostContract;
     switch (request.method) {
-      // ── Phase 2: host.* RPC（执行面契约） ──
+      // ── Phase 2: host.* RPC（执行面契约 + admin 观测） ──
       case "host.submitRun":
         if (!hostContract) throw new Error("host contract not configured");
         await hostContract.submitRun(request.params);
@@ -219,6 +221,13 @@ export class TunnelClient {
         if (!hostContract) throw new Error("host contract not configured");
         await hostContract.releaseOwner(request.params.owner);
         return;
+      case "host.listWorkers":
+        if (!hostContract) throw new Error("host contract not configured");
+        const workers = await hostContract.listWorkers();
+        return { workers };
+      case "host.stopWorker":
+        if (!hostContract) throw new Error("host contract not configured");
+        return await hostContract.stopWorker(request.params.key);
       // ── 旧 runtime.* RPC（过渡期文件/环境操作仍走此路径） ──
       case "runtime.launch":
         return dispatcher.launch(request.params);

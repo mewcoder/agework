@@ -5,6 +5,8 @@ import type {
   SubmitRunInput,
   OwnerKey,
   ExecutionRef,
+  WorkerKey,
+  WorkerSnapshot,
 } from "./runtime-host";
 import type { RuntimeEnvConfig } from "../api/runtimes";
 import type {
@@ -179,7 +181,16 @@ export type HostUpstreamNotification =
 export type RuntimeTunnelHostRpcRequest =
   | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>
   | RpcRequest<"host.command", HostCommandRpcParams>
-  | RpcRequest<"host.releaseOwner", HostReleaseOwnerRpcParams>;
+  | RpcRequest<"host.releaseOwner", HostReleaseOwnerRpcParams>
+  | RpcRequest<"host.listWorkers", Record<string, never>>
+  | RpcRequest<"host.stopWorker", { key: WorkerKey }>;
+
+/** host.listWorkers 响应：本 Host 的 worker 快照列表。 */
+export type HostListWorkersRpcResult = { workers: WorkerSnapshot[] };
+
+export type RuntimeTunnelHostRpcResponse =
+  | RpcResponse<HostListWorkersRpcResult>
+  | RpcResponse<null>;
 
 export type RuntimeTunnelHostNotification =
   | RpcNotification<"host.upstream", HostUpstreamNotification>;
@@ -188,6 +199,11 @@ export type RuntimeTunnelHostNotification =
 export type RuntimeTunnelAllRpcRequest =
   | RuntimeTunnelRpcRequest
   | RuntimeTunnelHostRpcRequest;
+
+/** Phase 2 扩展后的全量 RPC 响应类型。 */
+export type RuntimeTunnelAllRpcResponse =
+  | RuntimeTunnelRpcResponse
+  | RuntimeTunnelHostRpcResponse;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,
 // 内联在 protocol/index.ts(shared 源码直连消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。
