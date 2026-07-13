@@ -15,6 +15,7 @@ import type {
 } from "@agework/shared/protocol";
 import { findInPath } from "@agework/shared/cli";
 import type { Subscription } from "rxjs";
+import { MockAgentDriver } from "./mock-agent.driver";
 
 type Adapter = ClaudeAgentAdapter | CodexAgentInstance | AcpAgentAdapter;
 
@@ -105,6 +106,15 @@ export function createAgentDriver(
     // AG-UI boundary: event.threadId is the AgeWork conversationId.
     emitRunStatusForAguiThread(event.threadId, payload);
   };
+
+  // baseUrl 以 `mock:` 开头视为内部测试 scheme：返回确定性 mock 执行器,
+  // 不接任何真实 SDK/CLI(e2e/本地联调用,见 MockAgentDriver)。
+  if (
+    agentProviderConfig.source === "custom" &&
+    agentProviderConfig.baseUrl.startsWith("mock:")
+  ) {
+    return new MockAgentDriver();
+  }
 
   const credentials =
     agentProviderConfig.source === "system"
