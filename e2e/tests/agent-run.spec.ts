@@ -1,6 +1,13 @@
 import { test, expect } from "@playwright/test";
+import { ensureMockProvider } from "./support/mock-provider";
 
 const SLOW = 800;
+
+// mock 模型 provider（baseUrl=mock://e2e）在套件开跑前就位:
+// agent 回复由 worker 的 MockAgentDriver 确定性生成,不依赖真实模型 key。
+test.beforeAll(async () => {
+  await ensureMockProvider();
+});
 
 function sendBtn(page: import("@playwright/test").Page) {
   return page.locator('button[aria-label="Send message"]');
@@ -19,14 +26,11 @@ async function selectModelProvider(page: import("@playwright/test").Page) {
   await modelSubmenu.click();
   await slow(page);
 
+  // mock provider 由 beforeAll 保证存在;选不到就该失败,不再静默回退默认模型
   const testOption = page.locator('[role="menuitemradio"]:has-text("test")');
-  if (await testOption.isVisible().catch(() => false)) {
-    await testOption.click();
-    await slow(page);
-  } else {
-    await page.keyboard.press("Escape");
-    await slow(page);
-  }
+  await expect(testOption).toBeVisible({ timeout: 5000 });
+  await testOption.click();
+  await slow(page);
 }
 
 async function ensureWorkspace(page: import("@playwright/test").Page) {
@@ -89,7 +93,7 @@ test.describe("Agent Run 全链路", () => {
     await expect(composer).toBeVisible({ timeout: 10000 });
     await slow(page);
 
-    await composer.fill("当前目录是什么？列出文件");
+    await composer.fill("hello e2e");
     await slow(page);
 
     await expect(sendBtn(page)).toBeEnabled({ timeout: 5000 });
@@ -102,6 +106,13 @@ test.describe("Agent Run 全链路", () => {
     await slow(page);
 
     await waitForAgentReply(page);
+
+    // mock 模型的回复是确定性的,可做强断言(真实模型只能断言非空)
+    const reply = page
+      .locator('[data-slot="aui_assistant-message-root"][data-role="assistant"]')
+      .last()
+      .locator('[data-slot="aui_assistant-message-content"]');
+    await expect(reply).toContainText("mock reply: hello e2e");
   });
 
   test("对话 URL 正确更新", async ({ page }) => {
