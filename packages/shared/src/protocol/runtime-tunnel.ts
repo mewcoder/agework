@@ -56,8 +56,9 @@ export interface RuntimeTunnelRegisteredMessage {
   type: "registered";
   runtimeId: string;
   heartbeatIntervalSeconds: number;
-  /** Phase 2: 隧道会话的单调递增 epoch。server 重启后新 epoch 开始，
-   *  旧 epoch 的消息一律丢弃（防脑裂）。builtin 场景（进程内）无隧道，不使用。 */
+  /** Phase 2: 隧道会话 epoch,每次 register 递增。Host 把它盖在所有
+   *  host.upstream 信封上,server 丢弃非当前 epoch 的消息(防脑裂:
+   *  被顶掉的旧连接残留消息不得混入新会话)。builtin(进程内)无隧道,不使用。 */
   epoch?: number;
 }
 
@@ -178,6 +179,26 @@ export type HostUpstreamNotification =
   | { kind: "workerLost"; runId: string; reason: string }
   | { kind: "executionRef"; runId: string; ref: ExecutionRef };
 
+/**
+ * host.upstream 的传输信封:Host 进程内单调递增 seq + 会话 epoch。
+ * Host 缓冲未 ACK 的通知,断线重连(收到新 registered)后按原 seq 补发;
+ * server 逐条回 host.upstreamAck(累计水位),Host 收到后丢弃 ≤seq 的缓冲。
+ * 跨 server 重启的重复投递由 RunChannelMessage.seq 的 run 级幂等兜底。
+ */
+export type HostUpstreamEnvelope = {
+  /** Host 进程内单调递增(跨重连连续;Host 进程重启后归零重计)。 */
+  seq: number;
+  /** 当前隧道会话 epoch(来自 registered 回执);server 校验后非当前值丢弃。 */
+  epoch?: number;
+  notification: HostUpstreamNotification;
+};
+
+/** server → Host:host.upstream 的累计 ACK 水位(≤seq 的通知均已被 server 接收)。 */
+export type HostUpstreamAckParams = { seq: number };
+
+/** server → Host:run 已终结,Host 清理该 run 的状态(单向,best-effort)。 */
+export type HostReleaseRunParams = { runId: string };
+
 export type RuntimeTunnelHostRpcRequest =
   | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>
   | RpcRequest<"host.command", HostCommandRpcParams>
@@ -193,7 +214,9 @@ export type RuntimeTunnelHostRpcResponse =
   | RpcResponse<null>;
 
 export type RuntimeTunnelHostNotification =
-  | RpcNotification<"host.upstream", HostUpstreamNotification>;
+  | RpcNotification<"host.upstream", HostUpstreamEnvelope>
+  | RpcNotification<"host.upstreamAck", HostUpstreamAckParams>
+  | RpcNotification<"host.releaseRun", HostReleaseRunParams>;
 
 /** Phase 2 扩展后的全量 RPC 请求类型。 */
 export type RuntimeTunnelAllRpcRequest =

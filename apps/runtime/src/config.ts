@@ -30,6 +30,9 @@ export interface RegisteredRuntimeConfig {
   /** Phase 2: worker HTTP 服务器监听端口(worker 回连 Host 的端口)。
  *  默认 7101。worker 的 AGEWORK_WORKER_API_BASE 会被设为 `http://127.0.0.1:<port>/api/v1`。 */
   workerPort?: number;
+  /** 用户工作空间根目录(user-scope 隔离的挂载根)。managed 场景由 server
+ *  supervisor 注入自己的配置值;registered 默认 /home/agework/workspaces。 */
+  userWorkspaceRoot?: string;
 }
 
 /**
@@ -52,6 +55,8 @@ export function resolveRegisteredRuntimeConfig(
     args.get("runtime-entry") ?? env.AGEWORK_RUNTIME_ENTRY;
   const workerPortStr = args.get("worker-port") ?? env.AGEWORK_RUNTIME_WORKER_PORT;
   const workerPort = workerPortStr ? parseInt(workerPortStr, 10) : undefined;
+  const userWorkspaceRoot =
+    args.get("user-workspace-root") ?? env.AGEWORK_RUNTIME_USER_WORKSPACE_ROOT;
 
   if (!serverBaseUrl) {
     throw new Error("missing server url: pass --server or AGEWORK_SERVER_BASE_URL");
@@ -78,6 +83,7 @@ export function resolveRegisteredRuntimeConfig(
     ...(workerImage ? { workerImage } : {}),
     ...(runtimeEntryPath ? { runtimeEntryPath } : {}),
     ...(workerPort ? { workerPort } : {}),
+    ...(userWorkspaceRoot ? { userWorkspaceRoot } : {}),
   };
 }
 

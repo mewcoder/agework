@@ -5,10 +5,13 @@
   "main": "./src/main.ts",
   "exports": {
     ".": "./src/main.ts",
-    "./host": "./src/host/runtime-host.ts"
+    "./host": {
+      "types": "./src/host/runtime-host.ts",
+      "default": "./dist/host.cjs"
+    }
   },
   "scripts": {
-    "build": "esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" && node scripts/install-sdk-deps.mjs",
+    "build": "esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" && esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/providers --external:@agework/shared --outfile=dist/host.cjs && node scripts/install-sdk-deps.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

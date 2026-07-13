@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { WebSocket, type RawData } from "ws";
 import {
   RUNTIME_TUNNEL_CLOSE_GONE,
@@ -9,6 +11,7 @@ import {
   type HostListWorkersRpcResult,
 } from "@agework/shared/protocol";
 import {
+  isRpcNotification,
   isRpcRequest,
   rpcError,
   rpcSuccess,
@@ -123,8 +126,8 @@ export class TunnelClient {
     });
     this.ws = ws;
     ws.on("open", () => {
-      // Phase 2: 接线上行通知通道
-      this.options.tunnelUpstream?.setSocket(ws);
+      // 上行通道在收到 registered(带会话 epoch)后才接线,这个窗口内的
+      // 通知只入 TunnelUpstream 缓冲,注册完成后按 seq 补发。
       const envConfig = detectEnvConfig();
       const register: RuntimeTunnelRegisterMessage = {
         type: "register",
@@ -164,12 +167,26 @@ export class TunnelClient {
       return;
     }
 
+    // Phase 2: server 的单向通知——ACK 水位清缓冲 / run 终结清状态
+    if (isRpcNotification(parsed)) {
+      if (parsed.method === "host.upstreamAck") {
+        const { seq } = parsed.params as { seq: number };
+        this.options.tunnelUpstream?.onAck(seq);
+      } else if (parsed.method === "host.releaseRun") {
+        const { runId } = parsed.params as { runId: string };
+        this.options.hostContract?.releaseRun(runId);
+      }
+      return;
+    }
+
     const message = parsed as RuntimeTunnelServerMessage;
     if (message.type === "registered") {
       log(
         `registered as runtime ${message.runtimeId} (${this.options.config.runtimeType})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
+      // Phase 2: 注册完成才接线上行通道(绑定会话 epoch),并补发未 ACK 通知
+      this.options.tunnelUpstream?.setSession(ws, message.epoch);
       this.scheduleHeartbeat(ws, message.heartbeatIntervalSeconds);
     }
   }
@@ -268,8 +285,8 @@ export class TunnelClient {
 
   private onClose(code: number): void {
     this.clearHeartbeat();
-    // Phase 2: 断开上行通知通道
-    this.options.tunnelUpstream?.setSocket(undefined);
+    // Phase 2: 断开上行通知通道(缓冲保留,重连注册后补发)
+    this.options.tunnelUpstream?.clearSocket();
     if (this.stopped) return;
     if (code === RUNTIME_TUNNEL_CLOSE_GONE) {
       log("runtime deleted on server (4410), exiting", "error");
@@ -344,6 +361,8 @@ export async function runRegisteredRuntime(): Promise<void> {
   const config = resolveRegisteredRuntimeConfig(process.argv.slice(2), process.env);
   const workerPort = config.workerPort ?? 7101;
   const workerApiBaseUrl = `http://127.0.0.1:${workerPort}/api/v1`;
+  const userWorkspaceRoot =
+    config.userWorkspaceRoot ?? "/home/agework/workspaces";
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
   // providerConfig.serverBaseUrl 设为 Host 的 worker HTTP 端点——
@@ -351,7 +370,11 @@ export async function runRegisteredRuntime(): Promise<void> {
   // 使 worker 数据面对端从 server 切到 Host。
   const hostConfig: RuntimeHostConfig = {
     runtimeLogDir: config.runtimeLogHostPath,
-    getUserWorkspace: (username) => `/home/agework/workspaces/${username}`,
+    getUserWorkspace: (username) => {
+      const dir = join(userWorkspaceRoot, username);
+      mkdirSync(dir, { recursive: true });
+      return dir;
+    },
     launchTimeoutMs: 60_000,
     heartbeatTimeoutMs: 120_000,
     agentEventTrace: { enabled: false, maxFileMb: 50 },
@@ -370,6 +393,15 @@ export async function runRegisteredRuntime(): Promise<void> {
       },
     },
     workerApiBaseUrl,
+    // native 隔离的 CLI 路径:Host 就是执行机器本机,按本机检测结果解析
+    resolveCliPaths: async () => {
+      const envConfig = detectEnvConfig();
+      return {
+        claude: envConfig.claude.executablePath,
+        codex: envConfig.codex.executablePath,
+        opencode: envConfig.opencode.executablePath,
+      };
+    },
   };
   const runtimeHost = new RuntimeHost(hostConfig);
 
@@ -393,9 +425,20 @@ export async function runRegisteredRuntime(): Promise<void> {
   });
   const shutdown = () => {
     client.stop();
-    runtimeHost.drain();
-    void httpServer.stop();
-    process.exit(0);
+    // 停掉名下所有 worker 载体(目标架构不做跨重启容器复用),超时兜底强退
+    const stopAll = runtimeHost
+      .listWorkers()
+      .then((workers) =>
+        Promise.allSettled(
+          workers.map((w) => runtimeHost.stopWorker(w.workerKey))
+        )
+      );
+    const timeout = new Promise((resolve) => setTimeout(resolve, 10_000));
+    void Promise.race([stopAll, timeout]).then(() => {
+      runtimeHost.drain();
+      void httpServer.stop();
+      process.exit(0);
+    });
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);

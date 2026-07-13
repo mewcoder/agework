@@ -65,9 +65,13 @@ import {
   rpcNotificationToUpstreamMessage,
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
-import { WorkerPool, type WorkerEntry } from "./worker-pool.js";
-import { CommandMailbox } from "./command-mailbox.js";
-import { HandshakeStore } from "./handshake-store.js";
+import { WorkerPool, type WorkerEntry } from "./worker-pool";
+import { CommandMailbox } from "./command-mailbox";
+import { HandshakeStore } from "./handshake-store";
+import {
+  createDirectory as createDirectoryOnDisk,
+  listDirectory as listDirectoryOnDisk,
+} from "../filesystem/directory-browser";
 
 /**
  * RuntimeHost 的配置：由 server 侧（builtin 场景）或 daemon 侧（registered 场景）提供。
@@ -91,6 +95,22 @@ export interface RuntimeHostConfig {
    * builtin 场景（进程内）可省略——worker 仍连 server 旧端点。
    */
   workerApiBaseUrl?: string;
+  /**
+   * native 隔离的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
+   * 由宿主注入:builtin 用 server 的 RuntimeService 解析,daemon 用本机 detectEnvConfig。
+   * 未提供时 RunConfig 不带 CLI 路径,worker 退回 PATH 查找。
+   */
+  resolveCliPaths?: () => Promise<{
+    claude: string | null;
+    codex: string | null;
+    opencode: string | null;
+  }>;
+  /** 命令下发审计钩子(builtin 场景由 server 接到 run-event 账本;daemon 场景不设)。 */
+  onCommandDispatched?: (info: {
+    runId: string;
+    commandId: string;
+    commandType: string;
+  }) => void;
 }
 
 /**
@@ -124,8 +144,12 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
   private upstream!: RuntimeHostUpstream;
   private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
+  // 不用 constructor parameter property:server dev 以 Node strip-only TS
+  // 直接加载本文件,strip-only 不支持 parameter property 语法。
+  private readonly config: RuntimeHostConfig;
 
-  constructor(private readonly config: RuntimeHostConfig) {
+  constructor(config: RuntimeHostConfig) {
+    this.config = config;
     this.resolveProvider = createRuntimeResolver(config.providerConfig);
     // 心跳判死定时器：定期扫描 pool，超时未见心跳即判死。
     const interval = Math.max(1000, Math.floor(config.heartbeatTimeoutMs / 3));
@@ -143,6 +167,13 @@ export class RuntimeHost implements RuntimeHostContract {
     const { runId, placement } = input;
     if (this.states.has(runId)) return; // 幂等
 
+    // spec/config 组装失败同步抛出(配置/入参问题),由调用方按启动失败处理。
+    // 每次 run 都建 RunConfig(不只新建 worker 时)——复用已有 worker 的 run
+    // 同样要能被 worker 经 getRunConfig 拉到自己的配置。
+    const runtimeTarget = this.resolveSpec(placement);
+    const runConfig = await this.makeRunConfig(input, runtimeTarget);
+    this.runConfigs.set(runId, runConfig);
+
     const wKey = workerKey(placement.owner, placement.isolation);
     const existing = this.pool.get(wKey);
 
@@ -159,7 +190,7 @@ export class RuntimeHost implements RuntimeHostContract {
     }
 
     // 异步取得 worker——受理即返回
-    this.acquireWorker(input, wKey).then(
+    this.acquireWorker(input, wKey, runtimeTarget, runConfig).then(
       (entry) => this.onAcquired(runId, input, wKey, entry),
       (err) => this.onAcquireFailed(runId, err)
     );
@@ -216,14 +247,12 @@ export class RuntimeHost implements RuntimeHostContract {
 
   async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
     // builtin Host 直读本机文件系统
-    const { listDirectory } = await import("../filesystem/directory-browser.js");
-    const result = listDirectory(input.path);
+    const result = listDirectoryOnDisk(input.path);
     return { path: result.path, entries: result.entries };
   }
 
   async createDirectory(input: CreateDirectoryInput): Promise<void> {
-    const { createDirectory } = await import("../filesystem/directory-browser.js");
-    createDirectory(input.path);
+    createDirectoryOnDisk(input.path);
   }
 
   async listFiles(input: WorkspaceFileQuery): Promise<WorkspaceFileListResponse> {
@@ -335,7 +364,9 @@ export class RuntimeHost implements RuntimeHostContract {
    */
   private async acquireWorker(
     input: SubmitRunInput,
-    wKey: WorkerKey
+    wKey: WorkerKey,
+    runtimeTarget: RuntimeSpec,
+    runConfig: RunConfig
   ): Promise<WorkerEntry> {
     // 再次检查池（可能在异步等待期间已被其他 run 创建）
     const existing = this.pool.get(wKey);
@@ -360,11 +391,6 @@ export class RuntimeHost implements RuntimeHostContract {
       activeRuns: new Set(),
     };
     this.pool.put(entry);
-
-    // 解析 runtime spec 和构建 run config
-    const runtimeTarget = this.resolveSpec(placement);
-    const runConfig = await this.makeRunConfig(input, runtimeTarget, workerId, startToken);
-    this.runConfigs.set(input.runId, runConfig);
 
     // 构建 worker env
     const workerEnv = this.buildWorkerEnv(
@@ -414,10 +440,12 @@ export class RuntimeHost implements RuntimeHostContract {
     const state = this.states.get(runId);
     if (!state) return;
 
-    if (entry.cancelledRuns.has(runId)) {
-      entry.cancelledRuns.delete(runId);
+    // 就绪前到达的 cancel:state.cancelled 由 command() 标记(彼时 runIndex 还没
+    // 建立,pool.markCancelled 不一定落上),两处标记任一命中都转 cancelled 终态。
+    if (state.cancelled || entry.cancelledRuns.delete(runId)) {
       this.pool.dissociateRun(runId);
       this.states.delete(runId);
+      this.runConfigs.delete(runId);
       this.upstream.notifyRunCancelled(runId).catch(() => {});
       return;
     }
@@ -432,11 +460,7 @@ export class RuntimeHost implements RuntimeHostContract {
       runtimeInstanceId: entry.runtimeInstanceId,
     });
 
-    // 开会话 + 下发首条 user_message
-    const runConfig = this.runConfigs.get(runId);
-    if (runConfig) {
-      // runConfig 已在 acquireWorker 中存入，worker 可通过 getRunConfig 拉取
-    }
+    // 下发首条 user_message(runConfig 已在 submitRun 存入,worker 经 getRunConfig 拉取)
     this.dispatch(entry.workerId, runId, {
       type: "user_message",
       commandId: generateId(),
@@ -485,6 +509,11 @@ export class RuntimeHost implements RuntimeHostContract {
       ts: new Date().toISOString(),
     };
     this.mailbox.push(workerId, message);
+    this.config.onCommandDispatched?.({
+      runId,
+      commandId: payload.commandId,
+      commandType: payload.type,
+    });
   }
 
   // ── worker HTTP 端点支持（供 server 侧注册路由时调用） ──────────────
@@ -580,12 +609,21 @@ export class RuntimeHost implements RuntimeHostContract {
 
   private async makeRunConfig(
     input: SubmitRunInput,
-    placement: RuntimeSpec,
-    _workerId: string,
-    _startToken: string
+    placement: RuntimeSpec
   ): Promise<RunConfig> {
     const { runId, conversationId, agentProviderConfig } = input;
     const logPaths = this.makeLogPaths(placement, conversationId);
+
+    // native 的 CLI 路径由 Host 侧合成(override > detected);container 不走此链路
+    // (镜像固定路径,经 env 注入)。
+    let cliPaths: {
+      claude: string | null;
+      codex: string | null;
+      opencode: string | null;
+    } | null = null;
+    if (placement.runtimeType === "native" && this.config.resolveCliPaths) {
+      cliPaths = await this.config.resolveCliPaths();
+    }
 
     return {
       runId,
@@ -603,6 +641,11 @@ export class RuntimeHost implements RuntimeHostContract {
         logPaths
       ),
       workerLogFilePath: logPaths.workerRuntimeFilePath,
+      ...(cliPaths?.claude ? { claudeExecutablePath: cliPaths.claude } : {}),
+      ...(cliPaths?.codex ? { codexExecutablePath: cliPaths.codex } : {}),
+      ...(cliPaths?.opencode
+        ? { opencodeExecutablePath: cliPaths.opencode }
+        : {}),
     };
   }
 
