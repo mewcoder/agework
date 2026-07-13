@@ -25,7 +25,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: "cross-env AGEWORK_RUNTIME_ALLOWED_TYPES=native pnpm dev:api",
+      command: "cross-env AGEWORK_RUNTIME_ALLOWED_TYPES=native pnpm dev:server",
       cwd: "..",
       url: "http://localhost:3000/api/v1/auth/config",
       reuseExistingServer: !process.env.CI,

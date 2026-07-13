@@ -9,12 +9,13 @@ async function slow(page: import("@playwright/test").Page) {
 test.describe("页面导航", () => {
   test("首页加载正常", async ({ page }) => {
     await page.goto("/");
-    await expect(page.locator("button", { hasText: "新会话" })).toBeVisible({
+    await expect(page.getByRole("button", { name: "新会话" })).toBeVisible({
       timeout: 15000,
     });
     await slow(page);
+    // 首页主体是落地 composer;侧栏"新建工作空间"图标现在悬停才挂载,不再作为首页断言
     await expect(
-      page.locator('button[aria-label="新建工作空间"]')
+      page.locator('textarea[aria-label="消息输入"]')
     ).toBeVisible();
     await slow(page);
   });

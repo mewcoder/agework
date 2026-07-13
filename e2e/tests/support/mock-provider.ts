@@ -1,7 +1,9 @@
 import { request } from "@playwright/test";
 
-/** 与 playwright.config.ts webServer 保持一致的后端地址。 */
-const API_BASE_URL = "http://localhost:3000/api/v1";
+/** 与 playwright.config.ts webServer 保持一致的后端地址。
+ *  注意 baseURL 不能带路径段:以 / 开头的请求路径会把它整段吞掉。 */
+const API_BASE_URL = "http://localhost:3000";
+const API_PREFIX = "/api/v1";
 
 /** e2e 专用 mock 模型 provider 的名字（selectModelProvider 按它选中）。 */
 export const MOCK_PROVIDER_NAME = "test";
@@ -16,7 +18,7 @@ export async function ensureMockProvider(): Promise<void> {
   const api = await request.newContext({ baseURL: API_BASE_URL });
   try {
     const listResponse = await api.get(
-      "/admin/model-providers/list?agentType=claude"
+      `${API_PREFIX}/admin/model-providers/list?agentType=claude`
     );
     if (!listResponse.ok()) {
       throw new Error(
@@ -31,7 +33,9 @@ export async function ensureMockProvider(): Promise<void> {
     );
     if (exists) return;
 
-    const createResponse = await api.post("/admin/model-providers/create", {
+    const createResponse = await api.post(
+      `${API_PREFIX}/admin/model-providers/create`,
+      {
       data: {
         agentType: "claude",
         name: MOCK_PROVIDER_NAME,
