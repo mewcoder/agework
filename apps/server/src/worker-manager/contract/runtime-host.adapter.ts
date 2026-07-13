@@ -10,6 +10,7 @@ import type {
   DirectoryListing,
   ExecutionRef,
   HostCapabilityStatus,
+  HostUpstreamNotification,
   InstallCliInput,
   InstallCliResult,
   ListChangedFilesInput,
@@ -40,6 +41,8 @@ import type {
 import { isRuntimeType } from "@agework/providers";
 import { WorkerManagerService } from "../worker-manager.service";
 import { RuntimeService } from "../../runtime/runtime.service";
+import { RuntimeTunnelHandler } from "../../runtime/gateway/runtime-tunnel.handler";
+import { isManagedRuntimeId } from "../../runtime/runtime.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { WORKER_LOST_EVENT, WorkerLostEvent } from "../worker-manager.events";
@@ -51,6 +54,8 @@ type SubmittedRunState = {
   workerId: string;
   status: "acquiring" | "ready";
   cancelled: boolean;
+  /** Phase 2: 记录该 run 的 Host id，供 command 路由用。 */
+  runtimeHostId: string;
 };
 
 /**
@@ -73,6 +78,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   constructor(
     private readonly workerManager: WorkerManagerService,
     private readonly runtimeService: RuntimeService,
+    private readonly tunnelHandler: RuntimeTunnelHandler,
     private readonly configService: ConfigService,
     private readonly runEvents: RunEventService
   ) {}
@@ -82,11 +88,21 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     this.workerManager.setUpstreamPort({
       sendEvent: (runId, message) => upstream.emit(runId, message),
     });
+    // Phase 2: 注册隧道上游通知回调——registered Host 的事件经隧道回流
+    this.tunnelHandler.setUpstreamHandler((runtimeId, notification) => {
+      this.onTunnelUpstream(runtimeId, notification, upstream);
+    });
   }
 
   async submitRun(input: SubmitRunInput): Promise<void> {
     const { runId, placement } = input;
     if (this.states.has(runId)) return; // 幂等：同 runId 重复提交是空操作
+
+    // Phase 2 双栈：registered Host 走隧道，managed Host 走旧 worker-manager 路径
+    if (!isManagedRuntimeId(placement.runtimeHostId)) {
+      await this.submitRunViaTunnel(input);
+      return;
+    }
 
     // spec/config 组装失败在受理前同步抛出（配置/入参问题），由调用方按启动失败处理。
     const runtimeTarget = this.resolveSpec(placement);
@@ -96,6 +112,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       workerId: "",
       status: "acquiring",
       cancelled: false,
+      runtimeHostId: placement.runtimeHostId,
     });
 
     // 受理即返回：取得实例是异步续章，就绪/失败经 upstream 回流。
@@ -116,8 +133,6 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     }
   }
 
-  // async 是有意的：契约方法统一返回 Promise，同步 body 的异常转成 rejection。
-  // eslint-disable-next-line @typescript-eslint/require-await
   async command(runId: string, payload: CommandPayload): Promise<void> {
     const state = this.states.get(runId);
     if (!state) {
@@ -126,6 +141,11 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
         commandType: payload.type,
         reason: "no_active_state",
       });
+      return;
+    }
+    // Phase 2 双栈：registered Host 走隧道
+    if (!isManagedRuntimeId(state.runtimeHostId)) {
+      await this.commandViaTunnel(state.runtimeHostId, runId, payload);
       return;
     }
     // 就绪前到达的 cancel 由这里吸收：标记后在 onAcquired 的 ready 分支转 cancelled 终态。
@@ -141,6 +161,85 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     this.workerManager.cleanupRun(runId);
     this.workerManager.releaseInstanceForRun(runId);
     this.states.delete(runId);
+  }
+
+  // ── Phase 2 双栈：registered Host 隧道路径 ──────────────────────────
+
+  /** 通过隧道向 registered Host 发 submitRun。 */
+  private async submitRunViaTunnel(input: SubmitRunInput): Promise<void> {
+    const { runId, placement } = input;
+    this.states.set(runId, {
+      workerId: "",
+      status: "ready", // registered Host 自己管 worker 生命周期，server 侧不需要 acquiring 状态
+      cancelled: false,
+      runtimeHostId: placement.runtimeHostId,
+    });
+    try {
+      const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+      await this.tunnelHandler.sendRequest(
+        placement.runtimeHostId,
+        {
+          jsonrpc: "2.0",
+          id: runId,
+          method: "host.submitRun",
+          params: input,
+        },
+        timeoutMs
+      );
+    } catch (err) {
+      this.states.delete(runId);
+      this.upstream
+        .notifyRunFailed(runId, `tunnel submitRun failed: ${String(err)}`)
+        .catch(() => {});
+    }
+  }
+
+  /** 通过隧道向 registered Host 发 command。 */
+  private async commandViaTunnel(
+    runtimeHostId: string,
+    runId: string,
+    payload: CommandPayload
+  ): Promise<void> {
+    try {
+      const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+      await this.tunnelHandler.sendRequest(
+        runtimeHostId,
+        {
+          jsonrpc: "2.0",
+          id: `${runId}:${payload.commandId}`,
+          method: "host.command",
+          params: { runId, payload },
+        },
+        timeoutMs
+      );
+    } catch (err) {
+      this.logger.warn(`tunnel command failed for run ${runId}: ${String(err)}`);
+    }
+  }
+
+  /** 隧道 upstream 通知 → RuntimeHostUpstream 回流。 */
+  private onTunnelUpstream(
+    _runtimeId: string,
+    notification: HostUpstreamNotification,
+    upstream: RuntimeHostUpstream
+  ): void {
+    switch (notification.kind) {
+      case "emit":
+        upstream.emit(notification.runId, notification.message).catch(() => {});
+        break;
+      case "runFailed":
+        upstream.notifyRunFailed(notification.runId, notification.error).catch(() => {});
+        break;
+      case "runCancelled":
+        upstream.notifyRunCancelled(notification.runId).catch(() => {});
+        break;
+      case "workerLost":
+        upstream.notifyWorkerLost(notification.runId, notification.reason).catch(() => {});
+        break;
+      case "executionRef":
+        upstream.notifyExecutionRef(notification.runId, notification.ref);
+        break;
+    }
   }
 
   async sendRecoveryCancel(input: {

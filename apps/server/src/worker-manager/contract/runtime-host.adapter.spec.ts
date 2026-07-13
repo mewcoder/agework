@@ -9,8 +9,17 @@ import type { WorkerManagerService } from "../worker-manager.service";
 import type { RuntimeService } from "../../runtime/runtime.service";
 import type { ConfigService } from "../../config/config.service";
 import type { RunEventService } from "../../run-event/run-event.service";
+import type { RuntimeTunnelHandler } from "../../runtime/gateway/runtime-tunnel.handler";
 
 const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
+
+function makeTunnelHandler() {
+  return {
+    sendRequest: vi.fn(),
+    isConnected: vi.fn().mockReturnValue(true),
+    setUpstreamHandler: vi.fn(),
+  };
+}
 
 function makeWorkerManager() {
   return {
@@ -141,6 +150,7 @@ describe.each(["native", "docker"] as const)(
       adapter = new RuntimeHostAdapter(
         workerManager as unknown as WorkerManagerService,
         runtimeService as unknown as RuntimeService,
+        makeTunnelHandler() as unknown as RuntimeTunnelHandler,
         makeConfigService() as unknown as ConfigService,
         runEvents as unknown as RunEventService
       );
@@ -334,6 +344,7 @@ describe("RuntimeHostAdapter.sendRecoveryCancel", () => {
     return new RuntimeHostAdapter(
       workerManager as unknown as WorkerManagerService,
       makeRuntimeService("docker") as unknown as RuntimeService,
+      makeTunnelHandler() as unknown as RuntimeTunnelHandler,
       makeConfigService() as unknown as ConfigService,
       makeRunEvents() as unknown as RunEventService
     );

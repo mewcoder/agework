@@ -26,6 +26,6 @@ import { ManagedRuntimeSupervisor } from "./managed/supervisor";
     ManagedRuntimeSupervisor,
   ],
   controllers: [RuntimeController, AdminRuntimeController],
-  exports: [RuntimeService],
+  exports: [RuntimeService, RuntimeTunnelHandler],
 })
 export class RuntimeModule {}

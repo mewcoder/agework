@@ -14,9 +14,12 @@ import {
   type RuntimeTunnelClientMessage,
   type RuntimeTunnelRegisteredMessage,
   type RuntimeTunnelRpcRequest,
+  type RuntimeTunnelAllRpcRequest,
+  type HostUpstreamNotification,
 } from "@agework/shared/protocol";
 import {
   isRpcResponse,
+  isRpcNotification,
   type RpcId,
   type RpcResponse,
 } from "@agework/shared/protocol/rpc";
@@ -50,6 +53,11 @@ export class RuntimeTunnelHandler
   private readonly tunnelPath = `${resolveApiBasePath(getApiContext())}/runtimes/tunnel`;
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
+  /** Phase 2: host.upstream 通知回调，由 RuntimeHostAdapter 注册。 */
+  private upstreamHandler?: (
+    runtimeId: string,
+    notification: HostUpstreamNotification
+  ) => void;
   private wss?: WebSocketServer;
   private httpServer?: {
     on: (event: string, listener: typeof this.onUpgrade) => void;
@@ -94,11 +102,18 @@ export class RuntimeTunnelHandler
     return this.connections.has(runtimeId);
   }
 
-  /** 向目标 runtimeId 发一次 launch/stop/destroy RPC,等它回应或超时。
-   *  这是 RemoteRuntime 的唯一后端:RemoteRuntime 只组包、这里管连接与关联。 */
+  /** Phase 2: 注册 host.upstream 通知回调。 */
+  setUpstreamHandler(
+    handler: (runtimeId: string, notification: HostUpstreamNotification) => void
+  ): void {
+    this.upstreamHandler = handler;
+  }
+
+  /** 向目标 runtimeId 发一次 RPC（launch/stop/destroy/host.*），等它回应或超时。
+   *  Phase 2 扩展：接受 RuntimeTunnelAllRpcRequest，包含 host.submitRun/command/releaseOwner。 */
   sendRequest<Result>(
     runtimeId: string,
-    request: RuntimeTunnelRpcRequest,
+    request: RuntimeTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
     const socket = this.connections.get(runtimeId);
@@ -222,6 +237,17 @@ export class RuntimeTunnelHandler
 
     if (isRpcResponse(parsed)) {
       this.onRpcResponse(runtimeId, parsed);
+      return;
+    }
+
+    // Phase 2: host.upstream 通知（Host → server，单向）
+    if (isRpcNotification(parsed)) {
+      if (parsed.method === "host.upstream" && this.upstreamHandler) {
+        this.upstreamHandler(
+          runtimeId,
+          parsed.params as HostUpstreamNotification
+        );
+      }
       return;
     }
 
