@@ -15,6 +15,7 @@ import type {
   OwnerKey,
   ReadFileDiffInput,
   ReadFileInput,
+  RunChannelMessage,
   RunConfig,
   RunPlacement,
   RuntimeHostContract,
@@ -58,6 +59,12 @@ import {
   listChangedFiles as listChangedFilesDirect,
   readFileDiff as readFileDiffDirect,
 } from "@agework/shared/git";
+import {
+  isWorkerCommandResultRpcResponse,
+  isWorkerEventRpcNotification,
+  rpcNotificationToUpstreamMessage,
+  rpcResponseToCommandResultMessage,
+} from "@agework/shared/protocol/rpc";
 import { WorkerPool, type WorkerEntry } from "./worker-pool.js";
 import { CommandMailbox } from "./command-mailbox.js";
 import { HandshakeStore } from "./handshake-store.js";
@@ -78,6 +85,12 @@ export interface RuntimeHostConfig {
   agentEventTrace: { enabled: boolean; maxFileMb: number };
   /** Runtime provider 配置（传给 @agework/providers）。 */
   providerConfig: RuntimeConfig;
+  /**
+   * worker 回连 Host 的 HTTP 基地址（如 `http://0.0.0.0:7101/api/v1`）。
+   * worker 的 AGEWORK_WORKER_API_BASE 设为此值，使 worker 数据面对端从 server 切到 Host。
+   * builtin 场景（进程内）可省略——worker 仍连 server 旧端点。
+   */
+  workerApiBaseUrl?: string;
 }
 
 /**
@@ -108,11 +121,16 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly states = new Map<string, SubmittedRunState>();
   private readonly commandSeqs = new Map<string, number>();
   private readonly runConfigs = new Map<string, RunConfig>();
+  private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
   private upstream!: RuntimeHostUpstream;
   private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
 
   constructor(private readonly config: RuntimeHostConfig) {
     this.resolveProvider = createRuntimeResolver(config.providerConfig);
+    // 心跳判死定时器：定期扫描 pool，超时未见心跳即判死。
+    const interval = Math.max(1000, Math.floor(config.heartbeatTimeoutMs / 3));
+    this.fenceTimer = setInterval(() => this.sweepFence(), interval);
+    this.fenceTimer.unref?.();
   }
 
   setUpstream(upstream: RuntimeHostUpstream): void {
@@ -504,6 +522,37 @@ export class RuntimeHost implements RuntimeHostContract {
     return this.handshakes.registerWorker(workerId, token, info);
   }
 
+  /**
+   * 校验 worker token（worker HTTP 端点鉴权用）。
+   * 在 pool 中按 workerId 查找，比对其 startToken。
+   */
+  validateWorkerToken(workerId: string, token: string): boolean {
+    const entry = this.findWorkerByWorkerId(workerId);
+    return !!entry && entry.startToken === token;
+  }
+
+  /**
+   * worker 上报上行事件（POST /worker/runs/:runId/events）。
+   * 解析 JSON-RPC notification / command-result，逐条转发给 upstream。
+   * 事件上报本身也是 worker 活着的证据，顺带 touch 心跳。
+   */
+  async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
+    const events = parseWorkerEventPostBody(body, runId);
+    if (!events || events.length === 0) {
+      throw new Error("Invalid worker event body");
+    }
+    if (events.some((event) => event.runId !== runId)) {
+      throw new Error("Worker event runId mismatch");
+    }
+    // touch worker 心跳
+    const entry = this.pool.getByRunId(runId);
+    if (entry) this.pool.touch(entry.key);
+    for (const event of events) {
+      await this.upstream.emit(runId, event);
+    }
+    return { ok: true };
+  }
+
   // ── placement → 执行机细节派生 ──────────────────────────────────────
 
   private resolveSpec(placement: RunPlacement): RuntimeSpec {
@@ -613,6 +662,12 @@ export class RuntimeHost implements RuntimeHostContract {
     if (runConfig.workerLogFilePath) {
       env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
     }
+    // Phase 2: worker 数据面对端从 server 切到 Host。
+    // provider（native / sandbox）会用 RuntimeConfig.serverBaseUrl 覆盖此值——
+    // 因此 providerConfig.serverBaseUrl 也必须设为 Host 的 worker HTTP 端点。
+    if (this.config.workerApiBaseUrl) {
+      env.AGEWORK_WORKER_API_BASE = this.config.workerApiBaseUrl;
+    }
     return env;
   }
 
@@ -646,5 +701,90 @@ export class RuntimeHost implements RuntimeHostContract {
   /** 进程退出时清理。 */
   drain(): void {
     this.mailbox.drain();
+    if (this.fenceTimer) clearInterval(this.fenceTimer);
   }
+
+  /**
+   * 心跳判死扫描：pool 中 lastSeen 超过 heartbeatTimeoutMs 的 worker 判死。
+   * 判死即从 pool 移除、清理信箱、通知 upstream 其名下所有 run。
+   */
+  private sweepFence(): void {
+    const now = Date.now();
+    const timeoutMs = this.config.heartbeatTimeoutMs;
+    const workers = this.pool.list();
+    for (const worker of workers) {
+      if (worker.status !== "ready") continue;
+      if (now - worker.lastSeen < timeoutMs) continue;
+      // 通知 upstream 名下所有 run
+      for (const runId of worker.activeRuns) {
+        this.upstream
+          .notifyWorkerLost(runId, "worker heartbeat timeout (fence)")
+          .catch(() => {});
+      }
+      // 从 pool 移除、清理信箱
+      this.pool.remove(worker.key);
+      this.mailbox.cleanup(worker.workerId);
+      // best-effort 停物理载体
+      const isolation = worker.key.split("#")[1] ?? "native";
+      if (isRuntimeType(isolation)) {
+        const ref: RuntimeInstanceRef = {
+          runtimeType: isolation,
+          ownerId: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).id,
+          workerId: worker.workerId,
+          runtimeInstanceId: worker.runtimeInstanceId,
+          isolationScope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).scope,
+        };
+        Promise.resolve(this.resolveProvider(isolation).stop(ref)).catch(() => {});
+      }
+    }
+  }
+}
+
+// ── worker 事件解析（复用 shared protocol 类型守卫） ──────────────────
+
+/** 剥离值为 undefined 的 key，使联合类型守卫按真实字段判断。 */
+function stripUndefinedKeys(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (val !== undefined) result[key] = val;
+  }
+  return result;
+}
+
+/**
+ * 解析 worker POST /worker/runs/:runId/events 的 body。
+ * body 是单条或数组形式的 JSON-RPC notification / command-result。
+ * 收编自 apps/server/src/worker-manager/connection/worker-event.parser.ts。
+ */
+function parseWorkerEventPostBody(
+  body: unknown,
+  routeRunId?: string
+): RunChannelMessage[] | undefined {
+  if (Array.isArray(body)) {
+    if (body.length === 0) return undefined;
+    const events: RunChannelMessage[] = [];
+    for (const message of body) {
+      const normalized = parseWorkerEventPostItem(message, routeRunId);
+      if (!normalized) return undefined;
+      events.push(normalized);
+    }
+    return events;
+  }
+  const event = parseWorkerEventPostItem(body, routeRunId);
+  return event ? [event] : undefined;
+}
+
+function parseWorkerEventPostItem(
+  rawBody: unknown,
+  routeRunId?: string
+): RunChannelMessage | undefined {
+  const body = stripUndefinedKeys(rawBody);
+  if (isWorkerEventRpcNotification(body)) {
+    return rpcNotificationToUpstreamMessage(body);
+  }
+  if (isWorkerCommandResultRpcResponse(body)) {
+    return rpcResponseToCommandResultMessage(body, { runId: routeRunId });
+  }
+  return undefined;
 }

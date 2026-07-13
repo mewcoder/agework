@@ -2,13 +2,16 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminWorkerController } from "./admin-worker.controller";
 
 function makeController(workerManager: Record<string, unknown> = {}) {
-  return new AdminWorkerController({
-    getRuntimePolicy: vi.fn(),
-    getWorkerStats: vi.fn(),
-    listResources: vi.fn(),
-    stopWorkerInstance: vi.fn(),
-    ...workerManager,
-  } as never);
+  return new AdminWorkerController(
+    {
+      getRuntimePolicy: vi.fn(),
+      getWorkerStats: vi.fn(),
+      listResources: vi.fn(),
+      stopWorkerInstance: vi.fn(),
+      ...workerManager,
+    } as never,
+    { listWorkers: vi.fn().mockResolvedValue([]) } as never
+  );
 }
 
 describe("AdminWorkerController", () => {

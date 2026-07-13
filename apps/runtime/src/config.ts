@@ -23,10 +23,13 @@ export interface RegisteredRuntimeConfig {
   /** docker/opensandbox 起 worker 载体用的镜像 tag;native 不用。 */
   workerImage?: string;
   /** native 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
-   *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
-   *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
-   *  的 NativeProviderConfig。Registered+native 场景下镜像里只有一份 bundle,默认即正确。 */
+ *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
+ *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
+ *  的 NativeProviderConfig。Registered+native 场景下镜像里只有一份 bundle,默认即正确。 */
   runtimeEntryPath?: string;
+  /** Phase 2: worker HTTP 服务器监听端口(worker 回连 Host 的端口)。
+ *  默认 7101。worker 的 AGEWORK_WORKER_API_BASE 会被设为 `http://127.0.0.1:<port>/api/v1`。 */
+  workerPort?: number;
 }
 
 /**
@@ -47,6 +50,8 @@ export function resolveRegisteredRuntimeConfig(
   const workerImage = args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
   const runtimeEntryPath =
     args.get("runtime-entry") ?? env.AGEWORK_RUNTIME_ENTRY;
+  const workerPortStr = args.get("worker-port") ?? env.AGEWORK_RUNTIME_WORKER_PORT;
+  const workerPort = workerPortStr ? parseInt(workerPortStr, 10) : undefined;
 
   if (!serverBaseUrl) {
     throw new Error("missing server url: pass --server or AGEWORK_SERVER_BASE_URL");
@@ -72,6 +77,7 @@ export function resolveRegisteredRuntimeConfig(
     runtimeLogHostPath,
     ...(workerImage ? { workerImage } : {}),
     ...(runtimeEntryPath ? { runtimeEntryPath } : {}),
+    ...(workerPort ? { workerPort } : {}),
   };
 }
 

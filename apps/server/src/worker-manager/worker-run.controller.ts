@@ -14,6 +14,9 @@ import { WorkerTokenGuard } from "./connection/worker-token.guard";
  *
  * config 下发与事件上报都经 WorkerManagerService facade 进入 worker-manager，
  * controller 不直接依赖内部 store / registry。
+ *
+ * Phase 2 双栈切流：本端点仅服务 managed Host（builtin）的 worker。
+ * registered Host 的 worker 纯走 Host daemon 的 HTTP 端点，不经过 server。
  */
 @Public()
 @RawResponse()

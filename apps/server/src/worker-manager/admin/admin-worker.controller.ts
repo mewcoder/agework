@@ -1,13 +1,18 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Inject, Post, Query } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { WorkerManagerService } from "../worker-manager.service";
 import { WorkerInstanceIdDto } from "./worker-instance-id.dto";
 import { AdminWorkerResourcesQueryDto } from "./admin-worker-query.dto";
+import { RUNTIME_HOST_CONTRACT } from "../worker-manager.types";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 
 @Controller("admin/worker")
 @Roles("admin")
 export class AdminWorkerController {
-  constructor(private readonly workerManager: WorkerManagerService) {}
+  constructor(
+    private readonly workerManager: WorkerManagerService,
+    @Inject(RUNTIME_HOST_CONTRACT) private readonly hostContract: RuntimeHostContract
+  ) {}
 
   @Get("policy")
   getRuntimePolicy() {
@@ -22,6 +27,12 @@ export class AdminWorkerController {
   @Get("resources")
   listResources(@Query() query: AdminWorkerResourcesQueryDto) {
     return this.workerManager.listResources(query);
+  }
+
+  /** Phase 2: 现场查询 Host 上的 worker 快照（不入库，不依赖 Worker 表）。 */
+  @Get("resources/live")
+  async listLiveWorkers() {
+    return { list: await this.hostContract.listWorkers() };
   }
 
   @Post("resources/stop")

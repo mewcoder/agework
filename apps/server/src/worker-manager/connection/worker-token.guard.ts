@@ -30,6 +30,10 @@ type WorkerTokenRequest = {
  *
  * register 端点不接这个 guard:它靠 body 里的 startToken 匹配
  * WorkerHandshakeStore 里等待中的握手,是另一套机制。
+ *
+ * Phase 2 双栈切流：registered Host 的 worker 不在 server registry 中
+ * （Worker 表停写），查无结果即返回 410——自然拒绝，worker 侧收到 410 后退出。
+ * managed Host 的 worker 仍在 registry 中，正常通过校验。
  */
 @Injectable()
 export class WorkerTokenGuard implements CanActivate {

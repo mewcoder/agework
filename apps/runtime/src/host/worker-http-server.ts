@@ -1,0 +1,223 @@
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  WORKER_ID_HEADER,
+  WORKER_TOKEN_HEADER,
+  type RunConfig,
+  type WorkerCommandRpcRequest,
+} from "@agework/shared/protocol";
+import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
+import { AGEWORK_VERSION } from "@agework/shared";
+import type { RuntimeHost } from "./runtime-host.js";
+
+/**
+ * Registered Host daemon 上的 worker HTTP 服务器。
+ *
+ * Phase 2 双栈切流：worker 数据面对端从 server 的 `/worker/*` 旧端点切到 Host。
+ * 本服务器暴露与 server 旧端点同构的 `/worker/*` 路由，使 `WorkerHttpTransport`
+ * 无需改动——只是 `AGEWORK_WORKER_API_BASE` 指向 Host 而非 server。
+ *
+ * 路由：
+ * - GET  /worker/:workerId/commands  → runtimeHost.pollCommands()
+ * - GET  /worker/runs/:runId          → runtimeHost.getRunConfig()
+ * - POST /worker/:workerId/register   → runtimeHost.registerWorker()
+ * - POST /worker/runs/:runId/events   → runtimeHost.postEvent()
+ *
+ * 鉴权：commands/runConfig/events 三个端点共用 token 校验（runtimeHost.validateWorkerToken），
+ * register 靠 body 里的 startToken 匹配 HandshakeStore——与 server 侧 WorkerTokenGuard 同约定。
+ */
+export class WorkerHttpServer {
+  private server?: Server;
+
+  constructor(
+    private readonly host: RuntimeHost,
+    private readonly port: number,
+    private readonly apiBasePath: string = "/api/v1"
+  ) {}
+
+  start(): Promise<void> {
+    return new Promise((resolve) => {
+      this.server = createServer((req, res) => {
+        this.handle(req, res).catch((err) => {
+          this.sendError(res, 500, err);
+        });
+      });
+      this.server.listen(this.port, () => resolve());
+    });
+  }
+
+  async stop(): Promise<void> {
+    if (!this.server) return;
+    return new Promise((resolve) => {
+      this.server!.close(() => resolve());
+    });
+  }
+
+  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const url = new URL(req.url ?? "/", "http://placeholder");
+    const pathname = url.pathname;
+
+    // 剥离 API base path 前缀，剩余路径用于路由
+    const route = pathname.startsWith(this.apiBasePath)
+      ? pathname.slice(this.apiBasePath.length)
+      : pathname;
+
+    // GET /worker/:workerId/commands
+    const commandsMatch = route.match(/^\/worker\/([^/]+)\/commands$/);
+    if (commandsMatch && req.method === "GET") {
+      return this.handlePollCommands(commandsMatch[1], url, req, res);
+    }
+
+    // POST /worker/:workerId/register
+    const registerMatch = route.match(/^\/worker\/([^/]+)\/register$/);
+    if (registerMatch && req.method === "POST") {
+      return this.handleRegister(registerMatch[1], req, res);
+    }
+
+    // GET /worker/runs/:runId
+    const getConfigMatch = route.match(/^\/worker\/runs\/([^/]+)$/);
+    if (getConfigMatch && req.method === "GET") {
+      return this.handleGetRunConfig(getConfigMatch[1], req, res);
+    }
+
+    // POST /worker/runs/:runId/events
+    const postEventsMatch = route.match(/^\/worker\/runs\/([^/]+)\/events$/);
+    if (postEventsMatch && req.method === "POST") {
+      return this.handlePostEvents(postEventsMatch[1], req, res);
+    }
+
+    this.sendJson(res, 404, { error: "not found" });
+  }
+
+  // ── 路由处理 ────────────────────────────────────────────────────────
+
+  private async handlePollCommands(
+    workerId: string,
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    if (!this.guardToken(req, res, workerId)) return;
+
+    const afterSeq = parseInt(url.searchParams.get("afterSeq") ?? "0", 10);
+    const waitMs = parseInt(url.searchParams.get("waitMs") ?? "0", 10);
+
+    const result = await this.host.pollCommands(workerId, { afterSeq, waitMs });
+    const messages: WorkerCommandRpcRequest[] = result.commands.map(
+      commandMessageToRpcRequest
+    );
+    this.sendJson(res, 200, {
+      messages,
+      queueEpoch: result.queueEpoch,
+    });
+  }
+
+  private async handleRegister(
+    workerId: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    const body = (await this.readJsonBody(req)) as
+      | { startToken?: string; pid?: number; version?: string }
+      | undefined;
+    const startToken = typeof body?.startToken === "string" ? body.startToken : "";
+    const pid = typeof body?.pid === "number" ? body.pid : undefined;
+
+    const accepted = this.host.registerWorker(workerId, startToken, { pid });
+    if (!accepted) {
+      this.sendJson(res, 400, {
+        error: "no pending launch handshake, or token mismatch",
+      });
+      return;
+    }
+    // 版本校验（与 server 侧同约定：不匹配仅告警，不拒绝接入）
+    if (typeof body?.version === "string" && body.version !== AGEWORK_VERSION) {
+      console.warn(
+        `[agework-runtime] worker version mismatch: worker=${body.version} host=${AGEWORK_VERSION}`
+      );
+    }
+    this.sendJson(res, 200, { ok: true });
+  }
+
+  private async handleGetRunConfig(
+    runId: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    // runConfig/events 端点没有路由 :workerId 参数，退回读 header
+    const workerId = req.headers[WORKER_ID_HEADER];
+    if (typeof workerId !== "string" || !this.guardToken(req, res, workerId)) {
+      return;
+    }
+
+    const config = this.host.getRunConfig(runId);
+    if (!config) {
+      this.sendJson(res, 404, { error: `Run config not found: ${runId}` });
+      return;
+    }
+    const response: { config: RunConfig } = { config };
+    this.sendJson(res, 200, response);
+  }
+
+  private async handlePostEvents(
+    runId: string,
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
+    const workerId = req.headers[WORKER_ID_HEADER];
+    if (typeof workerId !== "string" || !this.guardToken(req, res, workerId)) {
+      return;
+    }
+
+    const body = await this.readJsonBody(req);
+    try {
+      const result = await this.host.postEvent(runId, body);
+      this.sendJson(res, 200, result);
+    } catch (err) {
+      this.sendError(res, 400, err);
+    }
+  }
+
+  // ── 工具 ────────────────────────────────────────────────────────────
+
+  /** token 校验：不匹配返回 410（与 server 侧 WorkerTokenGuard 同约定）。 */
+  private guardToken(
+    req: IncomingMessage,
+    res: ServerResponse,
+    workerId: string
+  ): boolean {
+    const token = req.headers[WORKER_TOKEN_HEADER];
+    if (typeof token !== "string" || !this.host.validateWorkerToken(workerId, token)) {
+      this.sendJson(res, 410, { error: `worker token rejected for worker ${workerId}` });
+      return false;
+    }
+    return true;
+  }
+
+  private async readJsonBody(req: IncomingMessage): Promise<unknown> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    }
+    const text = Buffer.concat(chunks).toString("utf8");
+    if (!text) return undefined;
+    try {
+      return JSON.parse(text);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private sendJson(res: ServerResponse, status: number, body: unknown): void {
+    const json = JSON.stringify(body);
+    res.writeHead(status, {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(json),
+    });
+    res.end(json);
+  }
+
+  private sendError(res: ServerResponse, status: number, err: unknown): void {
+    const message = err instanceof Error ? err.message : String(err);
+    this.sendJson(res, status, { error: message });
+  }
+}

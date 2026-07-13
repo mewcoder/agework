@@ -21,6 +21,10 @@ import { WorkerTokenGuard } from "./connection/worker-token.guard";
  * Worker command API — 仅供持久容器内的 worker 调用。
  * 提供 worker 级命令轮询：一个 workerId（Worker.id 主键）
  * 对应一个长期容器，容器内常驻 worker 同时服务该 worker 下多个并行 run。
+ *
+ * Phase 2 双栈切流：本端点仅服务 managed Host（builtin）的 worker。
+ * registered Host 的 worker 连接自己的 Host daemon（WorkerHttpServer），
+ * 不经过 server——WorkerTokenGuard 查 registry 无果返回 410，自然拒绝。
  */
 @Public()
 @RawResponse()

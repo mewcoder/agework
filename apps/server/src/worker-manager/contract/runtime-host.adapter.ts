@@ -164,6 +164,11 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   // ── Phase 2 双栈：registered Host 隧道路径 ──────────────────────────
+  //
+  // registered Host 的 submitRun/command 经隧道 RPC 下发到 Host daemon，
+  // Host 内部管理 worker 池（内存），server 不写 Worker 表（Phase 2 停写）。
+  // worker 数据面对端切到 Host daemon 的 WorkerHttpServer，不再连 server /worker/*。
+  // managed Host 仍走旧 WorkerManagerService 路径（registry 读写继续）。
 
   /** 通过隧道向 registered Host 发 submitRun。 */
   private async submitRunViaTunnel(input: SubmitRunInput): Promise<void> {
