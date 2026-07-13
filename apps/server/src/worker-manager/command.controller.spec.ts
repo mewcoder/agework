@@ -6,7 +6,7 @@ import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { WorkerCommandController } from "./command.controller";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
-import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
+import { MANAGED_RUNTIME_HOST } from "./contract/managed-runtime-host";
 
 describe("WorkerCommandController", () => {
   it("is marked @Public() so worker callbacks bypass the global JwtAuthGuard (auth is handled by WorkerAuthGuard)", () => {
@@ -60,8 +60,8 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
     app = undefined;
   });
 
-  async function startApp(registry: {
-    findActiveByWorkerId: ReturnType<typeof vi.fn>;
+  async function startApp(host: {
+    validateWorkerToken: ReturnType<typeof vi.fn>;
   }) {
     const workerManager = {
       pollCommands: vi.fn().mockResolvedValue({ messages: [] }),
@@ -71,7 +71,7 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
       providers: [
         WorkerTokenGuard,
         { provide: WorkerManagerService, useValue: workerManager },
-        { provide: WorkerRegistryRepository, useValue: registry },
+        { provide: MANAGED_RUNTIME_HOST, useValue: host },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -83,10 +83,10 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
   }
 
   it("lets the request through and reaches the controller when the token matches", async () => {
-    const registry = {
-      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+    const host = {
+      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
     };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/worker-1/commands`, {
       headers: { [WORKER_TOKEN_HEADER]: "token-1" },
@@ -98,8 +98,8 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
   });
 
   it("returns 410 and never reaches the controller when the token is missing", async () => {
-    const registry = { findActiveByWorkerId: vi.fn() };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const host = { validateWorkerToken: vi.fn() };
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/worker-1/commands`);
 
@@ -108,10 +108,10 @@ describe("WorkerCommandController — pollCommands guard wiring (real Nest pipel
   });
 
   it("returns 410 and never reaches the controller when the token does not match", async () => {
-    const registry = {
-      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+    const host = {
+      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
     };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/worker-1/commands`, {
       headers: { [WORKER_TOKEN_HEADER]: "wrong-token" },

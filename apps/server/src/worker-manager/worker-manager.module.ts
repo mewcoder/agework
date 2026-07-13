@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
+import { managedRuntimeHostProvider } from "./contract/managed-runtime-host";
 import { RUNTIME_HOST_CONTRACT } from "./worker-manager.types";
 import { WorkerConfigStore } from "./connection/worker-config.store";
 import { WorkerCommandQueue } from "./connection/command-queue";
@@ -59,6 +60,7 @@ import { OwnerRunStore } from "./instance/owner-run.store";
     WorkerLivenessSweeper,
     OwnerRunStore,
     WorkerManagerService,
+    managedRuntimeHostProvider,
     RuntimeHostAdapter,
     { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
   ],

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -26,11 +27,12 @@ import { workerInstanceDiagnostics } from "./registry/worker-registry-metadata";
 import { pageWindow } from "../common/dto/pagination-query.dto";
 import { RuntimeService } from "../runtime/runtime.service";
 import { WorkerProvisioner } from "./instance/worker.provisioner";
-import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
 import type { RegisterWorkerDto } from "./dto/register-worker.dto";
-import { WorkerLivenessStore } from "./connection/worker-liveness.store";
 import { OwnerRunStore } from "./instance/owner-run.store";
 import { AGEWORK_VERSION } from "@agework/shared";
+import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
+import type { RuntimeHost } from "@agework/runtime/host";
+import { MANAGED_RUNTIME_HOST } from "./contract/managed-runtime-host";
 
 /**
  * native 和 sandbox 现在走同一条 HTTP 长轮询通道收发命令/事件,命令路由不再按
@@ -48,15 +50,20 @@ export class WorkerManagerService {
     private readonly registry: WorkerRegistryRepository,
     private readonly runtimeService: RuntimeService,
     private readonly provisioner: WorkerProvisioner,
-    private readonly handshakeStore: WorkerHandshakeStore,
-    private readonly livenessStore: WorkerLivenessStore,
-    private readonly ownerRunStore: OwnerRunStore
+    private readonly ownerRunStore: OwnerRunStore,
+    @Inject(MANAGED_RUNTIME_HOST)
+    private readonly managedHost: RuntimeHost
   ) {}
+
+  // ── worker 数据面(Phase 2:委托进程内 RuntimeHost) ─────────────────
+  //
+  // /worker/* 旧端点只服务 managed-native 的 worker(managed 容器型 + registered
+  // 的 worker 连各自 Host 的 WorkerHttpServer)。这些方法委托进程内 RuntimeHost,
+  // 响应形状与 Host 侧 WorkerHttpServer 同构,WorkerHttpTransport 无感。
 
   /**
    * worker 长轮询拉取下行命令，按 workerId + afterSeq 增量返回。长轮询本身就是心跳
-   * 信号,不加独立心跳 RPC——这里是 native/sandbox 唯一共用的 poll 入口,touch 记
-   * 一次该 worker 最后被看见的时间。
+   * 信号,不加独立心跳 RPC——poll 在 Host 内会 touch 该 worker 的 fence 心跳。
    */
   async pollCommands(
     workerId: string,
@@ -65,30 +72,39 @@ export class WorkerManagerService {
     messages: WorkerCommandRpcRequest[];
     queueEpoch: number;
   }> {
-    this.livenessStore.touch(workerId);
-    return this.endpointHandler.pollCommands(workerId, query);
+    const result = await this.managedHost.pollCommands(workerId, query);
+    return {
+      messages: result.commands.map(commandMessageToRpcRequest),
+      queueEpoch: result.queueEpoch,
+    };
   }
 
   /** worker 启动后拉取本次 run 的 RunConfig。 */
   getRunConfig(runId: string): { config: RunConfig } {
-    return this.endpointHandler.getRunConfig(runId);
+    const config = this.managedHost.getRunConfig(runId);
+    if (!config) {
+      throw new NotFoundException(`Run config not found: ${runId}`);
+    }
+    return { config };
   }
 
   /**
    * 接收 worker 上报的上行事件（JSON-RPC notification / command-result），转发给 run 层。
-   * 事件上报本身也是"worker 活着"的证据，顺带 touch 一次该 worker 的心跳——否则一个
-   * 正在正常汇报进度的 worker，只要恰好没赶上 pollCommands 的节奏，也会被
-   * WorkerLivenessSweeper 误判成心跳超时并 fence 掉。
+   * 事件上报本身也是"worker 活着"的证据,Host 内会顺带 touch 心跳。
    */
   async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
-    const workerId = this.ownerRunStore.findWorkerIdByRunId(runId);
-    if (workerId) this.livenessStore.touch(workerId);
-    return this.endpointHandler.postEvent(runId, body);
+    try {
+      return await this.managedHost.postEvent(runId, body);
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof Error ? err.message : String(err)
+      );
+    }
   }
 
   /**
    * worker 进程启动后主动回连注册，携带 launch 时下发的 startToken。
-   * token 匹配则 resolve 对应 executor 里挂起的 launch 等待（见 WorkerHandshakeStore），
+   * token 匹配则 resolve Host 里挂起的 launch 等待（见 HandshakeStore），
    * 不匹配或没有 pending 握手（迟到的/伪造的回连）一律 400。
    */
   // async 是有意的：把下面的同步 BadRequestException throw 转成 rejected Promise，
@@ -98,7 +114,7 @@ export class WorkerManagerService {
     workerId: string,
     body: RegisterWorkerDto
   ): Promise<{ ok: boolean }> {
-    const accepted = this.handshakeStore.registerWorker(
+    const accepted = this.managedHost.registerWorker(
       workerId,
       body.startToken,
       { pid: body.pid }
@@ -114,6 +130,11 @@ export class WorkerManagerService {
       );
     }
     return { ok: true };
+  }
+
+  /** worker 数据面 token 校验(WorkerTokenGuard 用):对进程内 Host 的池比对 startToken。 */
+  validateWorkerToken(workerId: string, token: string): boolean {
+    return this.managedHost.validateWorkerToken(workerId, token);
   }
 
   /** 为一次 run 打开命令下行会话。 */

@@ -7,11 +7,20 @@ import { WorkerManagerService } from "./worker-manager.service";
 import type { WorkerRegistryRepository } from "./registry/worker-registry.repository";
 
 /**
- * WorkerManagerService 是 worker-manager 唯一 export 的公开面,所有跨模块调用方
- * (run 模块)都依赖它。controller spec 直接 new WorkerEndpointHandler,因此没有
- * 任何测试穿过 facade 验证委托接线。这里 mock 全套 internal provider,固定
- * facade 把每个公开方法路由到正确的 internal provider。
+ * WorkerManagerService 是 worker-manager 唯一 export 的公开面。
+ * Phase 2 后 worker 数据面(pollCommands/getRunConfig/postEvent/registerWorker)
+ * 委托进程内 RuntimeHost;其余方法仍路由旧 internal provider(Phase 3 清尾)。
  */
+function makeManagedHost() {
+  return {
+    pollCommands: vi.fn(),
+    getRunConfig: vi.fn(),
+    postEvent: vi.fn(),
+    registerWorker: vi.fn(),
+    validateWorkerToken: vi.fn(),
+  };
+}
+
 function makeService() {
   const endpointHandler = {
     pollCommands: vi.fn(),
@@ -32,27 +41,21 @@ function makeService() {
   const runtimeService = {
     resolveRuntimeSpec: vi.fn(),
   };
-  const livenessStore = {
-    touch: vi.fn(),
-    lastSeenAt: vi.fn(),
-    remove: vi.fn(),
-    listStale: vi.fn(),
-  };
   const ownerRunStore = {
     registerRun: vi.fn(),
     unregisterRun: vi.fn(),
     listRunIdsByWorkerId: vi.fn(),
     findWorkerIdByRunId: vi.fn(),
   };
+  const managedHost = makeManagedHost();
   const service = new WorkerManagerService(
     endpointHandler as unknown as WorkerEndpointHandler,
     commandDispatcher as unknown as WorkerCommandDispatcher,
     {} as unknown as WorkerRegistryRepository,
     runtimeService as never,
     provisioner as never,
-    {} as never,
-    livenessStore as never,
-    ownerRunStore as never
+    ownerRunStore as never,
+    managedHost as never
   );
   return {
     service,
@@ -60,76 +63,110 @@ function makeService() {
     commandDispatcher,
     provisioner,
     runtimeService,
-    livenessStore,
     ownerRunStore,
+    managedHost,
   };
 }
 
-describe("WorkerManagerService — facade routing", () => {
-  it("routes pollCommands to the endpoint handler", async () => {
-    const { service, endpointHandler } = makeService();
-    endpointHandler.pollCommands.mockResolvedValue({ messages: [] });
+describe("WorkerManagerService — worker 数据面(委托进程内 RuntimeHost)", () => {
+  it("pollCommands delegates to the managed host and maps commands to RPC requests", async () => {
+    const { service, managedHost } = makeService();
+    managedHost.pollCommands.mockResolvedValue({
+      commands: [
+        {
+          runId: "run-1",
+          seq: 3,
+          type: "command",
+          payload: { type: "cancel", commandId: "cmd-1", runId: "run-1" },
+          ts: "t",
+        },
+      ],
+      queueEpoch: 2,
+    });
 
-    await service.pollCommands("owner-1", { afterSeq: 3, waitMs: 0 });
-
-    expect(endpointHandler.pollCommands).toHaveBeenCalledWith("owner-1", {
-      afterSeq: 3,
+    const result = await service.pollCommands("worker-1", {
+      afterSeq: 2,
       waitMs: 0,
     });
-  });
 
-  it("pollCommands touches the liveness store (long-poll doubles as heartbeat)", async () => {
-    const { service, endpointHandler, livenessStore } = makeService();
-    endpointHandler.pollCommands.mockResolvedValue({ messages: [] });
-
-    await service.pollCommands("owner-1", { afterSeq: 0, waitMs: 0 });
-
-    expect(livenessStore.touch).toHaveBeenCalledWith("owner-1");
-  });
-
-  it("routes getRunConfig to the endpoint handler", () => {
-    const { service, endpointHandler } = makeService();
-    const config = { runId: "run-1" } as unknown as RunConfig;
-    endpointHandler.getRunConfig.mockReturnValue({ config });
-
-    expect(service.getRunConfig("run-1")).toEqual({ config });
-    expect(endpointHandler.getRunConfig).toHaveBeenCalledWith("run-1");
-  });
-
-  it("routes postEvent to the endpoint handler", async () => {
-    const { service, endpointHandler } = makeService();
-    endpointHandler.postEvent.mockResolvedValue({ ok: true });
-
-    await service.postEvent("run-1", { body: true });
-
-    expect(endpointHandler.postEvent).toHaveBeenCalledWith("run-1", {
-      body: true,
+    expect(managedHost.pollCommands).toHaveBeenCalledWith("worker-1", {
+      afterSeq: 2,
+      waitMs: 0,
+    });
+    expect(result.queueEpoch).toBe(2);
+    expect(result.messages).toHaveLength(1);
+    expect(result.messages[0]).toMatchObject({
+      jsonrpc: "2.0",
+      method: "run.cancel",
     });
   });
 
-  it("postEvent touches the liveness store for the run's owner (reporting also proves it's alive)", async () => {
-    const { service, endpointHandler, livenessStore, ownerRunStore } =
-      makeService();
-    endpointHandler.postEvent.mockResolvedValue({ ok: true });
-    ownerRunStore.findWorkerIdByRunId.mockReturnValue("worker-1");
+  it("getRunConfig delegates to the managed host and 404s when missing", () => {
+    const { service, managedHost } = makeService();
+    const config = { runId: "run-1" } as unknown as RunConfig;
+    managedHost.getRunConfig.mockReturnValue(config);
 
-    await service.postEvent("run-1", { body: true });
+    expect(service.getRunConfig("run-1")).toEqual({ config });
 
-    expect(ownerRunStore.findWorkerIdByRunId).toHaveBeenCalledWith("run-1");
-    expect(livenessStore.touch).toHaveBeenCalledWith("worker-1");
+    managedHost.getRunConfig.mockReturnValue(undefined);
+    expect(() => service.getRunConfig("run-2")).toThrow(/not found/);
   });
 
-  it("postEvent skips the liveness touch when the run has no known owner", async () => {
-    const { service, endpointHandler, livenessStore, ownerRunStore } =
-      makeService();
-    endpointHandler.postEvent.mockResolvedValue({ ok: true });
-    ownerRunStore.findWorkerIdByRunId.mockReturnValue(undefined);
+  it("postEvent delegates to the managed host and maps parse errors to 400", async () => {
+    const { service, managedHost } = makeService();
+    managedHost.postEvent.mockResolvedValue({ ok: true });
 
-    await service.postEvent("run-1", { body: true });
+    await expect(service.postEvent("run-1", { body: true })).resolves.toEqual({
+      ok: true,
+    });
+    expect(managedHost.postEvent).toHaveBeenCalledWith("run-1", {
+      body: true,
+    });
 
-    expect(livenessStore.touch).not.toHaveBeenCalled();
+    managedHost.postEvent.mockRejectedValue(
+      new Error("Invalid worker event body")
+    );
+    await expect(service.postEvent("run-1", null)).rejects.toMatchObject({
+      status: 400,
+    });
   });
 
+  it("registerWorker delegates to the managed host handshake", async () => {
+    const { service, managedHost } = makeService();
+    managedHost.registerWorker.mockReturnValue(true);
+
+    await expect(
+      service.registerWorker("worker-1", { startToken: "token-1", pid: 4242 })
+    ).resolves.toEqual({ ok: true });
+    expect(managedHost.registerWorker).toHaveBeenCalledWith(
+      "worker-1",
+      "token-1",
+      { pid: 4242 }
+    );
+  });
+
+  it("registerWorker throws BadRequestException when the handshake is rejected", async () => {
+    const { service, managedHost } = makeService();
+    managedHost.registerWorker.mockReturnValue(false);
+
+    await expect(
+      service.registerWorker("worker-1", { startToken: "wrong-token" })
+    ).rejects.toThrow(/no pending launch handshake/);
+  });
+
+  it("validateWorkerToken delegates to the managed host pool", () => {
+    const { service, managedHost } = makeService();
+    managedHost.validateWorkerToken.mockReturnValue(true);
+
+    expect(service.validateWorkerToken("worker-1", "token-1")).toBe(true);
+    expect(managedHost.validateWorkerToken).toHaveBeenCalledWith(
+      "worker-1",
+      "token-1"
+    );
+  });
+});
+
+describe("WorkerManagerService — facade routing(旧执行栈,Phase 3 清尾)", () => {
   it("routes openSession to the command dispatcher with passthrough params", () => {
     const { service, commandDispatcher } = makeService();
     const params = {
@@ -208,21 +245,12 @@ describe("WorkerManagerService — facade routing", () => {
 function makeRepositoryMock() {
   return {
     findActiveByWorkspace: vi.fn(),
-    upsertRunning: vi.fn(),
-    markStoppedByOwner: vi.fn(),
-    markErrorByOwner: vi.fn(),
-    isRuntimeInstanceBoundToWorkspace: vi.fn(),
     countRunning: vi.fn(),
     findByRuntimeId: vi.fn(),
     findRunInstanceView: vi.fn(),
     listResourcesPage: vi.fn(),
     findById: vi.fn(),
-    findBindingWithResource: vi.fn(),
-    findWorkspaceIdsByUser: vi.fn(),
-    findRunningByOwners: vi.fn(),
     markStoppedById: vi.fn(),
-    deleteWorkspaceBinding: vi.fn(),
-    findActiveByWorkerId: vi.fn(),
   } as unknown as WorkerRegistryRepository;
 }
 
@@ -233,19 +261,20 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
   beforeEach(() => {
     repository = makeRepositoryMock();
     service = new WorkerManagerService(
-      {} as any,
-      {} as any,
+      {} as never,
+      {} as never,
       repository,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never
     );
   });
 
   it("findRuntimeByRuntimeId forwards to repository.findByRuntimeId", async () => {
-    (repository.findByRuntimeId as any).mockResolvedValue({ id: "x" });
+    (repository.findByRuntimeId as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: "x",
+    });
     const result = await service.findRuntimeByRuntimeId("sandbox", "inst-1");
     expect(repository.findByRuntimeId).toHaveBeenCalledWith(
       "sandbox",
@@ -255,13 +284,13 @@ describe("WorkerManagerService WorkerRegistry cross-module queries", () => {
   });
 
   it("getWorkerStats counts running runtime resources", async () => {
-    (repository.countRunning as any).mockResolvedValue(3);
+    (repository.countRunning as ReturnType<typeof vi.fn>).mockResolvedValue(3);
     expect(await service.getWorkerStats()).toEqual({ activeWorkers: 3 });
   });
 });
 
 describe("WorkerManagerService runtime policy", () => {
-  function makeService() {
+  it("getRuntimePolicy forwards to RuntimeService", () => {
     const runtimeService = { getRuntimePolicy: vi.fn() };
     const service = new WorkerManagerService(
       {} as never,
@@ -270,21 +299,15 @@ describe("WorkerManagerService runtime policy", () => {
       runtimeService as never,
       {} as never,
       {} as never,
-      {} as never,
       {} as never
     );
-    return { service, runtimeService };
-  }
-
-  it("getRuntimePolicy forwards to RuntimeService", () => {
-    const { service, runtimeService } = makeService();
     runtimeService.getRuntimePolicy.mockReturnValue({ runtimeType: "native" });
     expect(service.getRuntimePolicy()).toEqual({ runtimeType: "native" });
   });
 });
 
 describe("WorkerManagerService.stopWorkerInstance", () => {
-  function makeService() {
+  function makeStopService() {
     const registry = {
       findById: vi.fn(),
       markStoppedById: vi.fn().mockResolvedValue(undefined),
@@ -297,14 +320,13 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
       {} as never,
       provisioner as never,
       {} as never,
-      {} as never,
       {} as never
     );
     return { service, registry, provisioner };
   }
 
   it("tears down the sandbox resource through the provisioner using a ref built from the DB row", async () => {
-    const { service, registry, provisioner } = makeService();
+    const { service, registry, provisioner } = makeStopService();
     registry.findById.mockResolvedValue({
       id: "rr-1",
       runtimeType: "docker",
@@ -333,38 +355,8 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
     );
   });
 
-  it("tears down the local resource through the provisioner using a ref built from the DB row", async () => {
-    const { service, registry, provisioner } = makeService();
-    registry.findById.mockResolvedValue({
-      id: "rr-2",
-      runtimeType: "native",
-      ownerId: "ws-2",
-      instanceId: "4242:token",
-      isolationScope: "workspace",
-      runtimeId: "managed-native",
-      status: "running",
-    });
-
-    await expect(service.stopWorkerInstance("rr-2")).resolves.toEqual({
-      ok: true,
-    });
-
-    expect(provisioner.stop).toHaveBeenCalledWith({
-      runtimeType: "native",
-      ownerId: "ws-2",
-      workerId: "rr-2",
-      runtimeInstanceId: "4242:token",
-      isolationScope: "workspace",
-      targetRuntimeId: "managed-native",
-    });
-    expect(registry.markStoppedById).toHaveBeenCalledWith(
-      expect.objectContaining({ id: "rr-2" }),
-      "manual_stop"
-    );
-  });
-
   it("throws when the resource is missing or not running", async () => {
-    const { service, registry, provisioner } = makeService();
+    const { service, registry, provisioner } = makeStopService();
     registry.findById.mockResolvedValue({ status: "stopped" });
 
     await expect(service.stopWorkerInstance("rr-3")).rejects.toThrow(
@@ -375,8 +367,8 @@ describe("WorkerManagerService.stopWorkerInstance", () => {
   });
 });
 
-describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () => {
-  function makeService() {
+describe("WorkerManagerService — resolveInstance/releaseInstanceForRun(旧栈,Phase 3 清尾)", () => {
+  function makeOldStackService() {
     const provisioner = {
       acquireInstanceForRun: vi.fn(),
       stop: vi.fn(),
@@ -392,15 +384,14 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
       {} as never,
       {} as never,
       provisioner as never,
-      {} as never,
-      {} as never,
-      ownerRunStore as never
+      ownerRunStore as never,
+      {} as never
     );
     return { service, provisioner, ownerRunStore };
   }
 
-  it("resolveInstance forwards local placements to the provisioner and registers the run in the owner index", async () => {
-    const { service, provisioner, ownerRunStore } = makeService();
+  it("resolveInstance forwards placements to the provisioner and registers the run in the owner index", async () => {
+    const { service, provisioner, ownerRunStore } = makeOldStackService();
     const input = {
       runtimeTarget: { runtimeType: "native", ownerId: "ws-1" },
       runConfig: { runId: "run-1" },
@@ -420,72 +411,11 @@ describe("WorkerManagerService — resolveInstance/releaseInstanceForRun", () =>
     expect(ownerRunStore.registerRun).toHaveBeenCalledWith("run-1", "worker-1");
   });
 
-  it("resolveInstance forwards sandbox placements to the provisioner and registers the run in the owner index", async () => {
-    const { service, provisioner, ownerRunStore } = makeService();
-    const input = {
-      runtimeTarget: { runtimeType: "docker", ownerId: "ws-2" },
-      runConfig: { runId: "run-2" },
-    } as never;
-    provisioner.acquireInstanceForRun.mockResolvedValue({
-      outcome: "ready",
-      workerId: "worker-2",
-      runtimeInstanceId: "container-1",
-    });
-
-    await expect(service.resolveInstance(input)).resolves.toEqual({
-      outcome: "ready",
-      workerId: "worker-2",
-      runtimeInstanceId: "container-1",
-    });
-    expect(provisioner.acquireInstanceForRun).toHaveBeenCalledWith(input);
-    expect(ownerRunStore.registerRun).toHaveBeenCalledWith("run-2", "worker-2");
-  });
-
   it("releaseInstanceForRun only clears the owner index (no reclaim/instance-side action)", () => {
-    const { service, provisioner, ownerRunStore } = makeService();
+    const { service, provisioner, ownerRunStore } = makeOldStackService();
     service.releaseInstanceForRun("run-1");
     expect(ownerRunStore.unregisterRun).toHaveBeenCalledWith("run-1");
     expect(provisioner.acquireInstanceForRun).not.toHaveBeenCalled();
     expect(provisioner.stop).not.toHaveBeenCalled();
-  });
-});
-
-describe("WorkerManagerService.registerWorker", () => {
-  function makeService() {
-    const handshakeStore = { registerWorker: vi.fn() };
-    const service = new WorkerManagerService(
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      handshakeStore as never,
-      {} as never,
-      {} as never
-    );
-    return { service, handshakeStore };
-  }
-
-  it("returns ok:true when the handshake store accepts the token", async () => {
-    const { service, handshakeStore } = makeService();
-    handshakeStore.registerWorker.mockReturnValue(true);
-
-    await expect(
-      service.registerWorker("worker-1", { startToken: "token-1", pid: 4242 })
-    ).resolves.toEqual({ ok: true });
-    expect(handshakeStore.registerWorker).toHaveBeenCalledWith(
-      "worker-1",
-      "token-1",
-      { pid: 4242 }
-    );
-  });
-
-  it("throws BadRequestException when the handshake store rejects the token", async () => {
-    const { service, handshakeStore } = makeService();
-    handshakeStore.registerWorker.mockReturnValue(false);
-
-    await expect(
-      service.registerWorker("worker-1", { startToken: "wrong-token" })
-    ).rejects.toThrow(/no pending launch handshake/);
   });
 });

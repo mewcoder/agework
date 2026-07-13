@@ -10,7 +10,7 @@ import { IS_PUBLIC_KEY } from "../auth/decorators/public.decorator";
 import { WorkerRunController } from "./worker-run.controller";
 import { WorkerManagerService } from "./worker-manager.service";
 import { WorkerTokenGuard } from "./connection/worker-token.guard";
-import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
+import { MANAGED_RUNTIME_HOST } from "./contract/managed-runtime-host";
 
 describe("WorkerRunController", () => {
   it("is marked @Public() so worker callbacks bypass the global JwtAuthGuard (auth is handled by WorkerAuthGuard)", () => {
@@ -59,8 +59,8 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
     app = undefined;
   });
 
-  async function startApp(registry: {
-    findActiveByWorkerId: ReturnType<typeof vi.fn>;
+  async function startApp(host: {
+    validateWorkerToken: ReturnType<typeof vi.fn>;
   }) {
     const workerManager = {
       getRunConfig: vi.fn().mockReturnValue({ config: { runId: "run-1" } }),
@@ -71,7 +71,7 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
       providers: [
         WorkerTokenGuard,
         { provide: WorkerManagerService, useValue: workerManager },
-        { provide: WorkerRegistryRepository, useValue: registry },
+        { provide: MANAGED_RUNTIME_HOST, useValue: host },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -83,10 +83,10 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
   }
 
   it("getRunConfig reaches the controller when the worker-id header token matches", async () => {
-    const registry = {
-      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+    const host = {
+      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
     };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/runs/run-1`, {
       headers: {
@@ -96,13 +96,13 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(registry.findActiveByWorkerId).toHaveBeenCalledWith("worker-1");
+    expect(host.validateWorkerToken).toHaveBeenCalledWith("worker-1", "token-1");
     expect(workerManager.getRunConfig).toHaveBeenCalledWith("run-1");
   });
 
   it("getRunConfig returns 410 and never reaches the controller without the worker-id header", async () => {
-    const registry = { findActiveByWorkerId: vi.fn() };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const host = { validateWorkerToken: vi.fn() };
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/runs/run-1`, {
       headers: { [WORKER_TOKEN_HEADER]: "token-1" },
@@ -113,10 +113,10 @@ describe("WorkerRunController — guard wiring (real Nest pipeline)", () => {
   });
 
   it("postEvent returns 410 and never reaches the controller when the token mismatches", async () => {
-    const registry = {
-      findActiveByWorkerId: vi.fn().mockResolvedValue({ startToken: "token-1" }),
+    const host = {
+      validateWorkerToken: vi.fn().mockImplementation((_id: string, token: string) => token === "token-1"),
     };
-    const { baseUrl, workerManager } = await startApp(registry);
+    const { baseUrl, workerManager } = await startApp(host);
 
     const res = await fetch(`${baseUrl}/worker/runs/run-1/events`, {
       method: "POST",

@@ -98,6 +98,7 @@ describe("RuntimeTunnelHandler", () => {
       type: "registered",
       runtimeId: "rt-1",
       heartbeatIntervalSeconds: 10,
+      epoch: 1,
     });
     expect(repository.markRegistered).toHaveBeenCalledWith(
       "rt-1",
@@ -105,6 +106,20 @@ describe("RuntimeTunnelHandler", () => {
       { isolationScopes: ["user", "workspace"] },
       undefined
     );
+  });
+
+  it("increments the session epoch on each register (防脑裂)", async () => {
+    const first = connect();
+    await once(first, "open");
+    first.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+    const firstReply = (await nextMessage(first)) as { epoch: number };
+    expect(firstReply.epoch).toBe(1);
+
+    const second = connect();
+    await once(second, "open");
+    second.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+    const secondReply = (await nextMessage(second)) as { epoch: number };
+    expect(secondReply.epoch).toBe(2);
   });
 
   it("rejects a bad token during upgrade", async () => {
@@ -157,6 +172,118 @@ describe("RuntimeTunnelHandler", () => {
     sockets.push(ws);
     const [err] = (await once(ws, "error")) as [Error];
     expect(err).toBeInstanceOf(Error);
+  });
+
+  describe("host.upstream envelope (ACK 水位 + epoch)", () => {
+    async function register(ws: WebSocket): Promise<number> {
+      ws.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+      const reply = (await nextMessage(ws)) as { epoch: number };
+      return reply.epoch;
+    }
+
+    function sendUpstream(
+      ws: WebSocket,
+      seq: number,
+      epoch: number | undefined,
+      runId = "run-1"
+    ): void {
+      ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "host.upstream",
+          params: {
+            seq,
+            epoch,
+            notification: { kind: "runCancelled", runId },
+          },
+        })
+      );
+    }
+
+    it("dispatches the notification to the handler and acks the seq", async () => {
+      const received: unknown[] = [];
+      handler.setUpstreamHandler((runtimeId, notification) => {
+        received.push({ runtimeId, notification });
+      });
+      const ws = connect();
+      await once(ws, "open");
+      const epoch = await register(ws);
+
+      sendUpstream(ws, 7, epoch);
+      const ack = (await nextMessage(ws)) as {
+        method: string;
+        params: { seq: number };
+      };
+
+      expect(ack.method).toBe("host.upstreamAck");
+      expect(ack.params.seq).toBe(7);
+      expect(received).toEqual([
+        {
+          runtimeId: "rt-1",
+          notification: { kind: "runCancelled", runId: "run-1" },
+        },
+      ]);
+    });
+
+    it("acks even when the handler throws (处理 best-effort,传输不丢)", async () => {
+      handler.setUpstreamHandler(() => {
+        throw new Error("handler boom");
+      });
+      const ws = connect();
+      await once(ws, "open");
+      const epoch = await register(ws);
+
+      sendUpstream(ws, 3, epoch);
+      const ack = (await nextMessage(ws)) as { params: { seq: number } };
+      expect(ack.params.seq).toBe(3);
+    });
+
+    it("drops stale-epoch envelopes without acking", async () => {
+      const received: unknown[] = [];
+      handler.setUpstreamHandler((_runtimeId, notification) => {
+        received.push(notification);
+      });
+      // 第一次注册拿 epoch 1,再注册把会话推进到 epoch 2
+      const first = connect();
+      await once(first, "open");
+      const staleEpoch = await register(first);
+      const second = connect();
+      await once(second, "open");
+      const currentEpoch = await register(second);
+
+      sendUpstream(second, 1, staleEpoch, "stale-run");
+      sendUpstream(second, 2, currentEpoch, "live-run");
+      const ack = (await nextMessage(second)) as { params: { seq: number } };
+
+      expect(ack.params.seq).toBe(2);
+      expect(received).toEqual([{ kind: "runCancelled", runId: "live-run" }]);
+    });
+
+    it("processes a legacy bare notification without acking (双栈兼容)", async () => {
+      const received: unknown[] = [];
+      handler.setUpstreamHandler((_runtimeId, notification) => {
+        received.push(notification);
+      });
+      const ws = connect();
+      await once(ws, "open");
+      const epoch = await register(ws);
+
+      ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "host.upstream",
+          params: { kind: "runCancelled", runId: "legacy-run" },
+        })
+      );
+      // 用一条带信封的通知作为同步屏障:它的 ACK 回来时,前面的裸通知必已处理
+      sendUpstream(ws, 1, epoch, "envelope-run");
+      await nextMessage(ws);
+
+      expect(received).toEqual([
+        { kind: "runCancelled", runId: "legacy-run" },
+        { kind: "runCancelled", runId: "envelope-run" },
+      ]);
+    });
   });
 
   describe("sendRequest", () => {

@@ -23,6 +23,7 @@ function createMockChild(pid: number): ChildProcess & EventEmitter {
 function makeConfigService(): Partial<ConfigService> {
   return {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-logs"),
+    getWorkspace: vi.fn().mockReturnValue("/tmp/agework-workspaces"),
   };
 }
 

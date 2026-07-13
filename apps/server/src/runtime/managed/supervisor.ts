@@ -43,6 +43,13 @@ const MAX_RESTART_DELAY_MS = 30_000;
 /** 首次退避值(立即重启后,第二次崩溃起的起始延迟)。 */
 const BASE_RESTART_DELAY_MS = 1_000;
 
+/** managed runtime 进程的 worker HTTP 端口分配(loopback 上按 runtimeType 固定)。 */
+const MANAGED_WORKER_PORTS: Record<RuntimeType, number> = {
+  native: 7100, // native 不经 supervisor,占位
+  docker: 7101,
+  opensandbox: 7102,
+};
+
 /**
  * Managed 容器 runtime 进程的 supervisor:为 docker/opensandbox 各 fork 一个
  * apps/runtime 进程,注入 loopback 地址 + managed token;进程崩了自动重启
@@ -128,6 +135,11 @@ export class ManagedRuntimeSupervisor implements OnApplicationShutdown {
       AGEWORK_RUNTIME_TYPE: runtimeType,
       AGEWORK_RUNTIME_WORKER_IMAGE: DEFAULT_RUNTIME_IMAGE,
       AGEWORK_RUNTIME_LOG_DIR: this.configService.getRuntimeLogDir(),
+      // Phase 2: managed runtime 进程即 Host,worker 数据面连它的 WorkerHttpServer。
+      // 每种 runtimeType 一个固定端口,docker/opensandbox 并存不冲突。
+      AGEWORK_RUNTIME_WORKER_PORT: String(MANAGED_WORKER_PORTS[runtimeType]),
+      // user-scope 隔离的挂载根用 server 自己的配置,不用镜像默认值
+      AGEWORK_RUNTIME_USER_WORKSPACE_ROOT: this.configService.getWorkspace(),
     };
   }
 

@@ -4,46 +4,38 @@ import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { UserDeletedEvent, UserDisabledEvent } from "../../user/user.events";
 
 describe("WorkerLifecycleListener", () => {
-  it("shuts down the workspace runtime resource on WorkspaceDeletedEvent", async () => {
-    const shutdownForWorkspace = vi.fn().mockResolvedValue(undefined);
-    const listener = new WorkerLifecycleListener({
-      shutdownForWorkspace,
-    } as never);
+  it("releases the workspace-scope owner on WorkspaceDeletedEvent", async () => {
+    const releaseOwner = vi.fn().mockResolvedValue(undefined);
+    const listener = new WorkerLifecycleListener({ releaseOwner } as never);
 
     await listener.onWorkspaceDeleted(new WorkspaceDeletedEvent("ws-1"));
 
-    expect(shutdownForWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(releaseOwner).toHaveBeenCalledWith("workspace:ws-1");
   });
 
-  it("swallows shutdown failures so the source operation is unaffected", async () => {
-    const shutdownForWorkspace = vi.fn().mockRejectedValue(new Error("boom"));
-    const listener = new WorkerLifecycleListener({
-      shutdownForWorkspace,
-    } as never);
+  it("swallows release failures so the source operation is unaffected", async () => {
+    const releaseOwner = vi.fn().mockRejectedValue(new Error("boom"));
+    const listener = new WorkerLifecycleListener({ releaseOwner } as never);
 
     await expect(
       listener.onWorkspaceDeleted(new WorkspaceDeletedEvent("ws-1"))
     ).resolves.toBeUndefined();
   });
 
-  it("shuts down user runtime resources on UserDeletedEvent and UserDisabledEvent", async () => {
-    const shutdownForUser = vi.fn().mockResolvedValue(undefined);
-    const listener = new WorkerLifecycleListener({
-      shutdownForUser,
-    } as never);
+  it("releases the user-scope owner on UserDeletedEvent and UserDisabledEvent", async () => {
+    const releaseOwner = vi.fn().mockResolvedValue(undefined);
+    const listener = new WorkerLifecycleListener({ releaseOwner } as never);
 
     await listener.onUserResourcesReleased(new UserDeletedEvent("user-1"));
     await listener.onUserResourcesReleased(new UserDisabledEvent("user-2"));
 
-    expect(shutdownForUser).toHaveBeenCalledWith("user-1");
-    expect(shutdownForUser).toHaveBeenCalledWith("user-2");
+    expect(releaseOwner).toHaveBeenCalledWith("user:user-1");
+    expect(releaseOwner).toHaveBeenCalledWith("user:user-2");
   });
 
-  it("swallows user shutdown failures", async () => {
-    const shutdownForUser = vi.fn().mockRejectedValue(new Error("boom"));
-    const listener = new WorkerLifecycleListener({
-      shutdownForUser,
-    } as never);
+  it("swallows user release failures", async () => {
+    const releaseOwner = vi.fn().mockRejectedValue(new Error("boom"));
+    const listener = new WorkerLifecycleListener({ releaseOwner } as never);
 
     await expect(
       listener.onUserResourcesReleased(new UserDeletedEvent("user-1"))

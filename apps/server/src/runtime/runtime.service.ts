@@ -8,7 +8,12 @@ import {
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
-import type { RuntimeSpec } from "@agework/shared/protocol";
+import type {
+  HostUpstreamNotification,
+  RuntimeSpec,
+  RuntimeTunnelAllRpcRequest,
+  RuntimeTunnelHostNotification,
+} from "@agework/shared/protocol";
 import type {
   CreateRuntimeDirectoryResponse,
   CreateRuntimeResponse,
@@ -26,8 +31,10 @@ import type {
 } from "@agework/shared/api";
 import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
+import type { RuntimeConfig } from "@agework/providers";
 import { ConfigService, type RuntimeType } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
+import { toRuntimeConfig } from "./local/runtime-config";
 import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
@@ -409,6 +416,52 @@ export class RuntimeService implements OnApplicationBootstrap {
    */
   getRuntimeRow(id: string): Promise<RuntimeRow | null> {
     return this.repository.findById(id);
+  }
+
+  /**
+   * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 local/runtime-config.ts)。
+   * Phase 2:worker-manager 侧进程内 RuntimeHost(managed-native)构造时用。
+   */
+  getProviderRuntimeConfig(): RuntimeConfig {
+    return toRuntimeConfig(this.configService);
+  }
+
+  // ── Phase 2 隧道公开面(对 RuntimeTunnelHandler 的薄转发)────────────
+  //
+  // worker-manager 的 RuntimeHostAdapter 经这里走隧道,不直接 reach
+  // gateway 内部文件(模块边界:跨模块只调根 Service)。
+
+  /** 向已建连的 registered Host 发一次隧道 RPC(host.* / launch/stop/destroy)。 */
+  sendTunnelRequest<Result>(
+    runtimeId: string,
+    request: RuntimeTunnelAllRpcRequest,
+    timeoutMs: number
+  ): Promise<Result> {
+    return this.tunnelHandler.sendRequest<Result>(runtimeId, request, timeoutMs);
+  }
+
+  /** 列出所有隧道在线的 runtime id(managed-native 不走隧道,不会出现在结果里)。 */
+  listConnectedRuntimeIds(): string[] {
+    return this.tunnelHandler.listConnected();
+  }
+
+  /** 向目标 Host 发一条单向隧道通知(不等回应,不在线即丢弃,best-effort)。 */
+  sendTunnelNotification(
+    runtimeId: string,
+    notification: RuntimeTunnelHostNotification
+  ): void {
+    this.tunnelHandler.sendNotification(runtimeId, notification);
+  }
+
+  /** 注册 host.upstream 通知回调(Host → server 单向回流,进程内仅一个消费者)。
+   *  handler 返回 Promise 时按连接串行 await,处理完成后才向 Host 回 ACK 水位。 */
+  setTunnelUpstreamHandler(
+    handler: (
+      runtimeId: string,
+      notification: HostUpstreamNotification
+    ) => Promise<void> | void
+  ): void {
+    this.tunnelHandler.setUpstreamHandler(handler);
   }
 
   /**

@@ -15,7 +15,9 @@ import {
   type RuntimeTunnelRegisteredMessage,
   type RuntimeTunnelRpcRequest,
   type RuntimeTunnelAllRpcRequest,
+  type RuntimeTunnelHostNotification,
   type HostUpstreamNotification,
+  type HostUpstreamEnvelope,
 } from "@agework/shared/protocol";
 import {
   isRpcResponse,
@@ -53,11 +55,18 @@ export class RuntimeTunnelHandler
   private readonly tunnelPath = `${resolveApiBasePath(getApiContext())}/runtimes/tunnel`;
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
-  /** Phase 2: host.upstream 通知回调，由 RuntimeHostAdapter 注册。 */
+  /** Phase 2: host.upstream 通知回调，由 RuntimeHostAdapter 注册。
+   *  返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
   private upstreamHandler?: (
     runtimeId: string,
     notification: HostUpstreamNotification
-  ) => void;
+  ) => Promise<void> | void;
+  /** Phase 2: 每个 runtime 的隧道会话状态。epoch 每次 register 递增,
+   *  非当前 epoch 的上行信封丢弃(防脑裂);chain 串行化上行处理保事件顺序。 */
+  private readonly hostSessions = new Map<
+    string,
+    { epoch: number; chain: Promise<void> }
+  >();
   private wss?: WebSocketServer;
   private httpServer?: {
     on: (event: string, listener: typeof this.onUpgrade) => void;
@@ -109,9 +118,22 @@ export class RuntimeTunnelHandler
 
   /** Phase 2: 注册 host.upstream 通知回调。 */
   setUpstreamHandler(
-    handler: (runtimeId: string, notification: HostUpstreamNotification) => void
+    handler: (
+      runtimeId: string,
+      notification: HostUpstreamNotification
+    ) => Promise<void> | void
   ): void {
     this.upstreamHandler = handler;
+  }
+
+  /** 向目标 runtimeId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
+  sendNotification(
+    runtimeId: string,
+    notification: RuntimeTunnelHostNotification
+  ): void {
+    const socket = this.connections.get(runtimeId);
+    if (!socket) return;
+    socket.send(JSON.stringify(notification));
   }
 
   /** 向目标 runtimeId 发一次 RPC（launch/stop/destroy/host.*），等它回应或超时。
@@ -245,12 +267,13 @@ export class RuntimeTunnelHandler
       return;
     }
 
-    // Phase 2: host.upstream 通知（Host → server，单向）
+    // Phase 2: host.upstream 通知（Host → server，单向,带 seq/epoch 信封）
     if (isRpcNotification(parsed)) {
-      if (parsed.method === "host.upstream" && this.upstreamHandler) {
-        this.upstreamHandler(
+      if (parsed.method === "host.upstream") {
+        this.onUpstreamEnvelope(
           runtimeId,
-          parsed.params as HostUpstreamNotification
+          ws,
+          parsed.params as HostUpstreamEnvelope
         );
       }
       return;
@@ -278,6 +301,9 @@ export class RuntimeTunnelHandler
           type: "registered",
           runtimeId,
           heartbeatIntervalSeconds: this.heartbeatIntervalSeconds(),
+          // Phase 2: 每次 register 递增会话 epoch,Host 盖在上行信封里,
+          // 被顶掉的旧连接残留消息按 epoch 丢弃(防脑裂)。
+          epoch: this.nextEpoch(runtimeId),
         };
         ws.send(JSON.stringify(reply));
         return;
@@ -294,6 +320,91 @@ export class RuntimeTunnelHandler
           `runtime ${runtimeId} sent unknown tunnel message type`
         );
     }
+  }
+
+  /** register 时递增该 runtime 的隧道会话 epoch 并返回。 */
+  private nextEpoch(runtimeId: string): number {
+    const session = this.hostSessions.get(runtimeId);
+    const epoch = (session?.epoch ?? 0) + 1;
+    this.hostSessions.set(runtimeId, {
+      epoch,
+      chain: session?.chain ?? Promise.resolve(),
+    });
+    return epoch;
+  }
+
+  /**
+   * host.upstream 信封处理:
+   * 1. 只认当前连接 + 当前 epoch(被顶掉的旧连接残留一律丢弃);
+   * 2. 按 runtime 串行 await 处理(保事件顺序,处理失败记日志不中断——
+   *    与 Event 纪律一致,ACK 只保证传输不丢,处理仍是 best-effort);
+   * 3. 处理完成回累计 ACK 水位,Host 收到后清缓冲。
+   */
+  private onUpstreamEnvelope(
+    runtimeId: string,
+    ws: WebSocket,
+    envelope: HostUpstreamEnvelope
+  ): void {
+    const session = this.hostSessions.get(runtimeId);
+    if (this.connections.get(runtimeId) !== ws) {
+      this.logger.warn(
+        `dropped upstream from a replaced connection of runtime ${runtimeId}`
+      );
+      return;
+    }
+    // 双栈兼容:旧版 Host 直接发裸 notification(无 seq/epoch 信封),
+    // 照旧 best-effort 处理、不回 ACK。
+    if (envelope.notification === undefined) {
+      const legacy = envelope as unknown as HostUpstreamNotification;
+      if ("kind" in legacy) {
+        void Promise.resolve(
+          this.upstreamHandler?.(runtimeId, legacy)
+        ).catch((err: unknown) => {
+          this.logger.warn(
+            `legacy upstream handler failed for runtime ${runtimeId}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        });
+      }
+      return;
+    }
+    if (
+      envelope.epoch !== undefined &&
+      envelope.epoch !== session?.epoch
+    ) {
+      this.logger.warn(
+        `dropped stale-epoch upstream from runtime ${runtimeId}: epoch=${envelope.epoch} current=${session?.epoch ?? "none"}`
+      );
+      return;
+    }
+    if (!session) return; // 未注册就发上行:异常客户端,丢弃
+    session.chain = session.chain
+      .then(async () => {
+        try {
+          await this.upstreamHandler?.(runtimeId, envelope.notification);
+        } catch (err) {
+          this.logger.warn(
+            `upstream handler failed for runtime ${runtimeId} seq=${envelope.seq}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+        this.sendUpstreamAck(runtimeId, ws, envelope.seq);
+      })
+      .catch(() => {});
+  }
+
+  private sendUpstreamAck(
+    runtimeId: string,
+    ws: WebSocket,
+    seq: number
+  ): void {
+    if (ws.readyState !== ws.OPEN) return;
+    if (this.connections.get(runtimeId) !== ws) return;
+    ws.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "host.upstreamAck",
+        params: { seq },
+      })
+    );
   }
 
   private onRpcResponse(runtimeId: string, response: RpcResponse): void {

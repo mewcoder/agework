@@ -9,7 +9,9 @@ import {
   WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
-import { WorkerRegistryRepository } from "../registry/worker-registry.repository";
+import type { RuntimeHost } from "@agework/runtime/host";
+import { Inject } from "@nestjs/common";
+import { MANAGED_RUNTIME_HOST } from "../contract/managed-runtime-host";
 
 type WorkerTokenRequest = {
   params?: { workerId?: string };
@@ -31,15 +33,17 @@ type WorkerTokenRequest = {
  * register 端点不接这个 guard:它靠 body 里的 startToken 匹配
  * WorkerHandshakeStore 里等待中的握手,是另一套机制。
  *
- * Phase 2 双栈切流：registered Host 的 worker 不在 server registry 中
- * （Worker 表停写），查无结果即返回 410——自然拒绝，worker 侧收到 410 后退出。
- * managed Host 的 worker 仍在 registry 中，正常通过校验。
+ * Phase 2 执行面搬家：校验对象是进程内 RuntimeHost 的 worker 池(Worker 表停写)。
+ * 不在池中的 worker(server 重启前的旧容器、registered Host 的 worker)一律 410,
+ * worker 侧收到 410 判定自己被驱逐,直接退出——这同时就是孤儿容器的自清路径。
  */
 @Injectable()
 export class WorkerTokenGuard implements CanActivate {
-  constructor(private readonly registry: WorkerRegistryRepository) {}
+  constructor(
+    @Inject(MANAGED_RUNTIME_HOST) private readonly managedHost: RuntimeHost
+  ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<WorkerTokenRequest>();
     const workerId =
       request.params?.workerId ?? request.headers[WORKER_ID_HEADER];
@@ -50,8 +54,7 @@ export class WorkerTokenGuard implements CanActivate {
         HttpStatus.GONE
       );
     }
-    const active = await this.registry.findActiveByWorkerId(workerId);
-    if (!active || active.startToken !== token) {
+    if (!this.managedHost.validateWorkerToken(workerId, token)) {
       throw new HttpException(
         `worker token rejected for worker ${workerId}`,
         HttpStatus.GONE

@@ -108,6 +108,14 @@ export class RunRepository {
   async findAllActive() {
     return this.prisma.run.findMany({
       where: { status: { in: ACTIVE_RUN_STATUSES } },
+      // 恢复路径需要知道 run 落在哪台 Host 上(registered 不判死、走 ACK 续传)
+      include: {
+        conversation: {
+          select: {
+            workspace: { select: { runtimeId: true } },
+          },
+        },
+      },
     });
   }
 
