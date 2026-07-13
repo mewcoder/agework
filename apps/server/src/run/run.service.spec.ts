@@ -1,23 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunService } from "./run.service";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RunDriver } from "./driver/run-driver";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunLauncher } from "./launch/run-launcher";
-import { WorkerManagerService } from "../worker-manager/worker-manager.service";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockExecutor: Partial<RunDriver>;
+  let mockRuntimeHost: Partial<RuntimeHostContract>;
   let mockRunEvents: RunEventService;
   let mockRunStatusService: Partial<RunStatusService>;
   let mockRunLauncher: Partial<RunLauncher>;
-  let mockWorkerManager: Partial<WorkerManagerService>;
   let mockRunRecovery: Partial<RunRecoveryService>;
 
   beforeEach(() => {
@@ -30,9 +28,9 @@ describe("RunService", () => {
     mockLiveRunRegistry = {
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockExecutor = {
-      sendCommand: vi.fn(),
-      cancel: vi.fn(),
+    mockRuntimeHost = {
+      command: vi.fn().mockResolvedValue(undefined),
+      getWorkerSnapshotForAdmin: vi.fn().mockResolvedValue(null),
     };
     mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -43,9 +41,6 @@ describe("RunService", () => {
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
     };
-    mockWorkerManager = {
-      getWorkerInstanceForAdmin: vi.fn().mockResolvedValue(null),
-    };
     mockRunRecovery = {
       failInterruptedRuns: vi.fn().mockResolvedValue(undefined),
     };
@@ -53,11 +48,10 @@ describe("RunService", () => {
     service = new RunService(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockExecutor as RunDriver,
+      mockRuntimeHost as RuntimeHostContract,
       mockRunEvents,
       mockRunStatusService as RunStatusService,
       mockRunLauncher as RunLauncher,
-      mockWorkerManager as WorkerManagerService,
       mockRunRecovery as RunRecoveryService
     );
   });
@@ -188,8 +182,8 @@ describe("RunService", () => {
       });
 
       expect(handle.stream.replace).toHaveBeenCalledWith(res, "events");
-      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
-        handle.runtimeHandle,
+      expect(mockRuntimeHost.command).toHaveBeenCalledWith(
+        "run-1",
         expect.objectContaining({
           type: "approval_resolved",
           conversationId: "conversation-1",
@@ -200,7 +194,7 @@ describe("RunService", () => {
       // 附接先于命令下发,续接段的 RUN_STARTED 不会漏
       const replaceOrder = (handle.stream.replace as ReturnType<typeof vi.fn>)
         .mock.invocationCallOrder[0];
-      const sendOrder = (mockExecutor.sendCommand as ReturnType<typeof vi.fn>)
+      const sendOrder = (mockRuntimeHost.command as ReturnType<typeof vi.fn>)
         .mock.invocationCallOrder[0];
       expect(replaceOrder).toBeLessThan(sendOrder);
       expect(mockRunEvents.append).toHaveBeenCalledWith(
@@ -231,8 +225,8 @@ describe("RunService", () => {
         res: makeRes(),
       });
 
-      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
-        handle.runtimeHandle,
+      expect(mockRuntimeHost.command).toHaveBeenCalledWith(
+        "run-1",
         expect.objectContaining({
           type: "approval_resolved",
           payload: { decision: "accept" },
@@ -259,8 +253,8 @@ describe("RunService", () => {
         res: makeRes(),
       });
 
-      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
-        handle.runtimeHandle,
+      expect(mockRuntimeHost.command).toHaveBeenCalledWith(
+        "run-1",
         expect.objectContaining({
           type: "approval_resolved",
           payload: { status: "cancelled" },
@@ -289,8 +283,8 @@ describe("RunService", () => {
         res: makeRes(),
       });
 
-      expect(mockExecutor.sendCommand).toHaveBeenCalledWith(
-        handle.runtimeHandle,
+      expect(mockRuntimeHost.command).toHaveBeenCalledWith(
+        "run-1",
         expect.objectContaining({
           type: "approval_resolved",
           payload: permPayload,
@@ -376,7 +370,14 @@ describe("RunService", () => {
         "run-1",
         undefined
       );
-      expect(mockExecutor.cancel).toHaveBeenCalledWith(handle.runtimeHandle);
+      expect(mockRuntimeHost.command).toHaveBeenCalledWith(
+        "run-1",
+        expect.objectContaining({
+          type: "cancel",
+          runId: "run-1",
+          conversationId: "conversation-1",
+        })
+      );
       expect(hadHandle).toBe(true);
     });
   });

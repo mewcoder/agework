@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
 
 import { RuntimeModule } from "../runtime/runtime.module";
+import { RunEventModule } from "../run-event/run-event.module";
+import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
+import { RUNTIME_HOST_CONTRACT } from "./worker-manager.types";
 import { WorkerConfigStore } from "./connection/worker-config.store";
 import { WorkerCommandQueue } from "./connection/command-queue";
 import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
@@ -27,13 +30,15 @@ import { OwnerRunStore } from "./instance/owner-run.store";
  * 经 `RuntimeService` 转发给 `runtime` 模块——这是 `worker-manager → runtime` 唯一
  * 合法方向,`runtime` 从不反过来依赖 `worker-manager`。
  *
- * 公开面只暴露 WorkerManagerService。
+ * 公开面暴露 WorkerManagerService 与 RUNTIME_HOST_CONTRACT token（后者绑定
+ * RuntimeHostContract 接口的 Phase 1 委托实现,run 模块只经它消费执行面,
+ * 见 docs/design/server-runtime-worker-target-architecture.md §7 Phase 1）。
  *
  * commands/runConfig/events 三个端点靠 WorkerTokenGuard 校验 startToken;
  * register 端点不接这个 guard,走 WorkerHandshakeStore 那套 token-in-body 机制。
  */
 @Module({
-  imports: [RuntimeModule],
+  imports: [RuntimeModule, RunEventModule],
   controllers: [
     WorkerCommandController,
     WorkerRunController,
@@ -54,7 +59,9 @@ import { OwnerRunStore } from "./instance/owner-run.store";
     WorkerLivenessSweeper,
     OwnerRunStore,
     WorkerManagerService,
+    RuntimeHostAdapter,
+    { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
   ],
-  exports: [WorkerManagerService],
+  exports: [WorkerManagerService, RUNTIME_HOST_CONTRACT],
 })
 export class WorkerManagerModule {}

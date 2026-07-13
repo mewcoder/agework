@@ -1,16 +1,15 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { generateId } from "@agework/shared";
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
-import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
+import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { swallow } from "../../common/swallow";
 
 /**
- * 服务重启后恢复中断 run:找到所有仍处于 active 状态的 run,向它绑定的
- * runtime 实例(如果 WorkerRegistry 里还找得到)发一条 cancel 命令让 Worker
- * 自己收尾,不碰实例本身的生死——这个 run 中断不代表实例本身有问题,可能还在
- * 正常服务其它 run(仍待讨论第 12 条)。实例已经不在了,这条命令发出去没人
- * 收,无副作用。随后统一把 run/thread 状态标记为 error。
+ * 服务重启后恢复中断 run:找到所有仍处于 active 状态的 run,经执行面契约向它
+ * 绑定的载体(如果还找得到)发一条 cancel 命令让 Worker 自己收尾,不碰载体本身
+ * 的生死——这个 run 中断不代表载体有问题,可能还在正常服务其它 run。载体已经
+ * 不在了,这条命令发出去没人收,无副作用。随后统一把 run/thread 状态标记为 error。
  */
 @Injectable()
 export class RunRecoveryService {
@@ -19,7 +18,8 @@ export class RunRecoveryService {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
-    private readonly workerManager: WorkerManagerService
+    @Inject(RUNTIME_HOST_CONTRACT)
+    private readonly runtimeHost: RuntimeHostContract
   ) {}
 
   async failInterruptedRuns(): Promise<void> {
@@ -66,21 +66,14 @@ export class RunRecoveryService {
     runtimeInstanceId: string | null;
   }): Promise<void> {
     if (!run.runtimeInstanceId) return;
-    // local worker 是 fork 的子进程,API 重启时必随父进程一起死;WorkerInstanceLifecycleHandler
-    // 在 bootstrap 已经杀掉孤儿并标 stopped,这里再发 cancel 纯属打空气,直接跳过。只有 sandbox
-    // 容器可能还活着,才有必要发 cancel 让仍在 poll 的 worker 自己收尾。
-    if (run.runtimeType === "native") return;
-    const resource = await this.workerManager.findRuntimeByRuntimeId(
-      run.runtimeType,
-      run.runtimeInstanceId
-    );
-    if (!resource) return;
-
-    this.workerManager.sendCommand(resource.ownerId, run.id, {
-      type: "cancel",
-      commandId: generateId(),
+    // native 跳过等判断收在契约实现内(native worker 随 server 重启必死,发了也没人收)。
+    await this.runtimeHost.sendRecoveryCancel({
       runId: run.id,
       conversationId: run.conversationId,
+      ref: {
+        runtimeType: run.runtimeType,
+        runtimeInstanceId: run.runtimeInstanceId,
+      },
     });
   }
 }

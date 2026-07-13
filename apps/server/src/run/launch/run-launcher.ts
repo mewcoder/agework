@@ -1,26 +1,25 @@
 import {
   Injectable,
+  Inject,
   Logger,
   BadRequestException,
   ConflictException,
 } from "@nestjs/common";
-import { join, posix } from "node:path";
 import type { Response } from "express";
-import type {
-  AgentProviderConfig,
-  RecordRunEventInput,
-  RunConfig,
-  RuntimeSpec,
-  WorkerExecutionHandle,
+import {
+  userOwnerKey,
+  workspaceOwnerKey,
+  type AgentProviderConfig,
+  type RecordRunEventInput,
+  type RunPlacement,
+  type RuntimeHostContract,
+  type WorkerExecutionHandle,
+  type WorkerScope,
 } from "@agework/shared/protocol";
 import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
-import { RunDriver } from "../driver/run-driver";
-import {
-  type RunCliPaths,
-} from "../run.types";
+import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -35,7 +34,6 @@ import {
 } from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
-import { safePathPart } from "../../common/safe-path";
 import { RunStream } from "../streaming/run-stream";
 
 type SaveRun = (
@@ -53,9 +51,10 @@ export type StopActiveRun = (
 ) => Promise<boolean>;
 
 /**
- * 一次 run 的启动准备能力：解析 placement、组装 RunConfig、并发守卫、落库 run 记录、
- * 拉起 worker、注册 live handle。从 RunService 抽出的稳定子能力，只在 run 模块内部使用。
- * RunService.start 仅按顺序委托到本 provider，不持有这些组装/持久化细节。
+ * 一次 run 的启动准备能力：业务放置校验、并发守卫、落库 run 记录、提交执行面
+ * （RuntimeHostContract.submitRun）、注册 live handle。从 RunService 抽出的稳定
+ * 子能力，只在 run 模块内部使用。RunConfig 组装、CLI 路径、日志路径等执行机细节
+ * 归 Host 侧（契约实现），run 层从此看不见 worker/RunConfig。
  */
 @Injectable()
 export class RunLauncher {
@@ -64,8 +63,8 @@ export class RunLauncher {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly workerManager: WorkerManagerService,
-    private readonly driver: RunDriver,
+    @Inject(RUNTIME_HOST_CONTRACT)
+    private readonly runtimeHost: RuntimeHostContract,
     private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
@@ -90,21 +89,10 @@ export class RunLauncher {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
-    const targetRuntimeId = workspace.runtimeId;
-    const runtimeTarget = this.getPlacement({ workspace, userId });
-    const runtimeType = runtimeTarget.runtimeType;
-    const sandbox =
-      runtimeTarget.runtimeType !== "native" ? runtimeTarget.sandbox : undefined;
-    const runConfig = this.makeRunConfig({
-      agentProviderConfig,
-      placement: runtimeTarget,
-      workspaceId: workspace.workspaceId,
-      runId,
-      conversationId,
-      input: runInput,
-      runtimeType,
-      cliPaths: input.cliPaths,
-    });
+    const placement = this.buildPlacement({ workspace, userId });
+    const runtimeType = placement.isolation;
+    const isolationScope =
+      runtimeType !== "native" ? placement.scope : undefined;
     const stream = new RunStream(res);
 
     await this.claimRun({
@@ -128,51 +116,42 @@ export class RunLauncher {
     this.logger.log("run starting", {
       runId,
       conversationId,
-      workspaceId: runtimeTarget.workspaceId,
+      workspaceId: placement.workspaceId,
       agentType,
       runtimeType,
-      isolationScope: sandbox?.isolationScope,
+      isolationScope,
     });
 
     const runCreated = await this.createRun({
       runId,
       conversationId,
-      workspaceId: runtimeTarget.workspaceId,
+      workspaceId: placement.workspaceId,
       agentType,
       runtimeType,
-      isolationScope: sandbox?.isolationScope,
+      isolationScope,
       userMessageId,
       userId,
       stream,
     });
     if (!runCreated) return;
 
-    const runtimeHandle = await this.startWorker({
+    const runtimeHandle = await this.submitToHost({
       runId,
       conversationId,
-      runtimeType,
-      isolationScope: sandbox?.isolationScope,
-      runConfig,
-      runtimeTarget,
-      targetRuntimeId,
+      placement,
+      agentProviderConfig,
+      runInput,
       stream,
     });
     if (!runtimeHandle) return;
 
-    if (runtimeHandle.runtimeInstanceId) {
-      await this.persistRuntimeHandle(
-        runId,
-        runtimeHandle.runtimeType,
-        runtimeHandle.runtimeInstanceId
-      );
-    }
     this.registerRun({
       runId,
       conversationId,
+      workspaceId: placement.workspaceId,
       runtimeHandle,
       stream,
       aggregator,
-      runConfig,
       agentType,
       saveRun,
       onAgentSessionId,
@@ -181,167 +160,59 @@ export class RunLauncher {
   }
 
   /**
-   * 解析 placement:部署默认值在这里一次性补齐并校验,传给 runtime 的是已解析入参。
-   * Registered runtime 的 workspace(workspace.runtimeId 非空)跳过部署级
-   * allow-list 校验——那是 Managed 专属策略,与一台具体远程机器的能力无关;
-   * 这个 workspace 的 runtimeType/isolationScope 已在创建时对着该 Runtime
-   * 自己的注册类型/能力矩阵校验过(见 WorkspaceService.resolveRegisteredPlacement),
-   * 这里不用再查一遍部署允许列表。
+   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 Managed 专属策略,
+   * Registered runtime 的 workspace 跳过——它的 runtimeType/isolationScope 已在
+   * 创建时对着该 Runtime 自己的注册类型/能力矩阵校验过(见
+   * WorkspaceService.resolveRegisteredPlacement)。执行机路径/RunConfig 派生
+   * 不在这里:那是 Host 侧(契约实现)的职责。
    */
-  private getPlacement(input: {
+  private buildPlacement(input: {
     workspace: WorkspaceRunContext;
     userId: string;
-  }): RuntimeSpec {
+  }): RunPlacement {
     const { workspace, userId } = input;
     const isRegistered = workspace.runtimeSource !== "managed";
-    const requestedRuntimeType = workspace.runtimeType;
-    if (
-      !isRegistered &&
-      !this.configService.isRuntimeTypeAllowed(requestedRuntimeType)
-    ) {
+    const isolation = workspace.runtimeType;
+    if (!isRegistered && !this.configService.isRuntimeTypeAllowed(isolation)) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
-    // Registered 分支不查部署 allow-list,但 runtimeType 仍必须是三种已知值之一——
-    // 已在 workspace 创建时校验过(WorkspaceService.resolveRegisteredPlacement),
-    // 这里只是把 string 收窄回字面量联合类型,不是重新做策略判断。
-    if (!isRuntimeType(requestedRuntimeType)) {
-      throw new BadRequestException(
-        `工作空间的运行环境类型无效: ${requestedRuntimeType}`
-      );
-    }
-    const runtimeType = requestedRuntimeType;
-    const base = {
-      userId,
-      workspaceId: workspace.workspaceId,
-      workspaceRootPath: workspace.workspaceRootPath,
-      userWorkspaceRootPath: this.configService.getUserWorkspace(
-        workspace.username
-      ),
-      runtimeLogHostPath: this.readRuntimeLogHostPath(),
-    };
-    if (runtimeType === "native") {
-      return this.workerManager.resolveRuntimeSpec({
-        ...base,
-        runtimeType: "native",
-      });
+    if (!isRuntimeType(isolation)) {
+      throw new BadRequestException(`工作空间的运行环境类型无效: ${isolation}`);
     }
 
-    const requestedIsolationScope = workspace.isolationScope;
-    if (
-      !isRegistered &&
-      !this.configService.isIsolationScopeAllowed(requestedIsolationScope)
-    ) {
-      throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
-    }
-    if (
-      requestedIsolationScope !== "user" &&
-      requestedIsolationScope !== "workspace"
-    ) {
-      throw new BadRequestException(
-        `工作空间的隔离级别无效: ${requestedIsolationScope}`
-      );
-    }
-    return this.workerManager.resolveRuntimeSpec({
-      ...base,
-      runtimeType,
-      isolationScope: requestedIsolationScope,
-    });
-  }
-
-  /** 日志目录配置读取失败按启动入参问题返回 400,与 makeRunConfig 的组装错误语义一致。 */
-  private readRuntimeLogHostPath(): string {
-    try {
-      return this.configService.getRuntimeLogDir();
-    } catch (err) {
-      throw new BadRequestException(
-        err instanceof Error ? err.message : String(err)
-      );
-    }
-  }
-
-  private makeRunConfig(params: {
-    agentProviderConfig: AgentProviderConfig;
-    placement: RuntimeSpec;
-    workspaceId: string;
-    runId: string;
-    conversationId: string;
-    input: unknown;
-    runtimeType: string;
-    cliPaths?: RunCliPaths;
-  }): RunConfig {
-    const {
-      agentProviderConfig,
-      placement,
-      workspaceId,
-      runId,
-      conversationId,
-      input,
-      runtimeType,
-      cliPaths,
-    } = params;
-    try {
-      const logPaths = this.makeLogPaths(placement, conversationId);
-
-      // local 类型 CLI 路径由调用方（AgentService）参数喂入，不再直接依赖 RuntimeModule。
-      // container 不走此链路（镜像固定路径，经 env 注入，见 ADR-0004）。
-      let claudeExecutablePath: string | undefined;
-      let codexExecutablePath: string | undefined;
-      let opencodeExecutablePath: string | undefined;
-      if (runtimeType === "native" && cliPaths) {
-        claudeExecutablePath = cliPaths.claude;
-        codexExecutablePath = cliPaths.codex;
-        opencodeExecutablePath = cliPaths.opencode;
+    // native 无容器边界,scope 恒为 workspace(能力矩阵约束);sandbox 校验创建时的选择。
+    let scope: WorkerScope = "workspace";
+    if (isolation !== "native") {
+      const requestedIsolationScope = workspace.isolationScope;
+      if (
+        !isRegistered &&
+        !this.configService.isIsolationScopeAllowed(requestedIsolationScope)
+      ) {
+        throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
       }
-
-      return {
-        runId,
-        conversationId,
-        workspaceId,
-        runtimePath: placement.runtimePath,
-        env: {},
-        input,
-        agentProviderConfig,
-        agentEventTrace: buildAgentEventTraceConfig({
-          ...this.configService.getAgentEventTraceConfig(),
-          runId,
-          conversationId,
-          workspaceId,
-          agentType: agentProviderConfig.agentType,
-          ...logPaths,
-        }),
-        workerLogFilePath: logPaths.workerRuntimeFilePath,
-        ...(claudeExecutablePath ? { claudeExecutablePath } : {}),
-        ...(codexExecutablePath ? { codexExecutablePath } : {}),
-        ...(opencodeExecutablePath ? { opencodeExecutablePath } : {}),
-      };
-    } catch (err) {
-      throw new BadRequestException(
-        err instanceof Error ? err.message : String(err)
-      );
+      if (
+        requestedIsolationScope !== "user" &&
+        requestedIsolationScope !== "workspace"
+      ) {
+        throw new BadRequestException(
+          `工作空间的隔离级别无效: ${requestedIsolationScope}`
+        );
+      }
+      scope = requestedIsolationScope;
     }
-  }
-
-  private makeLogPaths(
-    placement: RuntimeSpec,
-    conversationId: string
-  ): RuntimeLogPaths {
-    const logDir = this.configService.getRuntimeLogDir();
-    const conversationFileName = safePathPart(conversationId);
-    const rawFileName = `${conversationFileName}.raw.jsonl`;
-    const aguiFileName = `${conversationFileName}.agui.jsonl`;
-    const workerFileName = `${conversationFileName}.worker.log`;
-    // 运行时侧路径基于 placement.runtimeLogDir(容器挂载点或宿主机目录由 placement
-    // 决定,run 层不再区分 sandbox/local)。统一 posix join:容器必然 linux,
-    // local 下 runtimeLogDir 即宿主机目录,服务端按 unix 运行时两者等价。
-    const runtimeLogDir = placement.runtimeLogDir;
 
     return {
-      logDir,
-      rawFilePath: join(logDir, rawFileName),
-      rawRuntimeFilePath: posix.join(runtimeLogDir, rawFileName),
-      aguiFilePath: join(logDir, aguiFileName),
-      aguiRuntimeFilePath: posix.join(runtimeLogDir, aguiFileName),
-      workerRuntimeFilePath: posix.join(runtimeLogDir, workerFileName),
+      owner:
+        scope === "user"
+          ? userOwnerKey(userId)
+          : workspaceOwnerKey(workspace.workspaceId),
+      scope,
+      isolation,
+      runtimeHostId: workspace.runtimeId,
+      workspaceId: workspace.workspaceId,
+      userId,
+      username: workspace.username,
+      workspacePath: workspace.workspaceRootPath,
     };
   }
 
@@ -385,10 +256,14 @@ export class RunLauncher {
     const { conversationId, userMessage, agentType, modelProviderId } = input;
     if (!userMessage) return;
 
-    await this.conversationService.saveUserMessage(conversationId, userMessage, {
-      agentType,
-      modelProviderId,
-    });
+    await this.conversationService.saveUserMessage(
+      conversationId,
+      userMessage,
+      {
+        agentType,
+        modelProviderId,
+      }
+    );
   }
 
   private makeSaveRun(input: {
@@ -501,26 +376,27 @@ export class RunLauncher {
     }
   }
 
-  private async startWorker(input: {
+  /**
+   * 把 run 提交给执行面（受理即返回，就绪/失败经上行事件流回流）。
+   * 受理失败（组装/配置问题在 submitRun 内同步暴露）按启动失败收尾。
+   */
+  private async submitToHost(input: {
     runId: string;
     conversationId: string;
-    runtimeType: string;
-    isolationScope?: string;
-    runConfig: RunConfig;
-    runtimeTarget: RuntimeSpec;
-    targetRuntimeId: string;
+    placement: RunPlacement;
+    agentProviderConfig: AgentProviderConfig;
+    runInput: unknown;
     stream: RunStream;
   }): Promise<WorkerExecutionHandle | null> {
     const {
       runId,
       conversationId,
-      runtimeType,
-      isolationScope,
-      runConfig,
-      runtimeTarget,
-      targetRuntimeId,
+      placement,
+      agentProviderConfig,
+      runInput,
       stream,
     } = input;
+    const runtimeType = placement.isolation;
 
     try {
       this.recordRunEvent(
@@ -528,17 +404,25 @@ export class RunLauncher {
           runId,
           status: "starting",
           runtimeType,
-          isolationScope,
+          isolationScope:
+            runtimeType !== "native" ? placement.scope : undefined,
         }),
         `record runtime starting for run ${runId}`
       );
-      return this.driver.start({
-        runConfig,
-        runtimeTarget,
-        targetRuntimeId,
-        onRuntimeInstanceIdReady: (runtimeInstanceId) =>
-          void this.persistRuntimeHandle(runId, runtimeType, runtimeInstanceId),
+      await this.runtimeHost.submitRun({
+        runId,
+        conversationId,
+        placement,
+        agentProviderConfig,
+        input: runInput,
       });
+      // 执行载体标识在就绪后经 upstream.notifyExecutionRef 回流落库,这里先注册空句柄。
+      return {
+        runId,
+        runtimeType,
+        runtimeInstanceId: "",
+        conversationId,
+      };
     } catch (err) {
       this.logger.error("start worker failed", {
         runId,
@@ -581,31 +465,6 @@ export class RunLauncher {
     }
   }
 
-  /**
-   * 落库 runtime handle 并记录 ready 事件。同步就绪(handle 自带 instanceId)与
-   * sandbox 异步回调两条路径共用;eventKey 保证重复记录幂等。
-   */
-  private async persistRuntimeHandle(
-    runId: string,
-    runtimeType: string,
-    runtimeInstanceId: string
-  ): Promise<void> {
-    await this.runRepository
-      .updateRuntimeHandle(runId, runtimeType, runtimeInstanceId)
-      .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
-    this.recordRunEvent(
-      this.runEvents.runtimeStatusChanged({
-        runId,
-        eventKey: `runtime:${runtimeInstanceId}:ready`,
-        status: "ready",
-        targetId: runtimeInstanceId,
-        runtimeType,
-        runtimeInstanceId,
-      }),
-      `record runtime ready for run ${runId}`
-    );
-  }
-
   /** best-effort 记录一条 run 事件:失败只打日志,不影响启动链路。 */
   private recordRunEvent(event: RecordRunEventInput, context: string): void {
     this.runEvents.append(event).catch(swallow(this.logger, context));
@@ -614,10 +473,10 @@ export class RunLauncher {
   private registerRun(input: {
     runId: string;
     conversationId: string;
+    workspaceId: string;
     runtimeHandle: WorkerExecutionHandle;
     stream: RunStream;
     aggregator: AssistantMessageAggregator;
-    runConfig: RunConfig;
     agentType: string;
     saveRun: SaveRun;
     onAgentSessionId: (sessionId: string) => void;
@@ -626,10 +485,10 @@ export class RunLauncher {
     const {
       runId,
       conversationId,
+      workspaceId,
       runtimeHandle,
       stream,
       aggregator,
-      runConfig,
       agentType,
       saveRun,
       onAgentSessionId,
@@ -642,9 +501,8 @@ export class RunLauncher {
       aggregator,
       conversationId,
       runId,
-      workspaceId: runConfig.workspaceId,
+      workspaceId,
       agentType,
-      agentEventTrace: runConfig.agentEventTrace,
       stopRequested: false,
       saveRun,
       onAgentSessionId,
@@ -665,45 +523,4 @@ export class RunLauncher {
       runtimeInstanceId: runtimeHandle.runtimeInstanceId,
     });
   }
-}
-
-type RuntimeLogPaths = {
-  logDir: string;
-  rawFilePath: string;
-  rawRuntimeFilePath: string;
-  aguiFilePath: string;
-  aguiRuntimeFilePath: string;
-  workerRuntimeFilePath: string;
-};
-
-// enabled 只控制 raw/agui 大 payload 是否落 JSONL 文件（"trace" 这里指完整证据，不是事件索引）。
-// DB 关键事件索引（RunEventService 写入的 RunEvent）与本开关无关，始终记录，关闭本开关后 run
-// 仍可在管理端看到事件摘要，只是看不到完整 raw/agui payload 原文。开关与上限由 ConfigService 提供。
-function buildAgentEventTraceConfig(input: {
-  enabled: boolean;
-  maxFileMb: number;
-  runId: string;
-  conversationId: string;
-  workspaceId: string;
-  agentType: string;
-  logDir: string;
-  rawFilePath: string;
-  rawRuntimeFilePath: string;
-  aguiFilePath: string;
-  aguiRuntimeFilePath: string;
-}) {
-  const { enabled } = input;
-  return {
-    enabled,
-    logDir: enabled ? input.logDir : undefined,
-    rawFilePath: enabled ? input.rawFilePath : undefined,
-    rawRuntimeFilePath: enabled ? input.rawRuntimeFilePath : undefined,
-    aguiFilePath: enabled ? input.aguiFilePath : undefined,
-    aguiRuntimeFilePath: enabled ? input.aguiRuntimeFilePath : undefined,
-    maxFileMb: input.maxFileMb,
-    runId: input.runId,
-    conversationId: input.conversationId,
-    workspaceId: input.workspaceId,
-    agentType: input.agentType,
-  };
 }

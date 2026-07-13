@@ -3,13 +3,11 @@ import type { AgentProviderConfig } from "@agework/shared/protocol";
 import type { AssistantUserMessage } from "../conversation/conversation.types";
 import type { WorkspaceRunContext } from "../workspace/workspace.types";
 
-/** Local runtime 的 CLI 可执行文件路径。 */
-export type RunCliPaths = { claude?: string; codex?: string; opencode?: string };
-
 /**
  * RunService.start 的唯一入参：意图级。agent 层只负责把请求翻成它——
- * placement 解析、RunConfig 组装、并发守卫、消息持久化、aggregator/saveRun、
- * 启动 worker 等全部由 RunService 内部完成。
+ * placement 解析、并发守卫、消息持久化、aggregator/saveRun、提交执行面等
+ * 全部由 RunService 内部完成。CLI 路径等执行机细节由 Runtime Host 侧合成，
+ * 不再经这里传递（目标架构 §4.2 字段级决策）。
  */
 export type StartRunInput = {
   runId: string;
@@ -25,8 +23,4 @@ export type StartRunInput = {
   userMessageId?: string;
   res: Response;
   interruptReason?: "user_steered";
-  /** Local runtime 的 CLI 路径（由 AgentService 在调用方解析好传入）。*/
-  cliPaths?: RunCliPaths;
 };
-
-

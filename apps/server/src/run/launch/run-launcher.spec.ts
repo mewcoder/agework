@@ -1,71 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunLauncher, type StopActiveRun } from "./run-launcher";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
-import { RunDriver } from "../driver/run-driver";
 import type { ConversationService } from "../../conversation/conversation.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
-import type { RuntimeSpec } from "@agework/shared/protocol";
-import { CONTAINER_RUNTIME_LOG_DIR } from "../../config/registry/defaults";
-
-const RUNTIME_LOG_DIR = "/tmp/agework-logs/runtime";
-
-function makePlacement(runtimeType: "native" | "docker"): RuntimeSpec {
-  const common = {
-    userId: "user-1",
-    workspaceId: "ws-1",
-    hostPath: "/tmp/ws",
-    ownerId: "ws-1",
-  };
-  if (runtimeType === "native") {
-    return {
-      ...common,
-      runtimeType: "native",
-      runtimePath: "/tmp/ws",
-      runtimeLogDir: RUNTIME_LOG_DIR,
-    };
-  }
-  return {
-    ...common,
-    runtimeType: "docker",
-    runtimePath: "/workspace",
-    runtimeLogDir: CONTAINER_RUNTIME_LOG_DIR,
-    sandbox: {
-      isolationScope: "workspace",
-      mountTarget: "/workspace",
-    },
-  };
-}
-
-function makeRuntimeSpec(placement = makePlacement("native")): RuntimeSpec {
-  return {
-    ...placement,
-    ownerId:
-      placement.runtimeType !== "native" &&
-      placement.sandbox.isolationScope === "user"
-        ? placement.userId
-        : placement.workspaceId,
-  };
-}
-
-const AGENT_EVENT_TRACE = {
-  enabled: true,
-  logDir: RUNTIME_LOG_DIR,
-  rawFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-  rawRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-  aguiFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
-  aguiRuntimeFilePath: `${RUNTIME_LOG_DIR}/conversation-1.agui.jsonl`,
-  maxFileMb: 5,
-  runId: "run-1",
-  conversationId: "conversation-1",
-  workspaceId: "ws-1",
-  agentType: "claude",
-};
 
 function makeWorkspaceView(
   overrides: Partial<WorkspaceRunContext> = {}
@@ -86,8 +29,7 @@ describe("RunLauncher", () => {
   let launcher: RunLauncher;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
-  let mockWorkerManager: Partial<WorkerManagerService>;
-  let mockExecutor: Partial<RunDriver>;
+  let mockRuntimeHost: Partial<RuntimeHostContract>;
   let mockConversationEffects: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
@@ -144,20 +86,8 @@ describe("RunLauncher", () => {
       unregister: vi.fn(),
       get: vi.fn().mockReturnValue(undefined),
     };
-    mockWorkerManager = {
-      resolveRuntimeSpec: vi
-        .fn()
-        .mockReturnValue(makeRuntimeSpec(makePlacement("native"))),
-    };
-    mockExecutor = {
-      start: vi.fn().mockReturnValue({
-        runId: "run-1",
-        runtimeType: "native",
-        runtimeInstanceId: "1:token",
-      }),
-      sendCommand: vi.fn(),
-      cancel: vi.fn(),
-      cleanup: vi.fn(),
+    mockRuntimeHost = {
+      submitRun: vi.fn().mockResolvedValue(undefined),
     };
     mockConversationEffects = {
       activateConversation: vi.fn().mockResolvedValue(true),
@@ -177,17 +107,11 @@ describe("RunLauncher", () => {
         t === "native" || t === "docker",
       isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
-      getUserWorkspace: vi.fn().mockReturnValue("/root-user"),
-      getRuntimeLogDir: vi.fn().mockReturnValue(RUNTIME_LOG_DIR),
-      getAgentEventTraceConfig: vi
-        .fn()
-        .mockReturnValue({ enabled: true, maxFileMb: 5 }),
     };
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
-      mockWorkerManager as WorkerManagerService,
-      mockExecutor as RunDriver,
+      mockRuntimeHost as RuntimeHostContract,
       mockConversationEffects as ConversationService,
       mockRunEvents,
       mockConfigService as ConfigService
@@ -198,45 +122,35 @@ describe("RunLauncher", () => {
     vi.unstubAllEnvs();
   });
 
-  it("resolves placement, creates run, starts the worker and registers the handle", async () => {
+  it("builds placement, creates run, submits to the host and registers the handle", async () => {
     const res = makeRes();
     await launch(makeStartInput({ res }));
 
-    expect(mockWorkerManager.resolveRuntimeSpec).toHaveBeenCalledWith(
-      expect.objectContaining({ workspaceId: "ws-1", runtimeType: "native" })
-    );
     expect(mockRunRepository.create).toHaveBeenCalledWith({
       id: "run-1",
       conversationId: "conversation-1",
       agentType: "claude",
       runtimeType: "native",
     });
-    expect(mockExecutor.start).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runConfig: expect.objectContaining({ runId: "run-1" }),
-        runtimeTarget: expect.objectContaining({
-          runtimeType: "native",
-          ownerId: "ws-1",
-        }),
-      })
-    );
-    expect(mockExecutor.start).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runConfig: expect.objectContaining({
-          runId: "run-1",
-          conversationId: "conversation-1",
-          workspaceId: "ws-1",
-          runtimePath: "/tmp/ws",
-          input: { messages: [{ id: "msg-1" }] },
-          agentProviderConfig: expect.objectContaining({
-            agentType: "claude",
-            source: "system",
-          }),
-          agentEventTrace: AGENT_EVENT_TRACE,
-          workerLogFilePath: `${RUNTIME_LOG_DIR}/conversation-1.worker.log`,
-        }),
-      })
-    );
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      placement: {
+        owner: "workspace:ws-1",
+        scope: "workspace",
+        isolation: "native",
+        runtimeHostId: "managed-native",
+        workspaceId: "ws-1",
+        userId: "user-1",
+        username: "admin-1",
+        workspacePath: "/tmp/ws",
+      },
+      agentProviderConfig: expect.objectContaining({
+        agentType: "claude",
+        source: "system",
+      }),
+      input: { messages: [{ id: "msg-1" }] },
+    });
     expect(mockLiveRunRegistry.register).toHaveBeenCalledWith(
       "run-1",
       expect.objectContaining({
@@ -244,20 +158,40 @@ describe("RunLauncher", () => {
         conversationId: "conversation-1",
         workspaceId: "ws-1",
         agentType: "claude",
-        agentEventTrace: AGENT_EVENT_TRACE,
+        runtimeHandle: expect.objectContaining({
+          runId: "run-1",
+          runtimeType: "native",
+          runtimeInstanceId: "",
+        }),
         stream: expect.objectContaining({}),
       })
-    );
-    expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
-      "run-1",
-      "native",
-      "1:token"
     );
     const registered = (
       mockLiveRunRegistry.register as ReturnType<typeof vi.fn>
     ).mock.calls[0][1];
     expect(typeof registered.saveRun).toBe("function");
     expect(typeof registered.onAgentSessionId).toBe("function");
+  });
+
+  it("derives a user-scope owner key for user-isolated sandbox workspaces", async () => {
+    await launch(
+      makeStartInput({
+        workspace: makeWorkspaceView({
+          runtimeType: "docker",
+          isolationScope: "user",
+        }),
+      })
+    );
+
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: expect.objectContaining({
+          owner: "user:user-1",
+          scope: "user",
+          isolation: "docker",
+        }),
+      })
+    );
   });
 
   it("marks the conversation running before starting", async () => {
@@ -288,14 +222,7 @@ describe("RunLauncher", () => {
       _t: string
     ): _t is "native" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
-    expect(mockWorkerManager.resolveRuntimeSpec).not.toHaveBeenCalled();
-  });
-
-  it("wraps RunConfig assembly errors as BadRequestException", async () => {
-    mockConfigService.getRuntimeLogDir = vi.fn().mockImplementation(() => {
-      throw new Error("模型服务不可用");
-    });
-    await expect(launch()).rejects.toThrow(BadRequestException);
+    expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
   });
 
   it("attaches the accepted user message to the created run", async () => {
@@ -313,64 +240,23 @@ describe("RunLauncher", () => {
       })
     );
   });
-  it("continues starting the worker when audit event recording fails", async () => {
+
+  it("continues submitting when audit event recording fails", async () => {
     mockRunEvents.append = vi.fn().mockRejectedValue(new Error("SQLITE_BUSY"));
     const res = makeRes();
 
     await launch(makeStartInput({ res }));
 
-    expect(mockExecutor.start).toHaveBeenCalled();
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalled();
     expect(mockLiveRunRegistry.register).toHaveBeenCalled();
     expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(res.write).not.toHaveBeenCalled();
   });
 
-  it("persists the runtime handle once a docker provider resolves the container id asynchronously", async () => {
-    // placement.runtimeType=docker，runtimeInstanceId 由 container provider 异步解析
-    mockWorkerManager.resolveRuntimeSpec = vi
+  it("rolls back on submit failure", async () => {
+    mockRuntimeHost.submitRun = vi
       .fn()
-      .mockReturnValue(makeRuntimeSpec(makePlacement("docker")));
-    mockExecutor.start = vi
-      .fn()
-      .mockImplementation(({ onRuntimeInstanceIdReady }) => {
-        const handle = {
-          runId: "run-1",
-          runtimeType: "docker",
-          runtimeInstanceId: "",
-          conversationId: "conversation-1",
-        };
-        queueMicrotask(() => onRuntimeInstanceIdReady?.("container-abc"));
-        return handle;
-      });
-    await launch(
-      makeStartInput({
-        workspace: makeWorkspaceView({ runtimeType: "docker" }),
-      })
-    );
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
-
-    expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
-      "run-1",
-      "docker",
-      "container-abc"
-    );
-    expect(mockExecutor.start).toHaveBeenCalledWith(
-      expect.objectContaining({
-        runConfig: expect.objectContaining({
-          runtimePath: "/workspace",
-          agentEventTrace: expect.objectContaining({
-            rawRuntimeFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.raw.jsonl`,
-          }),
-          workerLogFilePath: `${CONTAINER_RUNTIME_LOG_DIR}/conversation-1.worker.log`,
-        }),
-      })
-    );
-  });
-
-  it("rolls back on worker start failure", async () => {
-    mockExecutor.start = vi.fn().mockImplementation(() => {
-      throw new Error("spawn failed");
-    });
+      .mockRejectedValue(new Error("spawn failed"));
     const res = makeRes();
 
     await launch(makeStartInput({ res }));

@@ -8,7 +8,6 @@ import type {
 import { ConversationService } from "../conversation/conversation.service";
 import type { JwtUser } from "../auth/auth.types";
 import { RunService } from "../run/run.service";
-import type { RunCliPaths } from "../run/run.types";
 import { WorkspaceService } from "../workspace/workspace.service";
 import type { AgentRunRequestDto } from "./dto/agent-run.dto";
 import type { CreateConversationDto } from "./dto/create-conversation.dto";
@@ -17,7 +16,6 @@ import {
   getAgentOptionsByType,
 } from "./options/agent-options";
 import { ModelProviderService } from "../model-provider/model-provider.service";
-import { RuntimeService } from "../runtime/runtime.service";
 import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
 
 type AgentRunUserMessage = NonNullable<AgentRunRequestDto["messages"]>[number];
@@ -36,8 +34,7 @@ export class AgentService {
     private readonly runService: RunService,
     private readonly modelProviderService: ModelProviderService,
     private readonly workspaceService: WorkspaceService,
-    private readonly runtimeService: RuntimeService,
-    private readonly skillsScanner: AgentSkillsScanner,
+    private readonly skillsScanner: AgentSkillsScanner
   ) {}
 
   /** 返回各 agent 类型的入口可选项(权限模式等),供前端入口展示。 */
@@ -50,11 +47,7 @@ export class AgentService {
    * SlashCommandItem 列表。不经过 agent，不需要 run。
    * runtime 不可达或目录不存在时返回空数组。
    */
-  async getSkills(
-    userId: string,
-    workspaceId: string,
-    agentType: string,
-  ) {
+  async getSkills(userId: string, workspaceId: string, agentType: string) {
     const list = await this.skillsScanner.scan(userId, workspaceId, agentType);
     return { list };
   }
@@ -183,20 +176,6 @@ export class AgentService {
         err instanceof Error ? err.message : String(err)
       );
     }
-    // Resolve CLI paths for native runtime (parameter feeding: RunModule should not depend on RuntimeModule)
-    let cliPaths: RunCliPaths | undefined;
-    if (workspace.runtimeType === "native") {
-      const resolved = await this.runtimeService.getResolvedCliPaths(
-        workspace.runtimeId
-      );
-      if (resolved) {
-        cliPaths = {};
-        if (resolved.claude) cliPaths.claude = resolved.claude;
-        if (resolved.codex) cliPaths.codex = resolved.codex;
-        if (resolved.opencode) cliPaths.opencode = resolved.opencode;
-      }
-    }
-
     await this.runService.start({
       runId,
       conversationId,
@@ -209,7 +188,6 @@ export class AgentService {
       userMessageId,
       res,
       interruptReason,
-      cliPaths,
     });
   }
 

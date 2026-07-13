@@ -5,7 +5,6 @@ import { ConversationService } from "../conversation/conversation.service";
 import { RunService } from "../run/run.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { WorkspaceService } from "../workspace/workspace.service";
-import { RuntimeService } from "../runtime/runtime.service";
 import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
 import type { Response } from "express";
 import type { JwtUser } from "../auth/auth.types";
@@ -17,7 +16,6 @@ describe("AgentService", () => {
   let mockRunService: Partial<RunService>;
   let mockModelProviderService: Partial<ModelProviderService>;
   let mockWorkspaceService: Partial<WorkspaceService>;
-  let mockRuntimeService: Partial<RuntimeService>;
   let mockSkillsScanner: Partial<AgentSkillsScanner>;
   let res: Partial<Response>;
   let user: JwtUser;
@@ -51,12 +49,6 @@ describe("AgentService", () => {
         username: "mew",
       }),
     };
-    mockRuntimeService = {
-      getResolvedCliPaths: vi.fn().mockResolvedValue({
-        claude: "/usr/local/bin/claude",
-        codex: null,
-      }),
-    };
     mockSkillsScanner = {
       scan: vi.fn().mockResolvedValue([]),
     };
@@ -74,7 +66,6 @@ describe("AgentService", () => {
       mockRunService as RunService,
       mockModelProviderService as ModelProviderService,
       mockWorkspaceService as WorkspaceService,
-      mockRuntimeService as RuntimeService,
       mockSkillsScanner as AgentSkillsScanner
     );
   });
@@ -149,7 +140,6 @@ describe("AgentService", () => {
     expect(startArgs.modelProviderId).toBe("mc-1");
     expect(startArgs.workspace.workspaceId).toBe("proj-1");
     expect(startArgs.userMessageId).toBe("msg-1");
-    expect(startArgs.cliPaths).toEqual({ claude: "/usr/local/bin/claude" });
     expect(startArgs.agentProviderConfig).toEqual(
       expect.objectContaining({ agentType: "claude", source: "system" })
     );

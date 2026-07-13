@@ -9,7 +9,7 @@ import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import type { ConfigService } from "../../config/config.service";
-import type { RunDriver } from "../driver/run-driver";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunStream } from "../streaming/run-stream";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
@@ -40,7 +40,7 @@ describe("WorkerEventService", () => {
   let mockRunRepository: Partial<RunRepository>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
-  let mockExecutor: Partial<RunDriver>;
+  let mockRuntimeHost: Partial<RuntimeHostContract>;
   let runStatusService: RunStatusService;
   let seqGate: WorkerSeqStore;
 
@@ -53,6 +53,7 @@ describe("WorkerEventService", () => {
       markRequiresAction: vi.fn().mockResolvedValue(undefined),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
       recordUsage: vi.fn().mockResolvedValue(undefined),
+      updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
 
     mockConversations = {
@@ -63,9 +64,9 @@ describe("WorkerEventService", () => {
     mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
-    mockExecutor = {
-      cleanup: vi.fn(),
-      terminateExecution: vi.fn(),
+    mockRuntimeHost = {
+      releaseRun: vi.fn(),
+      setUpstream: vi.fn(),
     };
 
     liveRuns = new LiveRunRegistry(makeConfig());
@@ -88,10 +89,10 @@ describe("WorkerEventService", () => {
       liveRuns,
       mockRunEvents,
       runStatusService,
-      mockExecutor as RunDriver,
       aguiEvents,
       seqGate,
-      { setUpstreamPort: vi.fn() } as never
+      mockRunRepository as RunRepository,
+      mockRuntimeHost as RuntimeHostContract
     );
   });
 
@@ -99,7 +100,7 @@ describe("WorkerEventService", () => {
     expect(workerEventsService).toBeDefined();
   });
 
-  it("sendEvent delegates to publish", async () => {
+  it("emit delegates to publish", async () => {
     const publish = vi
       .spyOn(workerEventsService, "publish")
       .mockResolvedValue(undefined);
@@ -111,12 +112,12 @@ describe("WorkerEventService", () => {
       ts: new Date().toISOString(),
     };
 
-    await workerEventsService.sendEvent("run-1", message);
+    await workerEventsService.emit("run-1", message);
 
     expect(publish).toHaveBeenCalledWith(message);
   });
 
-  it("sendEvent cleans up execution on terminal run status", async () => {
+  it("emit releases the run on terminal run status", async () => {
     const runtimeHandle = {
       runId: "run-1",
       runtimeType: "native",
@@ -135,7 +136,7 @@ describe("WorkerEventService", () => {
       saveRun: vi.fn(),
     });
 
-    await workerEventsService.sendEvent("run-1", {
+    await workerEventsService.emit("run-1", {
       runId: "run-1",
       seq: 1,
       type: "run.status",
@@ -143,21 +144,23 @@ describe("WorkerEventService", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockExecutor.cleanup).toHaveBeenCalledWith(runtimeHandle.runId);
+    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(
+      runtimeHandle.runId
+    );
   });
 
-  it("notifyWorkerError skips when run already terminal/finalizing", async () => {
+  it("notifyRunFailed skips when run already terminal/finalizing", async () => {
     vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
       true
     );
     const forceErrorStatus = vi.spyOn(workerEventsService, "forceErrorStatus");
 
-    await workerEventsService.notifyWorkerError("run-1", "crashed");
+    await workerEventsService.notifyRunFailed("run-1", "crashed");
 
     expect(forceErrorStatus).not.toHaveBeenCalled();
   });
 
-  it("notifyWorkerError forces error status when run not terminal", async () => {
+  it("notifyRunFailed forces error status when run not terminal", async () => {
     vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
       false
     );
@@ -165,14 +168,14 @@ describe("WorkerEventService", () => {
       .spyOn(workerEventsService, "forceErrorStatus")
       .mockResolvedValue(undefined);
 
-    await workerEventsService.notifyWorkerError("run-1", "crashed");
+    await workerEventsService.notifyRunFailed("run-1", "crashed");
 
     expect(forceErrorStatus).toHaveBeenCalledWith("run-1", "crashed");
   });
 
-  it("notifyWorkerLost delegates to notifyWorkerError (fence terminates via the same terminal-status path)", async () => {
-    const notifyWorkerError = vi
-      .spyOn(workerEventsService, "notifyWorkerError")
+  it("notifyWorkerLost delegates to notifyRunFailed (fence terminates via the same terminal-status path)", async () => {
+    const notifyRunFailed = vi
+      .spyOn(workerEventsService, "notifyRunFailed")
       .mockResolvedValue(undefined);
 
     await workerEventsService.notifyWorkerLost(
@@ -180,7 +183,7 @@ describe("WorkerEventService", () => {
       "worker heartbeat timeout"
     );
 
-    expect(notifyWorkerError).toHaveBeenCalledWith(
+    expect(notifyRunFailed).toHaveBeenCalledWith(
       "run-1",
       "worker heartbeat timeout"
     );
@@ -195,7 +198,7 @@ describe("WorkerEventService", () => {
     );
   });
 
-  it("notifyCancelledBeforeReady forces cancelled when run not terminal", async () => {
+  it("notifyRunCancelled forces cancelled when run not terminal", async () => {
     vi.spyOn(workerEventsService, "isTerminalOrFinalizing").mockReturnValue(
       false
     );
@@ -203,9 +206,48 @@ describe("WorkerEventService", () => {
       .spyOn(workerEventsService, "forceCancelledStatus")
       .mockResolvedValue(undefined);
 
-    await workerEventsService.notifyCancelledBeforeReady("run-1");
+    await workerEventsService.notifyRunCancelled("run-1");
 
     expect(forceCancelledStatus).toHaveBeenCalledWith("run-1");
+  });
+
+  it("notifyExecutionRef persists the handle, records ready and syncs the live handle", async () => {
+    const runtimeHandle = {
+      runId: "run-1",
+      runtimeType: "docker",
+      runtimeInstanceId: "",
+      conversationId: "conversation-1",
+    };
+    liveRuns.register("run-1", {
+      runtimeHandle,
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: { handle: vi.fn() } as any,
+      stopRequested: false,
+      saveRun: vi.fn(),
+    });
+
+    workerEventsService.notifyExecutionRef("run-1", {
+      runtimeType: "docker",
+      runtimeInstanceId: "container-abc",
+    });
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+
+    expect(runtimeHandle.runtimeInstanceId).toBe("container-abc");
+    expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
+      "run-1",
+      "docker",
+      "container-abc"
+    );
+    expect(mockRunEvents.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventKey: "runtime:container-abc:ready",
+        type: "runtime.status_changed",
+      })
+    );
   });
 
   it("should deduplicate messages by seq", async () => {
@@ -272,7 +314,7 @@ describe("WorkerEventService", () => {
     );
   });
 
-  it("markRunTimedOut marks error and terminates the execution session", async () => {
+  it("markRunTimedOut marks error and releases the run", async () => {
     const runtimeHandle = {
       runId: "run-1",
       runtimeType: "native",
@@ -286,9 +328,8 @@ describe("WorkerEventService", () => {
       "run-1",
       "run timeout"
     );
-    expect(mockExecutor.terminateExecution).toHaveBeenCalledWith(
-      runtimeHandle.runId,
-      "run timeout"
+    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(
+      runtimeHandle.runId
     );
   });
 
@@ -410,7 +451,7 @@ describe("WorkerEventService", () => {
     expect(workerEventsService.isTerminalOrFinalizing("run-1")).toBe(true);
     expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
 
-    await workerEventsService.notifyWorkerError("run-1", "late crash");
+    await workerEventsService.notifyRunFailed("run-1", "late crash");
     expect(mockRunRepository.markError).not.toHaveBeenCalled();
   });
 
@@ -541,16 +582,6 @@ describe("WorkerEventService", () => {
 
   it("processes AG-UI events when the worker owns runtime trace files", async () => {
     const aggregator = { handle: vi.fn() };
-    const traceConfig = {
-      enabled: true,
-      rawFilePath: "/tmp/conversation-1.raw.jsonl",
-      aguiFilePath: "/tmp/conversation-1.agui.jsonl",
-      aguiRuntimeFilePath: "/tmp/conversation-1.agui.jsonl",
-      runId: "run-1",
-      conversationId: "conversation-1",
-      workspaceId: "ws-1",
-      agentType: "claude",
-    };
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
@@ -562,7 +593,6 @@ describe("WorkerEventService", () => {
       conversationId: "conversation-1",
       workspaceId: "ws-1",
       agentType: "claude",
-      agentEventTrace: traceConfig,
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,

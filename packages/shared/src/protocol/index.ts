@@ -78,6 +78,24 @@ export type {
   SandboxRuntimeSpec,
   SandboxPlacementInfo,
 } from "./channel";
+export {
+  workspaceOwnerKey,
+  userOwnerKey,
+  workerKey,
+  parseOwnerKey,
+} from "./runtime-host";
+export type {
+  WorkerScope,
+  Isolation,
+  OwnerKey,
+  WorkerKey,
+  RunPlacement,
+  SubmitRunInput,
+  ExecutionRef,
+  WorkerSnapshot,
+  RuntimeHostContract,
+  RuntimeHostUpstream,
+} from "./runtime-host";
 export type {
   RpcBatch,
   RpcError,

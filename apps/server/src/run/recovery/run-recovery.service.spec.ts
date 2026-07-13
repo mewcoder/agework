@@ -1,21 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRecoveryService } from "./run-recovery.service";
 import { RunRepository } from "../run.repository";
 import type { ConversationService } from "../../conversation/conversation.service";
-import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
 
-function makeWorkerManager(
+function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
-): Partial<WorkerManagerService> {
+): Partial<RuntimeHostContract> {
   return {
-    findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
-    sendCommand: vi.fn(),
+    sendRecoveryCancel: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
 
 describe("RunRecoveryService.failInterruptedRuns", () => {
-  it("sends a cancel command to the bound instance instead of tearing it down", async () => {
+  it("sends a recovery cancel through the contract instead of tearing the instance down", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
@@ -30,31 +29,21 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
-    const workerManager = makeWorkerManager({
-      findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
-    });
+    const runtimeHost = makeRuntimeHost();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationEffects as unknown as ConversationService,
-      workerManager as WorkerManagerService
+      runtimeHost as RuntimeHostContract
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerManager.findRuntimeByRuntimeId).toHaveBeenCalledWith(
-      "sandbox",
-      "container-abc"
-    );
-    expect(workerManager.sendCommand).toHaveBeenCalledWith(
-      "ws-1",
-      "run-1",
-      expect.objectContaining({
-        type: "cancel",
-        runId: "run-1",
-        conversationId: "conversation-1",
-      })
-    );
+    expect(runtimeHost.sendRecoveryCancel).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      ref: { runtimeType: "sandbox", runtimeInstanceId: "container-abc" },
+    });
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -64,7 +53,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 
-  it("skips sending a cancel command when a run has no persisted runtimeInstanceId", async () => {
+  it("skips the recovery cancel when a run has no persisted runtimeInstanceId", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
@@ -79,25 +68,24 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
-    const workerManager = makeWorkerManager();
+    const runtimeHost = makeRuntimeHost();
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationEffects as unknown as ConversationService,
-      workerManager as WorkerManagerService
+      runtimeHost as RuntimeHostContract
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerManager.findRuntimeByRuntimeId).not.toHaveBeenCalled();
-    expect(workerManager.sendCommand).not.toHaveBeenCalled();
+    expect(runtimeHost.sendRecoveryCancel).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
     );
   });
 
-  it("skips sending a cancel command when no WorkerRegistry row is found for the instance", async () => {
+  it("still marks the run as error when the recovery cancel rejects", async () => {
     const mockRunRepository: Partial<RunRepository> = {
       findAllActive: vi.fn().mockResolvedValue([
         {
@@ -112,59 +100,18 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     const mockConversationEffects: Partial<ConversationService> = {
       setConversationRunState: vi.fn().mockResolvedValue(undefined),
     };
-    const workerManager = makeWorkerManager({
-      findRuntimeByRuntimeId: vi.fn().mockResolvedValue(null),
+    const runtimeHost = makeRuntimeHost({
+      sendRecoveryCancel: vi.fn().mockRejectedValue(new Error("boom")),
     });
 
     const service = new RunRecoveryService(
       mockRunRepository as RunRepository,
       mockConversationEffects as unknown as ConversationService,
-      workerManager as WorkerManagerService
+      runtimeHost as RuntimeHostContract
     );
 
     await service.failInterruptedRuns();
 
-    expect(workerManager.findRuntimeByRuntimeId).toHaveBeenCalledWith(
-      "sandbox",
-      "container-xyz"
-    );
-    expect(workerManager.sendCommand).not.toHaveBeenCalled();
-    expect(mockRunRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "服务重启导致运行中断"
-    );
-  });
-
-  it("skips the cancel command for a local runtime even when an instance is bound (lifecycle already reaped it)", async () => {
-    const mockRunRepository: Partial<RunRepository> = {
-      findAllActive: vi.fn().mockResolvedValue([
-        {
-          id: "run-1",
-          conversationId: "conversation-1",
-          runtimeType: "native",
-          runtimeInstanceId: "4242:token",
-        },
-      ]),
-      markError: vi.fn().mockResolvedValue(undefined),
-    };
-    const mockConversationEffects: Partial<ConversationService> = {
-      setConversationRunState: vi.fn().mockResolvedValue(undefined),
-    };
-    const workerManager = makeWorkerManager({
-      findRuntimeByRuntimeId: vi.fn().mockResolvedValue({ ownerId: "ws-1" }),
-    });
-
-    const service = new RunRecoveryService(
-      mockRunRepository as RunRepository,
-      mockConversationEffects as unknown as ConversationService,
-      workerManager as WorkerManagerService
-    );
-
-    await service.failInterruptedRuns();
-
-    // local 分支在查 WorkerRegistry 之前就早退,连 findRuntimeByRuntimeId 都不该调。
-    expect(workerManager.findRuntimeByRuntimeId).not.toHaveBeenCalled();
-    expect(workerManager.sendCommand).not.toHaveBeenCalled();
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"

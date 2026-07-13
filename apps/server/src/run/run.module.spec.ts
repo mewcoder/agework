@@ -10,10 +10,9 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
-import { RunDriver } from "./driver/run-driver";
 import { RunService } from "./run.service";
 import { WorkerEventService } from "./upstream/worker-event.service";
-import { WorkerManagerService } from "../worker-manager/worker-manager.service";
+import { RuntimeHostAdapter } from "../worker-manager/contract/runtime-host.adapter";
 import { RunModule } from "./run.module";
 
 const MOCK_CONVERSATION_SERVICE = {
@@ -46,25 +45,21 @@ describe("RunModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("compiles, resolves run executor tokens, and self-wires the reverse ports on init", async () => {
+  it("compiles, resolves the runtime host contract, and self-wires the upstream on init", async () => {
     ({ testingModule, runRecovery } = await createRunsTestingModule([
       RunModule,
     ]));
 
-    const runDriver = testingModule.get(RunDriver);
-    expect(runDriver).toBeInstanceOf(RunDriver);
     expect(testingModule.get(RunService)).toBeInstanceOf(RunService);
 
-    const setRunEventPort = vi.spyOn(runDriver, "setRunEventPort");
-    const workerManager = testingModule.get(WorkerManagerService);
-    const setUpstreamPort = vi.spyOn(workerManager, "setUpstreamPort");
+    const adapter = testingModule.get(RuntimeHostAdapter);
+    const setUpstream = vi.spyOn(adapter, "setUpstream");
     const liveRuns = testingModule.get(LiveRunRegistry);
     const setTimeoutErrorPort = vi.spyOn(liveRuns, "setTimeoutErrorPort");
     await testingModule.init();
 
     const workerEvents = testingModule.get(WorkerEventService);
-    expect(setRunEventPort).toHaveBeenCalledWith(workerEvents);
-    expect(setUpstreamPort).toHaveBeenCalledWith(workerEvents);
+    expect(setUpstream).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorPort).toHaveBeenCalledWith(workerEvents);
     // run 自身在 onApplicationBootstrap 触发一次性重启恢复
     expect(runRecovery.failInterruptedRuns).toHaveBeenCalledTimes(1);

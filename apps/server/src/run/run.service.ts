@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   type OnApplicationBootstrap,
@@ -8,10 +9,10 @@ import {
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import { swallow } from "../common/swallow";
+import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RunDriver } from "./driver/run-driver";
-import { WorkerManagerService } from "../worker-manager/worker-manager.service";
+import { RUNTIME_HOST_CONTRACT } from "../worker-manager/worker-manager.types";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
@@ -28,11 +29,11 @@ export class RunService implements OnApplicationBootstrap {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    private readonly driver: RunDriver,
+    @Inject(RUNTIME_HOST_CONTRACT)
+    private readonly runtimeHost: RuntimeHostContract,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
     private readonly runLauncher: RunLauncher,
-    private readonly workerManager: WorkerManagerService,
     private readonly runRecovery: RunRecoveryService
   ) {}
 
@@ -51,14 +52,14 @@ export class RunService implements OnApplicationBootstrap {
     return this.runRepository.listAdmin(params);
   }
 
-  /** 管理端：单个 run 详情；runtime 实例视图经 WorkerManagerService 补齐。 */
+  /** 管理端：单个 run 详情；worker 快照经执行面契约的观测口补齐。 */
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const workerInstance = detail.runtimeInstanceId
-      ? await this.workerManager.getWorkerInstanceForAdmin(
-          detail.runtimeType,
-          detail.runtimeInstanceId
-        )
+      ? await this.runtimeHost.getWorkerSnapshotForAdmin({
+          runtimeType: detail.runtimeType,
+          runtimeInstanceId: detail.runtimeInstanceId,
+        })
       : null;
     return { ...detail, workerInstance };
   }
@@ -154,14 +155,14 @@ export class RunService implements OnApplicationBootstrap {
       }
     });
 
-    this.driver.sendCommand(handle.runtimeHandle, {
+    const runId = handle.runtimeHandle.runId;
+    await this.runtimeHost.command(runId, {
       type: "approval_resolved",
       commandId: generateId(),
       conversationId,
       payload: status === "cancelled" ? { status: "cancelled" } : payload,
       resumeRunId,
     });
-    const runId = handle.runtimeHandle.runId;
     this.runEvents
       .append(this.runEvents.permissionResolved({ runId }))
       .catch(
@@ -255,7 +256,12 @@ export class RunService implements OnApplicationBootstrap {
         options?.reason
       );
     }
-    this.driver.cancel(handle.runtimeHandle);
+    await this.runtimeHost.command(handle.runtimeHandle.runId, {
+      type: "cancel",
+      commandId: generateId(),
+      runId: handle.runtimeHandle.runId,
+      conversationId,
+    });
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);
       handle.stream.end();
@@ -276,9 +282,10 @@ export class RunService implements OnApplicationBootstrap {
  *
  * interruptId 不做匹配校验——adapter 按 threadId 单槽 resolve，错误 id 无副作用。
  */
-function extractResumePayload(
-  resume: unknown
-): { status: "resolved" | "cancelled"; payload: unknown } {
+function extractResumePayload(resume: unknown): {
+  status: "resolved" | "cancelled";
+  payload: unknown;
+} {
   if (!Array.isArray(resume) || resume.length === 0) {
     throw new BadRequestException("resume must be a non-empty array");
   }

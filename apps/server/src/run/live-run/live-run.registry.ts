@@ -1,8 +1,5 @@
 import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
-import type {
-  AgentEventTraceConfig,
-  WorkerExecutionHandle,
-} from "@agework/shared/protocol";
+import type { WorkerExecutionHandle } from "@agework/shared/protocol";
 import type {
   IncompleteMessageReason,
   AssistantMessageAggregator,
@@ -26,7 +23,6 @@ export type LiveRunHandle = {
   runId: string;
   workspaceId: string;
   agentType: string;
-  agentEventTrace?: AgentEventTraceConfig;
   stopRequested: boolean;
   stopReason?: IncompleteMessageReason;
   saveRun: (

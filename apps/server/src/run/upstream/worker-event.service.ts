@@ -1,20 +1,21 @@
-import { Injectable, Logger, type OnModuleInit } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnModuleInit } from "@nestjs/common";
 import type {
   RunChannelMessage,
   RunStatusPayload,
   CommandResultPayload,
   CommandTracePayload,
+  ExecutionRef,
+  RuntimeHostContract,
+  RuntimeHostUpstream,
   WorkerExecutionHandle,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import type { RunEventPort } from "../driver/run-event.port";
-import type { WorkerUpstreamPort } from "../../worker-manager/worker-manager.types";
-import { WorkerManagerService } from "../../worker-manager/worker-manager.service";
+import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
-import { RunDriver } from "../driver/run-driver";
+import { RunRepository } from "../run.repository";
 import { swallow } from "../../common/swallow";
 import { isTerminalRunStatus } from "@agework/shared";
 import { type RunStatusDecision } from "../status/run-status.policy";
@@ -24,9 +25,10 @@ import { RunEventService } from "../../run-event/run-event.service";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
 /**
- * worker 上行事件的统一入口:seq 闸门(去重 / gap 诊断)+ 按消息类型分发。
- * run.status 的整条处理序列(决策、落库、终态收敛与清理)由 RunStatusService
- * 独立持有,这里只做入口守卫与转发。
+ * 执行面上行事件的统一入口(RuntimeHostUpstream 的实现):emit 走 seq 闸门
+ * (去重 / gap 诊断)+ 按消息类型分发;notify* 是 Host 合成的终态/事实通知,
+ * 绕闸门。run.status 的整条处理序列(决策、落库、终态收敛与清理)由
+ * RunStatusService 独立持有,这里只做入口守卫与转发。
  */
 
 /** trace 档逐事件日志用的精简标签；完整 payload 见 <conversationId>.agui.jsonl。 */
@@ -41,7 +43,7 @@ function payloadTag(payload: unknown): string | undefined {
 
 @Injectable()
 export class WorkerEventService
-  implements OnModuleInit, RunEventPort, WorkerUpstreamPort, RunTimeoutErrorPort
+  implements OnModuleInit, RuntimeHostUpstream, RunTimeoutErrorPort
 {
   private readonly logger = new Logger(WorkerEventService.name);
 
@@ -49,20 +51,20 @@ export class WorkerEventService
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
-    private readonly driver: RunDriver,
     private readonly aguiEvents: WorkerAgUiEventHandler,
     private readonly seqGate: WorkerSeqStore,
-    private readonly workerManager: WorkerManagerService
+    private readonly runRepository: RunRepository,
+    @Inject(RUNTIME_HOST_CONTRACT)
+    private readonly runtimeHost: RuntimeHostContract
   ) {}
 
-  /** Port 自接线:本类是三个反向端口的实现者,启动期把自己注册给各下层调用方。 */
+  /** 端口自接线:本类是契约上行与超时端口的实现者,启动期注册给下层调用方。 */
   onModuleInit(): void {
-    this.driver.setRunEventPort(this);
-    this.workerManager.setUpstreamPort(this);
+    this.runtimeHost.setUpstream(this);
     this.liveRuns.setTimeoutErrorPort(this);
   }
 
-  async sendEvent(
+  async emit(
     runId: string,
     message: RunChannelMessage<unknown>
   ): Promise<void> {
@@ -85,28 +87,53 @@ export class WorkerEventService
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
       if (isTerminalRunStatus(status) && handle) {
-        this.driver.cleanup(handle.runtimeHandle.runId);
+        this.runtimeHost.releaseRun(handle.runtimeHandle.runId);
       }
     }
   }
 
-  async notifyWorkerError(runId: string, error: string): Promise<void> {
+  async notifyRunFailed(runId: string, error: string): Promise<void> {
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceErrorStatus(runId, error);
   }
 
-  /** worker 心跳超时被 fence 掉时终结其名下 in-flight run,复用 notifyWorkerError 的终态判断。 */
+  /** worker 心跳超时被 fence 掉时终结其名下 in-flight run,复用 notifyRunFailed 的终态判断。 */
   async notifyWorkerLost(runId: string, reason: string): Promise<void> {
     this.recordRunEvent(
       this.runEvents.workerStatusChanged({ runId, status: "lost", reason }),
       `record worker lost for run ${runId}`
     );
-    await this.notifyWorkerError(runId, reason);
+    await this.notifyRunFailed(runId, reason);
   }
 
-  async notifyCancelledBeforeReady(runId: string): Promise<void> {
+  async notifyRunCancelled(runId: string): Promise<void> {
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceCancelledStatus(runId);
+  }
+
+  /**
+   * 执行载体就绪:落库 run 行的执行标识(admin 详情/重启恢复用)、记 ready 事件、
+   * 同步 live handle 的 runtimeInstanceId。eventKey 保证重复通知幂等。
+   */
+  notifyExecutionRef(runId: string, ref: ExecutionRef): void {
+    const handle = this.liveRuns.get(runId);
+    if (handle) {
+      handle.runtimeHandle.runtimeInstanceId = ref.runtimeInstanceId;
+    }
+    void this.runRepository
+      .updateRuntimeHandle(runId, ref.runtimeType, ref.runtimeInstanceId)
+      .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
+    this.recordRunEvent(
+      this.runEvents.runtimeStatusChanged({
+        runId,
+        eventKey: `runtime:${ref.runtimeInstanceId}:ready`,
+        status: "ready",
+        targetId: ref.runtimeInstanceId,
+        runtimeType: ref.runtimeType,
+        runtimeInstanceId: ref.runtimeInstanceId,
+      }),
+      `record runtime ready for run ${runId}`
+    );
   }
 
   async publish(message: RunChannelMessage<unknown>): Promise<void> {
@@ -203,7 +230,11 @@ export class WorkerEventService
     try {
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
-      this.driver.terminateExecution(runtimeHandle.runId, "run timeout");
+      this.logger.warn("terminating run session", {
+        runId: runtimeHandle.runId,
+        reason: "run timeout",
+      });
+      this.runtimeHost.releaseRun(runtimeHandle.runId);
     }
   }
 
