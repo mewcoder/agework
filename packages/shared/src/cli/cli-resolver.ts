@@ -15,6 +15,9 @@
  *   `spawnSync('cmd', ['/c', path, ...])` 直接传 .cmd 完整路径同样拿不到 stdout。
  *   解法：把 .cmd 所在目录加进子进程 PATH、用 `cmd /c <basename>` 让 cmd 按 PATHEXT
  *   解析，能正常拿到 stdout。不硬编码任何路径，纯靠 executablePath 自身的 dirname/basename。
+ *   非 shim 路径(.exe / Unix 二进制)直接 spawn 且**不带 shell**——shell:true 不给
+ *   带空格的路径(Program Files、用户名带空格)加引号,必然失败;JS 入口(cli.js
+ *   已知位置)不是可执行文件,用 `node <path>` 执行。
  *
  * 注意：本文件是 shared 包 `./cli` 入口，所有运行时值（函数、常量）必须内联在本文件中，
  * 不可跨文件 re-export——shared 包以源码形式被消费（exports 指向 src 源文件，无 dist），
@@ -23,6 +26,7 @@
  */
 
 import { spawn, spawnSync, execSync } from "node:child_process";
+import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
@@ -108,30 +112,40 @@ function whichFirst(name: string): string | null {
  *  codex 输出 `codex-cli 0.142.2`，claude 输出 `2.1.201 (Claude Code)`，
  *  统一提取第一段 semver 风格的版本号。
  *
- *  Windows 上的 npm shim (.cmd/.bat) 见文件头注释：用 `cmd /c <basename>` +
- *  把 dirname 加进子进程 PATH 才能拿到 stdout。 */
-function getVersion(executablePath: string): string | null {
+ *  按路径形态分派执行方式(每种都踩过坑,别合并):
+ *  - Windows npm shim (.cmd/.bat):见文件头注释,`cmd /c <basename>` +
+ *    把 dirname 加进子进程 PATH 才能拿到 stdout;
+ *  - JS 入口 (cli.js 等已知位置):不是可执行文件,必须 `node <path> --version`;
+ *  - 其余(.exe / Unix 二进制):直接 spawn,**不带 shell**——shell:true 时
+ *    带空格的路径(Program Files、用户名带空格)不会被引号包裹,必然失败。 */
+export function getVersion(executablePath: string): string | null {
   try {
     const ext = extname(executablePath).toLowerCase();
     const isWindows = process.platform === "win32";
-    const isShim = isWindows && (ext === ".cmd" || ext === ".bat");
+    const spawnOptions: SpawnSyncOptionsWithStringEncoding = {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["pipe", "pipe", "ignore"],
+    };
 
-    const result = isShim
-      ? spawnSync("cmd", ["/c", basename(executablePath), "--version"], {
-          encoding: "utf-8",
-          timeout: 5000,
-          stdio: ["pipe", "pipe", "ignore"],
-          env: {
-            ...process.env,
-            PATH: `${dirname(executablePath)};${process.env.PATH ?? ""}`,
-          },
-        })
-      : spawnSync(executablePath, ["--version"], {
-          encoding: "utf-8",
-          timeout: 5000,
-          stdio: ["pipe", "pipe", "ignore"],
-          shell: isWindows,
-        });
+    let result;
+    if (isWindows && (ext === ".cmd" || ext === ".bat")) {
+      result = spawnSync("cmd", ["/c", basename(executablePath), "--version"], {
+        ...spawnOptions,
+        env: {
+          ...process.env,
+          PATH: `${dirname(executablePath)};${process.env.PATH ?? ""}`,
+        },
+      });
+    } else if (ext === ".js" || ext === ".mjs" || ext === ".cjs") {
+      result = spawnSync(
+        process.execPath,
+        [executablePath, "--version"],
+        spawnOptions
+      );
+    } else {
+      result = spawnSync(executablePath, ["--version"], spawnOptions);
+    }
     if (result.error || result.status !== 0) return null;
     const raw = result.stdout.trim();
     if (!raw) return null;
