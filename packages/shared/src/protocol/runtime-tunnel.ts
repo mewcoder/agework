@@ -18,18 +18,14 @@ import type {
   ReadFileDiffInput,
   SearchFilesInput,
   ListChangedFilesInput,
-} from "./runtime-host";
-import type { RuntimeCapabilities } from "./runtime-capabilities";
-import type { RuntimeEnvConfig } from "../api/runtimes";
-import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
-} from "../api/workspace-files";
-import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
-} from "../api/workspaces";
+} from "./runtime-host";
+import type { RuntimeCapabilities } from "./runtime-capabilities";
+import type { RuntimeEnvConfig } from "../common";
 
 /**
  * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。

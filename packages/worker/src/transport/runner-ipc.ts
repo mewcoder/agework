@@ -1,5 +1,5 @@
 import type {
-  RuntimeChannel,
+  RunChannel,
   RunConfig,
   UpstreamMessage,
   UpstreamMessageInput,
@@ -21,11 +21,11 @@ import { errorDetails, workerLog } from "../logging/worker-log.js";
 const CONFIG_TIMEOUT_MS = 10_000;
 
 /**
- * RuntimeChannel 的本地子进程实现。
+ * RunChannel 的本地子进程实现。
  * 通过 Node.js IPC channel（process.send / process.on("message")）
  * 与父进程（常驻 worker）通信。
  */
-export class RunnerIpcTransport implements RuntimeChannel {
+export class RunnerIpcTransport implements RunChannel {
   private seq = 0;
   private readonly runId: string;
 

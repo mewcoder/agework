@@ -8,8 +8,8 @@ import { runStatusEffect } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunStatusService } from "./run-status.service";
 import { RunFinalizationStore } from "./run-finalization.store";
-import { WorkerSeqStore } from "../upstream/worker-seq.store";
-import type { WorkerAgUiEventHandler } from "../upstream/worker-agui-event.handler";
+import { UpstreamSeqStore } from "../upstream/upstream-seq.store";
+import type { HostAgUiEventHandler } from "../upstream/host-agui-event.handler";
 import type { RunEventService } from "../../run-event/run-event.service";
 import type { ConfigService } from "../../config/config.service";
 import { RunStream } from "../streaming/run.stream";
@@ -73,7 +73,7 @@ function makeSubject(input?: {
   } satisfies Partial<ConversationService>;
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   const finalization = new RunFinalizationStore();
-  const seqGate = new WorkerSeqStore();
+  const seqGate = new UpstreamSeqStore();
   const aguiEvents = { clearRun: vi.fn() };
   const runEvents = {
     append: vi.fn().mockResolvedValue(undefined),
@@ -110,7 +110,7 @@ function makeSubject(input?: {
       registry,
       finalization,
       seqGate,
-      aguiEvents as unknown as WorkerAgUiEventHandler,
+      aguiEvents as unknown as HostAgUiEventHandler,
       runEvents as unknown as RunEventService
     ),
   };

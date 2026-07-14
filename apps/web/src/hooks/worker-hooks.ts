@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { workerApi } from '@/api/worker';
+import { workerApi } from '@/api/workers';
 
 /** admin runtime 资源相关 react-query 键的唯一 factory:define 与 invalidate 共用。 */
 const adminRuntimeKeys = {
@@ -26,7 +26,7 @@ export function useWorkerStats() {
 export function useWorkers() {
   return useQuery({
     queryKey: adminRuntimeKeys.workers,
-    queryFn: () => workerApi.listResources(),
+    queryFn: () => workerApi.list(),
   });
 }
 

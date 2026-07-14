@@ -12,8 +12,8 @@ import {
 } from "./run-status.policy";
 import { RunRepository } from "../run.repository";
 import { RunFinalizationStore } from "./run-finalization.store";
-import { WorkerSeqStore } from "../upstream/worker-seq.store";
-import { WorkerAgUiEventHandler } from "../upstream/worker-agui-event.handler";
+import { UpstreamSeqStore } from "../upstream/upstream-seq.store";
+import { HostAgUiEventHandler } from "../upstream/host-agui-event.handler";
 import { RunEventService } from "../../run-event/run-event.service";
 
 /**
@@ -31,8 +31,8 @@ export class RunStatusService {
     private readonly conversationService: ConversationService,
     private readonly liveRuns: LiveRunRegistry,
     private readonly finalization: RunFinalizationStore,
-    private readonly seqGate: WorkerSeqStore,
-    private readonly aguiEvents: WorkerAgUiEventHandler,
+    private readonly seqGate: UpstreamSeqStore,
+    private readonly aguiEvents: HostAgUiEventHandler,
     private readonly runEvents: RunEventService
   ) {}
 

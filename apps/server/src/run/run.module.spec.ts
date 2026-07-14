@@ -12,7 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunService } from "./run.service";
-import { WorkerEventHandler } from "./upstream/worker-event.handler";
+import { HostUpstreamHandler } from "./upstream/host-upstream.handler";
 import { RuntimeHostAdapter } from "../runtime-host/contract/runtime-host.adapter";
 import { RunModule } from "./run.module";
 
@@ -59,7 +59,7 @@ describe("RunModule wiring", () => {
     const setTimeoutErrorPort = vi.spyOn(liveRuns, "setTimeoutErrorPort");
     await testingModule.init();
 
-    const workerEvents = testingModule.get(WorkerEventHandler);
+    const workerEvents = testingModule.get(HostUpstreamHandler);
     expect(setUpstream).toHaveBeenCalledWith(workerEvents);
     expect(setTimeoutErrorPort).toHaveBeenCalledWith(workerEvents);
     // run 自身在 onApplicationBootstrap 触发一次性重启恢复

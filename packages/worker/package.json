@@ -4,7 +4,8 @@
   "private": true,
   "main": "./src/worker.ts",
   "exports": {
-    ".": "./src/worker.ts"
+    ".": "./src/worker.ts",
+    "./runner": "./src/runner.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

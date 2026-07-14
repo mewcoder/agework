@@ -4,17 +4,12 @@ import type {
   WorkerScope,
 } from "./channel";
 import type { RunChannelMessage } from "./run-channel-message";
-import type { AgentType } from "../common";
-import type { RuntimeEnvConfig } from "../api/runtimes";
+import type { AgentType, RuntimeEnvConfig } from "../common";
 import type {
-  WorkspaceFileListResponse,
-  WorkspaceFileReadResponse,
-  WorkspaceFileSearchResponse,
-} from "../api/workspace-files";
-import type {
-  WorkspaceChangedFilesResponse,
-  WorkspaceFileDiffResponse,
-} from "../api/workspaces";
+  FileEntry,
+  ChangedFileEntry,
+  WorkspaceChangeStatus,
+} from "../filesystem/types";
 
 // ── Server ↔ Runtime Host 契约 ──────────────────────────────────────
 //
@@ -190,6 +185,44 @@ export type ListChangedFilesInput = {
   /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
+};
+
+// ── 文件操作结果类型 ──
+//
+// 定义在契约层（Host 是生产者），api 层 re-export 作为对应 REST 端点的响应形状。
+
+export type WorkspaceFileListResponse = {
+  path: string;
+  list: FileEntry[];
+  truncated: boolean;
+};
+
+export type WorkspaceFileReadResponse = {
+  path: string;
+  encoding: "utf8" | "base64";
+  content: string;
+  size: number;
+  truncated: boolean;
+};
+
+/** 文件相对路径检索结果。list 为相对路径数组。 */
+export type WorkspaceFileSearchResponse = {
+  list: string[];
+  truncated: boolean;
+};
+
+/** 相对 HEAD 的累计变更文件列表。 */
+export type WorkspaceChangedFilesResponse = {
+  list: ChangedFileEntry[];
+  truncated: boolean;
+};
+
+/** 单文件 before/after diff。before/after 为 null 表示新增/删除侧不存在。 */
+export type WorkspaceFileDiffResponse = {
+  path: string;
+  status: WorkspaceChangeStatus;
+  before: string | null;
+  after: string | null;
 };
 
 export type InstallCliInput = {

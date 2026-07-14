@@ -256,11 +256,11 @@ describe("external API route convention", () => {
     expectRoute(AdminRunController, "query", "get", "query");
     expectRoute(AdminRunController, "listEvents", "get", "events/list");
 
-    expect(controllerPath(AdminWorkerController)).toBe("admin/worker");
+    expect(controllerPath(AdminWorkerController)).toBe("admin/workers");
     expectRoute(AdminWorkerController, "getRuntimePolicy", "get", "policy");
     expectRoute(AdminWorkerController, "getWorkerStats", "get", "stats");
-    expectRoute(AdminWorkerController, "listResources", "get", "resources");
-    expectRoute(AdminWorkerController, "stopWorker", "post", "resources/stop");
+    expectRoute(AdminWorkerController, "list", "get", "list");
+    expectRoute(AdminWorkerController, "stop", "post", "stop");
 
     expect(controllerPath(AdminWorkspaceController)).toBe("admin/workspaces");
     expectRoute(AdminWorkspaceController, "listAll", "get", "list");
@@ -277,7 +277,7 @@ describe("external API route convention", () => {
         "admin/config",
         "admin/model-providers",
         "admin/runs",
-        "admin/worker",
+        "admin/workers",
         "admin/users",
         "admin/workspaces",
       ])

@@ -30,8 +30,11 @@ import type { SpawnSyncOptionsWithStringEncoding } from "node:child_process";
 import { existsSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
-import type { AgentType } from "../common";
-import type { AgentDetectedEnv, RuntimeEnvConfig } from "../api/runtimes";
+import type {
+  AgentType,
+  AgentDetectedEnv,
+  RuntimeEnvConfig,
+} from "../common";
 
 /**
  * 检测本机 agent CLI 环境，返回完整的 envConfig（claude + codex）。

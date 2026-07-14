@@ -198,7 +198,7 @@ export type Unsubscribe = () => void;
  * 持久容器 worker 不走此接口；下行命令由 owner-scoped command loop 拉取，
  * 上行事件和 run config 由 run-scoped HTTP client 按 runId 参数化收发。
  */
-export interface RuntimeChannel {
+export interface RunChannel {
   fetchRunConfig(): Promise<RunConfig>;
   emit(msg: UpstreamMessageInput): Promise<void>;
   subscribeCommands(

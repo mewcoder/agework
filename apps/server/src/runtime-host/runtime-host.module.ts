@@ -16,6 +16,10 @@ import { AdminWorkerController } from "./admin/admin-worker.controller";
  *
  * 对外只暴露 RUNTIME_HOST_CONTRACT token；run 模块只消费执行面契约，
  * 不感知 builtin/registered 的路由细节。
+ *
+ * 与 runtime 模块的边界：本模块管「契约语义」(submitRun 路由、builtin 装配、
+ * worker 观测),runtime 管「机器资源」(注册行、隧道传输、Host 级判死),
+ * 隧道管道经 RuntimeService 借用。
  */
 @Module({
   imports: [RuntimeModule, RunEventModule, WorkspaceModule, UserModule],

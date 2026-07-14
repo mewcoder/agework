@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { WorkerSnapshot } from "@/api/worker";
+import type { WorkerSnapshot } from "@/api/workers";
 import { useWorkers, useStopWorker } from "@/hooks/worker-hooks";
 import {
   DataTable,

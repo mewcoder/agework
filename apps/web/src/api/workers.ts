@@ -21,12 +21,12 @@ export interface WorkerStats {
 }
 
 export const workerApi = {
-  policy: () => apiGet<RuntimePolicy>("/api/v1/admin/worker/policy"),
-  stats: () => apiGet<WorkerStats>("/api/v1/admin/worker/stats"),
+  policy: () => apiGet<RuntimePolicy>("/api/v1/admin/workers/policy"),
+  stats: () => apiGet<WorkerStats>("/api/v1/admin/workers/stats"),
   /** 现场查询所有 Host（builtin + registered）的 worker 快照。 */
-  listResources: () =>
-    apiGet<LiveWorkerListResponse>("/api/v1/admin/worker/resources"),
+  list: () =>
+    apiGet<LiveWorkerListResponse>("/api/v1/admin/workers/list"),
   /** 定向停止 worker:runtimeHostId 选 Host,workerKey 定位其上的 worker。 */
   stopWorker: (input: { runtimeHostId: string; workerKey: string }) =>
-    apiPost<{ ok: boolean }>("/api/v1/admin/worker/resources/stop", input),
+    apiPost<{ ok: boolean }>("/api/v1/admin/workers/stop", input),
 };

@@ -15,8 +15,8 @@ import { RunEventService } from "../../run-event/run-event.service";
 const CHUNK_SAVE_INTERVAL = 20;
 
 @Injectable()
-export class WorkerAgUiEventHandler {
-  private readonly logger = new Logger(WorkerAgUiEventHandler.name);
+export class HostAgUiEventHandler {
+  private readonly logger = new Logger(HostAgUiEventHandler.name);
   private readonly chunkCounters = new Map<string, number>();
 
   constructor(

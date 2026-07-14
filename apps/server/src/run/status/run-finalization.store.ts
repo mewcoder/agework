@@ -7,7 +7,7 @@ const COMPLETED_RUN_TTL_MS = 5 * 60 * 1000;
  * Run 终态守卫状态（run-status 子能力的 internal provider）。
  *
  * 持有「正在处理终态」与「已完成终态」两份 per-run 状态，回答
- * isTerminalOrFinalizing，使 WorkerEventHandler 在并发 / 延迟到达的 worker 事件下
+ * isTerminalOrFinalizing，使 HostUpstreamHandler 在并发 / 延迟到达的 worker 事件下
  * 不会覆盖已确定的终态。只管状态边界，不做事件落库与 run-status 编排。
  */
 @Injectable()

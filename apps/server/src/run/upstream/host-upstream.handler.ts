@@ -19,9 +19,9 @@ import { swallow } from "../../common/swallow";
 import { isTerminalRunStatus } from "@agework/shared";
 import { type RunStatusDecision } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
-import { WorkerSeqStore } from "./worker-seq.store";
+import { UpstreamSeqStore } from "./upstream-seq.store";
 import { RunEventService } from "../../run-event/run-event.service";
-import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
+import { HostAgUiEventHandler } from "./host-agui-event.handler";
 
 /**
  * 执行面上行事件的统一入口(RuntimeHostUpstream 的实现):emit 走 seq 闸门
@@ -41,17 +41,17 @@ function payloadTag(payload: unknown): string | undefined {
 }
 
 @Injectable()
-export class WorkerEventHandler
+export class HostUpstreamHandler
   implements OnModuleInit, RuntimeHostUpstream, RunTimeoutErrorPort
 {
-  private readonly logger = new Logger(WorkerEventHandler.name);
+  private readonly logger = new Logger(HostUpstreamHandler.name);
 
   constructor(
     private readonly liveRuns: LiveRunRegistry,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
-    private readonly aguiEvents: WorkerAgUiEventHandler,
-    private readonly seqGate: WorkerSeqStore,
+    private readonly aguiEvents: HostAgUiEventHandler,
+    private readonly seqGate: UpstreamSeqStore,
     private readonly runRepository: RunRepository,
     @Inject(RUNTIME_HOST_CONTRACT)
     private readonly runtimeHost: RuntimeHostContract
@@ -79,7 +79,7 @@ export class WorkerEventHandler
 
     await this.publish(message).catch((err) => {
       this.logger.warn(
-        `WorkerEventHandler.publish failed for runId=${runId}: ${String(err)}`
+        `HostUpstreamHandler.publish failed for runId=${runId}: ${String(err)}`
       );
     });
 

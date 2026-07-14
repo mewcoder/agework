@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { RunChannelMessage } from "./run-channel-message";
 import type {
   RunConfig,
-  RuntimeChannel,
+  RunChannel,
   CommandPayload,
   UpstreamMessage,
 } from "./channel";
 
-describe("RuntimeChannel contract", () => {
+describe("RunChannel contract", () => {
   it("RunConfig carries runtimePath and env for the worker", () => {
     const config: RunConfig = {
       runId: "run-1",
@@ -30,11 +30,11 @@ describe("RuntimeChannel contract", () => {
     expect(config.agentProviderConfig.agentType).toBe("claude");
   });
 
-  it("a RuntimeChannel implementation can fetch config, emit upstream messages and subscribe commands", async () => {
+  it("a RunChannel implementation can fetch config, emit upstream messages and subscribe commands", async () => {
     const sent: UpstreamMessage[] = [];
     let commandHandler: ((c: RunChannelMessage<CommandPayload>) => void) | undefined;
 
-    const transport: RuntimeChannel = {
+    const transport: RunChannel = {
       fetchRunConfig: () =>
         Promise.resolve({
           runId: "run-1",

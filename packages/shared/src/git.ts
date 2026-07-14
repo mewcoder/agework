@@ -18,7 +18,7 @@ import { isAbsolute, join, sep } from "node:path";
 import type {
   ChangedFileEntry,
   WorkspaceChangeStatus,
-} from "./api/workspaces";
+} from "./filesystem/types";
 
 // ── 常量 ──────────────────────────────────────────────────────────
 

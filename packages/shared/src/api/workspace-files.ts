@@ -1,21 +1,6 @@
-import type { FileEntry } from "../filesystem/types";
-
-export type WorkspaceFileListResponse = {
-  path: string;
-  list: FileEntry[];
-  truncated: boolean;
-};
-
-export type WorkspaceFileReadResponse = {
-  path: string;
-  encoding: "utf8" | "base64";
-  content: string;
-  size: number;
-  truncated: boolean;
-};
-
-/** GET /api/v1/workspaces/files/search 的响应。list 为相对路径数组。 */
-export type WorkspaceFileSearchResponse = {
-  list: string[];
-  truncated: boolean;
-};
+// 文件操作响应形状定义在契约层（Host 是生产者），此处 re-export 供 REST 消费方使用。
+export type {
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
+} from "../protocol/runtime-host";

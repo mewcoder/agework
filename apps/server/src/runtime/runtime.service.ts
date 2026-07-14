@@ -38,7 +38,7 @@ import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import type { RuntimeConfig, RuntimeType } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
-import { toRuntimeConfig } from "./local/runtime-config";
+import { toRuntimeConfig } from "./builtin/runtime-config";
 import { RuntimeRepository } from "./runtime.repository";
 import type { RuntimeHostRow } from "./runtime.types";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
@@ -537,7 +537,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /**
-   * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 local/runtime-config.ts)。
+   * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 builtin/runtime-config.ts)。
    * 供进程内 builtin RuntimeHost 构造 provider 配置。
    */
   getProviderRuntimeConfig(): RuntimeConfig {

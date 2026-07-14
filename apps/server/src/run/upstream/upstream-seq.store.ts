@@ -13,10 +13,10 @@ export type SeqDecision =
  *
  * 持有每个 run 已处理到的最大 seq，对新到事件做纯判定：重复(seq<=lastSeq)丢弃、
  * 跳号(seq>lastSeq+1)标记 gap、否则接受并推进游标。只决策与持状态，不打日志、
- * 不落库——gap 的诊断事件落库与 warn 日志由 WorkerEventHandler 按决策反应。
+ * 不落库——gap 的诊断事件落库与 warn 日志由 HostUpstreamHandler 按决策反应。
  */
 @Injectable()
-export class WorkerSeqStore {
+export class UpstreamSeqStore {
   private readonly lastSeqMap = new Map<string, number>();
 
   /** 判定一条 seq 是否接受，并在接受时推进游标（drop 不推进）。 */

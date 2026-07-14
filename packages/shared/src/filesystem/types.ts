@@ -41,3 +41,21 @@ export type WorkspaceFileCommandError = {
 export type BrowseResult =
   | { ok: true; result: ListFilesResult | ReadFileResult }
   | { ok: false; error: WorkspaceFileCommandError };
+
+// ── git 变更条目(生产者是 git.ts,放这里保持纯类型可被浏览器环境导入) ──
+
+export type WorkspaceChangeStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed";
+
+/** 一个变更文件条目。additions/deletions 为 null 表示未跟踪或二进制(无 numstat)。 */
+export type ChangedFileEntry = {
+  path: string;
+  status: WorkspaceChangeStatus;
+  additions: number | null;
+  deletions: number | null;
+  /** rename 时的原路径。 */
+  oldPath?: string;
+};

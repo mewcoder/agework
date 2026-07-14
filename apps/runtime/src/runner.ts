@@ -1,4 +1,4 @@
-import { runRunner } from "@agework/worker";
+import { runRunner } from "@agework/worker/runner";
 
 /**
  * agework-runtime 的 runner 入口:per-run 执行单元,独立产物(dist/runner.js),

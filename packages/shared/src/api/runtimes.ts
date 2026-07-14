@@ -1,26 +1,13 @@
 import type { RuntimeCapabilities } from "../protocol/runtime-capabilities";
-import type { AgentType } from "../common";
+import type { AgentType, RuntimeEnvConfig } from "../common";
 
 export type RuntimeStatus = "online" | "offline";
 
 // ── EnvConfig 类型（见 runtime 模块 ADR-0002 两层分离）──────────────────
+//
+// 上报层类型定义在 common（生产者是 cli/cli-resolver），此处 re-export 供 REST 消费方使用。
 
-/** Runtime manager 检测到的单个 agent CLI 环境信息（上报层，不可被 admin 直接覆写）。 */
-export type AgentDetectedEnv = {
-  /** 检测到的可执行文件绝对路径；没找到为 null。 */
-  executablePath: string | null;
-  /** CLI --version 输出；取不到为 null。 */
-  version: string | null;
-};
-
-/** 一个 Runtime 上报的完整环境配置——每个 agent 一条。 */
-export type RuntimeEnvConfig = {
-  claude: AgentDetectedEnv;
-  codex: AgentDetectedEnv;
-  opencode: AgentDetectedEnv;
-  /** 检测时间戳（ISO 8601），供前端判断新鲜度。 */
-  detectedAt: string;
-};
+export type { AgentDetectedEnv, RuntimeEnvConfig } from "../common";
 
 /** 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。per-runtime per-agent 粒度。 */
 export type RuntimeEnvConfigOverride = {

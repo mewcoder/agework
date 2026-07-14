@@ -68,7 +68,7 @@ export type {
   UpstreamMessage,
   UpstreamMessageInput,
   Unsubscribe,
-  RuntimeChannel,
+  RunChannel,
   RunExecutionHandle,
   WorkerRegisterRequest,
   WorkerScope,
@@ -102,6 +102,11 @@ export type {
   ListChangedFilesInput,
   InstallCliInput,
   InstallCliResult,
+  WorkspaceFileListResponse,
+  WorkspaceFileReadResponse,
+  WorkspaceFileSearchResponse,
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
 } from "./runtime-host";
 export type { RuntimeCapabilities } from "./runtime-capabilities";
 

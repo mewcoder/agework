@@ -69,33 +69,14 @@ export type WorkspaceCapabilitiesResponse = {
 };
 
 // ── 变更查看(diff,只读,只支持本地 runtime) ──
+//
+// 变更条目定义在 filesystem/types（纯类型层）、响应形状定义在契约层，此处 re-export 供 REST 消费方使用。
 
-export type WorkspaceChangeStatus =
-  | "added"
-  | "modified"
-  | "deleted"
-  | "renamed";
-
-/** 一个变更文件条目。additions/deletions 为 null 表示未跟踪或二进制(无 numstat)。 */
-export type ChangedFileEntry = {
-  path: string;
-  status: WorkspaceChangeStatus;
-  additions: number | null;
-  deletions: number | null;
-  /** rename 时的原路径。 */
-  oldPath?: string;
-};
-
-/** GET /api/v1/workspaces/files/changes 的响应。 */
-export type WorkspaceChangedFilesResponse = {
-  list: ChangedFileEntry[];
-  truncated: boolean;
-};
-
-/** GET /api/v1/workspaces/files/diff 的响应。before/after 为 null 表示新增/删除侧不存在。 */
-export type WorkspaceFileDiffResponse = {
-  path: string;
-  status: WorkspaceChangeStatus;
-  before: string | null;
-  after: string | null;
-};
+export type {
+  WorkspaceChangeStatus,
+  ChangedFileEntry,
+} from "../filesystem/types";
+export type {
+  WorkspaceChangedFilesResponse,
+  WorkspaceFileDiffResponse,
+} from "../protocol/runtime-host";

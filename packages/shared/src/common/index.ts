@@ -45,6 +45,23 @@ export function isAgentType(value: unknown): value is AgentType {
   );
 }
 
+/** 检测到的单个 agent CLI 环境信息（上报层，不可被 admin 直接覆写）。 */
+export type AgentDetectedEnv = {
+  /** 检测到的可执行文件绝对路径；没找到为 null。 */
+  executablePath: string | null;
+  /** CLI --version 输出；取不到为 null。 */
+  version: string | null;
+};
+
+/** 一台执行机上报的完整 CLI 环境配置——每个 agent 一条（生产者:cli/cli-resolver）。 */
+export type RuntimeEnvConfig = {
+  claude: AgentDetectedEnv;
+  codex: AgentDetectedEnv;
+  opencode: AgentDetectedEnv;
+  /** 检测时间戳（ISO 8601），供前端判断新鲜度。 */
+  detectedAt: string;
+};
+
 /** worker run 的生命周期状态。 */
 export type RunStatus =
   | "queued"

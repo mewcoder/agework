@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { WorkerEventHandler } from "./worker-event.handler";
+import { HostUpstreamHandler } from "./host-upstream.handler";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import type { ConversationService } from "../../conversation/conversation.service";
@@ -7,11 +7,11 @@ import { AssistantMessageAggregator } from "./assistant-message.aggregator";
 import { RunEventService } from "../../run-event/run-event.service";
 import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
-import { WorkerSeqStore } from "./worker-seq.store";
+import { UpstreamSeqStore } from "./upstream-seq.store";
 import type { ConfigService } from "../../config/config.service";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunStream } from "../streaming/run.stream";
-import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
+import { HostAgUiEventHandler } from "./host-agui-event.handler";
 
 function makeConfig(): ConfigService {
   return {
@@ -34,15 +34,15 @@ function makeStream(res = makeRes(), mode: "events" | "snapshots" = "events") {
   return new RunStream(res, mode);
 }
 
-describe("WorkerEventHandler", () => {
-  let workerEventsService: WorkerEventHandler;
+describe("HostUpstreamHandler", () => {
+  let workerEventsService: HostUpstreamHandler;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
   let mockConversations: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockRuntimeHost: Partial<RuntimeHostContract>;
   let runStatusService: RunStatusService;
-  let seqGate: WorkerSeqStore;
+  let seqGate: UpstreamSeqStore;
 
   beforeEach(() => {
     mockRunRepository = {
@@ -69,12 +69,12 @@ describe("WorkerEventHandler", () => {
     };
 
     liveRuns = new LiveRunRegistry(makeConfig());
-    const aguiEvents = new WorkerAgUiEventHandler(
+    const aguiEvents = new HostAgUiEventHandler(
       mockRunRepository as RunRepository,
       liveRuns,
       mockRunEvents
     );
-    seqGate = new WorkerSeqStore();
+    seqGate = new UpstreamSeqStore();
     runStatusService = new RunStatusService(
       mockRunRepository as RunRepository,
       mockConversations as unknown as ConversationService,
@@ -84,7 +84,7 @@ describe("WorkerEventHandler", () => {
       aguiEvents,
       mockRunEvents
     );
-    workerEventsService = new WorkerEventHandler(
+    workerEventsService = new HostUpstreamHandler(
       liveRuns,
       mockRunEvents,
       runStatusService,

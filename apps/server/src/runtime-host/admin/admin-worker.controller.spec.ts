@@ -44,7 +44,7 @@ describe("AdminWorkerController", () => {
     expect(result).toEqual({ activeWorkers: 2 });
   });
 
-  it("listResources delegates to hostContract.listWorkers", async () => {
+  it("list delegates to hostContract.listWorkers", async () => {
     const listWorkers = vi.fn().mockResolvedValue([
       {
         runtimeHostId: "builtin",
@@ -55,7 +55,7 @@ describe("AdminWorkerController", () => {
     ]);
     const controller = makeController({}, { listWorkers });
 
-    const result = await controller.listResources();
+    const result = await controller.list();
 
     expect(listWorkers).toHaveBeenCalled();
     expect(result).toEqual({
@@ -70,11 +70,11 @@ describe("AdminWorkerController", () => {
     });
   });
 
-  it("stopWorker delegates to hostContract.stopWorker with the target host and key", async () => {
+  it("stop delegates to hostContract.stopWorker with the target host and key", async () => {
     const stopWorker = vi.fn().mockResolvedValue(undefined);
     const controller = makeController({}, { stopWorker });
 
-    const result = await controller.stopWorker({
+    const result = await controller.stop({
       runtimeHostId: "rt-1",
       workerKey: "workspace:ws-1#native",
     });
@@ -86,14 +86,14 @@ describe("AdminWorkerController", () => {
     expect(result).toEqual({ ok: true });
   });
 
-  it("stopWorker maps contract failures to 502 (目标 Host 不可达)", async () => {
+  it("stop maps contract failures to 502 (目标 Host 不可达)", async () => {
     const stopWorker = vi
       .fn()
       .mockRejectedValue(new Error("runtime rt-1 is not connected"));
     const controller = makeController({}, { stopWorker });
 
     await expect(
-      controller.stopWorker({
+      controller.stop({
         runtimeHostId: "rt-1",
         workerKey: "workspace:ws-1#native",
       })
