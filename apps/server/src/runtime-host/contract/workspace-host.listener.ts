@@ -8,7 +8,7 @@ import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
 } from "../../workspace/workspace.events";
-import { RUNTIME_HOST_CONTRACT } from "../worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../runtime-host.types";
 
 /**
  * 监听 workspace 删除事件，调 RuntimeHostContract.releaseOwner 清理 worker。

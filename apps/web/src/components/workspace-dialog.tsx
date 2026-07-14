@@ -52,7 +52,7 @@ const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
 const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
 const ISOLATION_SCOPES = ["user", "workspace"] as const;
-const PLACEMENT_MODES = ["managed", "registered"] as const;
+const PLACEMENT_MODES = ["builtin", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
 function supportedRuntimeTypes(runtime: Runtime): WorkspaceRuntimeType[] {
@@ -112,14 +112,14 @@ const workspaceDialogFormSchema = z
     gitUrl: z.string().optional(),
     gitBranch: z.string().optional(),
     rootPath: z.string().optional(),
-    runtimeId: z.string().optional(),
+    runtimeHostId: z.string().optional(),
   })
   .superRefine((values, ctx) => {
     if (values.placementMode === "registered") {
-      if (!values.runtimeId) {
+      if (!values.runtimeHostId) {
         ctx.addIssue({
           code: "custom",
-          path: ["runtimeId"],
+          path: ["runtimeHostId"],
           message: "请选择运行环境",
         });
       }
@@ -211,13 +211,13 @@ function WorkspaceDialogForm({
       name: workspace?.name ?? defaultWorkspaceName(),
       description: workspace?.description ?? "",
       useGit: false,
-      placementMode: "managed",
+      placementMode: "builtin",
       runtimeType: "native",
       isolationScope: "user",
       gitUrl: "",
       gitBranch: "",
       rootPath: "",
-      runtimeId: undefined,
+      runtimeHostId: undefined,
     },
   });
 
@@ -278,7 +278,7 @@ function WorkspaceDialogForm({
           name,
           description: description || undefined,
           rootPath: normalizeFilesystemPath(values.rootPath ?? ""),
-          runtimeId: values.runtimeId,
+          runtimeHostId: values.runtimeHostId,
           runtimeType: values.runtimeType,
           isolationScope:
             values.runtimeType !== "native" ? values.isolationScope : undefined,
@@ -357,9 +357,9 @@ function WorkspaceDialogForm({
   const runtimeType = form.watch("runtimeType");
   const isolationScope = form.watch("isolationScope");
   const rootPathValue = form.watch("rootPath") ?? "";
-  const runtimeId = form.watch("runtimeId");
+  const runtimeHostId = form.watch("runtimeHostId");
   const showPlacementToggle = !isEdit && registeredRuntimes.length > 0;
-  const selectedRuntime = registeredRuntimes.find((r) => r.id === runtimeId);
+  const selectedRuntime = registeredRuntimes.find((r) => r.id === runtimeHostId);
   const selectedRuntimeTypes = useMemo(
     () => (selectedRuntime ? supportedRuntimeTypes(selectedRuntime) : []),
     [selectedRuntime]
@@ -369,13 +369,11 @@ function WorkspaceDialogForm({
     [selectedRuntime, runtimeType]
   );
   const canSubmitRegistered =
-    !!runtimeId &&
+    !!runtimeHostId &&
     !!rootPathValue.trim() &&
     selectedRuntimeTypes.includes(runtimeType) &&
     (runtimeType === "native" ||
       selectedRuntimeIsolationScopes.includes(isolationScope));
-  /** managed 场景下,当前 runtimeType 对应的 managed runtime(浏览目录接口按 runtime 维度调用,
-   *  managed 也有固定的 runtime id)。 */
   const browserDisabled =
     placementMode === "registered" && selectedRuntime?.status !== "online";
 
@@ -473,7 +471,7 @@ function WorkspaceDialogForm({
                     }}
                     className="grid w-full grid-cols-2"
                   >
-                    <ToggleGroupItem value="managed" className="w-full">
+                    <ToggleGroupItem value="builtin" className="w-full">
                       平台托管
                     </ToggleGroupItem>
                     <ToggleGroupItem value="registered" className="w-full">
@@ -513,7 +511,7 @@ function WorkspaceDialogForm({
           ) : placementMode === "registered" ? (
             <>
               <Controller
-                name="runtimeId"
+                name="runtimeHostId"
                 control={form.control}
                 render={({ field, fieldState }) => (
                   <Field data-invalid={fieldState.invalid}>

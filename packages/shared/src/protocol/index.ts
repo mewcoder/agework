@@ -71,7 +71,6 @@ export type {
   Unsubscribe,
   RuntimeChannel,
   WorkerExecutionHandle,
-  WorkerExecutionStartInput,
   WorkerRegisterRequest,
   AcquireInstanceResult,
   IsolationScope,

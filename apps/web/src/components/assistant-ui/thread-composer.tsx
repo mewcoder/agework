@@ -283,8 +283,8 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
   const targetWorkspace = targetWorkspaceId
     ? workspaces.find((workspace) => workspace.id === targetWorkspaceId)
     : undefined;
-  const runtimeId = targetWorkspace?.runtimeId ?? undefined;
-  const { data: modelProviders = [] } = useModelProviders(selectedAgentType, runtimeId);
+  const runtimeHostId = targetWorkspace?.runtimeHostId ?? undefined;
+  const { data: modelProviders = [] } = useModelProviders(selectedAgentType, runtimeHostId);
   const selectedModelProvider = selectedModelProviderId
     ? modelProviders.find(
         (modelProvider) => modelProvider.modelProviderId === selectedModelProviderId,

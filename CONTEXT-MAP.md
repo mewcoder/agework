@@ -32,11 +32,11 @@ RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。
   - `0001-question-interrupt-terminal-model.md` — 问答走 AG-UI interrupt terminal model,worker/SDK 保持 pause model
   - `0002-resume-payload-generalization.md` — resume 契约泛化为 provider 无关 payload + 接受 cancelled(为 Codex 审批 decision/decline,顺带解锁 Claude 权限拒绝)
 
-### `apps/server` → worker-manager module — contract 实现 + admin 观测面
+### `apps/server` → runtime-host module — contract 实现 + admin 观测面
 
 Phase 3 清尾后只剩 `RuntimeHostContract` 实现（`RuntimeHostAdapter`，路由 builtin/registered）+ `AdminWorkerController`（现场查询）+ `WorkspaceHostListener`（workspace 删除时调 `releaseOwner`）。旧执行栈（connection/instance/registry）已全部删除。
 
-- ⚠ ADRs: [`apps/server/src/worker-manager/docs/adr/`](apps/server/src/worker-manager/docs/adr/) — **全部 SUPERSEDED**，被 server-runtime-worker 目标架构推翻。worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 `RuntimeHost` 库。
+- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime/host` 的 `RuntimeHost` 库。
   - `0001` ~ `0006` — 旧 worker-manager 执行栈设计，已删除
 
 ### `apps/web` — 前端

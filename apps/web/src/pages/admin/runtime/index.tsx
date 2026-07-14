@@ -73,12 +73,12 @@ function runtimeTypeLabel(runtimeType: string | null) {
 function AgentEnvItem({
   agentType,
   status,
-  runtimeId,
+  runtimeHostId,
   overridePath,
 }: {
   agentType: AgentType;
   status: AgentEnvStatus | null;
-  runtimeId: string;
+  runtimeHostId: string;
   overridePath: string | undefined;
 }) {
   return (
@@ -117,10 +117,10 @@ function AgentEnvItem({
     >
       <div className="flex items-center gap-1.5">
         {status && !status.resolvedPath && (
-          <AgentInstallButton runtimeId={runtimeId} agentType={agentType} />
+          <AgentInstallButton runtimeHostId={runtimeHostId} agentType={agentType} />
         )}
         <OverrideEditor
-          runtimeId={runtimeId}
+          runtimeHostId={runtimeHostId}
           agentType={agentType}
           currentOverride={overridePath}
         />
@@ -130,10 +130,10 @@ function AgentEnvItem({
 }
 
 function AgentInstallButton({
-  runtimeId,
+  runtimeHostId,
   agentType,
 }: {
-  runtimeId: string;
+  runtimeHostId: string;
   agentType: AgentType;
 }) {
   const installMutation = useInstallCli();
@@ -144,7 +144,7 @@ function AgentInstallButton({
       size="sm"
       className="h-7"
       disabled={installMutation.isPending}
-      onClick={() => installMutation.mutate({ id: runtimeId, agentType })}
+      onClick={() => installMutation.mutate({ id: runtimeHostId, agentType })}
     >
       {installMutation.isPending ? "安装中…" : "安装"}
     </Button>
@@ -152,11 +152,11 @@ function AgentInstallButton({
 }
 
 function OverrideEditor({
-  runtimeId,
+  runtimeHostId,
   agentType,
   currentOverride,
 }: {
-  runtimeId: string;
+  runtimeHostId: string;
   agentType: AgentType;
   currentOverride: string | undefined;
 }) {
@@ -166,7 +166,7 @@ function OverrideEditor({
 
   const handleSave = () => {
     overrideMutation.mutate(
-      { id: runtimeId, agentType, executablePath: value.trim() },
+      { id: runtimeHostId, agentType, executablePath: value.trim() },
       { onSuccess: () => setOpen(false) }
     );
   };
@@ -317,13 +317,13 @@ function RuntimeSection({
           <AgentEnvItem
             agentType="claude"
             status={env?.claude ?? null}
-            runtimeId={runtime.id}
+            runtimeHostId={runtime.id}
             overridePath={runtime.envConfigOverride?.claude?.executablePath}
           />
           <AgentEnvItem
             agentType="codex"
             status={env?.codex ?? null}
-            runtimeId={runtime.id}
+            runtimeHostId={runtime.id}
             overridePath={runtime.envConfigOverride?.codex?.executablePath}
           />
         </>

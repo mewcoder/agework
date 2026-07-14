@@ -88,7 +88,7 @@ describe("RuntimeTunnelHandler", () => {
     );
     await expect(nextMessage(ws)).resolves.toEqual({
       type: "registered",
-      runtimeId: "rt-1",
+      runtimeHostId: "rt-1",
       heartbeatIntervalSeconds: 10,
       epoch: 1,
     });
@@ -225,8 +225,8 @@ describe("RuntimeTunnelHandler", () => {
 
     it("dispatches the notification to the handler and acks the seq", async () => {
       const received: unknown[] = [];
-      handler.setUpstreamHandler((runtimeId, notification) => {
-        received.push({ runtimeId, notification });
+      handler.setUpstreamHandler((runtimeHostId, notification) => {
+        received.push({ runtimeHostId, notification });
       });
       const ws = connect();
       await once(ws, "open");
@@ -242,7 +242,7 @@ describe("RuntimeTunnelHandler", () => {
       expect(ack.params.seq).toBe(7);
       expect(received).toEqual([
         {
-          runtimeId: "rt-1",
+          runtimeHostId: "rt-1",
           notification: { kind: "runCancelled", runId: "run-1" },
         },
       ]);

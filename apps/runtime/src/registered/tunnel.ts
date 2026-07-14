@@ -161,7 +161,7 @@ export class TunnelClient {
     const message = parsed as RuntimeTunnelServerMessage;
     if (message.type === "registered") {
       log(
-        `registered as runtime ${message.runtimeId} (${this.options.config.runtimeType})`
+        `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeType})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
       // Phase 2: 注册完成才接线上行通道(绑定会话 epoch),并补发未 ACK 通知

@@ -22,7 +22,7 @@ Contexts in this repo:
 |---|---|
 | `apps/runtime` | `apps/runtime/docs/adr/` |
 | `apps/server` runtime module | `apps/server/src/runtime/docs/adr/` |
-| `apps/server` worker-manager module | `apps/server/src/worker-manager/docs/adr/` |
+| `apps/server` runtime-host module | `apps/server/src/runtime-host/docs/adr/` |
 | `packages/providers` | `packages/providers/docs/adr/` |
 | `packages/worker` | `packages/worker/docs/adr/` |
 
@@ -36,7 +36,7 @@ If a context has its own `CONTEXT.md` (per-context glossary), read it before wor
 └── (per-context ADR dirs, e.g.)
     apps/runtime/docs/adr/
     apps/server/src/runtime/docs/adr/
-    apps/server/src/worker-manager/docs/adr/
+    apps/server/src/runtime-host/docs/adr/
     packages/providers/docs/adr/
     packages/worker/docs/adr/
 ```

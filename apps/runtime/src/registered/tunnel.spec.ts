@@ -110,7 +110,7 @@ describe("TunnelClient", () => {
     connections[0].ws.send(
       JSON.stringify({
         type: "registered",
-        runtimeId: "rt-1",
+        runtimeHostId: "rt-1",
         heartbeatIntervalSeconds: 0.05,
       })
     );

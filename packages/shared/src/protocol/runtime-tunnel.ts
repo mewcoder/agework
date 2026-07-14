@@ -59,7 +59,7 @@ export type RuntimeTunnelClientMessage =
 /** server → manager:注册成功回执,带心跳节奏。 */
 export interface RuntimeTunnelRegisteredMessage {
   type: "registered";
-  runtimeId: string;
+  runtimeHostId: string;
   heartbeatIntervalSeconds: number;
   /** Phase 2: 隧道会话 epoch,每次 register 递增。Host 把它盖在所有
    *  host.upstream 信封上,server 丢弃非当前 epoch 的消息(防脑裂:

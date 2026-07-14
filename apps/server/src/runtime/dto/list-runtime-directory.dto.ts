@@ -4,7 +4,7 @@ import type { ListRuntimeDirectoryRequest } from "@agework/shared/api";
 export class ListRuntimeDirectoryDto implements ListRuntimeDirectoryRequest {
   @IsString()
   @IsNotEmpty()
-  runtimeId!: string;
+  runtimeHostId!: string;
 
   @IsOptional()
   @IsString()

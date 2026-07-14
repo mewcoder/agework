@@ -31,7 +31,7 @@ import type { AgentDetectedEnv, RuntimeEnvConfig } from "../api/runtimes";
 
 /**
  * 检测本机 agent CLI 环境，返回完整的 envConfig（claude + codex）。
- * builtin/managed native runtime 启动时、registered runtime 注册时、admin 触发重检时各调一次。
+ * builtin Host 启动时、registered Host 注册时、admin 触发重检时各调一次。
  */
 export function detectEnvConfig(): RuntimeEnvConfig {
   return {

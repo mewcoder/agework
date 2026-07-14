@@ -36,7 +36,7 @@ export const workerApi = {
     const qs = query.toString();
     return apiGet<WorkerInstanceListResponse>(`/api/v1/admin/worker/resources${qs ? `?${qs}` : ''}`);
   },
-  /** Phase 2: 现场查询所有 Host（managed + registered）的 worker 快照。 */
+  /** 现场查询所有 Host（builtin + registered）的 worker 快照。 */
   listLiveWorkers: () =>
     apiGet<LiveWorkerListResponse>('/api/v1/admin/worker/resources/live'),
   stopResource: (id: string) => apiPost<{ ok: boolean }>('/api/v1/admin/worker/resources/stop', { id }),

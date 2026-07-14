@@ -15,14 +15,14 @@ import { EnvKey } from "../../config/registry/env-key";
  * worker 数据面对端从 server 旧 /worker/* 端点切到 Host——与 registered
  * daemon 同构。native/docker/opensandbox 都由这一个 Host 按 runtimeType 分派 provider。
  *
- * worker-manager 内部 provider:不 export、不进其他 module。
+ * runtime-host 内部 provider：不 export、不进入其他 module。
  */
-export const MANAGED_RUNTIME_HOST = Symbol("MANAGED_RUNTIME_HOST");
+export const BUILTIN_RUNTIME_HOST = Symbol("BUILTIN_RUNTIME_HOST");
 
-const logger = new Logger("ManagedRuntimeHost");
+const logger = new Logger("BuiltinRuntimeHost");
 
-export const managedRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
-  provide: MANAGED_RUNTIME_HOST,
+export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
+  provide: BUILTIN_RUNTIME_HOST,
   inject: [ConfigService, RuntimeService, RunEventService],
   useFactory: async (
     configService: ConfigService,
@@ -60,7 +60,7 @@ export const managedRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       workerApiBaseUrl,
       resolveCliPaths: async () => {
         const resolved = await runtimeService.getResolvedCliPaths(
-          runtimeService.getManagedRuntimeId("native")
+          runtimeService.getBuiltinHostId()
         );
         return {
           claude: resolved?.claude ?? null,

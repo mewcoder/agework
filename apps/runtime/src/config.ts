@@ -30,7 +30,7 @@ export interface RegisteredRuntimeConfig {
   /** Phase 2: worker HTTP 服务器监听端口(worker 回连 Host 的端口)。
  *  默认 7101。worker 的 AGEWORK_WORKER_API_BASE 会被设为 `http://127.0.0.1:<port>/api/v1`。 */
   workerPort?: number;
-  /** 用户工作空间根目录(user-scope 隔离的挂载根)。managed 场景由 server
+  /** 用户工作空间根目录(user-scope 挂载根)。builtin 场景由 server
  *  supervisor 注入自己的配置值;registered 默认 /home/agework/workspaces。 */
   userWorkspaceRoot?: string;
 }

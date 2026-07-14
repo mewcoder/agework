@@ -4,18 +4,18 @@ import type { ProviderConfigValues } from '@/api/model-providers';
 import type { AgentType } from '@agework/shared';
 export type { ModelProvider, ProviderConfigValues, ModelProviderTestResponse } from '@/api/model-providers';
 
-function queryKey(agentType: AgentType, runtimeId?: string) {
-  return ['model-providers', agentType, runtimeId ?? null];
+function queryKey(agentType: AgentType, runtimeHostId?: string) {
+  return ['model-providers', agentType, runtimeHostId ?? null];
 }
 
 function adminQueryKey(agentType: AgentType) {
   return ['admin-model-providers', agentType];
 }
 
-export function useModelProviders(agentType: AgentType, runtimeId?: string) {
+export function useModelProviders(agentType: AgentType, runtimeHostId?: string) {
   return useQuery({
-    queryKey: queryKey(agentType, runtimeId),
-    queryFn: () => modelProvidersApi.list(agentType, runtimeId),
+    queryKey: queryKey(agentType, runtimeHostId),
+    queryFn: () => modelProvidersApi.list(agentType, runtimeHostId),
     select: (data) => data.list,
   });
 }

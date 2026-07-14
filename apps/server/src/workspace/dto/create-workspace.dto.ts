@@ -32,5 +32,5 @@ export class CreateWorkspaceDto implements CreateWorkspaceRequest {
 
   @IsOptional()
   @IsString()
-  runtimeId?: string;
+  runtimeHostId?: string;
 }

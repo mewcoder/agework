@@ -19,7 +19,7 @@ import {
 import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -160,9 +160,9 @@ export class RunLauncher {
   }
 
   /**
-   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 Managed 专属策略,
-   * Registered runtime 的 workspace 跳过——它的 runtimeType/isolationScope 已在
-   * 创建时对着该 Runtime 自己的注册类型/能力矩阵校验过(见
+   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 builtin Host 的策略，
+   * registered Host 的 workspace 跳过——它的 runtimeType/isolationScope 已在
+   * 创建时对着该 Host 的能力矩阵校验过(见
    * WorkspaceService.resolveRegisteredPlacement)。执行机路径/RunConfig 派生
    * 不在这里:那是 Host 侧(契约实现)的职责。
    */
@@ -171,13 +171,18 @@ export class RunLauncher {
     userId: string;
   }): RunPlacement {
     const { workspace, userId } = input;
-    const isRegistered = workspace.runtimeSource !== "managed";
+    const isRegistered = workspace.runtimeSource === "registered";
     const runtimeType = workspace.runtimeType;
-    if (!isRegistered && !this.configService.isRuntimeTypeAllowed(runtimeType)) {
+    if (
+      !isRegistered &&
+      !this.configService.isRuntimeTypeAllowed(runtimeType)
+    ) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
     if (!isRuntimeType(runtimeType)) {
-      throw new BadRequestException(`工作空间的运行环境类型无效: ${runtimeType}`);
+      throw new BadRequestException(
+        `工作空间的运行环境类型无效: ${runtimeType}`
+      );
     }
 
     // native 无容器边界,isolationScope 恒为 workspace(能力矩阵约束);sandbox 校验创建时的选择。

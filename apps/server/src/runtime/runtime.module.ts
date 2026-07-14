@@ -8,7 +8,7 @@ import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { RuntimeLivenessWatchdog } from "./gateway/runtime-liveness.watchdog";
 
 /**
- * Runtime 领域的组合根:门面 Service + Managed 实现 + Registered 配对/隧道。
+ * Runtime Host 资源域组合根：门面 Service + builtin 状态 + registered 配对/隧道。
  * `RuntimeTunnelHandler`(隧道 WS 端点)、`RuntimeLivenessWatchdog`(Host 级判死)
  * 都是 internal provider,不 export。
  */

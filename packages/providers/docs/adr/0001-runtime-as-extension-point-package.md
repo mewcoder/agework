@@ -19,4 +19,4 @@
 
 - server 侧只剩薄接线:`RuntimeModule`(`ConfigService` → `toRuntimeConfig` → `createRuntimeProviders`)+ `RuntimeService`(注入 Map 分发 + `getRuntimePolicy`)。Nest DI 机器全留在 server,包保持 Nest-agnostic(仅用 `Logger`)。
 - `swallow`/`safePathPart`/`safeLogJson` 三个小工具在包内自带(不 import server `common/`)。容器路径常量(`CONTAINER_WORKSPACES_ROOT` 等)下沉进包 `placement`。
-- 关联决策:runtime 生命周期 start/stop/destroy 见 `apps/server/src/worker-manager/docs/adr/0002`。
+- 历史关联决策：runtime 生命周期 start/stop/destroy 见 `apps/server/src/runtime-host/docs/adr/0002`（已 superseded）。

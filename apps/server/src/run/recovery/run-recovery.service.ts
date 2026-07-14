@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
-import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { isBuiltinHostId } from "../../runtime/runtime.types";
@@ -15,7 +15,7 @@ import { swallow } from "../../common/swallow";
 
 /**
  * 服务重启后恢复中断 run,按 Host 归属分流(Phase 2):
- * - managed(builtin)Host 与 server 同生共死,其上的 run 无法续接——发一条
+ * - builtin Host 与 server 同生共死,其上的 run 无法续接——发一条
  *   best-effort cancel 让还活着的 sandbox worker 自己收尾,随后统一判死。
  * - registered Host 独立于 server 存活,其上进行中的 run **不判死**:Host 重连
  *   后按 ACK 水位补发事件流,run 自然续传(路由状态由 RuntimeHostAdapter 从

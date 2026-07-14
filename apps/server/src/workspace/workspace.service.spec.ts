@@ -28,8 +28,7 @@ beforeEach(() => {
 });
 
 // Repository 返回的行由入参回推，保证 toWorkspaceDto 的 rootPath / source 映射可被断言。
-// runtimeType 不再是 WorkspaceCreateInput 的字段（由 runtimeHostId 关联的 Runtime 派生），
-// 从 managed runtimeHostId（"Managed-xxx"）反推，registered runtimeHostId 由调用方显式传入。
+// runtimeType 作为 workspace 快照持久化；runtimeHostId 只选择 builtin/registered Host。
 function workspaceRowFromCreate(
   input: WorkspaceCreateInput,
   runtimeType: string
@@ -70,9 +69,7 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
       Promise.resolve(
         workspaceRowFromCreate(
           input,
-          input.runtimeHostId === "builtin"
-            ? input.runtimeHostId.slice("managed-".length)
-            : "docker"
+          input.runtimeHostId === "builtin" ? "native" : "docker"
         )
       )
     ),
@@ -111,8 +108,10 @@ function makeConfig(overrides: Record<string, unknown> = {}) {
 function makeRuntimeService(overrides: Record<string, unknown> = {}) {
   return {
     getOwned: vi.fn().mockResolvedValue(null),
-    getManagedRuntimeId: vi.fn(() => "builtin"),
-    isManaged: vi.fn((runtimeHostId: string) => runtimeHostId === "builtin"),
+    getBuiltinHostId: vi.fn(() => "builtin"),
+    isBuiltinHost: vi.fn(
+      (runtimeHostId: string) => runtimeHostId === "builtin"
+    ),
     listFiles: vi.fn().mockResolvedValue({
       path: "src",
       list: [{ name: "a.ts", type: "file", size: 10 }],
@@ -857,10 +856,10 @@ describe("WorkspaceService", () => {
     });
   });
 
-  // ── 文件预览路由(managed native 直读, docker/opensandbox/registered 隧道 RPC) ──
+  // ── 文件预览路由（builtin 直读，registered 经隧道 RPC） ──
 
   describe("file preview routing", () => {
-    function makeManagedRunView() {
+    function makeBuiltinRunView() {
       return {
         id: "ws-1",
         runtimeHost: { source: "builtin" },
@@ -882,10 +881,10 @@ describe("WorkspaceService", () => {
       };
     }
 
-    it("managed listFiles routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin listFiles routes to RuntimeService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
-        findRunView: vi.fn().mockResolvedValue(makeManagedRunView()),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
       });
       const runtimeService = makeRuntimeService();
       const service = makeService(repo, makeConfig(), runtimeService);
@@ -904,10 +903,10 @@ describe("WorkspaceService", () => {
       });
     });
 
-    it("managed readFile routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin readFile routes to RuntimeService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
-        findRunView: vi.fn().mockResolvedValue(makeManagedRunView()),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
       });
       const runtimeService = makeRuntimeService();
       const service = makeService(repo, makeConfig(), runtimeService);
@@ -963,10 +962,10 @@ describe("WorkspaceService", () => {
       expect(result.content).toBe("hello");
     });
 
-    it("managed listChangedFiles routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin listChangedFiles routes to RuntimeService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
-        findRunView: vi.fn().mockResolvedValue(makeManagedRunView()),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
       });
       const runtimeService = makeRuntimeService();
       const service = makeService(repo, makeConfig(), runtimeService);
@@ -996,10 +995,10 @@ describe("WorkspaceService", () => {
       );
     });
 
-    it("managed readFileDiff routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin readFileDiff routes to RuntimeService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
-        findRunView: vi.fn().mockResolvedValue(makeManagedRunView()),
+        findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
       });
       const runtimeService = makeRuntimeService();
       const service = makeService(repo, makeConfig(), runtimeService);
@@ -1031,7 +1030,7 @@ describe("WorkspaceService", () => {
       );
     });
 
-    it("404s when the workspace does not belong to the caller (managed)", async () => {
+    it("404s when the builtin workspace does not belong to the caller", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue(null),
       });

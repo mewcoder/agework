@@ -114,10 +114,10 @@ export class WorkspaceDirectoryHandler {
     requestedRootPath?: string;
     runtimeType: RuntimeType;
     isolationScope: IsolationScope | null;
-    /** 目标 Registered Runtime id;非空时整个方法走远程分支,不碰本机文件系统。 */
-    targetRuntimeId?: string | null;
+    /** registered Host id；非空时整个方法走远程分支，不碰本机文件系统。 */
+    registeredRuntimeHostId?: string | null;
   }): Promise<WorkspaceDirectoryCreatePlan> {
-    if (input.targetRuntimeId) {
+    if (input.registeredRuntimeHostId) {
       return this.resolveRemotePlan(input);
     }
     const plan = await this.resolveCreatePlan(input);

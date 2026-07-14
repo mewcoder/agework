@@ -2,7 +2,7 @@ import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { StopWorkerKeyDto } from "./stop-worker-key.dto";
-import { RUNTIME_HOST_CONTRACT } from "../worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../runtime-host.types";
 import type { RuntimeHostContract, WorkerKey } from "@agework/shared/protocol";
 
 /**
@@ -26,7 +26,9 @@ export class AdminWorkerController {
   @Get("stats")
   async getWorkerStats() {
     const workers = await this.hostContract.listWorkers();
-    return { activeWorkers: workers.filter((w) => w.status === "running").length };
+    return {
+      activeWorkers: workers.filter((w) => w.status === "running").length,
+    };
   }
 
   /** Phase 3：唯一资源列表端点,现场查询 Host 上的 worker 快照。 */

@@ -19,8 +19,8 @@ function makeWorkspaceView(
     runtimeType: "native",
     isolationScope: "workspace",
     username: "admin-1",
-    runtimeHostId: "managed-native",
-    runtimeSource: "managed",
+    runtimeHostId: "builtin",
+    runtimeSource: "builtin",
     ...overrides,
   };
 }
@@ -139,7 +139,7 @@ describe("RunLauncher", () => {
         owner: "workspace:ws-1",
         isolationScope: "workspace",
         runtimeType: "native",
-        runtimeHostId: "managed-native",
+        runtimeHostId: "builtin",
         workspaceId: "ws-1",
         userId: "user-1",
         username: "admin-1",
@@ -223,6 +223,32 @@ describe("RunLauncher", () => {
     ): _t is "native" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
     expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
+  });
+
+  it("uses the registered Host capability snapshot instead of the builtin allow-list", async () => {
+    mockConfigService.isRuntimeTypeAllowed = (
+      _t: string
+    ): _t is "native" | "docker" => false;
+
+    await launch(
+      makeStartInput({
+        workspace: makeWorkspaceView({
+          runtimeHostId: "host-remote-1",
+          runtimeSource: "registered",
+          runtimeType: "docker",
+          isolationScope: "workspace",
+        }),
+      })
+    );
+
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: expect.objectContaining({
+          runtimeHostId: "host-remote-1",
+          runtimeType: "docker",
+        }),
+      })
+    );
   });
 
   it("attaches the accepted user message to the created run", async () => {

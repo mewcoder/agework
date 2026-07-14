@@ -98,13 +98,13 @@ export class RuntimeService implements OnApplicationBootstrap {
     );
   }
 
-  /** 是否是 managed(本机 in-process)Runtime id。供上层判断 Managed/Registered。 */
-  isManaged(runtimeId: string): boolean {
-    return isBuiltinHostId(runtimeId);
+  /** 是否是 builtin（本机 in-process）Host。 */
+  isBuiltinHost(runtimeHostId: string): boolean {
+    return isBuiltinHostId(runtimeHostId);
   }
 
-  /** managed Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
-  getManagedRuntimeId(_runtimeType: RuntimeType): string {
+  /** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
+  getBuiltinHostId(): string {
     return BUILTIN_HOST_ID;
   }
 
@@ -139,21 +139,21 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  /** 列出当前用户可见的 Runtime:自己的 Registered + 全局 managed。 */
+  /** 列出当前用户可见的 Host：自己的 registered + 全局 builtin。 */
   async list(ownerId: string): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listVisibleToOwner(ownerId);
     return { list: rows.map(toRuntimeResponse) };
   }
 
-  /** admin: 列出全部 Runtime(managed + 所有用户的 registered),不含已注销。 */
+  /** admin: 列出全部 Host（builtin + 所有用户的 registered），不含已注销。 */
   async listAll(): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listAll();
     return { list: rows.map(toRuntimeResponse) };
   }
 
   /**
-   * 查询 Runtime 是否存在且对该用户可见(自己的 Registered 或全局 managed,且未注销);
-   * 返回 null 表示不存在/不可见/已注销。供上层入口(如创建 workspace 时校验目标 runtime)
+   * 查询 Host 是否存在且对该用户可见（自己的 registered 或全局 builtin，且未注销）；
+   * 返回 null 表示不存在/不可见/已注销。供上层入口（如创建 workspace 时校验目标 Host）
    * 做归属校验,由调用方决定如何处理 null。
    */
   getOwned(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
@@ -161,10 +161,10 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /**
-   * 注销 Runtime(撤 token,软删除,行永久保留):只拦"以后不能再绑定新 workspace",
+   * 注销 registered Host（撤 token、软删除、行永久保留）：只拦"以后不能再绑定新 workspace"，
    * 不主动踢断在线隧道连接——这台机器上可能还有活跃 Worker 在跑,断连接等于强制判死,
    * 跟"放任其自然结束"的设计矛盾(见 runtime 模块 ADR-0001)。连接的存活/掉线继续按
-   * 心跳机制走,不因注销而改变。managed 行 ownerId=null,不会匹配任何真实 userId,
+   * 心跳机制走，不因注销而改变。builtin 行 ownerId=null，不会匹配任何真实 userId，
    * 天然不可被此方法注销。
    */
   async delete(ownerId: string, id: string): Promise<void> {
@@ -323,19 +323,19 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 安全校验复用 shared/fileBrowser，rootPath 由 WorkspaceService 查出后传入。
    */
   async listFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      if (!isBuiltinHostId(runtimeId)) {
+      if (!isBuiltinHostId(runtimeHostId)) {
         return await this.sendTunnelRequest<WorkspaceFileListResponse>(
-          runtimeId,
+          runtimeHostId,
           {
             jsonrpc: "2.0",
             id: generateId(),
             method: "host.listFiles",
-            params: { runtimeHostId: runtimeId, rootPath, path: relativePath },
+            params: { runtimeHostId, rootPath, path: relativePath },
           },
           this.configService.getLaunchTimeoutSeconds() * 1000
         );
@@ -359,19 +359,19 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 文件预览直读(ADR-0005),同 listFiles。 */
   async readFile(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      if (!isBuiltinHostId(runtimeId)) {
+      if (!isBuiltinHostId(runtimeHostId)) {
         return await this.sendTunnelRequest<WorkspaceFileReadResponse>(
-          runtimeId,
+          runtimeHostId,
           {
             jsonrpc: "2.0",
             id: generateId(),
             method: "host.readFile",
-            params: { runtimeHostId: runtimeId, rootPath, path: relativePath },
+            params: { runtimeHostId, rootPath, path: relativePath },
           },
           this.configService.getLaunchTimeoutSeconds() * 1000
         );
@@ -403,19 +403,19 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 非 git 目录 → BadRequestException(可区分「非 git」);git 失败 → BadRequestException。
    */
   async listChangedFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return isBuiltinHostId(runtimeId)
+      return isBuiltinHostId(runtimeHostId)
         ? await listChangedFilesDirect(rootPath)
         : await this.sendTunnelRequest<WorkspaceChangedFilesResponse>(
-            runtimeId,
+            runtimeHostId,
             {
               jsonrpc: "2.0",
               id: generateId(),
               method: "host.listChangedFiles",
-              params: { runtimeHostId: runtimeId, rootPath },
+              params: { runtimeHostId, rootPath },
             },
             this.configService.getLaunchTimeoutSeconds() * 1000
           );
@@ -426,21 +426,21 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 单文件 diff,同 listChangedFiles。 */
   async readFileDiff(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return isBuiltinHostId(runtimeId)
+      return isBuiltinHostId(runtimeHostId)
         ? await readFileDiffDirect(rootPath, relativePath)
         : await this.sendTunnelRequest<WorkspaceFileDiffResponse>(
-            runtimeId,
+            runtimeHostId,
             {
               jsonrpc: "2.0",
               id: generateId(),
               method: "host.readFileDiff",
               params: {
-                runtimeHostId: runtimeId,
+                runtimeHostId,
                 rootPath,
                 path: relativePath,
               },
@@ -454,19 +454,19 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 文件搜索(git ls-files，供 `@` 文件提及),同 listFiles。 */
   async searchFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string
   ): Promise<WorkspaceFileSearchResponse> {
     try {
-      return isBuiltinHostId(runtimeId)
+      return isBuiltinHostId(runtimeHostId)
         ? await searchFilesDirect(rootPath)
         : await this.sendTunnelRequest<WorkspaceFileSearchResponse>(
-            runtimeId,
+            runtimeHostId,
             {
               jsonrpc: "2.0",
               id: generateId(),
               method: "host.searchFiles",
-              params: { runtimeHostId: runtimeId, rootPath },
+              params: { runtimeHostId, rootPath },
             },
             this.configService.getLaunchTimeoutSeconds() * 1000
           );
@@ -511,7 +511,7 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /**
    * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 local/runtime-config.ts)。
-   * Phase 2:worker-manager 侧进程内 RuntimeHost(managed-native)构造时用。
+   * 供进程内 builtin RuntimeHost 构造 provider 配置。
    */
   getProviderRuntimeConfig(): RuntimeConfig {
     return toRuntimeConfig(this.configService);
@@ -519,40 +519,40 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   // ── Phase 2 隧道公开面(对 RuntimeTunnelHandler 的薄转发)────────────
   //
-  // worker-manager 的 RuntimeHostAdapter 经这里走隧道,不直接 reach
+  // RuntimeHostAdapter 经这里走隧道,不直接 reach
   // gateway 内部文件(模块边界:跨模块只调根 Service)。
 
   /** 向已建连的 registered Host 发一次隧道 RPC(host.* / launch/stop/destroy)。 */
   sendTunnelRequest<Result>(
-    runtimeId: string,
+    runtimeHostId: string,
     request: RuntimeTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
     return this.tunnelHandler.sendRequest<Result>(
-      runtimeId,
+      runtimeHostId,
       request,
       timeoutMs
     );
   }
 
-  /** 列出所有隧道在线的 runtime id(managed-native 不走隧道,不会出现在结果里)。 */
-  listConnectedRuntimeIds(): string[] {
+  /** 列出所有隧道在线的 registered Host id（builtin Host 不走隧道）。 */
+  listConnectedRuntimeHostIds(): string[] {
     return this.tunnelHandler.listConnected();
   }
 
   /** 向目标 Host 发一条单向隧道通知(不等回应,不在线即丢弃,best-effort)。 */
   sendTunnelNotification(
-    runtimeId: string,
+    runtimeHostId: string,
     notification: RuntimeTunnelHostNotification
   ): void {
-    this.tunnelHandler.sendNotification(runtimeId, notification);
+    this.tunnelHandler.sendNotification(runtimeHostId, notification);
   }
 
   /** 注册 host.upstream 通知回调(Host → server 单向回流,进程内仅一个消费者)。
    *  handler 返回 Promise 时按连接串行 await,处理完成后才向 Host 回 ACK 水位。 */
   setTunnelUpstreamHandler(
     handler: (
-      runtimeId: string,
+      runtimeHostId: string,
       notification: HostUpstreamNotification
     ) => Promise<void> | void
   ): void {

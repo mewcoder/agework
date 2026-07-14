@@ -112,10 +112,6 @@ export type RuntimeInstanceRef = {
   workerId: string;
   runtimeInstanceId: string;
   isolationScope: string;
-  /** 载体所在的 Registered Runtime id;null/undefined = Managed。provider 本身
-   *  不用这个字段(它只认识自己那一种载体的物理操作)——server 层拿它决定
-   *  该把 worker 生命周期路由到哪台 RuntimeHost。 */
-  targetRuntimeId?: string | null;
 };
 
 /**

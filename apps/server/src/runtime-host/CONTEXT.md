@@ -1,8 +1,8 @@
-# Worker Manager
+# Runtime Host
 
-Phase 3 清尾后，worker-manager 模块只剩 **contract 实现 + admin 观测面**。
+server 侧的 Runtime Host 组合根，负责 **contract 实现 + Host 路由 + admin 观测面**。
 
-旧执行栈（connection/instance/registry）、旧 `/worker/*` 端点、`WorkerManagerService` 已全部删除。worker 数据面由 builtin Host 自管的 `WorkerHttpServer` 承接（registered Host 各自的 `WorkerHttpServer`）。
+worker 数据面由 builtin Host 自管的 `WorkerHttpServer` 承接；registered Host 各自运行同构的 `WorkerHttpServer`。
 
 ## Language
 

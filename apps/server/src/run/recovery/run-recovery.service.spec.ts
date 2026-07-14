@@ -222,7 +222,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     expect(deps.runRepository.markError).not.toHaveBeenCalled();
   });
 
-  it("never sweeps managed runs (they are handled at boot)", async () => {
+  it("never sweeps builtin Host runs (they are handled at boot)", async () => {
     const deps = makeDeps([makeActiveRun({ runtimeHostId: "builtin" })]);
 
     await runOneSweep(deps, makeRuntimeHost());

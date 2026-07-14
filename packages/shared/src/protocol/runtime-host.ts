@@ -15,9 +15,7 @@ import type {
 // ── Server ↔ Runtime Host 契约 ──────────────────────────────────────
 //
 // 设计定案见 docs/design/server-runtime-worker-target-architecture.md §4.2。
-// Phase 1（契约先行）只收编 run 模块需要的执行面动词；环境/文件/观测全量动词
-// 在 Phase 2 执行面搬家时扩入。标注「过渡」的成员服务于 Phase 1 的委托实现，
-// Phase 2/3 收窄或删除。
+// run、环境、文件和观测能力统一经此契约进入目标 Host。
 
 /** worker 的服务范围：对用户是独享/共享承诺，对 Host 是复用粒度。 */
 export type WorkerScope = "workspace" | "user";
@@ -101,9 +99,8 @@ export type WorkerSnapshot = {
 
 // ── Phase 2 expand: 环境 / 文件 / 观测 全量动词 ─────────────────────
 //
-// 以下类型与方法是 Phase 2 执行面搬家时扩入的契约面（设计文档 §4.2）。
-// Phase 1 委托实现（RuntimeHostAdapter）以过渡方式兑现——
-// 标注「过渡」的入参字段（runtimeHostId）在 Phase 2 per-Host 实例就绪后删除。
+// RuntimeHostAdapter 使用 runtimeHostId 选择 builtin 或 registered Host；
+// Host 的具体执行能力由 runtimeType 显式表达。
 
 /**
  * Host 的能力矩阵动态部分：每种 runtimeType 的可用性 + CLI 检测结果。
@@ -125,11 +122,10 @@ export type AgentCliStatus = RuntimeEnvConfig;
 
 // ── 文件操作输入/输出类型 ──
 //
-// 过渡期入参带 runtimeHostId（Phase 2 per-Host 实例就绪后删除——
-// Host 知道自己的 id，不需要调用方传入）。
+// runtimeHostId 是 server 侧路由选择器，和 runtimeType（执行能力）正交。
 
 export type ListDirectoryInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   path?: string;
 };
@@ -140,46 +136,46 @@ export type DirectoryListing = {
 };
 
 export type CreateDirectoryInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   path: string;
 };
 
 export type WorkspaceFileQuery = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type ReadFileInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type ReadFileDiffInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type SearchFilesInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
 };
 
 export type ListChangedFilesInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
 };
 
 export type InstallCliInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   agentType: AgentType;
 };
@@ -189,8 +185,8 @@ export type InstallCliResult = {
 };
 
 /**
- * server → Runtime Host 的执行面契约。方向永远向下；Phase 1 由 worker-manager
- * 模块内的委托实现兑现（进程内），Phase 2 起 builtin 走库入口、registered 走隧道。
+ * server → Runtime Host 的执行面契约。方向永远向下；builtin 走进程内调用，
+ * registered 走控制隧道。
  */
 export interface RuntimeHostContract {
   // —— 执行 ——
@@ -217,11 +213,7 @@ export interface RuntimeHostContract {
 
   // —— 环境 ——
 
-  /**
-   * 每种 runtimeType 的可用性 + CLI 检测结果，构成能力矩阵的动态部分。
-   * 过渡：Phase 1 委托实现需 runtimeHostId 路由到正确的 Runtime；
-   * Phase 2 per-Host 实例直接返回自身能力。
-   */
+  /** 每种 runtimeType 的可用性 + CLI 检测结果，构成目标 Host 的能力矩阵。 */
   detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus>;
 
   /** 安装 agent CLI（仅 native runtimeType 有意义）。 */
@@ -260,12 +252,12 @@ export interface RuntimeHostContract {
   /** 按 WorkerKey 停止一个 worker（admin 诊断入口）。 */
   stopWorker(key: WorkerKey): Promise<void>;
 
-  // —— 过渡成员（Phase 1 委托实现专用，Phase 2/3 收窄或删除） ——
+  // —— 生命周期与上行端口 ——
 
   /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
   releaseRun(runId: string): void;
 
-  /** 接线上行端口（启动期一次）。Phase 2 变为隧道会话注册的一部分。 */
+  /** 接线上行端口（启动期一次）。 */
   setUpstream(upstream: RuntimeHostUpstream): void;
 
   /**

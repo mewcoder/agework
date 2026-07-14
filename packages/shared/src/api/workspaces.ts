@@ -16,8 +16,8 @@ export type WorkspaceResponse = {
   /** 创建时选定的 git 分支;非 git / 未选时为 null。创建后只读。 */
   gitBranch?: string | null;
   description?: string | null;
-  /** 绑定的 Registered Runtime id;null = Managed(本机 in-process)。创建后不可改。 */
-  runtimeId?: string | null;
+  /** 绑定的 Runtime Host id（builtin 或 registered）。创建后不可改。 */
+  runtimeHostId: string;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601 */
@@ -41,7 +41,7 @@ export type CreateWorkspaceRequest = {
   runtimeType?: WorkspaceRuntimeType;
   isolationScope?: WorkspaceIsolationScope;
   /** 绑定到某个已配对的 Registered Runtime Host；runtimeType 选择其一种能力。 */
-  runtimeId?: string;
+  runtimeHostId?: string;
 };
 
 export type UpdateWorkspaceRequest = {

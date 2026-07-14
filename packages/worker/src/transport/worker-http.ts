@@ -22,7 +22,7 @@ import { AGEWORK_VERSION } from "@agework/shared";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
- * 常驻 worker 的 worker-manager HTTP 客户端。
+ * 常驻 worker 的 Runtime Host HTTP 客户端。
  * commands 轮询是 workerId 级（`/worker/:workerId/commands`，
  * workerId 由 env AGEWORK_WORKER_ID 传入），emit/fetchRunConfig 按 runId 参数化。
  */
@@ -72,7 +72,7 @@ export class WorkerHttpTransport {
       throw new Error("AGEWORK_WORKER_ID is required for resident worker");
     }
 
-    workerLog("worker-manager http client initialized", {
+    workerLog("runtime-host http client initialized", {
       apiBase: this.apiBase,
       workerId: this.workerId,
       logFile:

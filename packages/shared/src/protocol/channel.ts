@@ -199,7 +199,9 @@ export type Unsubscribe = () => void;
 export interface RuntimeChannel {
   fetchRunConfig(): Promise<RunConfig>;
   emit(msg: UpstreamMessageInput): Promise<void>;
-  subscribeCommands(cb: (command: RunChannelMessage<CommandPayload>) => void): Unsubscribe;
+  subscribeCommands(
+    cb: (command: RunChannelMessage<CommandPayload>) => void
+  ): Unsubscribe;
   close(): Promise<void>;
 }
 
@@ -270,16 +272,6 @@ export interface WorkerExecutionHandle {
   runtimeInstanceId: string;
   conversationId: string;
 }
-
-export type WorkerExecutionStartInput = {
-  runtimeTarget: RuntimeSpec;
-  runConfig: RunConfig;
-  onRuntimeInstanceIdReady?: (runtimeInstanceId: string) => void;
-  /** 目标 Runtime id(managed 本机内置 或 registered 远程机器)。不进 RuntimeSpec——
-   *  那是纯 DB 无关的 placement 计算类型,这个字段来自 workspace.runtimeId,是
-   *  "起在哪台机器上"而非"怎么挂载/隔离"。 */
-  targetRuntimeId: string;
-};
 
 /**
  * runtime 为一次 run 取得（创建/复用/attach）持久容器实例的结果。

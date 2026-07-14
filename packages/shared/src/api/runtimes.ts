@@ -85,11 +85,11 @@ export type CreateRuntimeResponse = {
   token: string;
 };
 
-export type RuntimeIdRequest = { id: string };
+export type RuntimeHostIdRequest = { id: string };
 
 /** admin 覆盖 envConfig 的请求 body：per-agent，只覆盖指定的 agent。 */
 export type UpdateEnvConfigOverrideRequest = {
-  /** 目标 runtime id。 */
+  /** 目标 Runtime Host id。 */
   id: string;
   /** 指定要覆盖的 agent。 */
   agentType: AgentType;
@@ -105,7 +105,7 @@ export type DetectEnvResponse = {
 
 /** admin 一键安装 runtime 独立 CLI 的请求 body：per-agent，仅支持 native runtime。 */
 export type InstallCliRequest = {
-  /** 目标 runtime id。 */
+  /** 目标 Runtime Host id。 */
   id: string;
   /** 指定要安装的 agent。 */
   agentType: AgentType;
@@ -113,9 +113,9 @@ export type InstallCliRequest = {
 
 /** GET /api/v1/runtimes/directories/list 的查询参数。 */
 export type ListRuntimeDirectoryRequest = {
-  /** 目标 runtime id。 */
-  runtimeId: string;
-  /** 省略时列出该 runtime 所在机器的用户主目录。 */
+  /** 目标 Runtime Host id。 */
+  runtimeHostId: string;
+  /** 省略时列出该 Host 所在机器的用户主目录。 */
   path?: string;
 };
 
@@ -127,8 +127,8 @@ export type RuntimeDirectoryResponse = {
 
 /** POST /api/v1/runtimes/directories/create 的请求 body。 */
 export type CreateRuntimeDirectoryRequest = {
-  /** 目标 runtime id。 */
-  runtimeId: string;
+  /** 目标 Runtime Host id。 */
+  runtimeHostId: string;
   /** 要新建的目录绝对路径。 */
   path: string;
 };

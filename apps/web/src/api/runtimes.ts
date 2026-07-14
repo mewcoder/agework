@@ -18,7 +18,7 @@ export type { CreateRuntimeResponse };
 export const runtimesApi = {
   list: () => apiGet<{ list: RuntimeResponse[] }>('/api/v1/runtimes/list'),
 
-  /** admin: 列出全部 Runtime（managed + 所有用户的 registered）。 */
+  /** admin: 列出全部 Runtime Host（builtin + 所有用户的 registered）。 */
   adminList: () =>
     apiGet<{ list: RuntimeResponse[] }>('/api/v1/admin/runtimes/list'),
 
@@ -41,7 +41,7 @@ export const runtimesApi = {
 
   /** 列出某个 runtime 上 path 下的子目录（不含文件）。 */
   listDirectory: (params: ListRuntimeDirectoryRequest) => {
-    const query = new URLSearchParams({ runtimeId: params.runtimeId });
+    const query = new URLSearchParams({ runtimeHostId: params.runtimeHostId });
     if (params.path) query.set('path', params.path);
     return apiGet<RuntimeDirectoryResponse>(
       `/api/v1/runtimes/directories/list?${query.toString()}`

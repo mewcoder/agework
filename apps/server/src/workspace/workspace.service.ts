@@ -177,7 +177,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
     }
   }
 
-  // ── 文件预览(managed native 直读, docker/opensandbox/registered 隧道 RPC) ──
+  // ── 文件预览（builtin 直读，registered 经隧道 RPC） ──
 
   /** 列出一层目录(根目录时 path 为空串)。 */
   async listFiles(
@@ -213,8 +213,8 @@ export class WorkspaceService implements OnApplicationBootstrap {
   // ── 变更查看(diff,只读) ──
 
   /**
-   * 列出工作空间相对 HEAD 的累计变更(git-only、只读)。managed native 直跑 git;
-   * docker/opensandbox/registered 经隧道 RPC 调 runtime 进程。
+   * 列出工作空间相对 HEAD 的累计变更（git-only、只读）。builtin Host 直跑 git；
+   * registered Host 经隧道 RPC 调用。
    */
   async listChangedFiles(
     userId: string,
@@ -257,7 +257,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
   }
 
   /**
-   * 属主校验 + 解析运行上下文。managed 和 registered 分支共用。
+   * 属主校验 + 解析运行上下文。builtin 和 registered 分支共用。
    */
   private async resolveFileContext(
     userId: string,
@@ -283,19 +283,19 @@ export class WorkspaceService implements OnApplicationBootstrap {
       rootPath: requestedRootPath,
       runtimeType: requestedRuntimeType,
       isolationScope: requestedIsolationScope,
-      runtimeHostId: requestedRuntimeId,
+      runtimeHostId: requestedRuntimeHostId,
     } = input;
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
     // 只有真的填了 git 地址,分支选择才有意义;否则忽略,gitBranch 留 null。
     const workspaceGitBranch = workspaceGitUrl ? gitBranch?.trim() : undefined;
-    const { runtimeType, isolationScope, targetRuntimeId } =
+    const { runtimeType, isolationScope, runtimeHostId } =
       await this.resolvePlacement({
         userId,
         requestedRuntimeType,
         requestedIsolationScope,
-        requestedRuntimeId,
+        requestedRuntimeHostId,
         hasCustomRootPath: Boolean(requestedRootPath?.trim()),
       });
     // native 没有隔离概念,isolationScope 解析结果是 null;Workspace.isolationScope
@@ -303,12 +303,13 @@ export class WorkspaceService implements OnApplicationBootstrap {
     // 的 identity())。
     const storedIsolationScope = isolationScope ?? "workspace";
     const id = generateId();
-    // directoryHandler 用 targetRuntimeId 是否有值判断"目录在远程机器上,不碰本机
-    // 文件系统"——managed runtimeHostId 现在也总是有值,但 managed 就是 Managed(本机),
-    // 目录仍要走本机 fs 校验/创建,只有 registered 才传给它。
-    const remoteRuntimeId = this.runtimeService.isManaged(targetRuntimeId)
+    // directoryHandler 只接收 registered Host id；builtin Host 的目录仍走本机
+    // fs 校验/创建。
+    const registeredRuntimeHostId = this.runtimeService.isBuiltinHost(
+      runtimeHostId
+    )
       ? undefined
-      : targetRuntimeId;
+      : runtimeHostId;
     const directory = await this.directoryHandler.prepareCreate({
       userId,
       workspaceId: id,
@@ -317,7 +318,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
       gitUrl: workspaceGitUrl,
       gitBranch: workspaceGitBranch,
       requestedRootPath,
-      targetRuntimeId: remoteRuntimeId,
+      registeredRuntimeHostId,
     });
 
     try {
@@ -333,7 +334,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
         runtimeType: runtimeType,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
-        runtimeHostId: targetRuntimeId,
+        runtimeHostId,
       });
       return this.toWorkspaceDto(workspace);
     } catch (err) {
@@ -344,24 +345,23 @@ export class WorkspaceService implements OnApplicationBootstrap {
 
   /**
    * 解析 placement:Registered(传了 runtimeHostId)分支复用 resolveRegisteredPlacement;
-   * Managed 分支按部署策略解析 runtimeType/isolationScope 后,落到该 runtimeType
-   * 对应的 managed Runtime id。
+   * builtin 分支按部署策略解析 runtimeType/isolationScope，Host id 固定为 builtin。
    */
   private async resolvePlacement(input: {
     userId: string;
     requestedRuntimeType?: string;
     requestedIsolationScope?: string;
-    requestedRuntimeId?: string;
+    requestedRuntimeHostId?: string;
     hasCustomRootPath: boolean;
   }): Promise<{
     runtimeType: RuntimeType;
     isolationScope: IsolationScope | null;
-    targetRuntimeId: string;
+    runtimeHostId: string;
   }> {
-    if (input.requestedRuntimeId) {
+    if (input.requestedRuntimeHostId) {
       return this.resolveRegisteredPlacement(
         input.userId,
-        input.requestedRuntimeId,
+        input.requestedRuntimeHostId,
         input.requestedRuntimeType,
         input.requestedIsolationScope
       );
@@ -375,14 +375,14 @@ export class WorkspaceService implements OnApplicationBootstrap {
     return {
       runtimeType,
       isolationScope,
-      targetRuntimeId: this.runtimeService.getManagedRuntimeId(runtimeType),
+      runtimeHostId: this.runtimeService.getBuiltinHostId(),
     };
   }
 
   /**
    * Registered Host 分支的 placement 解析:runtimeType 从该 Host 的能力矩阵中选择；
    * isolationScope 按所选 runtimeType 的 scopes 校验，而非部署级 ConfigService 允许列表
-   * (那是 Managed 专属的策略,与某一台具体机器的能力无关)。
+   * (那是 builtin Host 的部署策略,与某一台 registered Host 的能力无关)。
    */
   private async resolveRegisteredPlacement(
     userId: string,
@@ -392,7 +392,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
   ): Promise<{
     runtimeType: RuntimeType;
     isolationScope: IsolationScope | null;
-    targetRuntimeId: string;
+    runtimeHostId: string;
   }> {
     const registeredRuntime = await this.runtimeService.getOwned(
       userId,
@@ -433,7 +433,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
       return {
         runtimeType,
         isolationScope: null,
-        targetRuntimeId: runtimeHostId,
+        runtimeHostId,
       };
     }
     const allowedScopes = capability.scopes;
@@ -451,7 +451,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
     return {
       runtimeType,
       isolationScope,
-      targetRuntimeId: runtimeHostId,
+      runtimeHostId,
     };
   }
 

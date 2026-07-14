@@ -62,7 +62,7 @@ export function PickDirectoryDialog({
   onCreated,
 }: PickDirectoryDialogProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [runtimeOverrideId, setRuntimeOverrideId] = useState<
+  const [runtimeHostOverrideId, setRuntimeHostOverrideId] = useState<
     string | undefined
   >(undefined);
   const [error, setError] = useState<string | null>(null);
@@ -71,56 +71,56 @@ export function PickDirectoryDialog({
   const { data: runtimes = [] } = useRuntimes();
   const createDirMutation = useCreateRuntimeDirectory();
 
-  // managed runtime 都跑在 server 所在这台机器上,「选择本地文件夹」只在这些之间选,
+  // builtin Host 就在 server 所在机器上；「选择本地文件夹」只在这里浏览，
   // 不含已配对的远程机器(那台机器上的目录不属于"本地")。
   const builtinRuntimes = useMemo(
     () => runtimes.filter((r) => r.source === "builtin"),
     [runtimes]
   );
 
-  const defaultRuntimeId = builtinRuntimes[0]?.id;
-  const selectedRuntimeId = runtimeOverrideId ?? defaultRuntimeId;
+  const defaultRuntimeHostId = builtinRuntimes[0]?.id;
+  const selectedRuntimeHostId = runtimeHostOverrideId ?? defaultRuntimeHostId;
 
   const selectedRuntime = builtinRuntimes.find(
-    (r) => r.id === selectedRuntimeId
+    (r) => r.id === selectedRuntimeHostId
   );
   const selectedRuntimeType = selectedRuntime?.capabilities?.native?.available
     ? "native"
     : undefined;
 
-  function handleRuntimeChange(runtimeId: string | null) {
-    if (!runtimeId) return;
-    setRuntimeOverrideId(runtimeId);
+  function handleRuntimeChange(runtimeHostId: string | null) {
+    if (!runtimeHostId) return;
+    setRuntimeHostOverrideId(runtimeHostId);
     setSelectedPath(null);
   }
 
   // 注入 DirectoryPicker 的目录列表函数
   const listDirectories = useMemo(() => {
-    if (!selectedRuntimeId) return undefined;
+    if (!selectedRuntimeHostId) return undefined;
     return async (dir: string | undefined): Promise<DirectoryListing> => {
       const res = await runtimesApi.listDirectory({
-        runtimeId: selectedRuntimeId,
+        runtimeHostId: selectedRuntimeHostId,
         path: dir,
       });
       return { path: res.path, list: res.list };
     };
-  }, [selectedRuntimeId]);
+  }, [selectedRuntimeHostId]);
 
   // 注入 DirectoryPicker 的新建目录函数
   const createDirectory = useMemo(() => {
-    if (!selectedRuntimeId) return undefined;
+    if (!selectedRuntimeHostId) return undefined;
     return async (path: string): Promise<string> => {
       const res = await createDirMutation.mutateAsync({
-        runtimeId: selectedRuntimeId,
+        runtimeHostId: selectedRuntimeHostId,
         path,
       });
       return res.path;
     };
-  }, [selectedRuntimeId, createDirMutation]);
+  }, [selectedRuntimeHostId, createDirMutation]);
 
   function reset() {
     setSelectedPath(null);
-    setRuntimeOverrideId(undefined);
+    setRuntimeHostOverrideId(undefined);
     setError(null);
     createWorkspace.reset();
   }
@@ -179,7 +179,7 @@ export function PickDirectoryDialog({
                 value: runtime.id,
                 label: runtime.name,
               }))}
-              value={selectedRuntimeId}
+              value={selectedRuntimeHostId}
               onValueChange={handleRuntimeChange}
             >
               <SelectTrigger id="pick-directory-runtime" className="w-full">

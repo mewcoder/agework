@@ -12,7 +12,7 @@ import { swallow } from "../common/swallow";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../runtime-host/runtime-host.types";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";

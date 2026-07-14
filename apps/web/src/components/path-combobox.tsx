@@ -113,7 +113,7 @@ interface PathComboboxProps {
  * <PathCombobox
  *   value={path}
  *   onChange={setPath}
- *   listDirectories={(dir) => runtimesApi.listDirectory({ runtimeId, path: dir })}
+ *   listDirectories={(dir) => runtimesApi.listDirectory({ runtimeHostId, path: dir })}
  *   placeholder="/Users/you/projects/app"
  * />
  * ```

@@ -10,7 +10,7 @@ import type {
   WorkerExecutionHandle,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,

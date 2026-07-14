@@ -142,14 +142,14 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("isManaged distinguishes managed ids from registered ids", () => {
-    expect(service.isManaged("builtin")).toBe(true);
-    expect(service.isManaged("builtin")).toBe(true);
-    expect(service.isManaged("rt-1")).toBe(false);
+  it("isBuiltinHost distinguishes builtin from registered ids", () => {
+    expect(service.isBuiltinHost("builtin")).toBe(true);
+    expect(service.isBuiltinHost("builtin")).toBe(true);
+    expect(service.isBuiltinHost("rt-1")).toBe(false);
   });
 
-  it("getManagedRuntimeId returns the fixed id for a runtimeType", () => {
-    expect(service.getManagedRuntimeId("docker")).toBe("builtin");
+  it("getBuiltinHostId returns the fixed builtin Host id", () => {
+    expect(service.getBuiltinHostId()).toBe("builtin");
   });
 
   it("resolveRuntimeSpec delegates to the pure resolver", () => {
@@ -197,7 +197,7 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("detectEnv for managed native runtime uses local detection (no tunnel)", async () => {
+  it("detectEnv for the builtin Host uses local detection (no tunnel)", async () => {
     const result = await service.detectEnv("builtin");
     expect(result.envConfig).not.toBeNull();
     expect(repository.updateEnvConfig).toHaveBeenCalledWith(
@@ -386,7 +386,7 @@ describe("RuntimeService", () => {
     expect(result).toEqual({ path: "/data/new" });
   });
 
-  // ── 文件预览(managed native 直读, registered/docker 隧道 RPC) ─────
+  // ── 文件预览（builtin 直读，registered 经隧道 RPC） ─────
 
   it("listFiles for builtin Host reads the local filesystem", async () => {
     const result = await service.listFiles("builtin", "/tmp/ws", "src");

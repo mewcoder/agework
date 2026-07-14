@@ -1,7 +1,7 @@
 # 工作空间文件预览方案设计
 
 > 状态:设计稿,未实现。
-> 已拍板决策:① UI 放聊天页(workbench)右侧可折叠面板;② 代码预览用 shiki 只读高亮;③ **一步到位:全部 runtime(local / docker / opensandbox / registered)统一由工作区所在环境内的常驻 worker 代理读,server 不做任何本机 fs 直读**,链路参考 omnigent 的 server 纯代理模式;④ 第一阶段**纯只读**——写文件/编辑文件不做,diff 视图第二阶段再做(见 §6);⑤ **文件命令(list_files/read_file)走独立的 owner-scoped 通道,不复用 run 的 `command.result`/`RunEvent`**——命令/结果通道从下到上都是 run-scoped 的(`RunChannelMessage.runId` 必填、`RunEvent.runId` 是必填外键关联 `Run`),文件预览常见的「worker 在线但无活跃 run」场景凑不出合法 runId,原因与取舍见 `apps/server/src/worker-manager/docs/adr/0004-workspace-file-commands-independent-channel.md`,§3/§4 已按此改写。
+> 已拍板决策:① UI 放聊天页(workbench)右侧可折叠面板;② 代码预览用 shiki 只读高亮;③ **一步到位:全部 runtime(local / docker / opensandbox / registered)统一由工作区所在环境内的常驻 worker 代理读,server 不做任何本机 fs 直读**,链路参考 omnigent 的 server 纯代理模式;④ 第一阶段**纯只读**——写文件/编辑文件不做,diff 视图第二阶段再做(见 §6);⑤ **文件命令(list_files/read_file)走独立的 owner-scoped 通道,不复用 run 的 `command.result`/`RunEvent`**——命令/结果通道从下到上都是 run-scoped 的(`RunChannelMessage.runId` 必填、`RunEvent.runId` 是必填外键关联 `Run`),文件预览常见的「worker 在线但无活跃 run」场景凑不出合法 runId,原因与取舍见 `apps/server/src/runtime-host/docs/adr/0004-workspace-file-commands-independent-channel.md`,§3/§4 已按此改写。
 
 ## 1. 背景与目标
 
