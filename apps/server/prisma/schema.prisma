@@ -234,7 +234,7 @@ model RuntimeHost {
   lastHeartbeatAt DateTime?
   // 配对 token 的 SHA-256（token 高熵随机，明文只在创建响应里出现一次）。builtin 行为 null。
   tokenHash       String?   @unique
-  // 能力矩阵：{ isolationScopes: string[] }，注册时上报；builtin 行创建时写死。
+  // 能力矩阵：{ [runtimeType]: { available, scopes, reason?, cli? } }。
   capabilities    Json?
   /// RuntimeHost 上报的 agent CLI 环境检测结果（路径/版本/认证状态）。
   /// 注册时检测上报，admin 可通过隧道 RPC 触发重检刷新。server 只存不测（见 ADR-0003）。

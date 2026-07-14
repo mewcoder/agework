@@ -57,9 +57,8 @@ export class RuntimeRepository {
     });
   }
 
-  /** builtin 行启动时 upsert:id 固定 "builtin",by-id 幂等落 capabilities/online。
-   *  tokenHash:native 传 null(留进程内,不经隧道);docker/opensandbox 传 sha256(managed token)
-   *  供隧道鉴权。每次 server 启动重新生成 token 并覆盖 tokenHash(旧进程已死,旧 token 自然失效)。 */
+  /** builtin 行启动时 upsert:id 固定 "builtin",幂等落完整能力矩阵并置 online。
+   *  builtin Host 在 server 进程内，不经隧道，因此 tokenHash 恒为 null。 */
   upsertBuiltin(input: {
     name: string;
     capabilities: RuntimeCapabilities;
@@ -121,7 +120,10 @@ export class RuntimeRepository {
    * 按可见性查询单条：属于该 owner，或是全局 builtin 行；不存在/不可见/已注销时返回 null
    * (供上层收敛为 404)。供 workspace 创建时校验目标 RuntimeHost。
    */
-  findVisibleToOwner(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
+  findVisibleToOwner(
+    ownerId: string,
+    id: string
+  ): Promise<RuntimeHostRow | null> {
     return this.prisma.runtimeHost.findFirst({
       where: { id, OR: [{ ownerId }, { ownerId: null }], removedAt: null },
       select: this.rowSelect,

@@ -124,8 +124,12 @@ describe("TunnelClient", () => {
 
     await expect(connections[0].nextMessage()).resolves.toEqual({
       type: "register",
-      runtimeType: "docker",
-      capabilities: { isolationScopes: ["user", "workspace"] },
+      capabilities: {
+        docker: {
+          available: true,
+          scopes: ["user", "workspace"],
+        },
+      },
       version: "0.0.1",
       envConfig: stubEnvConfig,
     });
@@ -279,7 +283,9 @@ describe("TunnelClient", () => {
         truncated: false,
       });
       mockListChangedFiles.mockResolvedValue({
-        list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
+        list: [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 0 },
+        ],
         truncated: false,
       });
       mockReadFileDiff.mockResolvedValue({

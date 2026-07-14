@@ -1,4 +1,4 @@
-import type { RuntimeCapabilities } from "../protocol/runtime-tunnel";
+import type { RuntimeCapabilities } from "../protocol/runtime-capabilities";
 import type { AgentType } from "../common";
 
 export type RuntimeStatus = "online" | "offline";
@@ -40,7 +40,7 @@ export type AgentEnvStatus = {
   source: EnvConfigSource;
   /** runtime 上报的原始检测路径。 */
   detectedPath: string | null;
- /** CLI --version 输出。 */
+  /** CLI --version 输出。 */
   version: string | null;
 };
 
@@ -53,16 +53,14 @@ export type RuntimeEnvStatus = {
   detectedAt: string | null;
 };
 
-/** /api/v1/runtimes/list 的条目(managed 本机内置 + Registered 部署实例)。 */
+/** /api/v1/runtimes/list 的条目（builtin 本机 Host + registered 远程 Host）。 */
 export type RuntimeResponse = {
   id: string;
   name: string;
-  /** "registered"=远程机器注册, "managed"=本机内置(全局,不可删除)。 */
+  /** "registered"=远程机器注册, "builtin"=本机内置(全局,不可删除)。 */
   source: string;
-  /** null = 全局 managed,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
+  /** null = 全局 builtin,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
   ownerId: string | null;
-  /** manager 注册时上报,配对未完成时为 null。 */
-  runtimeType: string | null;
   status: RuntimeStatus;
   capabilities: RuntimeCapabilities | null;
   /** runtime manager 上报的环境检测原始值；未上报为 null。 */

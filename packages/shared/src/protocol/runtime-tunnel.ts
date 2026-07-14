@@ -8,6 +8,7 @@ import type {
   WorkerKey,
   WorkerSnapshot,
 } from "./runtime-host";
+import type { RuntimeCapabilities } from "./runtime-capabilities";
 import type { RuntimeEnvConfig } from "../api/runtimes";
 import type {
   WorkspaceFileListResponse,
@@ -25,16 +26,11 @@ import type {
  * 与 worker↔server 的数据面(worker-http,startToken 鉴权)完全独立。
  */
 
-/** Runtime 实例声明的能力矩阵:它那一种运行方式支持哪些隔离档。
- *  (type 而非 interface:需要隐式索引签名以直接写入 Prisma Json 列。) */
-export type RuntimeCapabilities = {
-  isolationScopes: string[];
-};
+export type { RuntimeCapabilities } from "./runtime-capabilities";
 
 /** manager → server:注册(隧道建连后第一条消息)。 */
 export interface RuntimeTunnelRegisterMessage {
   type: "register";
-  runtimeType: string;
   capabilities: RuntimeCapabilities;
   /** manager 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
   version?: string;

@@ -17,11 +17,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DirectoryPicker, type DirectoryListing } from "@/components/directory-picker";
+import {
+  DirectoryPicker,
+  type DirectoryListing,
+} from "@/components/directory-picker";
 import { useRuntimes, useCreateRuntimeDirectory } from "@/hooks/use-runtime";
 import { useCreateWorkspace } from "@/hooks/use-workspace";
 import { errorMessage } from "@/utils/error";
-import { basename as pathBasename, normalizeFilesystemPath } from "@/utils/path";
+import {
+  basename as pathBasename,
+  normalizeFilesystemPath,
+} from "@/utils/path";
 import { runtimesApi } from "@/api/runtimes";
 import type { WorkspaceRuntimeType } from "@agework/shared/api";
 
@@ -56,7 +62,9 @@ export function PickDirectoryDialog({
   onCreated,
 }: PickDirectoryDialogProps) {
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [runtimeOverrideId, setRuntimeOverrideId] = useState<string | undefined>(undefined);
+  const [runtimeOverrideId, setRuntimeOverrideId] = useState<
+    string | undefined
+  >(undefined);
   const [error, setError] = useState<string | null>(null);
 
   const createWorkspace = useCreateWorkspace();
@@ -65,19 +73,20 @@ export function PickDirectoryDialog({
 
   // managed runtime 都跑在 server 所在这台机器上,「选择本地文件夹」只在这些之间选,
   // 不含已配对的远程机器(那台机器上的目录不属于"本地")。
-  const managedRuntimes = useMemo(
-    () => runtimes.filter((r) => r.source === "managed"),
+  const builtinRuntimes = useMemo(
+    () => runtimes.filter((r) => r.source === "builtin"),
     [runtimes]
   );
 
-  const defaultRuntimeId =
-    (managedRuntimes.find((r) => r.runtimeType === "native") ??
-      managedRuntimes[0])?.id;
+  const defaultRuntimeId = builtinRuntimes[0]?.id;
   const selectedRuntimeId = runtimeOverrideId ?? defaultRuntimeId;
 
-  const selectedRuntime = managedRuntimes.find(
+  const selectedRuntime = builtinRuntimes.find(
     (r) => r.id === selectedRuntimeId
   );
+  const selectedRuntimeType = selectedRuntime?.capabilities?.native?.available
+    ? "native"
+    : undefined;
 
   function handleRuntimeChange(runtimeId: string | null) {
     if (!runtimeId) return;
@@ -126,12 +135,12 @@ export function PickDirectoryDialog({
   }
 
   async function handleConfirm() {
-    if (!selectedPath || !selectedRuntime?.runtimeType) return;
+    if (!selectedPath || !selectedRuntimeType) return;
     setError(null);
 
     const rootPath = normalizeFilesystemPath(selectedPath);
     const name = pathBasename(rootPath) || rootPath;
-    const runtimeType = selectedRuntime.runtimeType as WorkspaceRuntimeType;
+    const runtimeType = selectedRuntimeType as WorkspaceRuntimeType;
 
     createWorkspace.mutate(
       {
@@ -154,7 +163,7 @@ export function PickDirectoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg gap-3">
+      <DialogContent className="gap-3 sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>选择本地文件夹</DialogTitle>
           <DialogDescription>
@@ -162,11 +171,11 @@ export function PickDirectoryDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {managedRuntimes.length > 1 && (
+        {builtinRuntimes.length > 1 && (
           <Field>
             <FieldLabel htmlFor="pick-directory-runtime">运行环境</FieldLabel>
             <Select
-              items={managedRuntimes.map((runtime) => ({
+              items={builtinRuntimes.map((runtime) => ({
                 value: runtime.id,
                 label: runtime.name,
               }))}
@@ -177,11 +186,15 @@ export function PickDirectoryDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {managedRuntimes.map((runtime) => (
+                {builtinRuntimes.map((runtime) => (
                   <SelectItem key={runtime.id} value={runtime.id}>
                     {runtime.name}
                     <span className="text-xs text-muted-foreground">
-                      {runtimeTypeLabel(runtime.runtimeType as WorkspaceRuntimeType | null)}
+                      {runtimeTypeLabel(
+                        runtime.capabilities?.native?.available
+                          ? "native"
+                          : null
+                      )}
                     </span>
                   </SelectItem>
                 ))}

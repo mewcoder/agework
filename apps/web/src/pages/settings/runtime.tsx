@@ -41,14 +41,20 @@ export function RuntimeSettings() {
       id: "runtimeType",
       header: "运行方式",
       cell: ({ row }) => (
-        <DataTableText>{runtimeTypeLabel(row.original.runtimeType)}</DataTableText>
+        <DataTableText>
+          {Object.keys(row.original.capabilities ?? {})
+            .map(runtimeTypeLabel)
+            .join(" / ") || "待配对"}
+        </DataTableText>
       ),
     },
     {
       id: "status",
       header: "状态",
       cell: ({ row }) => (
-        <DataTableBadge variant={row.original.status === "online" ? "default" : "secondary"}>
+        <DataTableBadge
+          variant={row.original.status === "online" ? "default" : "secondary"}
+        >
           {row.original.status === "online" ? "在线" : "离线"}
         </DataTableBadge>
       ),

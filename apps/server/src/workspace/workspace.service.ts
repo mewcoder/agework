@@ -33,6 +33,10 @@ import type {
   WorkspaceFileDiffResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
+import {
+  availableRuntimeTypes,
+  normalizeRuntimeCapabilities,
+} from "@agework/shared/protocol";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -50,8 +54,7 @@ type CreateWorkspaceInput = {
   rootPath?: string;
   runtimeType?: string;
   isolationScope?: string;
-  /** 绑定到某个已配对的 Registered Runtime;传入时 runtimeType/isolationScope
-   *  改由该 Runtime 自己决定,忽略 input 里另外传的 runtimeType。 */
+  /** 绑定到某个已配对的 Registered Runtime Host。runtimeType 选择其一种能力。 */
   runtimeHostId?: string;
 };
 
@@ -65,7 +68,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeService: RuntimeService,
+    private readonly runtimeService: RuntimeService
   ) {}
 
   /** Phase 2 expand:启动期幂等回填旧 workspace 的 runtimeType 快照列。 */
@@ -359,6 +362,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
       return this.resolveRegisteredPlacement(
         input.userId,
         input.requestedRuntimeId,
+        input.requestedRuntimeType,
         input.requestedIsolationScope
       );
     }
@@ -376,14 +380,14 @@ export class WorkspaceService implements OnApplicationBootstrap {
   }
 
   /**
-   * Registered runtime 分支的 placement 解析:runtimeType 由该 Runtime 自己注册的
-   * 类型决定(选 Runtime 即定运行方式,不接受前端另传 runtimeType);isolationScope
-   * 按该 Runtime 上报的能力矩阵校验/收窄,而非部署级 ConfigService 允许列表
+   * Registered Host 分支的 placement 解析:runtimeType 从该 Host 的能力矩阵中选择；
+   * isolationScope 按所选 runtimeType 的 scopes 校验，而非部署级 ConfigService 允许列表
    * (那是 Managed 专属的策略,与某一台具体机器的能力无关)。
    */
   private async resolveRegisteredPlacement(
     userId: string,
     runtimeHostId: string,
+    requestedRuntimeType?: string,
     requestedIsolationScope?: string
   ): Promise<{
     runtimeType: RuntimeType;
@@ -400,27 +404,53 @@ export class WorkspaceService implements OnApplicationBootstrap {
     if (!registeredRuntime.capabilities) {
       throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
     }
-    const capabilities = registeredRuntime.capabilities as {
-      runtimeType?: string;
-      isolationScopes?: string[];
-    } | null;
-    const runtimeType = (capabilities?.runtimeType ?? "native") as RuntimeType;
+    const capabilities = normalizeRuntimeCapabilities(
+      registeredRuntime.capabilities
+    );
+    const supportedRuntimeTypes = availableRuntimeTypes(capabilities);
+    if (supportedRuntimeTypes.length === 0) {
+      throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
+    }
+    const selectedRuntimeType =
+      requestedRuntimeType?.trim() ||
+      (supportedRuntimeTypes.length === 1
+        ? supportedRuntimeTypes[0]
+        : undefined);
+    if (!selectedRuntimeType) {
+      throw new BadRequestException("该运行环境提供多种运行方式,请选择一种");
+    }
+    if (!supportedRuntimeTypes.includes(selectedRuntimeType)) {
+      throw new BadRequestException(
+        `该运行环境不支持运行方式: ${selectedRuntimeType}`
+      );
+    }
+    const runtimeType = selectedRuntimeType as RuntimeType;
+    const capability = capabilities[runtimeType];
     if (runtimeType === "native") {
       if (requestedIsolationScope) {
         throw new BadRequestException("本地运行环境不能设置 isolationScope");
       }
-      return { runtimeType, isolationScope: null, targetRuntimeId: runtimeHostId };
+      return {
+        runtimeType,
+        isolationScope: null,
+        targetRuntimeId: runtimeHostId,
+      };
     }
-    const allowedScopes = capabilities?.isolationScopes ?? [];
+    const allowedScopes = capability.scopes;
     const isolationScope = requestedIsolationScope?.trim() || allowedScopes[0];
-    if (!isolationScope || !allowedScopes.includes(isolationScope)) {
+    if (isolationScope !== "user" && isolationScope !== "workspace") {
+      throw new BadRequestException(
+        `该运行环境不支持隔离级别: ${isolationScope ?? "未指定"}`
+      );
+    }
+    if (!allowedScopes.includes(isolationScope)) {
       throw new BadRequestException(
         `该运行环境不支持隔离级别: ${isolationScope ?? "未指定"}`
       );
     }
     return {
       runtimeType,
-      isolationScope: isolationScope as IsolationScope,
+      isolationScope,
       targetRuntimeId: runtimeHostId,
     };
   }
@@ -475,7 +505,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
 
     this.events.emit(
       WORKSPACE_DELETED_EVENT,
-      new WorkspaceDeletedEvent(id, userId),
+      new WorkspaceDeletedEvent(id, userId)
     );
   }
 
@@ -503,8 +533,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
         `Workspace ${(rest as { id?: string }).id ?? "unknown"} has no directory binding`
       );
     }
-    const runtimeType =
-      rtSnapshot ?? this.runtimePolicy.defaultRuntimeType();
+    const runtimeType = rtSnapshot ?? this.runtimePolicy.defaultRuntimeType();
     const workspaceIsolationScope =
       runtimeType !== "native"
         ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)

@@ -9,6 +9,7 @@ import {
   type RuntimeTunnelAllRpcRequest,
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
+  type WorkerScope,
 } from "@agework/shared/protocol";
 import {
   isRpcNotification,
@@ -24,7 +25,10 @@ import {
   type RuntimeType,
 } from "../config.js";
 import { detectEnvConfig } from "@agework/shared/cli";
-import { createDirectory, listDirectory } from "../filesystem/directory-browser.js";
+import {
+  createDirectory,
+  listDirectory,
+} from "../filesystem/directory-browser.js";
 import {
   listFiles as listFilesDirect,
   readFile as readFileDirect,
@@ -58,9 +62,9 @@ export interface LaunchDispatcher {
   destroy(params: RuntimeTunnelRpcRequest["params"]): Promise<void>;
 }
 
-/** 每种运行方式支持的隔离档(注册时上报的能力矩阵)。native 无容器,只有 host 档。 */
-const ISOLATION_SCOPES: Record<RuntimeType, string[]> = {
-  native: ["host"],
+/** 每种运行方式支持的 worker scope（注册时上报的能力矩阵）。 */
+const RUNTIME_TYPE_SCOPES: Record<RuntimeType, WorkerScope[]> = {
+  native: ["workspace"],
   docker: ["user", "workspace"],
   opensandbox: ["user", "workspace"],
 };
@@ -76,7 +80,7 @@ export interface TunnelClientOptions {
   /** 收到的 launch/stop/destroy RPC 转给它执行;它已知自己固定的 runtimeType。 */
   dispatcher: LaunchDispatcher;
   /** Phase 2: host.* RPC (submitRun/command/releaseOwner) 的执行契约。
- *  传入后 TunnelClient 将 host.* 请求委托给它,同时把 tunnelUpstream 接到 WS。 */
+   *  传入后 TunnelClient 将 host.* 请求委托给它,同时把 tunnelUpstream 接到 WS。 */
   hostContract?: RuntimeHostContract;
   /** Phase 2: Host 上行通知的隧道实现,连接建立/断开时由 TunnelClient 接线。 */
   tunnelUpstream?: TunnelUpstream;
@@ -131,9 +135,11 @@ export class TunnelClient {
       const envConfig = detectEnvConfig();
       const register: RuntimeTunnelRegisterMessage = {
         type: "register",
-        runtimeType: this.options.config.runtimeType,
         capabilities: {
-          isolationScopes: ISOLATION_SCOPES[this.options.config.runtimeType],
+          [this.options.config.runtimeType]: {
+            available: true,
+            scopes: RUNTIME_TYPE_SCOPES[this.options.config.runtimeType],
+          },
         },
         version: AGEWORK_VERSION,
         envConfig,
@@ -191,7 +197,10 @@ export class TunnelClient {
     }
   }
 
-  private onRpcRequest(ws: WebSocket, request: RuntimeTunnelAllRpcRequest): void {
+  private onRpcRequest(
+    ws: WebSocket,
+    request: RuntimeTunnelAllRpcRequest
+  ): void {
     const handled = this.dispatch(request).then(
       (result) => rpcSuccess(request.id, result ?? null),
       (err: unknown) =>
@@ -232,7 +241,10 @@ export class TunnelClient {
         return;
       case "host.command":
         if (!hostContract) throw new Error("host contract not configured");
-        await hostContract.command(request.params.runId, request.params.payload);
+        await hostContract.command(
+          request.params.runId,
+          request.params.payload
+        );
         return;
       case "host.releaseOwner":
         if (!hostContract) throw new Error("host contract not configured");
@@ -358,7 +370,10 @@ async function handleReadFile(
 
 /** Registered Runtime 常驻入口:解析配置、装配 RuntimeHost + worker HTTP + 隧道。 */
 export async function runRegisteredRuntime(): Promise<void> {
-  const config = resolveRegisteredRuntimeConfig(process.argv.slice(2), process.env);
+  const config = resolveRegisteredRuntimeConfig(
+    process.argv.slice(2),
+    process.env
+  );
   const workerPort = config.workerPort ?? 7101;
   const workerApiBaseUrl = `http://127.0.0.1:${workerPort}/api/v1`;
   const userWorkspaceRoot =
@@ -378,6 +393,12 @@ export async function runRegisteredRuntime(): Promise<void> {
     launchTimeoutMs: 60_000,
     heartbeatTimeoutMs: 120_000,
     agentEventTrace: { enabled: false, maxFileMb: 50 },
+    capabilities: {
+      [config.runtimeType]: {
+        available: true,
+        scopes: RUNTIME_TYPE_SCOPES[config.runtimeType],
+      },
+    },
     providerConfig: {
       workerImage: config.workerImage ?? "",
       runtimeLogHostPath: config.runtimeLogHostPath,

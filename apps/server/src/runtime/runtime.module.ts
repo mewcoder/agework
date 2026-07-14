@@ -7,13 +7,11 @@ import { RuntimeRepository } from "./runtime.repository";
 import { LocalRuntime } from "./local/local-runtime";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { RuntimeLivenessWatchdog } from "./gateway/runtime-liveness.watchdog";
-import { ManagedRuntimeSupervisor } from "./managed/supervisor";
 
 /**
  * Runtime 领域的组合根:门面 Service + Managed 实现 + Registered 配对/隧道。
  * `LocalRuntime`(Managed native in-process 实现)、`RuntimeTunnelHandler`(隧道 WS 端点)、
- * `RuntimeLivenessWatchdog`(Runtime 级判死)、`ManagedRuntimeSupervisor`(managed 容器
- * runtime 进程 fork + 重启)都是 internal provider,不 export;
+ * `RuntimeLivenessWatchdog`(Runtime 级判死)都是 internal provider,不 export;
  * 上层经 `RuntimeService.runtimeFor()` 拿 `Runtime` 接口。
  */
 @Module({
@@ -23,7 +21,6 @@ import { ManagedRuntimeSupervisor } from "./managed/supervisor";
     LocalRuntime,
     RuntimeTunnelHandler,
     RuntimeLivenessWatchdog,
-    ManagedRuntimeSupervisor,
   ],
   controllers: [RuntimeController, AdminRuntimeController],
   exports: [RuntimeService],

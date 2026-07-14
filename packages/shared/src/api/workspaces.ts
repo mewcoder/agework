@@ -40,8 +40,7 @@ export type CreateWorkspaceRequest = {
   rootPath?: string;
   runtimeType?: WorkspaceRuntimeType;
   isolationScope?: WorkspaceIsolationScope;
-  /** 绑定到某个已配对的 Registered Runtime;与 runtimeType 互斥
-   *  (选 Runtime 即定运行方式,runtimeType 由该 Runtime 注册的类型决定,不由前端传)。 */
+  /** 绑定到某个已配对的 Registered Runtime Host；runtimeType 选择其一种能力。 */
   runtimeId?: string;
 };
 
@@ -54,7 +53,8 @@ export type UpdateWorkspaceRequest = {
 export type WorkspaceIdRequest = { id: string };
 
 export type WorkspaceListResponse = ListResponse<WorkspaceResponse>;
-export type AdminWorkspaceListResponse = PaginatedListResponse<AdminWorkspaceResponse>;
+export type AdminWorkspaceListResponse =
+  PaginatedListResponse<AdminWorkspaceResponse>;
 
 /** GET /api/v1/workspaces/git-branches/list 的响应,分支名列表。 */
 export type WorkspaceGitBranchListResponse = ListResponse<string>;
@@ -69,7 +69,11 @@ export type WorkspaceCapabilitiesResponse = {
 
 // ── 变更查看(diff,只读,只支持本地 runtime) ──
 
-export type WorkspaceChangeStatus = "added" | "modified" | "deleted" | "renamed";
+export type WorkspaceChangeStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed";
 
 /** 一个变更文件条目。additions/deletions 为 null 表示未跟踪或二进制(无 numstat)。 */
 export type ChangedFileEntry = {

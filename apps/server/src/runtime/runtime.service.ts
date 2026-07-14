@@ -10,10 +10,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type {
   HostUpstreamNotification,
+  RuntimeCapabilities,
   RuntimeSpec,
   RuntimeTunnelAllRpcRequest,
   RuntimeTunnelHostNotification,
+  WorkerScope,
 } from "@agework/shared/protocol";
+import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
   CreateRuntimeDirectoryResponse,
   CreateRuntimeResponse,
@@ -38,7 +41,6 @@ import { toRuntimeConfig } from "./local/runtime-config";
 import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
-import { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import type { Runtime } from "./runtime.types";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
 
@@ -55,37 +57,31 @@ export class RuntimeService implements OnApplicationBootstrap {
     private readonly configService: ConfigService,
     private readonly localRuntime: LocalRuntime,
     private readonly repository: RuntimeRepository,
-    private readonly tunnelHandler: RuntimeTunnelHandler,
-    private readonly supervisor: ManagedRuntimeSupervisor
+    private readonly tunnelHandler: RuntimeTunnelHandler
   ) {}
 
-  /** 启动时按部署允许的 runtimeType 初始化 managed Runtime:
-   *  - native:upsert managed 行(无 token)+ LocalRuntime 进程内检测 CLI 环境。
-   *  - docker/opensandbox:生成 managed token → upsert managed 行(tokenHash 非空)→
-   *    supervisor fork 独立 runtime 进程(注入 loopback + token)。envConfig 由
-   *    runtime 进程注册时上报(register 消息),不走 LocalRuntime.detectEnv。 */
+  /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
   async onApplicationBootstrap(): Promise<void> {
-    for (const runtimeType of this.configService.getAllowedRuntimeTypes()) {
-      if (runtimeType === "native") {
-        await this.upsertBuiltin(runtimeType, {
-          isolationScopes: managedIsolationScopes(runtimeType),
-        });
-        const id = BUILTIN_HOST_ID;
-        const envConfig = await this.localRuntime.detectEnv();
-        await this.repository.updateEnvConfig(id, envConfig);
-      } else {
-        const token = randomBytes(32).toString("hex");
-        const tokenHash = createHash("sha256").update(token).digest("hex");
-        await this.upsertBuiltin(
-          runtimeType,
-          { isolationScopes: managedIsolationScopes(runtimeType) },
-          tokenHash
-        );
-        this.supervisor.startManagedRuntime(runtimeType, token);
-      }
+    const allowedRuntimeTypes = this.configService.getAllowedRuntimeTypes();
+    const capabilities: RuntimeCapabilities = {};
+    for (const runtimeType of allowedRuntimeTypes) {
+      capabilities[runtimeType] = {
+        available: true,
+        scopes: runtimeTypeScopes(runtimeType),
+      };
+    }
+    await this.repository.upsertBuiltin({
+      name: BUILTIN_HOST_ID,
+      capabilities,
+      tokenHash: null,
+    });
+
+    if (allowedRuntimeTypes.includes("native")) {
+      const envConfig = await this.localRuntime.detectEnv();
+      await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
     }
     this.logger.log(
-      `managed runtimes ready: ${this.configService.getAllowedRuntimeTypes().join(", ")}`
+      `builtin Runtime Host ready: ${allowedRuntimeTypes.join(", ")}`
     );
   }
 
@@ -113,7 +109,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /** managed Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
-  getManagedRuntimeId(runtimeType: RuntimeType): string {
+  getManagedRuntimeId(_runtimeType: RuntimeType): string {
     return BUILTIN_HOST_ID;
   }
 
@@ -131,20 +127,6 @@ export class RuntimeService implements OnApplicationBootstrap {
       allowedIsolationScopes: this.configService.getAllowedIsolationScopes(),
       idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
     };
-  }
-
-  /** 服务启动时 upsert 一个 managed Runtime 行(id 固定,幂等)。
-   *  tokenHash:native 传 null(进程内);docker/opensandbox 传 sha256(managed token)。 */
-  private upsertBuiltin(
-    runtimeType: RuntimeType,
-    capabilities: { isolationScopes: string[] },
-    tokenHash: string | null = null
-  ) {
-    return this.repository.upsertBuiltin({
-      name: BUILTIN_HOST_ID,
-      capabilities,
-      tokenHash,
-    });
   }
 
   /** 创建 Registered Runtime 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
@@ -502,15 +484,20 @@ export class RuntimeService implements OnApplicationBootstrap {
 function toRuntimeResponse(row: RuntimeHostRow): RuntimeResponse {
   const envConfig = row.envConfig as RuntimeEnvConfig | null;
   const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
+  const normalizedCapabilities = row.capabilities
+    ? normalizeRuntimeCapabilities(row.capabilities)
+    : null;
+  const capabilities =
+    normalizedCapabilities && Object.keys(normalizedCapabilities).length > 0
+      ? normalizedCapabilities
+      : null;
   return {
     id: row.id,
     name: row.name,
     source: row.source,
     ownerId: row.ownerId,
-    runtimeType: null,
     status: row.status === "online" ? "online" : "offline",
-    capabilities:
-      (row.capabilities as RuntimeResponse["capabilities"] | null) ?? null,
+    capabilities,
     envConfig,
     envConfigOverride: override,
     envStatus: envConfig ? computeEnvStatus(envConfig, override) : null,
@@ -553,7 +540,7 @@ function mergeAgent(
 
 /** native 没有容器,没有隔离概念,只有 workspace 独占子进程;docker/opensandbox 都有容器
  *  边界兜底,user 级共享安全,两种隔离都支持。 */
-function managedIsolationScopes(runtimeType: RuntimeType): string[] {
+function runtimeTypeScopes(runtimeType: RuntimeType): WorkerScope[] {
   return runtimeType === "native" ? ["workspace"] : ["user", "workspace"];
 }
 

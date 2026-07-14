@@ -19,13 +19,18 @@ function makeUpstream() {
   } satisfies RuntimeHostUpstream;
 }
 
-function makeConfig(overrides: Partial<RuntimeHostConfig> = {}): RuntimeHostConfig {
+function makeConfig(
+  overrides: Partial<RuntimeHostConfig> = {}
+): RuntimeHostConfig {
   return {
     runtimeLogDir: "/tmp/agework-host-test/logs",
     getUserWorkspace: (username) => `/tmp/agework-host-test/users/${username}`,
     launchTimeoutMs: 5_000,
     heartbeatTimeoutMs: 60_000,
     agentEventTrace: { enabled: false, maxFileMb: 5 },
+    capabilities: {
+      native: { available: true, scopes: ["workspace"] },
+    },
     providerConfig: {
       workerImage: "",
       runtimeLogHostPath: "/tmp/agework-host-test/logs",
@@ -48,9 +53,9 @@ function makeSubmitInput(runId: string): SubmitRunInput {
     conversationId: "conversation-1",
     placement: {
       owner: "workspace:ws-1",
-      scope: "workspace",
-      isolation: "native",
-      runtimeHostId: "managed-native",
+      isolationScope: "workspace",
+      runtimeType: "native",
+      runtimeHostId: "builtin",
       workspaceId: "ws-1",
       userId: "user-1",
       username: "admin-1",
@@ -58,7 +63,7 @@ function makeSubmitInput(runId: string): SubmitRunInput {
     },
     agentProviderConfig: { agentType: "claude", source: "system" },
     input: { messages: [{ id: "msg-1" }] },
-  } as SubmitRunInput;
+  };
 }
 
 /** 用可控的假 provider 替掉真实 provider 分发(私有字段,测试专用注入)。 */
@@ -93,9 +98,9 @@ async function submitAndHandshake(
   await host.submitRun(makeSubmitInput(runId));
   await settle();
   const entry = poolOf(host).get(KEY)!;
-  expect(host.registerWorker(entry.workerId, entry.startToken, { pid: 1 })).toBe(
-    true
-  );
+  expect(
+    host.registerWorker(entry.workerId, entry.startToken, { pid: 1 })
+  ).toBe(true);
   await settle();
   return entry.workerId;
 }
@@ -144,7 +149,9 @@ describe("RuntimeHost", () => {
     // 复用同一 worker,run-2 也必须能拉到自己的 RunConfig(曾经的缺口)
     expect(host.getRunConfig("run-2")).toMatchObject({ runId: "run-2" });
     const { commands } = await host.pollCommands(workerId, { afterSeq: 0 });
-    expect(commands.filter((c) => c.payload.type === "user_message")).toHaveLength(2);
+    expect(
+      commands.filter((c) => c.payload.type === "user_message")
+    ).toHaveLength(2);
   });
 
   it("absorbs a cancel that arrives before the worker is ready", async () => {
@@ -173,7 +180,9 @@ describe("RuntimeHost", () => {
     await settle();
 
     expect(upstream.notifyRunCancelled).toHaveBeenCalledWith("run-1");
-    const { commands } = await host.pollCommands(entry.workerId, { afterSeq: 0 });
+    const { commands } = await host.pollCommands(entry.workerId, {
+      afterSeq: 0,
+    });
     expect(commands).toEqual([]);
   });
 

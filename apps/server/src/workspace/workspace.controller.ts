@@ -35,7 +35,7 @@ export class WorkspaceController {
       description: body.description,
       rootPath: body.rootPath,
       runtimeType: body.runtimeType,
-      isolationScope: body.scope,
+      isolationScope: body.isolationScope,
       runtimeHostId: body.runtimeId,
     });
   }

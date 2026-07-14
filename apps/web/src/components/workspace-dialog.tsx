@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
@@ -55,11 +55,27 @@ const ISOLATION_SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["managed", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
-/** 只列出已完成配对注册的机器(runtimeType 未知的配对码不可选;managed 全局运行环境
- *  走上面的 runtimeType/isolationScope 下拉,不在这个"选择已配对机器"的列表里出现)。 */
+function supportedRuntimeTypes(runtime: Runtime): WorkspaceRuntimeType[] {
+  return RUNTIME_TYPES.filter(
+    (runtimeType) => runtime.capabilities?.[runtimeType]?.available
+  );
+}
+
+function supportedIsolationScopes(
+  runtime: Runtime | undefined,
+  runtimeType: WorkspaceRuntimeType
+): WorkspaceIsolationScope[] {
+  return (runtime?.capabilities?.[runtimeType]?.scopes ?? []).filter(
+    isIsolationScope
+  );
+}
+
+/** 只列出已完成配对且至少有一种可用 runtimeType 的 Registered Host。 */
 function eligibleRuntimes(runtimes: Runtime[]): Runtime[] {
   return runtimes.filter(
-    (runtime) => runtime.runtimeType !== null && runtime.source !== "managed"
+    (runtime) =>
+      runtime.source === "registered" &&
+      supportedRuntimeTypes(runtime).length > 0
   );
 }
 
@@ -83,11 +99,10 @@ const workspaceDialogFormSchema = z
     description: z
       .string()
       .refine(
-        (value) =>
-          value.trim().length <= PROJECT_DESCRIPTION_MAX_LENGTH,
+        (value) => value.trim().length <= PROJECT_DESCRIPTION_MAX_LENGTH,
         {
           message: `描述最多 ${PROJECT_DESCRIPTION_MAX_LENGTH} 个字`,
-        },
+        }
       )
       .optional(),
     useGit: z.boolean(),
@@ -144,9 +159,11 @@ export function WorkspaceDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={isEdit ? "编辑工作空间" : "新建工作空间"}
-      description={isEdit
-        ? "更新工作空间在列表和对话中的显示信息"
-        : "创建后可在该工作空间中启动 Agent 对话"}
+      description={
+        isEdit
+          ? "更新工作空间在列表和对话中的显示信息"
+          : "创建后可在该工作空间中启动 Agent 对话"
+      }
       footer="none"
     >
       <WorkspaceDialogForm
@@ -231,7 +248,10 @@ function WorkspaceDialogForm({
       if (onUpdate) {
         setCustomUpdatePending(true);
         try {
-          await onUpdate(workspace.id, { name, description: description || null });
+          await onUpdate(workspace.id, {
+            name,
+            description: description || null,
+          });
           onOpenChange(false);
         } catch (error) {
           setSubmitError(errorMessage(error, "保存工作空间失败"));
@@ -247,25 +267,21 @@ function WorkspaceDialogForm({
           onSuccess: () => onOpenChange(false),
           onError: (error) =>
             setSubmitError(errorMessage(error, "保存工作空间失败")),
-        },
+        }
       );
       return;
     }
 
     if (values.placementMode === "registered") {
-      const selectedRuntime = registeredRuntimes.find(
-        (runtime) => runtime.id === values.runtimeId,
-      );
       createWorkspace.mutate(
         {
           name,
           description: description || undefined,
           rootPath: normalizeFilesystemPath(values.rootPath ?? ""),
           runtimeId: values.runtimeId,
+          runtimeType: values.runtimeType,
           isolationScope:
-            selectedRuntime?.runtimeType !== "native"
-              ? values.isolationScope
-              : undefined,
+            values.runtimeType !== "native" ? values.isolationScope : undefined,
         },
         {
           onSuccess: (created) => {
@@ -274,7 +290,7 @@ function WorkspaceDialogForm({
           },
           onError: (error) =>
             setSubmitError(errorMessage(error, "创建工作空间失败")),
-        },
+        }
       );
       return;
     }
@@ -301,7 +317,7 @@ function WorkspaceDialogForm({
         },
         onError: (error) =>
           setSubmitError(errorMessage(error, "创建工作空间失败")),
-      },
+      }
     );
   }
 
@@ -317,7 +333,7 @@ function WorkspaceDialogForm({
       setGitBranches([]);
       form.setValue("gitBranch", "");
       setGitBranchesError(
-        errorMessage(error, "无法解析该仓库分支，请确认是公开仓库且地址正确"),
+        errorMessage(error, "无法解析该仓库分支，请确认是公开仓库且地址正确")
       );
     } finally {
       setGitBranchesLoading(false);
@@ -332,7 +348,9 @@ function WorkspaceDialogForm({
   }
 
   const isPending =
-    createWorkspace.isPending || renameWorkspace.isPending || customUpdatePending;
+    createWorkspace.isPending ||
+    renameWorkspace.isPending ||
+    customUpdatePending;
   const nameValue = form.watch("name") ?? "";
   const useGit = form.watch("useGit");
   const placementMode = form.watch("placementMode");
@@ -342,12 +360,19 @@ function WorkspaceDialogForm({
   const runtimeId = form.watch("runtimeId");
   const showPlacementToggle = !isEdit && registeredRuntimes.length > 0;
   const selectedRuntime = registeredRuntimes.find((r) => r.id === runtimeId);
-  const selectedRuntimeIsolationScopes =
-    selectedRuntime?.capabilities?.isolationScopes ?? [];
+  const selectedRuntimeTypes = useMemo(
+    () => (selectedRuntime ? supportedRuntimeTypes(selectedRuntime) : []),
+    [selectedRuntime]
+  );
+  const selectedRuntimeIsolationScopes = useMemo(
+    () => supportedIsolationScopes(selectedRuntime, runtimeType),
+    [selectedRuntime, runtimeType]
+  );
   const canSubmitRegistered =
     !!runtimeId &&
     !!rootPathValue.trim() &&
-    (selectedRuntime?.runtimeType === "native" ||
+    selectedRuntimeTypes.includes(runtimeType) &&
+    (runtimeType === "native" ||
       selectedRuntimeIsolationScopes.includes(isolationScope));
   /** managed 场景下,当前 runtimeType 对应的 managed runtime(浏览目录接口按 runtime 维度调用,
    *  managed 也有固定的 runtime id)。 */
@@ -355,22 +380,37 @@ function WorkspaceDialogForm({
     placementMode === "registered" && selectedRuntime?.status !== "online";
 
   useEffect(() => {
-    if (isEdit || !selectedRuntime || selectedRuntime.runtimeType === "native") {
+    if (isEdit || !selectedRuntime) return;
+    if (!selectedRuntimeTypes.includes(runtimeType)) {
+      const fallbackRuntimeType = selectedRuntimeTypes[0];
+      if (fallbackRuntimeType) {
+        form.setValue("runtimeType", fallbackRuntimeType);
+      }
       return;
     }
-    const allowedScopes = selectedRuntime.capabilities?.isolationScopes ?? [];
-    if (!allowedScopes.includes(isolationScope)) {
-      const fallback = allowedScopes[0];
+    if (
+      runtimeType !== "native" &&
+      !selectedRuntimeIsolationScopes.includes(isolationScope)
+    ) {
+      const fallback = selectedRuntimeIsolationScopes[0];
       if (fallback) form.setValue("isolationScope", fallback as never);
     }
-  }, [isEdit, form, selectedRuntime, isolationScope]);
+  }, [
+    isEdit,
+    form,
+    selectedRuntime,
+    selectedRuntimeTypes,
+    selectedRuntimeIsolationScopes,
+    runtimeType,
+    isolationScope,
+  ]);
 
-  const allowedRuntimeTypes =
-    capabilities?.allowedRuntimeTypes ?? [capabilities?.runtimeType ?? "native"];
-  const allowedIsolationScopes =
-    capabilities?.allowedIsolationScopes ?? [
-      capabilities?.isolationScope ?? "user",
-    ];
+  const allowedRuntimeTypes = capabilities?.allowedRuntimeTypes ?? [
+    capabilities?.runtimeType ?? "native",
+  ];
+  const allowedIsolationScopes = capabilities?.allowedIsolationScopes ?? [
+    capabilities?.isolationScope ?? "user",
+  ];
   const canSelectRuntimeType = allowedRuntimeTypes.length > 1;
   const canSelectIsolationScope =
     runtimeType !== "native" && allowedIsolationScopes.length > 1;
@@ -379,8 +419,7 @@ function WorkspaceDialogForm({
   const canSubmitIsolationScope =
     isEdit ||
     runtimeType === "native" ||
-    (capabilities &&
-      allowedIsolationScopes.includes(isolationScope));
+    (capabilities && allowedIsolationScopes.includes(isolationScope));
 
   // 通过 formId 关联 FormDialog 的 submit 按钮；
   // disabled 条件通过在 form 外面设置 FormDialog 的 submitDisabled prop 传递。
@@ -502,9 +541,9 @@ function WorkspaceDialogForm({
                           >
                             <span>{runtime.name}</span>
                             <span className="text-xs text-muted-foreground">
-                              {runtimeTypeLabel(
-                                runtime.runtimeType as WorkspaceRuntimeType
-                              )}
+                              {supportedRuntimeTypes(runtime)
+                                .map(runtimeTypeLabel)
+                                .join(" / ")}
                               {" · "}
                               {runtime.status === "online" ? "在线" : "离线"}
                             </span>
@@ -519,7 +558,45 @@ function WorkspaceDialogForm({
                 )}
               />
 
-              {selectedRuntime && selectedRuntime.runtimeType !== "native" && (
+              {selectedRuntimeTypes.length > 1 && (
+                <Controller
+                  name="runtimeType"
+                  control={form.control}
+                  render={({ field, fieldState }) => (
+                    <Field data-invalid={fieldState.invalid}>
+                      <FieldLabel>运行方式</FieldLabel>
+                      <Select
+                        items={selectedRuntimeTypes.map((type) => ({
+                          value: type,
+                          label: runtimeTypeLabel(type),
+                        }))}
+                        value={field.value}
+                        onValueChange={(value) => {
+                          if (value && isWorkspaceRuntimeType(value)) {
+                            field.onChange(value);
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {selectedRuntimeTypes.map((type) => (
+                            <SelectItem key={type} value={type}>
+                              {runtimeTypeLabel(type)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {fieldState.invalid && (
+                        <FieldError errors={[fieldState.error]} />
+                      )}
+                    </Field>
+                  )}
+                />
+              )}
+
+              {selectedRuntime && runtimeType !== "native" && (
                 <Controller
                   name="isolationScope"
                   control={form.control}
@@ -609,13 +686,15 @@ function WorkspaceDialogForm({
                         value={field.value}
                         onValueChange={(v) => {
                           if (!v || !isWorkspaceRuntimeType(v)) return;
-                          const nextScope = resolveIsolationScopeForRuntimeType({
-                            runtimeType: v,
-                            currentScope: form.getValues("isolationScope"),
-                            allowedScopes: allowedIsolationScopes,
-                            defaultScope:
-                              capabilities?.isolationScope ?? "user",
-                          });
+                          const nextScope = resolveIsolationScopeForRuntimeType(
+                            {
+                              runtimeType: v,
+                              currentScope: form.getValues("isolationScope"),
+                              allowedScopes: allowedIsolationScopes,
+                              defaultScope:
+                                capabilities?.isolationScope ?? "user",
+                            }
+                          );
                           field.onChange(v);
                           form.setValue("isolationScope", nextScope);
                         }}
@@ -692,7 +771,7 @@ function WorkspaceDialogForm({
                         />
                         <label
                           htmlFor="use-git"
-                          className="text-sm cursor-pointer"
+                          className="cursor-pointer text-sm"
                         >
                           从 Git 仓库克隆
                         </label>
@@ -827,7 +906,6 @@ function WorkspaceDialogForm({
             : (submitLabel ?? (isEdit ? "保存" : "创建"))}
         </Button>
       </DialogFooter>
-
     </>
   );
 }
@@ -851,9 +929,7 @@ function runtimeTypeLabel(type: WorkspaceRuntimeType) {
   }
 }
 
-function isIsolationScope(
-  value: string
-): value is WorkspaceIsolationScope {
+function isIsolationScope(value: string): value is WorkspaceIsolationScope {
   return value === "user" || value === "workspace";
 }
 

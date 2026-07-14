@@ -5,7 +5,7 @@ server 管理 RuntimeHost 的注册、存储与调度入口。RuntimeHost 是 wo
 ## Language
 
 **RuntimeHost**:
-一个可运行 worker 的执行节点。builtin（本机 in-process，固定 id `"builtin"`）或 registered（远程机器注册，配对 token 鉴权）。RuntimeHost 上报能力矩阵（`capabilities` JSON，含 `isolationScopes` 和 `runtimeType`）和环境配置（`envConfig`），server 负责存储和展示，不做本机检测。
+一个可运行 worker 的执行节点。builtin（本机 in-process，固定 id `"builtin"`）或 registered（远程机器注册，配对 token 鉴权）。RuntimeHost 上报能力矩阵（`capabilities` JSON，以 `runtimeType` 为 key，值包含 `available` 和 `scopes`）和环境配置（`envConfig`），server 负责存储和展示。
 _Avoid_: Runtime（旧模型名，Phase 3 改名 RuntimeHost）、Carrier、engine
 
 **EnvConfig**:

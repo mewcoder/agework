@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { generateId } from "@agework/shared";
+import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
   CommandPayload,
   CreateDirectoryInput,
@@ -20,7 +21,6 @@ import type {
   SearchFilesInput,
   SubmitRunInput,
   WorkerKey,
-  WorkerScope,
   WorkerSnapshot,
   WorkspaceFileQuery,
 } from "@agework/shared/protocol";
@@ -47,12 +47,10 @@ type SubmittedRunState = {
 /**
  * `RuntimeHostContract` 的 server 侧路由实现(目标架构设计文档 §7 Phase 2):
  * run 模块只经契约动词消费执行面,本类按 placement.runtimeHostId 分两路——
- * - **managed-native**:进程内 RuntimeHost 库实例(`MANAGED_RUNTIME_HOST`),
- *   与 registered daemon 同一实现、两种宿主;worker 数据面仍连 server 旧
- *   `/worker/*` 端点,由 WorkerManagerService 委托回该实例。
- * - **其余(managed docker/opensandbox + registered)**:都是隧道在线的 Host
- *   (managed 容器型是 supervisor fork 的 runtime 进程,本身就跑 Host 代码),
- *   经 `host.*` 隧道 RPC 下发,事件流经 `host.upstream`(ACK 水位)回流。
+ * - **builtin**:进程内 RuntimeHost 库实例(`MANAGED_RUNTIME_HOST`)，所有
+ *   runtimeType 都在同一 Host 内按 provider 分派。
+ * - **registered**:隧道在线的 Host，经 `host.*` 隧道 RPC 下发，事件流经
+ *   `host.upstream`（ACK 水位）回流。
  *
  * 旧 worker-manager 执行栈(connection/instance/registry)自此不再被任何
  * 新 run 触达,Worker 表停写(表结构保留,Phase 3 删除)。
@@ -73,7 +71,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
 
   setUpstream(upstream: RuntimeHostUpstream): void {
     this.upstream = upstream;
-    // 进程内 Host 直接回流;registered / managed 容器 Host 的事件经隧道回流
+    // 进程内 builtin Host 直接回流；registered Host 的事件经隧道回流
     this.managedHost.setUpstream(upstream);
     this.runtimeService.setTunnelUpstreamHandler((runtimeId, notification) =>
       this.onTunnelUpstream(runtimeId, notification, upstream)
@@ -131,7 +129,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     });
   }
 
-  // ── 隧道路径(managed 容器 Host + registered Host 共用) ────────────
+  // ── registered Host 隧道路径 ──────────────────────────────────────
 
   /** 通过隧道向 Host 发 submitRun。 */
   private async submitRunViaTunnel(input: SubmitRunInput): Promise<void> {
@@ -278,22 +276,13 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (!row) {
       throw new Error(`runtime host not found: ${runtimeHostId}`);
     }
-    const runtimeType = "native";
-    const caps = row.capabilities as { isolationScopes?: string[] } | null;
-    const scopes = (caps?.isolationScopes ?? ["workspace"]).filter(
-      (s): s is WorkerScope => s === "workspace" || s === "user"
-    );
+    const capabilities = normalizeRuntimeCapabilities(row.capabilities);
     const envConfig = row.envConfig as RuntimeEnvConfig | null;
-
-    // 过渡：当前一 Runtime 行只代表一种 runtimeType，构造单条目 HostCapabilityStatus。
-    const status: HostCapabilityStatus = {
-      [runtimeType]: {
-        available: true,
-        scopes: scopes.length > 0 ? scopes : ["workspace"],
-        ...(runtimeType === "native" && envConfig ? { cli: envConfig } : {}),
-      },
-    };
-    return status;
+    if (!envConfig || !capabilities.native) return capabilities;
+    return {
+      ...capabilities,
+      native: { ...capabilities.native, cli: envConfig },
+    } satisfies HostCapabilityStatus;
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
@@ -390,7 +379,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async stopWorker(key: WorkerKey): Promise<void> {
-    // WorkerKey = `${OwnerKey}#${Isolation}`。进程内 Host + 隧道广播,
+    // WorkerKey = `${OwnerKey}#${RuntimeType}`。进程内 Host + 隧道广播,
     // 持有该 key 的 Host 停掉对应 worker,其余 Host 空操作(幂等)。
     await this.managedHost.stopWorker(key);
     for (const runtimeId of this.runtimeService.listConnectedRuntimeIds()) {

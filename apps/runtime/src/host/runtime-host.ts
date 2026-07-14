@@ -88,6 +88,8 @@ export interface RuntimeHostConfig {
   heartbeatTimeoutMs: number;
   /** agent event trace 配置。 */
   agentEventTrace: { enabled: boolean; maxFileMb: number };
+  /** 这台 Host 支持的 runtimeType 能力矩阵。 */
+  capabilities: HostCapabilityStatus;
   /** Runtime provider 配置（传给 @agework/providers）。 */
   providerConfig: RuntimeConfig;
   /**
@@ -97,7 +99,7 @@ export interface RuntimeHostConfig {
    */
   workerApiBaseUrl?: string;
   /**
-   * native 隔离的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
+   * native runtimeType 的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
    * 由宿主注入:builtin 用 server 的 RuntimeService 解析,daemon 用本机 detectEnvConfig。
    * 未提供时 RunConfig 不带 CLI 路径,worker 退回 PATH 查找。
    */
@@ -225,16 +227,18 @@ export class RuntimeHost implements RuntimeHostContract {
   // ── 环境 ────────────────────────────────────────────────────────────
 
   async detectEnv(_runtimeHostId: string): Promise<HostCapabilityStatus> {
-    // builtin Host 直接检测本机环境
     const envConfig = detectEnvConfig();
-    // 过渡：返回 native 能力（builtin Host 的默认 isolation）
-    return {
-      native: {
-        available: true,
-        scopes: ["workspace"],
-        cli: envConfig,
-      },
-    };
+    return Object.fromEntries(
+      Object.entries(this.config.capabilities).map(([runtimeType, status]) => [
+        runtimeType,
+        {
+          ...status,
+          ...(runtimeType === "native" && status.available
+            ? { cli: envConfig }
+            : {}),
+        },
+      ])
+    );
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
@@ -256,10 +260,16 @@ export class RuntimeHost implements RuntimeHostContract {
     createDirectoryOnDisk(input.path);
   }
 
-  async listFiles(input: WorkspaceFileQuery): Promise<WorkspaceFileListResponse> {
+  async listFiles(
+    input: WorkspaceFileQuery
+  ): Promise<WorkspaceFileListResponse> {
     const signal = createFsTimeoutSignal();
     const result = await listFilesDirect(input.rootPath, input.path, signal);
-    return { path: result.path, list: result.list, truncated: result.truncated };
+    return {
+      path: result.path,
+      list: result.list,
+      truncated: result.truncated,
+    };
   }
 
   async readFile(input: ReadFileInput): Promise<WorkspaceFileReadResponse> {
@@ -274,16 +284,22 @@ export class RuntimeHost implements RuntimeHostContract {
     };
   }
 
-  async readFileDiff(input: ReadFileDiffInput): Promise<WorkspaceFileDiffResponse> {
+  async readFileDiff(
+    input: ReadFileDiffInput
+  ): Promise<WorkspaceFileDiffResponse> {
     return readFileDiffDirect(input.rootPath, input.path);
   }
 
-  async searchFiles(input: SearchFilesInput): Promise<WorkspaceFileSearchResponse> {
+  async searchFiles(
+    input: SearchFilesInput
+  ): Promise<WorkspaceFileSearchResponse> {
     const result = await searchFilesDirect(input.rootPath);
     return { list: result.list, truncated: result.truncated };
   }
 
-  async listChangedFiles(input: ListChangedFilesInput): Promise<WorkspaceChangedFilesResponse> {
+  async listChangedFiles(
+    input: ListChangedFilesInput
+  ): Promise<WorkspaceChangedFilesResponse> {
     return listChangedFilesDirect(input.rootPath);
   }
 
@@ -312,17 +328,17 @@ export class RuntimeHost implements RuntimeHostContract {
     this.mailbox.cleanup(entry.workerId);
 
     // 停止物理载体
-    const isolation = key.split("#")[1] ?? "native";
-    if (!isRuntimeType(isolation)) return;
+    const runtimeType = key.split("#")[1] ?? "native";
+    if (!isRuntimeType(runtimeType)) return;
     const ref: RuntimeInstanceRef = {
-      runtimeType: isolation,
+      runtimeType,
       ownerId: parseOwnerKey(key.split("#")[0] as OwnerKey).id,
       workerId: entry.workerId,
       runtimeInstanceId: entry.runtimeInstanceId,
       isolationScope: parseOwnerKey(key.split("#")[0] as OwnerKey).scope,
     };
     try {
-      await this.resolveProvider(isolation).stop(ref);
+      await this.resolveProvider(runtimeType).stop(ref);
     } catch {
       // best-effort
     }
@@ -349,12 +365,12 @@ export class RuntimeHost implements RuntimeHostContract {
     // builtin Host 与 server 同生共死，重启后无存活 worker，空操作
   }
 
-  async getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null> {
+  async getWorkerSnapshotForAdmin(
+    ref: ExecutionRef
+  ): Promise<WorkerSnapshot | null> {
     const workers = await this.listWorkers();
     return (
-      workers.find(
-        (w) => w.runtimeInstanceId === ref.runtimeInstanceId
-      ) ?? null
+      workers.find((w) => w.runtimeInstanceId === ref.runtimeInstanceId) ?? null
     );
   }
 
@@ -374,9 +390,9 @@ export class RuntimeHost implements RuntimeHostContract {
     if (existing?.status === "ready") return existing;
 
     const { placement } = input;
-    const isolation = placement.runtimeType;
-    if (!isRuntimeType(isolation)) {
-      throw new Error(`unsupported isolation: ${isolation}`);
+    const runtimeType = placement.runtimeType;
+    if (!isRuntimeType(runtimeType)) {
+      throw new Error(`unsupported runtimeType: ${runtimeType}`);
     }
     const startToken = randomUUID();
     const workerId = randomUUID();
@@ -398,13 +414,13 @@ export class RuntimeHost implements RuntimeHostContract {
       placement,
       startToken,
       workerId,
-      isolation,
+      runtimeType,
       runtimeTarget,
       runConfig
     );
 
     const ctx: RuntimeLaunchContext = {
-      runtimeType: isolation,
+      runtimeType,
       ownerId: parseOwnerKey(placement.owner).id,
       workspaceId: placement.workspaceId,
       runId: input.runId,
@@ -420,7 +436,10 @@ export class RuntimeHost implements RuntimeHostContract {
 
     const { runtimeInstanceId } = await this.withTimeout(
       (async () => {
-        const launched = await this.resolveProvider(isolation).start(ctx, onExit);
+        const launched = await this.resolveProvider(runtimeType).start(
+          ctx,
+          onExit
+        );
         await this.handshakes.waitForRegister(workerId, startToken);
         return launched;
       })(),
@@ -587,9 +606,9 @@ export class RuntimeHost implements RuntimeHostContract {
   // ── placement → 执行机细节派生 ──────────────────────────────────────
 
   private resolveSpec(placement: RunPlacement): RuntimeSpec {
-    const isolation = placement.runtimeType;
-    if (!isRuntimeType(isolation)) {
-      throw new Error(`unsupported isolation: ${isolation}`);
+    const runtimeType = placement.runtimeType;
+    if (!isRuntimeType(runtimeType)) {
+      throw new Error(`unsupported runtimeType: ${runtimeType}`);
     }
     const base = {
       userId: placement.userId,
@@ -598,12 +617,12 @@ export class RuntimeHost implements RuntimeHostContract {
       userWorkspaceRootPath: this.config.getUserWorkspace(placement.username),
       runtimeLogHostPath: this.config.runtimeLogDir,
     };
-    if (isolation === "native") {
+    if (runtimeType === "native") {
       return resolveRuntimeSpec({ ...base, runtimeType: "native" });
     }
     return resolveRuntimeSpec({
       ...base,
-      runtimeType: isolation,
+      runtimeType,
       isolationScope: placement.isolationScope,
     });
   }
@@ -660,7 +679,10 @@ export class RuntimeHost implements RuntimeHostContract {
       rawRuntimeFilePath: posix.join(runtimeLogDir, `${fileName}.raw.jsonl`),
       aguiFilePath: join(logDir, `${fileName}.agui.jsonl`),
       aguiRuntimeFilePath: posix.join(runtimeLogDir, `${fileName}.agui.jsonl`),
-      workerRuntimeFilePath: posix.join(runtimeLogDir, `${fileName}.worker.log`),
+      workerRuntimeFilePath: posix.join(
+        runtimeLogDir,
+        `${fileName}.worker.log`
+      ),
     };
   }
 
@@ -691,7 +713,7 @@ export class RuntimeHost implements RuntimeHostContract {
     placement: RunPlacement,
     startToken: string,
     workerId: string,
-    isolation: string,
+    runtimeType: string,
     runtimeTarget: RuntimeSpec,
     runConfig: RunConfig
   ): Record<string, string> {
@@ -700,7 +722,7 @@ export class RuntimeHost implements RuntimeHostContract {
       AGEWORK_WORKER_OWNER_ID: parseOwnerKey(placement.owner).id,
       AGEWORK_WORKER_ID: workerId,
       AGEWORK_WORKER_START_TOKEN: startToken,
-      AGEWORK_WORKER_RUNTIME_TYPE: isolation,
+      AGEWORK_WORKER_RUNTIME_TYPE: runtimeType,
       AGEWORK_WORKER_ISOLATION_SCOPE: placement.isolationScope,
       AGEWORK_WORKER_WORKSPACE_PATH: runtimeTarget.runtimePath,
     };
@@ -770,16 +792,19 @@ export class RuntimeHost implements RuntimeHostContract {
       this.pool.remove(worker.key);
       this.mailbox.cleanup(worker.workerId);
       // best-effort 停物理载体
-      const isolation = worker.key.split("#")[1] ?? "native";
-      if (isRuntimeType(isolation)) {
+      const runtimeType = worker.key.split("#")[1] ?? "native";
+      if (isRuntimeType(runtimeType)) {
         const ref: RuntimeInstanceRef = {
-          runtimeType: isolation,
+          runtimeType,
           ownerId: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).id,
           workerId: worker.workerId,
           runtimeInstanceId: worker.runtimeInstanceId,
-          isolationScope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).scope,
+          isolationScope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey)
+            .scope,
         };
-        Promise.resolve(this.resolveProvider(isolation).stop(ref)).catch(() => {});
+        Promise.resolve(this.resolveProvider(runtimeType).stop(ref)).catch(
+          () => {}
+        );
       }
     }
   }

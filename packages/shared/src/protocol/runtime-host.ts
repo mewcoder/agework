@@ -23,14 +23,14 @@ import type {
 export type WorkerScope = "workspace" | "user";
 
 /** native / docker / opensandbox，providers 扩展点决定取值。 */
-export type Isolation = string;
+export type RuntimeType = string;
 
 /** worker 复用的 owner 键：workspace-scope 用 workspaceId，user-scope 用 userId。 */
 export type OwnerKey = `workspace:${string}` | `user:${string}`;
 
 /**
- * worker 池的唯一键（不变量 2）：同一 (owner, isolation) 至多一个活跃 worker。
- * 池、观测、stopWorker、fence 全部用它，杜绝裸 ownerKey 在多 isolation 下撞车。
+ * worker 池的唯一键（不变量 2）：同一 (owner, runtimeType) 至多一个活跃 worker。
+ * 池、观测、stopWorker、fence 全部用它，杜绝裸 ownerKey 在多 runtimeType 下撞车。
  */
 export type WorkerKey = `${OwnerKey}#${string}`;
 
@@ -46,7 +46,7 @@ export type WorkerKey = `${OwnerKey}#${string}`;
 export type RunPlacement = {
   owner: OwnerKey;
   isolationScope: WorkerScope;
-  runtimeType: Isolation;
+  runtimeType: RuntimeType;
   runtimeHostId: string;
   workspaceId: string;
   userId: string;
@@ -81,7 +81,7 @@ export type ExecutionRef = {
 /** admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。 */
 export type WorkerSnapshot = {
   id: string;
-  /** Phase 2: 池键 `OwnerKey#Isolation`，stopWorker 用。 */
+  /** Phase 2: 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
   workerKey: WorkerKey;
   runtimeType: string;
   isolationScope: string;
@@ -106,11 +106,10 @@ export type WorkerSnapshot = {
 // 标注「过渡」的入参字段（runtimeHostId）在 Phase 2 per-Host 实例就绪后删除。
 
 /**
- * Host 的能力矩阵动态部分：每种 isolation 的可用性 + CLI 检测结果。
- * 取代旧 RuntimeCapabilities（仅 isolationScopes 字符串数组）。
+ * Host 的能力矩阵动态部分：每种 runtimeType 的可用性 + CLI 检测结果。
  */
 export type HostCapabilityStatus = Record<
-  Isolation,
+  RuntimeType,
   {
     available: boolean;
     /** 不可用原因，如 "docker daemon not running"。 */
@@ -219,13 +218,13 @@ export interface RuntimeHostContract {
   // —— 环境 ——
 
   /**
-   * 每种 isolation 的可用性 + CLI 检测结果，构成能力矩阵的动态部分。
+   * 每种 runtimeType 的可用性 + CLI 检测结果，构成能力矩阵的动态部分。
    * 过渡：Phase 1 委托实现需 runtimeHostId 路由到正确的 Runtime；
    * Phase 2 per-Host 实例直接返回自身能力。
    */
   detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus>;
 
-  /** 安装 agent CLI（仅 native isolation 有意义）。 */
+  /** 安装 agent CLI（仅 native runtimeType 有意义）。 */
   installCli(input: InstallCliInput): Promise<InstallCliResult>;
 
   // —— 工作空间文件（数据面统一入口） ——
@@ -249,7 +248,9 @@ export interface RuntimeHostContract {
   searchFiles(input: SearchFilesInput): Promise<WorkspaceFileSearchResponse>;
 
   /** 列出 rootPath 下相对 HEAD 的累计变更文件。 */
-  listChangedFiles(input: ListChangedFilesInput): Promise<WorkspaceChangedFilesResponse>;
+  listChangedFiles(
+    input: ListChangedFilesInput
+  ): Promise<WorkspaceChangedFilesResponse>;
 
   // —— 观测（admin 诊断面，显式例外） ——
 

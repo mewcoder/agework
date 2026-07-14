@@ -11,6 +11,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import {
   RUNTIME_TUNNEL_CLOSE_GONE,
+  normalizeRuntimeCapabilities,
   type RuntimeTunnelClientMessage,
   type RuntimeTunnelRegisteredMessage,
   type RuntimeTunnelAllRpcRequest,
@@ -27,7 +28,6 @@ import {
 import { getApiContext, ConfigService } from "../../config/config.service";
 import { resolveApiBasePath } from "../../common/api-path";
 import { RuntimeRepository } from "../runtime.repository";
-import { isBuiltinHostId } from "../runtime.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
@@ -220,16 +220,13 @@ export class RuntimeTunnelHandler
       if (this.connections.get(runtimeId) !== ws) return; // 已被新连接顶掉
       this.connections.delete(runtimeId);
       this.rejectPendingFor(runtimeId, "connection closed");
-      // managed 容器 runtime(docker/opensandbox)断连不立刻判死——supervisor 会重启
-      // 进程,重启后重新连 server。断连期间心跳超时由 RuntimeLivenessWatchdog 兜底。
-      // registered 断连 = 机器可能失联,立即标 offline(design.md §4.3)。
-      if (!isBuiltinHostId(runtimeId)) {
-        void this.repository.markOffline(runtimeId).catch((err: unknown) => {
-          this.logger.warn(
-            `mark runtime ${runtimeId} offline failed: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
-      }
+      // builtin Host 在 server 进程内，不会建立隧道；所有隧道连接都属于
+      // registered Host，断连即标记离线。
+      void this.repository.markOffline(runtimeId).catch((err: unknown) => {
+        this.logger.warn(
+          `mark runtime ${runtimeId} offline failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      });
     });
   }
 
@@ -281,9 +278,17 @@ export class RuntimeTunnelHandler
     const message = parsed as RuntimeTunnelClientMessage;
     switch (message.type) {
       case "register": {
+        const capabilities = normalizeRuntimeCapabilities(message.capabilities);
+        if (Object.keys(capabilities).length === 0) {
+          this.logger.warn(
+            `runtime ${runtimeId} registered without a valid capability matrix`
+          );
+          ws.close(1008, "invalid capability matrix");
+          return;
+        }
         const found = await this.repository.markRegistered(
           runtimeId,
-          message.capabilities,
+          capabilities,
           message.envConfig
         );
         if (!found) {

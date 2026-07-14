@@ -4,7 +4,6 @@ import { LocalRuntime } from "./local/local-runtime";
 import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
-import type { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import { RuntimeService } from "./runtime.service";
 
 const mockEnvConfig = {
@@ -55,9 +54,6 @@ describe("RuntimeService", () => {
     closeConnection: ReturnType<typeof vi.fn>;
     isConnected: ReturnType<typeof vi.fn>;
     sendRequest: ReturnType<typeof vi.fn>;
-  };
-  let supervisor: {
-    startManagedRuntime: ReturnType<typeof vi.fn>;
   };
   let service: RuntimeService;
 
@@ -114,7 +110,7 @@ describe("RuntimeService", () => {
       revokeByOwner: vi.fn().mockResolvedValue(true),
       findVisibleToOwner: vi.fn().mockResolvedValue(makeRow()),
       findById: vi.fn().mockResolvedValue(makeRow()),
-      upsertBuiltin: vi.fn().mockResolvedValue(makeRow({ source: "managed" })),
+      upsertBuiltin: vi.fn().mockResolvedValue(makeRow({ source: "builtin" })),
       updateEnvConfig: vi.fn().mockResolvedValue(true),
       updateEnvConfigOverride: vi.fn().mockResolvedValue(true),
     };
@@ -123,15 +119,11 @@ describe("RuntimeService", () => {
       isConnected: vi.fn().mockReturnValue(false),
       sendRequest: vi.fn(),
     };
-    supervisor = {
-      startManagedRuntime: vi.fn(),
-    };
     service = new RuntimeService(
       configService as ConfigService,
       localRuntime,
       repository as unknown as RuntimeRepository,
-      tunnelHandler as unknown as RuntimeTunnelHandler,
-      supervisor as unknown as ManagedRuntimeSupervisor
+      tunnelHandler as unknown as RuntimeTunnelHandler
     );
   });
 
@@ -178,17 +170,21 @@ describe("RuntimeService", () => {
     });
   });
 
-  it("onApplicationBootstrap: native upsert + local detectEnv", async () => {
+  it("onApplicationBootstrap: upserts one multi-runtimeType builtin Host", async () => {
     await service.onApplicationBootstrap();
-    // 合并后只有一行 builtin,native 走进程内 detectEnv
-    expect(repository.upsertBuiltin).toHaveBeenCalledTimes(3);
-    expect(repository.upsertBuiltin).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "builtin",
-        capabilities: { isolationScopes: ["workspace"] },
-        tokenHash: null,
-      })
-    );
+    expect(repository.upsertBuiltin).toHaveBeenCalledTimes(1);
+    expect(repository.upsertBuiltin).toHaveBeenCalledWith({
+      name: "builtin",
+      capabilities: {
+        native: { available: true, scopes: ["workspace"] },
+        docker: { available: true, scopes: ["user", "workspace"] },
+        opensandbox: {
+          available: true,
+          scopes: ["user", "workspace"],
+        },
+      },
+      tokenHash: null,
+    });
     expect(repository.updateEnvConfig).toHaveBeenCalledTimes(1);
     expect(repository.updateEnvConfig).toHaveBeenCalledWith(
       "builtin",
@@ -261,7 +257,6 @@ describe("RuntimeService", () => {
         name: "mac-studio",
         source: "registered",
         ownerId: "u-1",
-        runtimeType: null,
         status: "offline",
         capabilities: null,
         envConfig: null,
@@ -271,6 +266,24 @@ describe("RuntimeService", () => {
         createdAt: "2026-07-04T00:00:00.000Z",
       },
     ]);
+  });
+
+  it("list exposes the registered Host capability matrix", async () => {
+    repository.listVisibleToOwner.mockResolvedValueOnce([
+      makeRow({
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      }),
+    ]);
+
+    const { list } = await service.list("u-1");
+
+    expect(list[0]).toMatchObject({
+      capabilities: {
+        docker: { available: true, scopes: ["user", "workspace"] },
+      },
+    });
   });
 
   it("listAll maps rows to response shape", async () => {
@@ -399,9 +412,9 @@ describe("RuntimeService", () => {
     (localRuntime.listFiles as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new Error("路径越界")
     );
-    await expect(
-      service.listFiles("builtin", "/tmp/ws", "..")
-    ).rejects.toThrow("路径越界");
+    await expect(service.listFiles("builtin", "/tmp/ws", "..")).rejects.toThrow(
+      "路径越界"
+    );
   });
 
   it("readFile for managed native delegates to LocalRuntime", async () => {
@@ -476,11 +489,7 @@ describe("RuntimeService", () => {
   });
 
   it("readFileDiff for managed native delegates to LocalRuntime", async () => {
-    const result = await service.readFileDiff(
-      "builtin",
-      "/tmp/ws",
-      "a.ts"
-    );
+    const result = await service.readFileDiff("builtin", "/tmp/ws", "a.ts");
     expect(localRuntime.readFileDiff).toHaveBeenCalledWith("/tmp/ws", "a.ts");
     expect(result).toEqual({
       path: "a.ts",

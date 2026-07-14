@@ -7,7 +7,7 @@ import type { WorkerKey } from "@agework/shared/protocol";
 export type WorkerEntry = {
   /** Worker 主键（供 worker HTTP 鉴权用，等价于旧模型的 Worker.id）。 */
   workerId: string;
-  /** 池键：`${OwnerKey}#${Isolation}`（不变量 2）。 */
+  /** 池键：`${OwnerKey}#${RuntimeType}`（不变量 2）。 */
   key: WorkerKey;
   /** 启动握手共享密钥，绑定"这次运行载体存活周期"。 */
   startToken: string;
@@ -25,7 +25,7 @@ export type WorkerEntry = {
 /**
  * worker 池：内存 `Map<WorkerKey, WorkerEntry>`。
  *
- * 不变量 2：同一个 `(owner, isolation)` 同时至多一个活跃 worker；
+ * 不变量 2：同一个 `(owner, runtimeType)` 同时至多一个活跃 worker；
  * 该键下所有 run 都路由给它。池、观测、stopWorker、fence 全部用同一个 WorkerKey，
  * 不出现裸 ownerKey。
  */

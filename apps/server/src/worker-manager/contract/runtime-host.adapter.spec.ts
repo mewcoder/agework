@@ -307,9 +307,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     });
 
     it("stopWorker hits the in-process host and broadcasts to tunnel hosts", async () => {
-      runtimeService.listConnectedRuntimeIds.mockReturnValue([
-        "builtin",
-      ]);
+      runtimeService.listConnectedRuntimeIds.mockReturnValue(["builtin"]);
 
       await adapter.stopWorker("workspace:ws-1#native");
 
@@ -359,17 +357,19 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("detectEnv", () => {
-    it("builds a single-entry capability status from the Runtime row", async () => {
-runtimeService.getRuntimeHostRow.mockResolvedValue({
-source: "registered",
-capabilities: { isolationScopes: ["user", "workspace"] },
+    it("returns the Runtime Host capability matrix", async () => {
+      runtimeService.getRuntimeHostRow.mockResolvedValue({
+        source: "registered",
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
         envConfig: null,
       });
 
       const status = await adapter.detectEnv("builtin");
 
       expect(status).toEqual({
-        native: { available: true, scopes: ["user", "workspace"] },
+        docker: { available: true, scopes: ["user", "workspace"] },
       });
     });
 
