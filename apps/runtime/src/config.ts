@@ -16,8 +16,8 @@ export interface RegisteredRuntimeConfig {
   serverBaseUrl: string;
   /** 配对 token(server 创建 Runtime 时下发,明文只出现一次)。 */
   token: string;
-  /** 本实例定死的一种运行方式(实例专一,不做全能节点)。 */
-  runtimeType: RuntimeType;
+  /** 这台 Host 支持的运行方式(≥1;一台机器可以同时提供 native + docker)。 */
+  runtimeTypes: RuntimeType[];
   /** 运行实例日志目录(容器内/宿主机路径,按 runtimeType 语义同 packages/providers)。 */
   runtimeLogHostPath: string;
   /** docker/opensandbox 起 worker 运行实例用的镜像 tag;native 不用。 */
@@ -37,8 +37,10 @@ export interface RegisteredRuntimeConfig {
 
 /**
  * Registered Runtime 启动配置:CLI 参数优先,env 兜底。
- * `agework-runtime --server <url> --token <配对码> --runtime <type>
+ * `agework-runtime --server <url> --token <配对码> --runtime <type[,type...]>
  *   [--worker-image <tag>] [--log-dir <path>] [--runtime-entry <path>]`
+ * 运行方式支持逗号分隔多值(如 `--runtime native,docker`);
+ * env 读 AGEWORK_RUNTIME_TYPES,单数 AGEWORK_RUNTIME_TYPE 作兼容别名。
  */
 export function resolveRegisteredRuntimeConfig(
   argv: string[],
@@ -47,7 +49,8 @@ export function resolveRegisteredRuntimeConfig(
   const args = parseFlags(argv);
   const serverBaseUrl = args.get("server") ?? env.AGEWORK_SERVER_BASE_URL;
   const token = args.get("token") ?? env.AGEWORK_RUNTIME_TOKEN;
-  const runtimeType = args.get("runtime") ?? env.AGEWORK_RUNTIME_TYPE;
+  const runtimeTypesRaw =
+    args.get("runtime") ?? env.AGEWORK_RUNTIME_TYPES ?? env.AGEWORK_RUNTIME_TYPE;
   const runtimeLogHostPath =
     args.get("log-dir") ?? env.AGEWORK_RUNTIME_LOG_DIR ?? DEFAULT_LOG_DIR;
   const workerImage = args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
@@ -64,21 +67,30 @@ export function resolveRegisteredRuntimeConfig(
   if (!token) {
     throw new Error("missing pairing token: pass --token or AGEWORK_RUNTIME_TOKEN");
   }
-  if (!runtimeType || !isRuntimeType(runtimeType)) {
+  const runtimeTypes = [
+    ...new Set(
+      (runtimeTypesRaw ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    ),
+  ];
+  if (runtimeTypes.length === 0 || !runtimeTypes.every(isRuntimeType)) {
     throw new Error(
-      `missing or invalid runtime type: pass --runtime <${SUPPORTED_RUNTIME_TYPES.join("|")}> or AGEWORK_RUNTIME_TYPE`
+      `missing or invalid runtime type: pass --runtime <${SUPPORTED_RUNTIME_TYPES.join("|")}>[,...] or AGEWORK_RUNTIME_TYPES`
     );
   }
-  if (runtimeType !== "native" && !workerImage) {
+  const containerTypes = runtimeTypes.filter((type) => type !== "native");
+  if (containerTypes.length > 0 && !workerImage) {
     throw new Error(
-      `missing worker image for --runtime ${runtimeType}: pass --worker-image or AGEWORK_RUNTIME_WORKER_IMAGE`
+      `missing worker image for --runtime ${containerTypes.join(",")}: pass --worker-image or AGEWORK_RUNTIME_WORKER_IMAGE`
     );
   }
 
   return {
     serverBaseUrl: serverBaseUrl.replace(/\/+$/, ""),
     token,
-    runtimeType,
+    runtimeTypes,
     runtimeLogHostPath,
     ...(workerImage ? { workerImage } : {}),
     ...(runtimeEntryPath ? { runtimeEntryPath } : {}),

@@ -68,7 +68,7 @@ describe("TunnelClient", () => {
     const config: RegisteredRuntimeConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
-      runtimeType: "docker",
+      runtimeTypes: ["docker"],
       runtimeLogHostPath: "/logs",
       workerImage: "agework/runtime:latest",
     };

@@ -21,7 +21,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
     expect(config).toEqual({
       serverBaseUrl: "http://host:3000/api/v1",
       token: "t1",
-      runtimeType: "docker",
+      runtimeTypes: ["docker"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       workerImage: "agework/runtime:latest",
     });
@@ -40,7 +40,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
     expect(config).toEqual({
       serverBaseUrl: "http://env:3000/api/v1",
       token: "flag-token",
-      runtimeType: "native",
+      runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       runtimeEntryPath: "/path/flag.js",
     });
@@ -54,7 +54,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
     expect(config).toEqual({
       serverBaseUrl: "http://h/api/v1",
       token: "t",
-      runtimeType: "native",
+      runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
     });
   });
@@ -116,7 +116,53 @@ describe("resolveRegisteredRuntimeConfig", () => {
       ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native"],
       {}
     );
-    expect(config.runtimeType).toBe("native");
+    expect(config.runtimeTypes).toEqual(["native"]);
+  });
+
+  it("parses a comma separated multi-type list with dedupe", () => {
+    const config = resolveRegisteredRuntimeConfig(
+      [
+        "--server",
+        "http://h/api/v1",
+        "--token",
+        "t",
+        "--runtime",
+        "native, docker,native",
+        "--worker-image",
+        "img",
+      ],
+      {}
+    );
+    expect(config.runtimeTypes).toEqual(["native", "docker"]);
+  });
+
+  it("prefers AGEWORK_RUNTIME_TYPES over the singular alias", () => {
+    const config = resolveRegisteredRuntimeConfig([], {
+      AGEWORK_SERVER_BASE_URL: "http://h/api/v1",
+      AGEWORK_RUNTIME_TOKEN: "t",
+      AGEWORK_RUNTIME_TYPES: "native,docker",
+      AGEWORK_RUNTIME_TYPE: "opensandbox",
+      AGEWORK_RUNTIME_WORKER_IMAGE: "img",
+    });
+    expect(config.runtimeTypes).toEqual(["native", "docker"]);
+  });
+
+  it("rejects a list containing an unknown runtime type", () => {
+    expect(() =>
+      resolveRegisteredRuntimeConfig(
+        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native,vm"],
+        {}
+      )
+    ).toThrow("invalid runtime type");
+  });
+
+  it("requires a worker image when any container type is listed", () => {
+    expect(() =>
+      resolveRegisteredRuntimeConfig(
+        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native,docker"],
+        {}
+      )
+    ).toThrow("missing worker image");
   });
 
   it("rejects a flag without value", () => {

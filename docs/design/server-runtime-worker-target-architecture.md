@@ -1,6 +1,6 @@
 # Server · Runtime Host · Worker 目标架构（理想态定案）
 
-> 状态：实施中（2026-07-14）：Phase 1/2 主链路已切换，Phase 3 正在删除 server 侧执行实例状态与旧词汇；registered Host 多 runtimeType 能力仍待收口。
+> 状态：已落地（2026-07-14）：三期迁移全部完成并通过出口判据验收（词汇 grep 清零、run/runtime 模块无 P0/P1）；registered Host 多 runtimeType 能力已收口（daemon `--runtime native,docker` 多值 + 启动时按类型探测可用性上报）。
 > 本文是三层关系的重新设计：**server 只管业务事实，Runtime Host 独占执行面，worker 是唯一的执行代理概念**。
 > 它有意推翻若干既有定案（见 §6 翻案清单），实施按 §7 三期迁移推进。
 

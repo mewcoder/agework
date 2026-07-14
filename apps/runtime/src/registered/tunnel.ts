@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -11,6 +12,7 @@ import {
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
   type InstallCliResult,
+  type RuntimeCapabilities,
   type WorkerScope,
 } from "@agework/shared/protocol";
 import {
@@ -49,6 +51,51 @@ const RUNTIME_TYPE_SCOPES: Record<RuntimeType, WorkerScope[]> = {
   opensandbox: ["user", "workspace"],
 };
 
+/** 按 runtimeTypes 构建能力矩阵条目(scope 表 + 各类型的可用性)。 */
+function buildCapabilities(
+  runtimeTypes: RuntimeType[],
+  availabilityOf: (runtimeType: RuntimeType) => {
+    available: boolean;
+    reason?: string;
+  }
+): RuntimeCapabilities {
+  return Object.fromEntries(
+    runtimeTypes.map((runtimeType) => [
+      runtimeType,
+      {
+        ...availabilityOf(runtimeType),
+        scopes: RUNTIME_TYPE_SCOPES[runtimeType],
+      },
+    ])
+  );
+}
+
+/**
+ * 启动时探测一种 runtimeType 在本机的真实可用性:
+ * - native:Host 进程能跑就可用;
+ * - docker:`docker info` 探测 daemon 是否可达;
+ * - opensandbox:registered daemon 尚无 sandbox 接入配置,恒不可用。
+ */
+function detectRuntimeTypeAvailability(runtimeType: RuntimeType): {
+  available: boolean;
+  reason?: string;
+} {
+  if (runtimeType === "native") return { available: true };
+  if (runtimeType === "docker") {
+    const result = spawnSync("docker", ["info"], {
+      stdio: "ignore",
+      timeout: 10_000,
+    });
+    return result.status === 0
+      ? { available: true }
+      : { available: false, reason: "docker daemon not reachable" };
+  }
+  return {
+    available: false,
+    reason: "opensandbox is not configured on this host",
+  };
+}
+
 function log(message: string, level: "info" | "error" = "info"): void {
   const line = `[agework-runtime] ${new Date().toISOString()} ${message}`;
   if (level === "error") console.error(line);
@@ -57,6 +104,9 @@ function log(message: string, level: "info" | "error" = "info"): void {
 
 export interface TunnelClientOptions {
   config: RegisteredRuntimeConfig;
+  /** register 上报的能力矩阵(每种 runtimeType 的可用性 + scope);
+   *  未提供时按 config.runtimeTypes 全部可用构建(测试便利)。 */
+  capabilities?: RuntimeCapabilities;
   /** Host 控制面契约；所有 RPC 都委托给它。 */
   hostContract: RuntimeHostContract;
   /** Phase 2: Host 上行通知的隧道实现,连接建立/断开时由 TunnelClient 接线。 */
@@ -111,12 +161,11 @@ export class TunnelClient {
       const envConfig = detectEnvConfig();
       const register: RuntimeTunnelRegisterMessage = {
         type: "register",
-        capabilities: {
-          [this.options.config.runtimeType]: {
+        capabilities:
+          this.options.capabilities ??
+          buildCapabilities(this.options.config.runtimeTypes, () => ({
             available: true,
-            scopes: RUNTIME_TYPE_SCOPES[this.options.config.runtimeType],
-          },
-        },
+          })),
         version: AGEWORK_VERSION,
         envConfig,
       };
@@ -164,7 +213,7 @@ export class TunnelClient {
     const message = parsed as RuntimeTunnelServerMessage;
     if (message.type === "registered") {
       log(
-        `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeType})`
+        `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
       // Phase 2: 注册完成才接线上行通道(绑定会话 epoch),并补发未 ACK 通知
@@ -311,6 +360,11 @@ export async function runRegisteredRuntime(): Promise<void> {
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
   // 与 server 侧 builtin Host 的约定一致:~/.agework/cli/<agent>/
   const cliInstallDir = join(homedir(), ".agework", "cli");
+  // 启动时按类型探测一次真实可用性,register 上报 + Host 能力矩阵共用
+  const capabilities = buildCapabilities(
+    config.runtimeTypes,
+    detectRuntimeTypeAvailability
+  );
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
   // providerConfig.serverBaseUrl 设为 Host 的 worker HTTP 端点——
@@ -327,12 +381,7 @@ export async function runRegisteredRuntime(): Promise<void> {
     heartbeatTimeoutMs: 120_000,
     agentEventTrace: { enabled: false, maxFileMb: 50 },
     cliInstallDir,
-    capabilities: {
-      [config.runtimeType]: {
-        available: true,
-        scopes: RUNTIME_TYPE_SCOPES[config.runtimeType],
-      },
-    },
+    capabilities,
     providerConfig: {
       workerImage: config.workerImage ?? "",
       runtimeLogHostPath: config.runtimeLogHostPath,
@@ -377,6 +426,7 @@ export async function runRegisteredRuntime(): Promise<void> {
 
   const client = new TunnelClient({
     config,
+    capabilities,
     hostContract: runtimeHost,
     tunnelUpstream,
     onGone: () => process.exit(0),
@@ -406,7 +456,7 @@ export async function runRegisteredRuntime(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   log(
-    `registered runtime starting: server=${config.serverBaseUrl} runtime=${config.runtimeType} workerPort=${workerPort}`
+    `registered runtime starting: server=${config.serverBaseUrl} runtimes=${config.runtimeTypes.join(",")} workerPort=${workerPort}`
   );
   client.start();
   // 常驻:存活由 WS 连接/重连 timer 维持
