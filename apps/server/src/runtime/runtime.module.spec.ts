@@ -28,9 +28,7 @@ describe("RuntimeModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("assembles the provider resolver from config and resolves RuntimeService", async () => {
-    // LocalRuntime 构造期 createRuntimeResolver(toRuntimeConfig(config)) 不抛,
-    // 即证明 provider 装配从 ConfigService 成功建成。
+  it("assembles the runtime module and resolves RuntimeService", async () => {
     testingModule = await createRuntimeTestingModule([RuntimeModule]);
 
     expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);

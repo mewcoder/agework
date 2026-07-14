@@ -43,8 +43,8 @@ type PendingRequest = {
 /**
  * Registered Runtime 控制隧道的 server 端:接受 agework-runtime/manager 的出站 WS,
  * 配对 token(sha256 比对)鉴权,处理 register/heartbeat,断连即标 offline;同一条
- * 连接上还承载 launch/stop/destroy 的 JSON-RPC 请求/响应(sendRequest,= RemoteRuntime
- * 的后端)。server 永不反连 runtime——这里只被动收连接、主动发的只有已建连上的 RPC 请求。
+ * 连接上还承载 host.* JSON-RPC 请求/响应。server 永不反连 Host——这里只被动收连接、
+ * 主动发的只有已建连上的 RPC 请求。
  */
 @Injectable()
 export class RuntimeTunnelHandler

@@ -317,8 +317,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.launch",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           1000
         )
@@ -337,7 +337,7 @@ describe("RuntimeTunnelHandler", () => {
           JSON.stringify({
             jsonrpc: "2.0",
             id: message.id,
-            result: { runtimeInstanceId: "container-1" },
+            result: { workers: [] },
           })
         );
       });
@@ -347,12 +347,12 @@ describe("RuntimeTunnelHandler", () => {
         {
           jsonrpc: "2.0",
           id: "req-1",
-          method: "runtime.launch",
-          params: {} as never,
+          method: "host.listWorkers",
+          params: {},
         },
         1000
       );
-      expect(result).toEqual({ runtimeInstanceId: "container-1" });
+      expect(result).toEqual({ workers: [] });
     });
 
     it("rejects with the manager's error message on an RPC error response", async () => {
@@ -375,8 +375,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.launch",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           1000
         )
@@ -393,8 +393,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.stop",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           20
         )
@@ -410,8 +410,8 @@ describe("RuntimeTunnelHandler", () => {
         {
           jsonrpc: "2.0",
           id: "req-1",
-          method: "runtime.destroy",
-          params: {} as never,
+          method: "host.listWorkers",
+          params: {},
         },
         5000
       );

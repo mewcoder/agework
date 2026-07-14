@@ -243,9 +243,6 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   // ── 环境 / 文件 / 观测 契约方法 ─────────────────────────────────────
-  //
-  // 过渡委托实现：直接调 RuntimeService.runtimeFor(id) 拿到 Runtime 接口实例，
-  // 调其文件/环境方法。authorization 在 server controller 层完成，这里不做 owner 校验。
 
   async releaseOwner(owner: OwnerKey): Promise<void> {
     // 进程内 Host + 所有隧道在线 Host 广播(无该 owner 的 Host 是空操作,幂等)
@@ -300,54 +297,124 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
-    const { runtimeHostId, path } = input;
-    const result = await this.runtimeService
-      .runtimeFor(runtimeHostId)
-      .listDirectory(path);
-    return { path: result.path, entries: result.entries };
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.listDirectory(input);
+    }
+    return this.runtimeService.sendTunnelRequest<DirectoryListing>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.listDirectory",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async createDirectory(input: CreateDirectoryInput): Promise<void> {
-    const { runtimeHostId, path } = input;
-    await this.runtimeService.runtimeFor(runtimeHostId).createDirectory(path);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      await this.managedHost.createDirectory(input);
+      return;
+    }
+    await this.runtimeService.sendTunnelRequest<never>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.createDirectory",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async listFiles(
     input: WorkspaceFileQuery
   ): Promise<WorkspaceFileListResponse> {
-    return this.runtimeService
-      .runtimeFor(input.runtimeHostId)
-      .listFiles(input.rootPath, input.path);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.listFiles(input);
+    }
+    return this.runtimeService.sendTunnelRequest<WorkspaceFileListResponse>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.listFiles",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async readFile(input: ReadFileInput): Promise<WorkspaceFileReadResponse> {
-    return this.runtimeService
-      .runtimeFor(input.runtimeHostId)
-      .readFile(input.rootPath, input.path);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.readFile(input);
+    }
+    return this.runtimeService.sendTunnelRequest<WorkspaceFileReadResponse>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.readFile",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async readFileDiff(
     input: ReadFileDiffInput
   ): Promise<WorkspaceFileDiffResponse> {
-    return this.runtimeService
-      .runtimeFor(input.runtimeHostId)
-      .readFileDiff(input.rootPath, input.path);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.readFileDiff(input);
+    }
+    return this.runtimeService.sendTunnelRequest<WorkspaceFileDiffResponse>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.readFileDiff",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async searchFiles(
     input: SearchFilesInput
   ): Promise<WorkspaceFileSearchResponse> {
-    return this.runtimeService
-      .runtimeFor(input.runtimeHostId)
-      .searchFiles(input.rootPath);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.searchFiles(input);
+    }
+    return this.runtimeService.sendTunnelRequest<WorkspaceFileSearchResponse>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.searchFiles",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async listChangedFiles(
     input: ListChangedFilesInput
   ): Promise<WorkspaceChangedFilesResponse> {
-    return this.runtimeService
-      .runtimeFor(input.runtimeHostId)
-      .listChangedFiles(input.rootPath);
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.managedHost.listChangedFiles(input);
+    }
+    return this.runtimeService.sendTunnelRequest<WorkspaceChangedFilesResponse>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.listChangedFiles",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async listWorkers(): Promise<WorkerSnapshot[]> {

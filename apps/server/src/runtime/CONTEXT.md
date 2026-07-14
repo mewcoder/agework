@@ -2,6 +2,10 @@
 
 server 管理 RuntimeHost 的注册、存储与调度入口。RuntimeHost 是 worker 运行的载体——builtin（本机 in-process）或 registered（远程机器注册）。
 
+控制隧道只承载 `host.*` 契约；旧 `LocalRuntime` / `RemoteRuntime`、`runtime.*` RPC
+和 registered `Launcher` 已删除。worker 生命周期由 `RuntimeHost` 内部按 `runtimeType`
+选择 provider。
+
 ## Language
 
 **RuntimeHost**:
@@ -9,7 +13,7 @@ server 管理 RuntimeHost 的注册、存储与调度入口。RuntimeHost 是 wo
 _Avoid_: Runtime（旧模型名，Phase 3 改名 RuntimeHost）、Carrier、engine
 
 **EnvConfig**:
-RuntimeHost 启动时检测本机 agent CLI（路径/版本/认证状态）后上报的结果。server 只存不测。native 类型 run 启动时从此字段提取 CLI 路径写入 RunConfig；container 类型不经此链路（镜像固定路径）。
+RuntimeHost 启动时检测本机 agent CLI（路径/版本/认证状态）后上报的结果。registered Host 由自身检测，builtin Host 在 server 进程内检测。native 类型 run 启动时从此字段提取 CLI 路径写入 RunConfig；container 类型不经此链路（镜像固定路径）。
 _Avoid_: CLI status（泛指时）、environment config
 
 **EnvConfigOverride**:
