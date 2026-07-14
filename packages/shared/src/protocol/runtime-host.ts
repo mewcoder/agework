@@ -199,7 +199,8 @@ export type InstallCliInput = {
 };
 
 export type InstallCliResult = {
-  envConfig: RuntimeEnvConfig;
+  /** 装好后的可执行文件绝对路径;持久化为 envConfigOverride 是 server 的事。 */
+  executablePath: string;
 };
 
 /**
@@ -235,7 +236,7 @@ export interface RuntimeHostContract {
   /** 每种 runtimeType 的可用性 + CLI 检测结果，构成目标 Host 的能力矩阵。 */
   detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus>;
 
-  /** 安装 agent CLI（仅 native runtimeType 有意义）。 */
+  /** 在目标 Host 上安装 agent CLI(仅 native runtimeType 有意义),返回可执行路径。 */
   installCli(input: InstallCliInput): Promise<InstallCliResult>;
 
   // —— 工作空间文件（数据面统一入口） ——

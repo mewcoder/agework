@@ -11,6 +11,7 @@ import { generateId, type AgentType } from "@agework/shared";
 import type {
   DirectoryListing,
   HostCapabilityStatus,
+  InstallCliResult,
   RuntimeCapabilities,
   RuntimeSpec,
   RuntimeTunnelAllRpcRequest,
@@ -42,8 +43,10 @@ import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
 import type { HostUpstreamPort } from "./runtime.types";
-import { detectEnvConfig } from "@agework/shared/cli";
-import { installCli as installLocalCli } from "./cli/cli-installer";
+import {
+  detectEnvConfig,
+  installCli as installLocalCli,
+} from "@agework/shared/cli";
 import {
   createDirectory as createDirectoryOnDisk,
   listDirectory as listDirectoryOnDisk,
@@ -58,6 +61,9 @@ import {
   listChangedFiles as listChangedFilesDirect,
   readFileDiff as readFileDiffDirect,
 } from "@agework/shared/git";
+
+/** CLI 安装要跑 npm install(上限 120s),隧道等待要给足余量。 */
+const INSTALL_CLI_TIMEOUT_MS = 150_000;
 
 /**
  * RuntimeHost 注册领域门面：管理 Host 注册表、placement 配置、能力与隧道传输。
@@ -211,15 +217,30 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    if (row.source !== "builtin") {
-      throw new BadRequestException(
-        `runtime ${id} is not a native runtime, cannot install CLI`
+    let executablePath: string;
+    if (isBuiltinHostId(id)) {
+      // builtin Host 就是 server 本机,直接在进程内安装
+      executablePath = await installLocalCli(
+        agentType,
+        this.configService.getHostCliDir()
       );
+    } else {
+      if (!this.tunnelHandler.isConnected(id)) {
+        throw new BadRequestException(`runtime ${id} is not connected`);
+      }
+      // registered Host:经隧道让目标机器自己装(npm install 上限 120s,给足余量)
+      const result = await this.sendTunnelRequest<InstallCliResult>(
+        id,
+        {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.installCli",
+          params: { runtimeHostId: id, agentType },
+        },
+        INSTALL_CLI_TIMEOUT_MS
+      );
+      executablePath = result.executablePath;
     }
-    const executablePath = await installLocalCli(
-      agentType,
-      this.configService.getHostCliDir()
-    );
     await this.updateEnvConfigOverride(id, agentType, executablePath);
     return this.detectEnv(id);
   }

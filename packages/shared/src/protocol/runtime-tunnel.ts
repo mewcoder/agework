@@ -6,6 +6,8 @@ import type {
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   StopWorkerInput,
+  InstallCliInput,
+  InstallCliResult,
   WorkerSnapshot,
   HostCapabilityStatus,
   ListDirectoryInput,
@@ -124,7 +126,8 @@ export type RuntimeTunnelHostRpcRequest =
   | RpcRequest<"host.searchFiles", SearchFilesInput>
   | RpcRequest<"host.listChangedFiles", ListChangedFilesInput>
   | RpcRequest<"host.listWorkers", Record<string, never>>
-  | RpcRequest<"host.stopWorker", StopWorkerInput>;
+  | RpcRequest<"host.stopWorker", StopWorkerInput>
+  | RpcRequest<"host.installCli", InstallCliInput>;
 
 /** host.listWorkers 响应：本 Host 的 worker 快照列表。 */
 export type HostListWorkersRpcResult = { workers: WorkerSnapshot[] };
@@ -138,6 +141,7 @@ export type RuntimeTunnelHostRpcResponse =
   | RpcResponse<WorkspaceFileSearchResponse>
   | RpcResponse<WorkspaceChangedFilesResponse>
   | RpcResponse<HostListWorkersRpcResult>
+  | RpcResponse<InstallCliResult>
   | RpcResponse<null>;
 
 export type RuntimeTunnelHostNotification =

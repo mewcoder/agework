@@ -169,5 +169,6 @@ function createConfigServiceMock(): Partial<ConfigService> {
       timeoutSeconds: 30,
       useServerProxy: false,
     }),
+    getHostCliDir: () => "/tmp/agework-host-test/cli",
   };
 }

@@ -22,8 +22,8 @@
  * ERR_MODULE_NOT_FOUND。类型可以用 `import type` 从其他文件引入（编译期擦除）。
  */
 
-import { spawnSync, execSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { spawn, spawnSync, execSync } from "node:child_process";
+import { existsSync, mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, extname, join } from "node:path";
 import type { AgentType } from "../common";
@@ -298,4 +298,67 @@ export function resolveCliPackageName(agentType: AgentType): string {
     default:
       return "@openai/codex";
   }
+}
+
+// ── agent CLI 一键安装 ────────────────────────────────────────────────
+//
+// 把独立 CLI 包装进 Host 专属目录(per-agent 一个子目录),不走全局
+// `npm install -g`,避免跟机器上已有的系统安装冲突。builtin 与 registered
+// Host 共用同一实现;安装完成后由 server 把返回路径写成 envConfigOverride。
+
+const NPM_INSTALL_TIMEOUT_MS = 120_000;
+
+/** 把 agentType 对应的独立 CLI 装进 cliRootDir 下的专属目录,返回可执行文件绝对路径。 */
+export async function installCli(
+  agentType: AgentType,
+  cliRootDir: string
+): Promise<string> {
+  const dir = join(cliRootDir, agentType);
+  mkdirSync(dir, { recursive: true });
+
+  await runNpmInstall(dir, resolveCliPackageName(agentType));
+
+  const binPath = resolveInstalledBinPath(cliRootDir, agentType);
+  if (!binPath) {
+    throw new Error(`安装完成但未找到可执行文件：${agentType}`);
+  }
+  return binPath;
+}
+
+/** 一键安装目录里某 agent CLI 的可执行文件路径;未安装返回 null。 */
+export function resolveInstalledBinPath(
+  cliRootDir: string,
+  agentType: AgentType
+): string | null {
+  const binName = process.platform === "win32" ? `${agentType}.cmd` : agentType;
+  const binPath = join(cliRootDir, agentType, "node_modules", ".bin", binName);
+  return existsSync(binPath) ? binPath : null;
+}
+
+function runNpmInstall(cwd: string, packageName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+    const child = spawn(
+      npmCommand,
+      ["install", "--prefix", cwd, `${packageName}@latest`],
+      { timeout: NPM_INSTALL_TIMEOUT_MS, stdio: ["ignore", "pipe", "pipe"] }
+    );
+
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `npm install 失败（exit ${code}）：${stderr.trim().slice(-500)}`
+          )
+        );
+      }
+    });
+  });
 }

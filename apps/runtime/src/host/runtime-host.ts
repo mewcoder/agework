@@ -50,7 +50,10 @@ import {
   type RuntimeType,
 } from "@agework/providers";
 import { resolveRuntimeSpec } from "@agework/providers";
-import { detectEnvConfig } from "@agework/shared/cli";
+import {
+  detectEnvConfig,
+  installCli as installCliOnDisk,
+} from "@agework/shared/cli";
 import {
   listFiles as listFilesDirect,
   readFile as readFileDirect,
@@ -90,6 +93,8 @@ export interface RuntimeHostConfig {
   heartbeatTimeoutMs: number;
   /** agent event trace 配置。 */
   agentEventTrace: { enabled: boolean; maxFileMb: number };
+  /** agent CLI 一键安装的根目录(per-agent 一个子目录,不占系统全局 npm)。 */
+  cliInstallDir: string;
   /** 这台 Host 支持的 runtimeType 能力矩阵。 */
   capabilities: HostCapabilityStatus;
   /** Runtime provider 配置（传给 @agework/providers）。 */
@@ -245,10 +250,13 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
-    // CLI 安装在 builtin Host 上由 server 侧的 CliInstaller 处理
-    // 过渡：检测当前环境返回
-    const envConfig = detectEnvConfig();
-    return { envConfig };
+    // 真实安装在 Host 本机执行(builtin/registered 同构);
+    // 把返回路径持久化为 envConfigOverride 是 server 的事。
+    const executablePath = await installCliOnDisk(
+      input.agentType,
+      this.config.cliInstallDir
+    );
+    return { executablePath };
   }
 
   // ── 工作空间文件 ────────────────────────────────────────────────────

@@ -5,8 +5,6 @@ import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { RunEventService } from "../../run-event/run-event.service";
-import { resolveApiBasePath } from "../../common/api-path";
-import { EnvKey } from "../../config/registry/env-key";
 
 /**
  * 进程内 builtin RuntimeHost 的注入 token。
@@ -30,7 +28,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
     runEvents: RunEventService
   ): Promise<RuntimeHost> => {
     const workerPort = configService.getBuiltinWorkerHttpPort();
-    const apiBasePath = resolveApiBasePath(process.env[EnvKey.CONTEXT]);
+    const apiBasePath = configService.getApiBasePath();
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
     const providerConfig = runtimeService.getProviderRuntimeConfig();
@@ -55,6 +53,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       launchTimeoutMs: configService.getLaunchTimeoutSeconds() * 1000,
       heartbeatTimeoutMs: configService.getHeartbeatTimeoutSeconds() * 1000,
       agentEventTrace: configService.getAgentEventTraceConfig(),
+      cliInstallDir: configService.getHostCliDir(),
       capabilities,
       providerConfig,
       workerApiBaseUrl,

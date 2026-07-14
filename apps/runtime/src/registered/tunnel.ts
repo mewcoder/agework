@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { WebSocket, type RawData } from "ws";
 import {
@@ -9,6 +10,7 @@ import {
   type RuntimeTunnelHostNotification,
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
+  type InstallCliResult,
   type WorkerScope,
 } from "@agework/shared/protocol";
 import {
@@ -24,7 +26,7 @@ import {
   type RegisteredRuntimeConfig,
   type RuntimeType,
 } from "../config.js";
-import { detectEnvConfig } from "@agework/shared/cli";
+import { detectEnvConfig, resolveInstalledBinPath } from "@agework/shared/cli";
 import type {
   DirectoryListing,
   HostCapabilityStatus,
@@ -205,6 +207,7 @@ export class TunnelClient {
     | HostListWorkersRpcResult
     | HostCapabilityStatus
     | DirectoryListing
+    | InstallCliResult
     | void
   > {
     const hostContract = this.options.hostContract;
@@ -240,6 +243,8 @@ export class TunnelClient {
         return { workers };
       case "host.stopWorker":
         return await hostContract.stopWorker(request.params);
+      case "host.installCli":
+        return hostContract.installCli(request.params);
     }
   }
 
@@ -304,6 +309,8 @@ export async function runRegisteredRuntime(): Promise<void> {
   const workerApiBaseUrl = `http://127.0.0.1:${workerPort}/api/v1`;
   const userWorkspaceRoot =
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
+  // 与 server 侧 builtin Host 的约定一致:~/.agework/cli/<agent>/
+  const cliInstallDir = join(homedir(), ".agework", "cli");
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
   // providerConfig.serverBaseUrl 设为 Host 的 worker HTTP 端点——
@@ -319,6 +326,7 @@ export async function runRegisteredRuntime(): Promise<void> {
     launchTimeoutMs: 60_000,
     heartbeatTimeoutMs: 120_000,
     agentEventTrace: { enabled: false, maxFileMb: 50 },
+    cliInstallDir,
     capabilities: {
       [config.runtimeType]: {
         available: true,
@@ -340,13 +348,20 @@ export async function runRegisteredRuntime(): Promise<void> {
       },
     },
     workerApiBaseUrl,
-    // native runtimeType 的 CLI 路径:Host 就是执行机器本机,按本机检测结果解析
+    // native runtimeType 的 CLI 路径:Host 就是执行机器本机——
+    // 一键安装目录优先(host.installCli 装的),否则按本机 PATH 检测结果
     resolveCliPaths: async () => {
       const envConfig = detectEnvConfig();
       return {
-        claude: envConfig.claude.executablePath,
-        codex: envConfig.codex.executablePath,
-        opencode: envConfig.opencode.executablePath,
+        claude:
+          resolveInstalledBinPath(cliInstallDir, "claude") ??
+          envConfig.claude.executablePath,
+        codex:
+          resolveInstalledBinPath(cliInstallDir, "codex") ??
+          envConfig.codex.executablePath,
+        opencode:
+          resolveInstalledBinPath(cliInstallDir, "opencode") ??
+          envConfig.opencode.executablePath,
       };
     },
   };

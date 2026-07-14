@@ -27,6 +27,7 @@ function makeConfig(
     launchTimeoutMs: 5_000,
     heartbeatTimeoutMs: 60_000,
     agentEventTrace: { enabled: false, maxFileMb: 5 },
+    cliInstallDir: "/tmp/agework-host-test/cli",
     capabilities: {
       native: { available: true, scopes: ["workspace"] },
     },

@@ -40,6 +40,9 @@ import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
 
+/** CLI 安装要跑 npm install(上限 120s),隧道等待要给足余量。 */
+const INSTALL_CLI_TIMEOUT_MS = 150_000;
+
 /**
  * `RuntimeHostContract` 的 server 侧路由实现(目标架构设计文档 §7 Phase 2):
  * run 模块只经契约动词消费执行面,本类按 placement.runtimeHostId 分两路——
@@ -230,17 +233,19 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
-    const { runtimeHostId, agentType } = input;
-    const result = await this.runtimeService.installCli(
-      runtimeHostId,
-      agentType
-    );
-    if (!result.envConfig) {
-      throw new Error(
-        `installCli failed: no envConfig returned for ${runtimeHostId}`
-      );
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      return this.builtinHost.installCli(input);
     }
-    return { envConfig: result.envConfig };
+    return this.runtimeService.sendTunnelRequest<InstallCliResult>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.installCli",
+        params: input,
+      },
+      INSTALL_CLI_TIMEOUT_MS
+    );
   }
 
   async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
