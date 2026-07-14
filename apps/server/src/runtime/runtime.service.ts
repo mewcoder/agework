@@ -14,20 +14,20 @@ import type {
   InstallCliResult,
   RuntimeCapabilities,
   RuntimeSpec,
-  RuntimeTunnelAllRpcRequest,
-  RuntimeTunnelHostNotification,
+  HostTunnelAllRpcRequest,
+  HostTunnelHostNotification,
   WorkerScope,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
-  CreateRuntimeDirectoryResponse,
-  CreateRuntimeResponse,
+  CreateHostDirectoryResponse,
+  CreateRuntimeHostResponse,
   DetectEnvResponse,
-  RuntimeDirectoryResponse,
+  HostDirectoryResponse,
   RuntimeEnvConfig,
-  RuntimeEnvConfigOverride,
+  RuntimeHostEnvConfigOverride,
   AgentEnvStatus,
-  RuntimeResponse,
+  RuntimeHostResponse,
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
   WorkspaceChangedFilesResponse,
@@ -41,7 +41,7 @@ import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./builtin/runtime-config";
 import { RuntimeRepository } from "./runtime.repository";
 import type { RuntimeHostRow } from "./runtime.types";
-import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
+import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
 import type { HostUpstreamPort } from "./runtime.types";
 import {
@@ -77,7 +77,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   constructor(
     private readonly configService: ConfigService,
     private readonly repository: RuntimeRepository,
-    private readonly tunnelHandler: RuntimeTunnelHandler
+    private readonly tunnelHandler: HostTunnelHandler
   ) {}
 
   /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
@@ -132,12 +132,15 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /** 创建 Registered Runtime 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
-  async create(ownerId: string, name: string): Promise<CreateRuntimeResponse> {
+  async create(
+    ownerId: string,
+    name: string
+  ): Promise<CreateRuntimeHostResponse> {
     const token = randomBytes(32).toString("hex");
     const tokenHash = createHash("sha256").update(token).digest("hex");
     try {
       const row = await this.repository.create({ ownerId, name, tokenHash });
-      return { runtime: toRuntimeResponse(row), token };
+      return { runtimeHost: toRuntimeHostResponse(row), token };
     } catch (err) {
       if (isPrismaUniqueError(err)) {
         throw new ConflictException(`runtime name already exists: ${name}`);
@@ -147,15 +150,15 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /** 列出当前用户可见的 Host：自己的 registered + 全局 builtin。 */
-  async list(ownerId: string): Promise<{ list: RuntimeResponse[] }> {
+  async list(ownerId: string): Promise<{ list: RuntimeHostResponse[] }> {
     const rows = await this.repository.listVisibleToOwner(ownerId);
-    return { list: rows.map(toRuntimeResponse) };
+    return { list: rows.map(toRuntimeHostResponse) };
   }
 
   /** admin: 列出全部 Host（builtin + 所有用户的 registered），不含已注销。 */
-  async listAll(): Promise<{ list: RuntimeResponse[] }> {
+  async listAll(): Promise<{ list: RuntimeHostResponse[] }> {
     const rows = await this.repository.listAll();
-    return { list: rows.map(toRuntimeResponse) };
+    return { list: rows.map(toRuntimeHostResponse) };
   }
 
   /**
@@ -195,7 +198,7 @@ export class RuntimeService implements OnApplicationBootstrap {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
     const override = mergeOverride(
-      current.envConfigOverride as RuntimeEnvConfigOverride | null,
+      current.envConfigOverride as RuntimeHostEnvConfigOverride | null,
       agentType,
       executablePath
     );
@@ -293,7 +296,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     ownerId: string,
     id: string,
     path?: string
-  ): Promise<RuntimeDirectoryResponse> {
+  ): Promise<HostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
       const result = isBuiltinHostId(id)
@@ -321,7 +324,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     ownerId: string,
     id: string,
     path: string
-  ): Promise<CreateRuntimeDirectoryResponse> {
+  ): Promise<CreateHostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
       if (isBuiltinHostId(id)) return createDirectoryOnDisk(path);
@@ -544,7 +547,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     return toRuntimeConfig(this.configService);
   }
 
-  // ── Phase 2 隧道公开面(对 RuntimeTunnelHandler 的薄转发)────────────
+  // ── Phase 2 隧道公开面(对 HostTunnelHandler 的薄转发)────────────
   //
   // RuntimeHostAdapter 经这里走隧道,不直接 reach
   // gateway 内部文件(模块边界:跨模块只调根 Service)。
@@ -552,7 +555,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   /** 向已建连的 registered Host 发一次隧道 RPC(host.* / launch/stop/destroy)。 */
   sendTunnelRequest<Result>(
     runtimeHostId: string,
-    request: RuntimeTunnelAllRpcRequest,
+    request: HostTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
     return this.tunnelHandler.sendRequest<Result>(
@@ -570,7 +573,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   /** 向目标 Host 发一条单向隧道通知(不等回应,不在线即丢弃,best-effort)。 */
   sendTunnelNotification(
     runtimeHostId: string,
-    notification: RuntimeTunnelHostNotification
+    notification: HostTunnelHostNotification
   ): void {
     this.tunnelHandler.sendNotification(runtimeHostId, notification);
   }
@@ -593,7 +596,8 @@ export class RuntimeService implements OnApplicationBootstrap {
     const row = await this.repository.findById(id);
     if (!row) return null;
     const envConfig = row.envConfig as RuntimeEnvConfig | null;
-    const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
+    const override =
+      row.envConfigOverride as RuntimeHostEnvConfigOverride | null;
     return {
       claude: resolveAgentPath(
         override?.claude?.executablePath,
@@ -611,9 +615,9 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 }
 
-function toRuntimeResponse(row: RuntimeHostRow): RuntimeResponse {
+function toRuntimeHostResponse(row: RuntimeHostRow): RuntimeHostResponse {
   const envConfig = row.envConfig as RuntimeEnvConfig | null;
-  const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
+  const override = row.envConfigOverride as RuntimeHostEnvConfigOverride | null;
   const normalizedCapabilities = row.capabilities
     ? normalizeRuntimeCapabilities(row.capabilities)
     : null;
@@ -639,8 +643,8 @@ function toRuntimeResponse(row: RuntimeHostRow): RuntimeResponse {
 /** override + detected 合并出展示层 envStatus（见 ADR-0002）。 */
 function computeEnvStatus(
   detected: RuntimeEnvConfig,
-  override: RuntimeEnvConfigOverride | null
-): RuntimeResponse["envStatus"] {
+  override: RuntimeHostEnvConfigOverride | null
+): RuntimeHostResponse["envStatus"] {
   return {
     claude: mergeAgent(
       detected.claude,
@@ -685,11 +689,11 @@ function isPrismaUniqueError(err: unknown): boolean {
 
 /** per-agent 合并 override：空字符串 = 清除该 agent 的覆盖。 */
 function mergeOverride(
-  current: RuntimeEnvConfigOverride | null,
+  current: RuntimeHostEnvConfigOverride | null,
   agentType: AgentType,
   executablePath: string
-): RuntimeEnvConfigOverride {
-  const result: RuntimeEnvConfigOverride = { ...(current ?? {}) };
+): RuntimeHostEnvConfigOverride {
+  const result: RuntimeHostEnvConfigOverride = { ...(current ?? {}) };
   const key = agentType;
   if (!executablePath) {
     delete result[key];

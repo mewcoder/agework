@@ -16,7 +16,7 @@ function makeController(
       listWorkers: vi.fn().mockResolvedValue([]),
       stopWorker: vi.fn().mockResolvedValue(undefined),
       ...hostContract,
-    } as never
+    }
   );
 }
 

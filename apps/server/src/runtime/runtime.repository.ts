@@ -3,7 +3,7 @@ import { generateId } from "@agework/shared";
 import type { RuntimeCapabilities } from "@agework/shared/protocol";
 import type {
   RuntimeEnvConfig,
-  RuntimeEnvConfigOverride,
+  RuntimeHostEnvConfigOverride,
 } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 import type { RuntimeHostRow } from "./runtime.types";
@@ -151,7 +151,7 @@ export class RuntimeRepository {
   /** admin 覆盖 envConfig（per-agent 合并写入）。 */
   async updateEnvConfigOverride(
     id: string,
-    override: RuntimeEnvConfigOverride
+    override: RuntimeHostEnvConfigOverride
   ): Promise<boolean> {
     const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id },

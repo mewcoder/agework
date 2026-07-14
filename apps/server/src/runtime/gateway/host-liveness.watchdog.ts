@@ -14,10 +14,10 @@ import { RuntimeRepository } from "../runtime.repository";
  * 超时即判死,不做"确认死亡"。
  */
 @Injectable()
-export class RuntimeLivenessWatchdog
+export class HostLivenessWatchdog
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
-  private readonly logger = new Logger(RuntimeLivenessWatchdog.name);
+  private readonly logger = new Logger(HostLivenessWatchdog.name);
   private timer?: NodeJS.Timeout;
 
   constructor(

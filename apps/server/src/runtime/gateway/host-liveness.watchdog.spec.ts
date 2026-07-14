@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { ConfigService } from "../../config/config.service";
-import { RuntimeLivenessWatchdog } from "./runtime-liveness.watchdog";
+import { HostLivenessWatchdog } from "./host-liveness.watchdog";
 
-describe("RuntimeLivenessWatchdog", () => {
+describe("HostLivenessWatchdog", () => {
   const repository = {
     markStaleOnlineAsOffline: vi.fn().mockResolvedValue(0),
   };
@@ -10,12 +10,12 @@ describe("RuntimeLivenessWatchdog", () => {
     getHeartbeatCheckIntervalSeconds: vi.fn().mockReturnValue(10),
     getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(30),
   } as unknown as ConfigService;
-  let watchdog: RuntimeLivenessWatchdog;
+  let watchdog: HostLivenessWatchdog;
 
   beforeEach(() => {
     vi.useFakeTimers();
     repository.markStaleOnlineAsOffline.mockClear();
-    watchdog = new RuntimeLivenessWatchdog(repository as never, configService);
+    watchdog = new HostLivenessWatchdog(repository as never, configService);
   });
 
   afterEach(() => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
 import { RuntimeRepository } from "./runtime.repository";
 import type { RuntimeHostRow } from "./runtime.types";
-import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
+import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import { RuntimeService } from "./runtime.service";
 
 const mockEnvConfig = {
@@ -139,7 +139,7 @@ describe("RuntimeService", () => {
     service = new RuntimeService(
       configService as ConfigService,
       repository as unknown as RuntimeRepository,
-      tunnelHandler as unknown as RuntimeTunnelHandler
+      tunnelHandler as unknown as HostTunnelHandler
     );
   });
 
@@ -251,7 +251,7 @@ describe("RuntimeService", () => {
     expect(stored.ownerId).toBe("u-1");
     expect(stored.tokenHash).not.toBe(result.token);
     expect(stored.tokenHash).toMatch(/^[0-9a-f]{64}$/);
-    expect(result.runtime).not.toHaveProperty("tokenHash");
+    expect(result.runtimeHost).not.toHaveProperty("tokenHash");
   });
 
   it("create maps unique violation to ConflictException", async () => {

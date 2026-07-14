@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { WebSocket } from "ws";
 import type { ConfigService } from "../../config/config.service";
 import type { HttpAdapterHost } from "@nestjs/core";
-import { RuntimeTunnelHandler } from "./runtime-tunnel.handler";
+import { HostTunnelHandler } from "./host-tunnel.handler";
 
 const GOOD_TOKEN = "good-token";
 const GOOD_HASH = createHash("sha256").update(GOOD_TOKEN).digest("hex");
@@ -23,13 +23,13 @@ function makeRepository() {
   };
 }
 
-describe("RuntimeTunnelHandler", () => {
+describe("HostTunnelHandler", () => {
   let server: Server;
   let baseUrl: string;
   let repository: ReturnType<typeof makeRepository>;
   let events: { emit: ReturnType<typeof vi.fn> };
   let adapterHost: HttpAdapterHost;
-  let handler: RuntimeTunnelHandler;
+  let handler: HostTunnelHandler;
   let sockets: WebSocket[];
 
   beforeEach(async () => {
@@ -50,7 +50,7 @@ describe("RuntimeTunnelHandler", () => {
     adapterHost = {
       httpAdapter: { getHttpServer: () => server },
     } as unknown as HttpAdapterHost;
-    handler = new RuntimeTunnelHandler(
+    handler = new HostTunnelHandler(
       repository as never,
       configService,
       adapterHost,
@@ -68,7 +68,7 @@ describe("RuntimeTunnelHandler", () => {
   });
 
   function connect(token = GOOD_TOKEN): WebSocket {
-    const ws = new WebSocket(`${baseUrl}/api/v1/runtimes/tunnel`, {
+    const ws = new WebSocket(`${baseUrl}/api/v1/runtime-hosts/tunnel`, {
       headers: { authorization: `Bearer ${token}` },
     });
     sockets.push(ws);
@@ -237,7 +237,7 @@ describe("RuntimeTunnelHandler", () => {
   it("kicks a connection that never registers within the register window", async () => {
     // 用极短心跳窗口构造一个独立 handler(注册窗口 = 心跳判死窗口)
     handler.onApplicationShutdown();
-    const fastHandler = new RuntimeTunnelHandler(
+    const fastHandler = new HostTunnelHandler(
       repository as never,
       {
         getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(0.05),

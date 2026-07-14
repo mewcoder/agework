@@ -1,7 +1,7 @@
 import { IsNotEmpty, IsString } from "class-validator";
-import type { CreateRuntimeDirectoryRequest } from "@agework/shared/api";
+import type { CreateHostDirectoryRequest } from "@agework/shared/api";
 
-export class CreateRuntimeDirectoryDto implements CreateRuntimeDirectoryRequest {
+export class CreateHostDirectoryDto implements CreateHostDirectoryRequest {
   @IsString()
   @IsNotEmpty()
   runtimeHostId!: string;

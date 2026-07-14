@@ -12,10 +12,10 @@ import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import {
   RUNTIME_TUNNEL_CLOSE_GONE,
   normalizeRuntimeCapabilities,
-  type RuntimeTunnelClientMessage,
-  type RuntimeTunnelRegisteredMessage,
-  type RuntimeTunnelAllRpcRequest,
-  type RuntimeTunnelHostNotification,
+  type HostTunnelClientMessage,
+  type HostTunnelRegisteredMessage,
+  type HostTunnelAllRpcRequest,
+  type HostTunnelHostNotification,
   type HostUpstreamEnvelope,
 } from "@agework/shared/protocol";
 import {
@@ -51,10 +51,10 @@ type PendingRequest = {
  * 请求/响应。server 永不反连 Host——这里只被动收连接、主动发的只有已建连上的 RPC 请求。
  */
 @Injectable()
-export class RuntimeTunnelHandler
+export class HostTunnelHandler
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
-  private readonly logger = new Logger(RuntimeTunnelHandler.name);
+  private readonly logger = new Logger(HostTunnelHandler.name);
   private readonly tunnelPath: string;
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
@@ -79,7 +79,7 @@ export class RuntimeTunnelHandler
     private readonly httpAdapterHost: HttpAdapterHost,
     private readonly events: EventEmitter2
   ) {
-    this.tunnelPath = `${configService.getApiBasePath()}/runtimes/tunnel`;
+    this.tunnelPath = `${configService.getApiBasePath()}/runtime-hosts/tunnel`;
   }
 
   onApplicationBootstrap(): void {
@@ -127,7 +127,7 @@ export class RuntimeTunnelHandler
   /** 向目标 runtimeHostId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
   sendNotification(
     runtimeHostId: string,
-    notification: RuntimeTunnelHostNotification
+    notification: HostTunnelHostNotification
   ): void {
     const socket = this.connections.get(runtimeHostId);
     if (!socket) return;
@@ -135,10 +135,10 @@ export class RuntimeTunnelHandler
   }
 
   /** 向目标 runtimeHostId 发一次 RPC（launch/stop/destroy/host.*），等它回应或超时。
-   *  Phase 2 扩展：接受 RuntimeTunnelAllRpcRequest，包含 host.submitRun/command/releaseOwner。 */
+   *  Phase 2 扩展：接受 HostTunnelAllRpcRequest，包含 host.submitRun/command/releaseOwner。 */
   sendRequest<Result>(
     runtimeHostId: string,
-    request: RuntimeTunnelAllRpcRequest,
+    request: HostTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
     const socket = this.connections.get(runtimeHostId);
@@ -291,7 +291,7 @@ export class RuntimeTunnelHandler
       return;
     }
 
-    const message = parsed as RuntimeTunnelClientMessage;
+    const message = parsed as HostTunnelClientMessage;
     switch (message.type) {
       case "register": {
         const capabilities = normalizeRuntimeCapabilities(message.capabilities);
@@ -322,7 +322,7 @@ export class RuntimeTunnelHandler
             `runtime ${runtimeHostId} version mismatch: manager=${message.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
           );
         }
-        const reply: RuntimeTunnelRegisteredMessage = {
+        const reply: HostTunnelRegisteredMessage = {
           type: "registered",
           runtimeHostId,
           heartbeatIntervalSeconds: this.heartbeatIntervalSeconds(),

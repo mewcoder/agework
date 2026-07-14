@@ -212,9 +212,7 @@ export class HostUpstreamHandler
             conversationId: runtimeHandle.conversationId,
           },
         })
-        .catch(
-          swallow(this.logger, `cancel timed out run ${runId} execution`)
-        );
+        .catch(swallow(this.logger, `cancel timed out run ${runId} execution`));
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
       this.logger.warn("terminating run session", {

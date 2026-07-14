@@ -8,9 +8,13 @@ server 管理 RuntimeHost 的注册、存储与调度入口。RuntimeHost 是 wo
 
 ## Language
 
+**Runtime（执行环境形态）**:
+"runtime" 单独出现时只指 worker 的执行环境形态，即 `runtimeType` 的取值（native / docker / opensandbox），类比容器界的 container runtime。它是 RuntimeHost 上报能力矩阵的维度，不是实体、不是进程。
+_Avoid_: 用 runtime 指代 RuntimeHost 节点或 `apps/runtime` 程序（后者是执行面程序的包名，不承载领域语义）
+
 **RuntimeHost**:
-一个可运行 worker 的执行节点。builtin（本机 in-process，固定 id `"builtin"`）或 registered（远程机器注册，配对 token 鉴权）。RuntimeHost 上报能力矩阵（`capabilities` JSON，以 `runtimeType` 为 key，值包含 `available` 和 `scopes`）和环境配置（`envConfig`），server 负责存储和展示。
-_Avoid_: Runtime（旧模型名，Phase 3 改名 RuntimeHost）、Carrier、engine
+一个可运行 worker 的执行节点，读作「承载多种 runtime（执行环境）的宿主」。builtin（本机 in-process，固定 id `"builtin"`）或 registered（远程机器注册，配对 token 鉴权）。RuntimeHost 上报能力矩阵（`capabilities` JSON，以 `runtimeType` 为 key，值包含 `available` 和 `scopes`）和环境配置（`envConfig`），server 负责存储和展示。领域内简称 **host**（`host.*` 隧道契约、Builtin Host 等用法即此简称）。
+_Avoid_: Runtime（旧模型名，Phase 3 改名 RuntimeHost）、Carrier、engine、Daemon（描述进程形态而非角色，builtin 形态不成立）
 
 **EnvConfig**:
 RuntimeHost 启动时检测本机 agent CLI（路径/版本/认证状态）后上报的结果。registered Host 由自身检测，builtin Host 在 server 进程内检测。native 类型 run 启动时从此字段提取 CLI 路径写入 RunConfig；container 类型不经此链路（镜像固定路径）。

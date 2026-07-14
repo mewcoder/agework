@@ -3,7 +3,7 @@ import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import type { JwtUser } from "../../auth/auth.types";
 import { RuntimeService } from "../runtime.service";
-import { CreateRuntimeDto } from "../dto/create-runtime.dto";
+import { CreateRuntimeHostDto } from "../dto/create-runtime-host.dto";
 import { UpdateEnvConfigOverrideDto } from "../dto/update-env-config-override.dto";
 import { InstallCliDto } from "../dto/install-cli.dto";
 import { RuntimeHostIdDto } from "../dto/runtime-host-id.dto";
@@ -14,8 +14,8 @@ import { RuntimeHostIdDto } from "../dto/runtime-host-id.dto";
  * repository / tunnel handler。
  */
 @Roles("admin")
-@Controller("admin/runtimes")
-export class AdminRuntimeController {
+@Controller("admin/runtime-hosts")
+export class AdminRuntimeHostController {
   constructor(private readonly runtimeService: RuntimeService) {}
 
   /** 列出全部 Runtime（builtin + 所有用户的 registered），不含已注销。 */
@@ -26,7 +26,7 @@ export class AdminRuntimeController {
 
   /** 创建 registered Host 并生成配对 token（归属当前管理员）。 */
   @Post("create")
-  create(@Body() body: CreateRuntimeDto, @CurrentUser() user: JwtUser) {
+  create(@Body() body: CreateRuntimeHostDto, @CurrentUser() user: JwtUser) {
     return this.runtimeService.create(user.userId, body.name);
   }
 
