@@ -46,6 +46,11 @@ export class WorkerPool {
     return this.workers.get(key);
   }
 
+  /** run 是否归指定 worker 所有（worker 数据面授权用）。 */
+  ownsRun(workerId: string, runId: string): boolean {
+    return this.getByRunId(runId)?.workerId === workerId;
+  }
+
   /** 放入一个 starting 状态的 worker。 */
   put(entry: WorkerEntry): void {
     this.workers.set(entry.key, entry);
@@ -99,9 +104,10 @@ export class WorkerPool {
   }
 
   /** 删除 worker（fence / stop / destroy 后）。 */
-  remove(key: WorkerKey): WorkerEntry | undefined {
+  remove(key: WorkerKey, expectedWorkerId?: string): WorkerEntry | undefined {
     const entry = this.workers.get(key);
     if (!entry) return undefined;
+    if (expectedWorkerId && entry.workerId !== expectedWorkerId) return undefined;
     // 清理 run 索引
     for (const runId of entry.activeRuns) {
       this.runIndex.delete(runId);

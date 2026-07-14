@@ -131,6 +131,14 @@ type SubmittedRunState = {
   cancelled: boolean;
 };
 
+type WorkerRemovalMode = "release" | "exited";
+
+type WorkerLaunchAttempt = {
+  cancelled: boolean;
+  runtimeInstanceId?: string;
+  cleanupPromise?: Promise<void>;
+};
+
 /**
  * RuntimeHost：部署在一台执行机器上的常驻执行节点。
  *
@@ -148,6 +156,11 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly mailbox = new CommandMailbox();
   private readonly handshakes = new HandshakeStore();
   private readonly states = new Map<string, SubmittedRunState>();
+  private readonly runSubmissions = new Map<string, Promise<void>>();
+  private readonly workerAcquisitions = new Map<
+    WorkerKey,
+    Promise<WorkerEntry>
+  >();
   private readonly commandSeqs = new Map<string, number>();
   private readonly runConfigs = new Map<string, RunConfig>();
   private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
@@ -172,34 +185,58 @@ export class RuntimeHost implements RuntimeHostContract {
 
   // ── 执行 ────────────────────────────────────────────────────────────
 
-  async submitRun(input: SubmitRunInput): Promise<void> {
+  submitRun(input: SubmitRunInput): Promise<void> {
     const { runId, placement } = input;
-    if (this.states.has(runId)) return; // 幂等
+    if (this.states.has(runId)) return Promise.resolve();
+
+    const inFlight = this.runSubmissions.get(runId);
+    if (inFlight) return inFlight;
+
+    // 在任何 RunConfig/CLI I/O 前占位：timeout/cancel/release 必须从提交第一刻
+    // 就能命中 run，不能等异步配置完成后才建立生命周期状态。
+    this.states.set(runId, {
+      workerId: "",
+      status: "acquiring",
+      cancelled: false,
+    });
+    const submission = Promise.resolve()
+      .then(() => this.acceptRun(input))
+      .catch((err) => {
+        this.clearRunState(runId);
+        throw err;
+      });
+    let tracked: Promise<void>;
+    tracked = submission.finally(() => {
+      if (this.runSubmissions.get(runId) === tracked) {
+        this.runSubmissions.delete(runId);
+      }
+    });
+    this.runSubmissions.set(runId, tracked);
+    return tracked;
+  }
+
+  private async acceptRun(input: SubmitRunInput): Promise<void> {
+    const { runId, placement } = input;
 
     // spec/config 组装失败同步抛出(配置/入参问题),由调用方按启动失败处理。
     // 每次 run 都建 RunConfig(不只新建 worker 时)——复用已有 worker 的 run
     // 同样要能被 worker 经 getRunConfig 拉到自己的配置。
     const runtimeTarget = this.resolveSpec(placement);
     const runConfig = await this.makeRunConfig(input, runtimeTarget);
+    const state = this.states.get(runId);
+    if (!state) return; // releaseRun 已先赢得竞态，不再启动执行资源
     this.runConfigs.set(runId, runConfig);
 
     const wKey = workerKey(placement.owner, placement.runtimeType);
     const existing = this.pool.get(wKey);
 
-    this.states.set(runId, {
-      workerId: existing?.workerId ?? "",
-      status: existing?.status === "ready" ? "ready" : "acquiring",
-      cancelled: false,
-    });
-
     if (existing?.status === "ready") {
-      // 复用已有 worker
-      this.onWorkerReady(runId, existing);
+      this.onAcquired(runId, wKey, existing);
       return;
     }
 
     // 异步取得 worker——受理即返回
-    this.acquireWorker(input, wKey, runtimeTarget, runConfig).then(
+    this.acquireWorkerOnce(input, wKey, runtimeTarget, runConfig).then(
       (entry) => this.onAcquired(runId, wKey, entry),
       (err) => this.onAcquireFailed(runId, err)
     );
@@ -228,7 +265,11 @@ export class RuntimeHost implements RuntimeHostContract {
   async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
     const workers = this.pool.listByOwner(input.owner);
     for (const worker of workers) {
-      await this.stopWorkerByKey(worker.key, "worker stopped");
+      await this.removeWorkerByKey(
+        worker.key,
+        "worker owner released",
+        "release"
+      );
     }
   }
 
@@ -336,47 +377,43 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   async stopWorker(input: StopWorkerInput): Promise<void> {
-    await this.stopWorkerByKey(input.key, "worker stopped");
+    await this.removeWorkerByKey(input.key, "worker stopped", "release");
   }
 
-  /** 停止一个 worker 的完整收尾:出池、清信箱、通知名下 run、停运行实例。 */
-  private async stopWorkerByKey(
+  /** worker 消失的唯一收尾路径：清索引、终结 run，再收资源。 */
+  private async removeWorkerByKey(
     key: WorkerKey,
-    reason: string
+    reason: string,
+    mode: WorkerRemovalMode,
+    expectedWorkerId?: string
   ): Promise<void> {
-    const entry = this.pool.remove(key);
+    const entry = this.pool.remove(key, expectedWorkerId);
     if (!entry) return;
 
+    this.handshakes.cancel(entry.workerId, reason);
     this.mailbox.cleanup(entry.workerId);
+    this.commandSeqs.delete(entry.workerId);
 
-    // 先通知 upstream 名下所有 run:run 终结不依赖运行实例停止(可能耗时/失败)
+    // 先收口 Host 内的 run 状态，终态不依赖 provider 收资源成功。
     for (const runId of entry.activeRuns) {
+      this.clearRunState(runId);
       this.upstream.notifyWorkerLost(runId, reason).catch(() => {});
     }
 
-    // best-effort 停止运行实例
+    if (mode === "exited" || !entry.runtimeInstanceId) return;
+
     const runtimeType = key.split("#")[1] ?? "native";
     if (!isRuntimeType(runtimeType)) return;
-    const owner = parseOwnerKey(key.split("#")[0] as OwnerKey);
-    const ref: RuntimeInstanceRef = {
-      runtimeType,
-      ownerId: owner.id,
-      workerId: entry.workerId,
-      runtimeInstanceId: entry.runtimeInstanceId,
-      scope: owner.scope,
-    };
+    const ref = this.makeRuntimeInstanceRef(key, entry, runtimeType);
     try {
-      await this.resolveProvider(runtimeType).stop(ref);
+      await this.resolveProvider(runtimeType).release(ref);
     } catch {
       // best-effort
     }
   }
 
   releaseRun(input: RuntimeHostRunRef): void {
-    const { runId } = input;
-    this.pool.dissociateRun(runId);
-    this.runConfigs.delete(runId);
-    this.states.delete(runId);
+    this.clearRunState(input.runId);
   }
 
   // ── worker 生命周期 ─────────────────────────────────────────────────
@@ -384,6 +421,34 @@ export class RuntimeHost implements RuntimeHostContract {
   /**
    * 取得（创建）worker。不变量 2：同一 WorkerKey 至多一个活跃 worker。
    */
+  private acquireWorkerOnce(
+    input: SubmitRunInput,
+    wKey: WorkerKey,
+    runtimeTarget: RuntimeSpec,
+    runConfig: RunConfig
+  ): Promise<WorkerEntry> {
+    const ready = this.pool.get(wKey);
+    if (ready?.status === "ready") return Promise.resolve(ready);
+
+    const inFlight = this.workerAcquisitions.get(wKey);
+    if (inFlight) return inFlight;
+
+    const acquisition = this.acquireWorker(
+      input,
+      wKey,
+      runtimeTarget,
+      runConfig
+    );
+    this.workerAcquisitions.set(wKey, acquisition);
+    const clear = () => {
+      if (this.workerAcquisitions.get(wKey) === acquisition) {
+        this.workerAcquisitions.delete(wKey);
+      }
+    };
+    acquisition.then(clear, clear);
+    return acquisition;
+  }
+
   private async acquireWorker(
     input: SubmitRunInput,
     wKey: WorkerKey,
@@ -414,6 +479,11 @@ export class RuntimeHost implements RuntimeHostContract {
     };
     this.pool.put(entry);
 
+    // 先挂握手再启动资源，避免极快 worker 回连时 pending 尚未建立。
+    const handshake = this.handshakes.waitForRegister(workerId, startToken);
+    const provider = this.resolveProvider(runtimeType);
+    const attempt: WorkerLaunchAttempt = { cancelled: false };
+
     // 构建 worker env
     const workerEnv = this.buildWorkerEnv(
       placement,
@@ -435,25 +505,68 @@ export class RuntimeHost implements RuntimeHostContract {
     };
 
     const onExit = () => {
-      this.pool.remove(wKey);
-      this.mailbox.cleanup(workerId);
+      void this.removeWorkerByKey(
+        wKey,
+        "worker exited unexpectedly",
+        "exited",
+        workerId
+      );
     };
 
-    const { runtimeInstanceId } = await this.withTimeout(
-      (async () => {
-        const launched = await this.resolveProvider(runtimeType).start(
-          ctx,
-          onExit
-        );
-        await this.handshakes.waitForRegister(workerId, startToken);
-        return launched;
-      })(),
-      this.config.launchTimeoutMs,
-      `worker launch timed out for worker ${workerId}`
-    );
+    try {
+      const { runtimeInstanceId } = await this.withTimeout(
+        (async () => {
+          const launched = await provider.start(ctx, onExit, (instanceId) => {
+            attempt.runtimeInstanceId = instanceId;
+            entry.runtimeInstanceId = instanceId;
+            if (attempt.cancelled) {
+              void this.cleanupFailedLaunch(
+                provider,
+                parseOwnerKey(placement.owner),
+                entry,
+                attempt
+              );
+            }
+          });
+          attempt.runtimeInstanceId ??= launched.runtimeInstanceId;
+          entry.runtimeInstanceId = launched.runtimeInstanceId;
+          if (attempt.cancelled) {
+            await this.cleanupFailedLaunch(
+              provider,
+              parseOwnerKey(placement.owner),
+              entry,
+              attempt
+            );
+            throw new Error(`worker launch cancelled for worker ${workerId}`);
+          }
+          await handshake;
+          return launched;
+        })(),
+        this.config.launchTimeoutMs,
+        `worker launch timed out for worker ${workerId}`
+      );
 
-    this.pool.markReady(wKey, runtimeInstanceId);
-    return this.pool.get(wKey)!;
+      this.pool.markReady(wKey, runtimeInstanceId);
+      const current = this.pool.get(wKey);
+      if (!current || current.workerId !== workerId) {
+        throw new Error(`worker launch superseded for worker ${workerId}`);
+      }
+      return current;
+    } catch (err) {
+      attempt.cancelled = true;
+      this.handshakes.cancel(workerId, String(err));
+      await handshake.catch(() => {});
+      this.pool.remove(wKey, workerId);
+      this.mailbox.cleanup(workerId);
+      this.commandSeqs.delete(workerId);
+      await this.cleanupFailedLaunch(
+        provider,
+        parseOwnerKey(placement.owner),
+        entry,
+        attempt
+      );
+      throw err;
+    }
   }
 
   private onAcquired(runId: string, wKey: WorkerKey, entry: WorkerEntry): void {
@@ -483,19 +596,10 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   private onAcquireFailed(runId: string, err: unknown): void {
-    this.states.delete(runId);
+    this.clearRunState(runId);
     this.upstream
       .notifyRunFailed(runId, `resolve instance failed: ${String(err)}`)
       .catch(() => {});
-  }
-
-  private onWorkerReady(runId: string, entry: WorkerEntry): void {
-    this.pool.associateRun(entry.key, runId);
-    this.dispatch(entry.workerId, runId, {
-      type: "user_message",
-      commandId: generateId(),
-      runId,
-    });
   }
 
   // ── 命令下发 ────────────────────────────────────────────────────────
@@ -545,7 +649,8 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   /** worker 拉取 run config。 */
-  getRunConfig(runId: string): RunConfig | undefined {
+  getRunConfig(workerId: string, runId: string): RunConfig | undefined {
+    if (!this.pool.ownsRun(workerId, runId)) return undefined;
     return this.runConfigs.get(runId);
   }
 
@@ -572,7 +677,14 @@ export class RuntimeHost implements RuntimeHostContract {
    * 解析 JSON-RPC notification / command-result，逐条转发给 upstream。
    * 事件上报本身也是 worker 活着的证据，顺带 touch 心跳。
    */
-  async postEvent(runId: string, body: unknown): Promise<{ ok: boolean }> {
+  async postEvent(
+    workerId: string,
+    runId: string,
+    body: unknown
+  ): Promise<{ ok: boolean }> {
+    if (!this.pool.ownsRun(workerId, runId)) {
+      throw new Error(`Worker ${workerId} does not own run ${runId}`);
+    }
     const events = parseWorkerEventPostBody(body, runId);
     if (!events || events.length === 0) {
       throw new Error("Invalid worker event body");
@@ -729,6 +841,46 @@ export class RuntimeHost implements RuntimeHostContract {
     return this.pool.list().find((w) => w.workerId === workerId);
   }
 
+  private clearRunState(runId: string): void {
+    this.pool.dissociateRun(runId);
+    this.runConfigs.delete(runId);
+    this.states.delete(runId);
+  }
+
+  private makeRuntimeInstanceRef(
+    key: WorkerKey,
+    entry: WorkerEntry,
+    runtimeType: RuntimeType
+  ): RuntimeInstanceRef {
+    const owner = parseOwnerKey(key.split("#")[0] as OwnerKey);
+    return {
+      runtimeType,
+      ownerId: owner.id,
+      workerId: entry.workerId,
+      runtimeInstanceId: entry.runtimeInstanceId,
+      scope: owner.scope,
+    };
+  }
+
+  private async cleanupFailedLaunch(
+    provider: RuntimeProvider,
+    owner: ReturnType<typeof parseOwnerKey>,
+    entry: WorkerEntry,
+    attempt: WorkerLaunchAttempt
+  ): Promise<void> {
+    if (!attempt.runtimeInstanceId) return;
+    attempt.cleanupPromise ??= Promise.resolve(
+      provider.destroy({
+        runtimeType: provider.type,
+        ownerId: owner.id,
+        workerId: entry.workerId,
+        runtimeInstanceId: attempt.runtimeInstanceId,
+        scope: owner.scope,
+      })
+    ).catch(() => {});
+    await attempt.cleanupPromise;
+  }
+
   private withTimeout<T>(
     promise: Promise<T>,
     ms: number,
@@ -766,8 +918,12 @@ export class RuntimeHost implements RuntimeHostContract {
     for (const worker of this.pool.list()) {
       if (worker.status !== "ready") continue;
       if (now - worker.lastSeen < timeoutMs) continue;
-      // stopWorkerByKey 内部吞掉运行实例停止失败,不会 reject
-      void this.stopWorkerByKey(worker.key, "worker heartbeat timeout (fence)");
+      // removeWorkerByKey 内部吞掉运行实例停止失败,不会 reject
+      void this.removeWorkerByKey(
+        worker.key,
+        "worker heartbeat timeout (fence)",
+        "release"
+      );
     }
   }
 }

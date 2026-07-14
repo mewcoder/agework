@@ -7,14 +7,19 @@ import { UserModule } from "../user/user.module";
 import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
 import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
 import { OwnerHostListener } from "./contract/owner-host.listener";
-import { RUNTIME_HOST_CONTRACT } from "./runtime-host.types";
+import {
+  RUNTIME_HOST_DIAGNOSTICS,
+  RUNTIME_HOST_EXECUTION,
+  RUNTIME_HOST_OPERATIONS,
+} from "./runtime-host.types";
 import { AdminWorkerController } from "./admin/admin-worker.controller";
 
 /**
  * Runtime Host 组合根：装配 builtin Host、registered Host 路由适配器和
  * admin 观测面。worker 数据面由每个 Host 自己的 WorkerHttpServer 承接。
  *
- * 对外只暴露 RUNTIME_HOST_CONTRACT token；run 模块只消费执行面契约，
+ * 同一个 adapter 按 execution / operations / diagnostics 三个角色暴露；run
+ * 模块只消费执行面契约，
  * 不感知 builtin/registered 的路由细节。
  *
  * 与 runtime 模块的边界：本模块管「契约语义」(submitRun 路由、builtin 装配、
@@ -28,8 +33,14 @@ import { AdminWorkerController } from "./admin/admin-worker.controller";
     builtinRuntimeHostProvider,
     RuntimeHostAdapter,
     OwnerHostListener,
-    { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
+    { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
+    { provide: RUNTIME_HOST_OPERATIONS, useExisting: RuntimeHostAdapter },
+    { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
   ],
-  exports: [RUNTIME_HOST_CONTRACT],
+  exports: [
+    RUNTIME_HOST_EXECUTION,
+    RUNTIME_HOST_OPERATIONS,
+    RUNTIME_HOST_DIAGNOSTICS,
+  ],
 })
 export class RuntimeHostModule {}

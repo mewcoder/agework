@@ -156,7 +156,7 @@ export class WorkerHttpServer {
       return;
     }
 
-    const config = this.host.getRunConfig(runId);
+    const config = this.host.getRunConfig(workerId, runId);
     if (!config) {
       this.sendJson(res, 404, { error: `Run config not found: ${runId}` });
       return;
@@ -177,7 +177,7 @@ export class WorkerHttpServer {
 
     const body = await this.readJsonBody(req);
     try {
-      const result = await this.host.postEvent(runId, body);
+      const result = await this.host.postEvent(workerId, runId, body);
       this.sendJson(res, 200, result);
     } catch (err) {
       this.sendError(res, 400, err);

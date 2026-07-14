@@ -30,6 +30,8 @@ import {
 
 /** SIGTERM 到 SIGKILL 的宽限期。 */
 const RUNNER_SIGKILL_GRACE_MS = 5_000;
+/** cancel 已送达 runner 后允许 adapter 自行收敛的最长时间。 */
+const RUNNER_CANCEL_GRACE_MS = 8_000;
 
 type UserMessageCommand = Extract<CommandPayload, { type: "user_message" }>;
 type CancelCommand = Extract<CommandPayload, { type: "cancel" }>;
@@ -50,6 +52,8 @@ type RunnerProcess = {
   runId: string;
   terminalSeen: boolean;
   cleaned: boolean;
+  cancellationRequested: boolean;
+  cancellationTimer?: NodeJS.Timeout;
 };
 
 export class RunnerManager {
@@ -197,7 +201,9 @@ export class RunnerManager {
       );
       return;
     }
+    runner.cancellationRequested = true;
     this.sendCommandToRunner(runner, command);
+    this.scheduleCancellationDeadline(runner);
   }
 
   private forwardInterrupt(command: InterruptCommand): void {
@@ -249,6 +255,7 @@ export class RunnerManager {
       runId: config.runId,
       terminalSeen: false,
       cleaned: false,
+      cancellationRequested: false,
     };
 
     child.on("message", (msg: unknown) => {
@@ -418,10 +425,13 @@ export class RunnerManager {
 
     if (runner.terminalSeen || runner.cleaned) return;
 
-    void this.emitRunStatusSafely(runner.runId, {
-      status: "error",
-      error: `runner exited before terminal status${code !== null ? ` with code ${code}` : ""}${signal ? ` by ${signal}` : ""}`,
-    }).finally(() => {
+    const exitError = `runner exited before terminal status${code !== null ? ` with code ${code}` : ""}${signal ? ` by ${signal}` : ""}`;
+    void this.emitRunStatusSafely(
+      runner.runId,
+      runner.cancellationRequested
+        ? { status: "cancelled" }
+        : { status: "error", error: exitError }
+    ).finally(() => {
       this.cleanupRunner(runner.runId);
     });
   }
@@ -452,6 +462,16 @@ export class RunnerManager {
         "warn"
       );
     }
+  }
+
+  private scheduleCancellationDeadline(runner: RunnerProcess): void {
+    if (runner.cancellationTimer) clearTimeout(runner.cancellationTimer);
+    runner.cancellationTimer = setTimeout(() => {
+      runner.cancellationTimer = undefined;
+      if (runner.cleaned || runner.terminalSeen) return;
+      this.terminateRunner(runner, "cancel grace period exceeded");
+    }, RUNNER_CANCEL_GRACE_MS);
+    runner.cancellationTimer.unref();
   }
 
   /** SIGTERM 宽限期后仍存活则 SIGKILL,避免忽略 SIGTERM 的 runner 变僵尸残留。 */
@@ -491,6 +511,7 @@ export class RunnerManager {
     if (!runner || runner.cleaned) return;
 
     runner.cleaned = true;
+    if (runner.cancellationTimer) clearTimeout(runner.cancellationTimer);
     this.runners.delete(runId);
     this.commandSeqs.delete(runId);
     unregisterWorkerRunLog(runId);

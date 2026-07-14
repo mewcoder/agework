@@ -236,13 +236,8 @@ export type InstallCliResult = {
   executablePath: string;
 };
 
-/**
- * server → Runtime Host 的执行面契约。方向永远向下；builtin 走进程内调用，
- * registered 走控制隧道。
- */
-export interface RuntimeHostContract {
-  // —— 执行 ——
-
+/** run 模块唯一应依赖的执行面。 */
+export interface RuntimeHostExecution {
   /**
    * 提交一次 run：Host 负责取得/复用 worker、开会话、下发首条 user_message。
    * 幂等（runId 为键）；受理即返回，就绪/失败经 upstream 回流。
@@ -254,6 +249,16 @@ export interface RuntimeHostContract {
    * 由 Host 内部吸收（就绪那刻转 cancelled 回流），调用方不需要感知时序。
    */
   command(input: RuntimeHostCommandInput): Promise<void>;
+
+  /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
+  releaseRun(input: RuntimeHostRunRef): void;
+
+  /** 接线上行端口（启动期一次）。 */
+  setUpstream(upstream: RuntimeHostUpstream): void;
+}
+
+/** Host 环境、owner 生命周期和工作空间数据面的运维能力。 */
+export interface RuntimeHostOperations {
 
   // —— 业务级收尾 ——
 
@@ -297,22 +302,25 @@ export interface RuntimeHostContract {
     input: ListChangedFilesInput
   ): Promise<WorkspaceChangedFilesResponse>;
 
-  // —— 观测（admin 诊断面，显式例外） ——
+}
 
+/** admin / reconciliation 显式使用的现场诊断面。业务执行不得依赖。 */
+export interface RuntimeHostDiagnostics {
   /** 现场查询 Host 上的 worker 快照列表（不入库）。 */
   listWorkers(): Promise<WorkerSnapshot[]>;
 
   /** 按 runtimeHostId 定向停止目标 Host 上的一个 worker（admin 诊断入口）。 */
   stopWorker(input: StopWorkerInput): Promise<void>;
-
-  // —— 生命周期与上行端口 ——
-
-  /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
-  releaseRun(input: RuntimeHostRunRef): void;
-
-  /** 接线上行端口（启动期一次）。 */
-  setUpstream(upstream: RuntimeHostUpstream): void;
 }
+
+/**
+ * Host 实现/路由适配器的完整组合契约。消费者应优先注入上面的最小角色。
+ * 方向永远向下；builtin 走进程内调用，registered 走控制隧道。
+ */
+export interface RuntimeHostContract
+  extends RuntimeHostExecution,
+    RuntimeHostOperations,
+    RuntimeHostDiagnostics {}
 
 /**
  * Runtime Host → server 的唯一上行流。emit 走 per-run seq 闸门；notify* 是

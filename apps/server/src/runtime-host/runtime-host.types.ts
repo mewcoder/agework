@@ -1,6 +1,4 @@
-/**
- * `RuntimeHostContract`（@agework/shared/protocol）的注入 token。
- * run 模块经它注入契约接口，看不见实现类——由本模块的
- * RuntimeHostAdapter 兑现（目标架构 §7 Phase 1）。
- */
-export const RUNTIME_HOST_CONTRACT = Symbol("RuntimeHostContract");
+/** 同一个 Host 路由适配器按角色暴露，消费者不能越面调用。 */
+export const RUNTIME_HOST_EXECUTION = Symbol("RuntimeHostExecution");
+export const RUNTIME_HOST_OPERATIONS = Symbol("RuntimeHostOperations");
+export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");

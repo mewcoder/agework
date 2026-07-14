@@ -13,14 +13,14 @@ import {
   type AgentProviderConfig,
   type RecordRunEventInput,
   type RunPlacement,
-  type RuntimeHostContract,
+  type RuntimeHostExecution,
   type RunExecutionHandle,
   type WorkerScope,
 } from "@agework/shared/protocol";
 import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
+import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -61,8 +61,8 @@ export class RunLauncher {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    @Inject(RUNTIME_HOST_CONTRACT)
-    private readonly runtimeHost: RuntimeHostContract,
+    @Inject(RUNTIME_HOST_EXECUTION)
+    private readonly runtimeHost: RuntimeHostExecution,
     private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
     private readonly configService: ConfigService
@@ -132,16 +132,12 @@ export class RunLauncher {
     });
     if (!runCreated) return;
 
-    const runtimeHandle = await this.submitToHost({
+    const runtimeHandle: RunExecutionHandle = {
       runId,
+      runtimeHostId: placement.runtimeHostId,
+      runtimeType,
       conversationId,
-      placement,
-      agentProviderConfig,
-      runInput,
-      stream,
-    });
-    if (!runtimeHandle) return;
-
+    };
     this.registerRun({
       runId,
       conversationId,
@@ -154,6 +150,16 @@ export class RunLauncher {
       onAgentSessionId,
       res,
     });
+
+    const submitted = await this.submitToHost({
+      runId,
+      conversationId,
+      placement,
+      agentProviderConfig,
+      runInput,
+      stream,
+    });
+    if (!submitted) this.liveRuns.unregister(runId);
   }
 
   /**
@@ -385,7 +391,7 @@ export class RunLauncher {
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
     stream: RunStream;
-  }): Promise<RunExecutionHandle | null> {
+  }): Promise<boolean> {
     const {
       runId,
       conversationId,
@@ -413,12 +419,7 @@ export class RunLauncher {
         agentProviderConfig,
         input: runInput,
       });
-      return {
-        runId,
-        runtimeHostId: placement.runtimeHostId,
-        runtimeType,
-        conversationId,
-      };
+      return true;
     } catch (err) {
       this.logger.error("start worker failed", {
         runId,
@@ -459,7 +460,7 @@ export class RunLauncher {
         message: "启动 worker 失败: " + errorMsg,
       });
       stream.end();
-      return null;
+      return false;
     }
   }
 

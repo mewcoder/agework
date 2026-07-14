@@ -237,6 +237,41 @@ describe("RunnerManager", () => {
     );
   });
 
+  it("terminates a stuck cancellation and preserves cancelled terminal status", async () => {
+    vi.useFakeTimers();
+    try {
+      const client = makeClient();
+      const manager = makeManager(client);
+      await manager.handle(userMessage);
+      const child = forkMock.mock.results[0]?.value as MockChildProcess;
+
+      await manager.handle({
+        type: "cancel",
+        commandId: "cmd-cancel",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      });
+
+      await vi.advanceTimersByTimeAsync(8_000);
+      expect(child.kill).toHaveBeenCalledWith("SIGTERM");
+
+      child.signalCode = "SIGTERM";
+      child.emit("exit", null, "SIGTERM");
+      await vi.waitFor(() => {
+        expect(client.emit).toHaveBeenCalledWith("run-1", {
+          type: "run.status",
+          payload: { status: "cancelled" },
+        });
+        expect(client.cleanup).toHaveBeenCalledWith("run-1");
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(child.kill).not.toHaveBeenCalledWith("SIGKILL");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("routes approval commands only by runId when one worker owns multiple runs", async () => {
     const client = makeClient();
     client.fetchRunConfig.mockImplementation(async (runId: string) => ({

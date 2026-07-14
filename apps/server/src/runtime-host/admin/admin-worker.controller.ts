@@ -9,8 +9,11 @@ import {
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { StopWorkerDto } from "./stop-worker.dto";
-import { RUNTIME_HOST_CONTRACT } from "../runtime-host.types";
-import type { RuntimeHostContract, WorkerKey } from "@agework/shared/protocol";
+import { RUNTIME_HOST_DIAGNOSTICS } from "../runtime-host.types";
+import type {
+  RuntimeHostDiagnostics,
+  WorkerKey,
+} from "@agework/shared/protocol";
 
 /**
  * Admin 运行资源诊断面：worker 现场查询(走 Host contract) + 运行策略查询。
@@ -21,8 +24,8 @@ import type { RuntimeHostContract, WorkerKey } from "@agework/shared/protocol";
 export class AdminWorkerController {
   constructor(
     private readonly runtimeService: RuntimeService,
-    @Inject(RUNTIME_HOST_CONTRACT)
-    private readonly hostContract: RuntimeHostContract
+    @Inject(RUNTIME_HOST_DIAGNOSTICS)
+    private readonly hostContract: RuntimeHostDiagnostics
   ) {}
 
   @Get("policy")

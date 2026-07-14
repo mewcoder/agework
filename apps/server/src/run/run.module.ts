@@ -23,8 +23,8 @@ import { ConversationModule } from "../conversation/conversation.module";
 import { RuntimeModule } from "../runtime/runtime.module";
 
 /**
- * Run 领域：一次执行的生命周期、事件记录/聚合。执行面只经 RUNTIME_HOST_CONTRACT
- * 契约消费（runtime-host 模块导出的 token），run 内部
+ * Run 领域：一次执行的生命周期、事件记录/聚合。执行只经
+ * RUNTIME_HOST_EXECUTION 角色消费，admin 查询显式使用 diagnostics；run 内部
  * 看不见 worker/RunConfig/CLI 路径等执行机细节；依赖 run-event 记录事件；
  * 直接 import ConversationModule，Run 内部的 RunRecoveryService /
  * RunStatusService / RunLauncher 直接注入 ConversationService 回写会话状态与消息。

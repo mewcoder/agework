@@ -115,19 +115,23 @@ export type RuntimeInstanceRef = {
 };
 
 /**
- * 某一 runtimeType 的运行形态:自声明类型 + 三段生命周期。
+ * 某一 runtimeType 的运行形态:自声明类型 + 生命周期策略。
  * - start:建环境 + 起 worker（容器 create/start 合一，native 是 fork）。onExit 是
  *   调用方本地专属的子进程退出钩子,只有 native provider 真正接线(容器形态没有
  *   本地子进程可监听);registered Host 不传、providers 也不转发它。
- * - stop:owner 仍在,停 worker 但保留运行实例（容器 stop/pause，native 杀进程）。
- * - destroy:owner 永久消失,删除运行实例（容器 rm/delete，native 杀进程）。
+ * - release:worker 从 Host 消失；是否保留载体由 provider 自己决定。
+ * - destroy:启动回滚/孤儿清理时强制删除载体。
+ * stop 保留为 provider 内部可用的缓存原语，不由 Host 选择业务语义。
  */
 export interface RuntimeProvider {
   readonly type: RuntimeType;
   start(
     ctx: RuntimeLaunchContext,
-    onExit?: () => void
+    onExit?: () => void,
+    /** 资源一旦拿到稳定 id 立即回报，Host 可在后续启动步骤卡住时回滚。 */
+    onProvisioned?: (runtimeInstanceId: string) => void
   ): Promise<{ runtimeInstanceId: string }>;
+  release(ref: RuntimeInstanceRef): Promise<void> | void;
   stop(ref: RuntimeInstanceRef): Promise<void> | void;
   destroy(ref: RuntimeInstanceRef): Promise<void> | void;
 }

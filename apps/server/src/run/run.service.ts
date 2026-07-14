@@ -10,10 +10,16 @@ import {
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import { swallow } from "../common/swallow";
-import type { RuntimeHostContract } from "@agework/shared/protocol";
+import type {
+  RuntimeHostDiagnostics,
+  RuntimeHostExecution,
+} from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../runtime-host/runtime-host.types";
+import {
+  RUNTIME_HOST_DIAGNOSTICS,
+  RUNTIME_HOST_EXECUTION,
+} from "../runtime-host/runtime-host.types";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
@@ -30,8 +36,10 @@ export class RunService implements OnApplicationBootstrap {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly liveRuns: LiveRunRegistry,
-    @Inject(RUNTIME_HOST_CONTRACT)
-    private readonly runtimeHost: RuntimeHostContract,
+    @Inject(RUNTIME_HOST_EXECUTION)
+    private readonly runtimeHost: RuntimeHostExecution,
+    @Inject(RUNTIME_HOST_DIAGNOSTICS)
+    private readonly runtimeHostDiagnostics: RuntimeHostDiagnostics,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
     private readonly runLauncher: RunLauncher,
@@ -65,7 +73,7 @@ export class RunService implements OnApplicationBootstrap {
     if (!detail) {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
-    const workers = await this.runtimeHost.listWorkers();
+    const workers = await this.runtimeHostDiagnostics.listWorkers();
     const worker = workers.find((w) => w.runIds.includes(id)) ?? null;
     return { ...detail, worker };
   }

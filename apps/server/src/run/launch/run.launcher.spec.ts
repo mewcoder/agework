@@ -171,6 +171,18 @@ describe("RunLauncher", () => {
     expect(typeof registered.onAgentSessionId).toBe("function");
   });
 
+  it("registers the live run before the host can emit early upstream events", async () => {
+    await launch();
+
+    const registerOrder = (
+      mockLiveRunRegistry.register as ReturnType<typeof vi.fn>
+    ).mock.invocationCallOrder[0];
+    const submitOrder = (mockRuntimeHost.submitRun as ReturnType<typeof vi.fn>)
+      .mock.invocationCallOrder[0];
+
+    expect(registerOrder).toBeLessThan(submitOrder);
+  });
+
   it("derives a user owner key for user-scope sandbox workspaces", async () => {
     await launch(
       makeStartInput({
@@ -284,7 +296,11 @@ describe("RunLauncher", () => {
 
     await launch(makeStartInput({ res }));
 
-    expect(mockLiveRunRegistry.register).not.toHaveBeenCalled();
+    expect(mockLiveRunRegistry.register).toHaveBeenCalledWith(
+      "run-1",
+      expect.any(Object)
+    );
+    expect(mockLiveRunRegistry.unregister).toHaveBeenCalledWith("run-1");
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "Failed to start worker"

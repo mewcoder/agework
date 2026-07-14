@@ -49,6 +49,7 @@ describe("RunService", () => {
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeHost as RuntimeHostContract,
+      mockRuntimeHost as RuntimeHostContract,
       mockRunEvents,
       mockRunStatusService as RunStatusService,
       mockRunLauncher as RunLauncher,

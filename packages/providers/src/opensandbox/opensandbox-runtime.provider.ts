@@ -31,10 +31,13 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   }
 
   async start(
-    ctx: RuntimeLaunchContext
+    ctx: RuntimeLaunchContext,
+    _onExit?: () => void,
+    onProvisioned?: (runtimeInstanceId: string) => void
   ): Promise<{ runtimeInstanceId: string }> {
     const input = buildSandboxStartInput(ctx, this.config);
     const sandbox = await this.createSandbox(input);
+    onProvisioned?.(sandbox.id);
     await this.startWorkerInSandbox(sandbox, input);
     return { runtimeInstanceId: sandbox.id };
   }
@@ -44,6 +47,11 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
     await this.client
       .pauseSandbox(ref.runtimeInstanceId)
       .catch(swallow(this.logger, `pause sandbox ${ref.runtimeInstanceId}`));
+  }
+
+  /** 当前没有可靠的 paused sandbox 重新接管协议，释放策略选择直接删除。 */
+  async release(ref: RuntimeInstanceRef): Promise<void> {
+    await this.destroy(ref);
   }
 
   async destroy(ref: RuntimeInstanceRef): Promise<void> {

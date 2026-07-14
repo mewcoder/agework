@@ -47,18 +47,21 @@ function makeConfig(
   };
 }
 
-function makeSubmitInput(runId: string): SubmitRunInput {
+function makeSubmitInput(
+  runId: string,
+  workspaceId: string = "ws-1"
+): SubmitRunInput {
   return {
     runId,
-    conversationId: "conversation-1",
+    conversationId: `conversation-${workspaceId}`,
     placement: {
-      owner: "workspace:ws-1",
+      owner: `workspace:${workspaceId}`,
       runtimeType: "native",
       runtimeHostId: "builtin",
-      workspaceId: "ws-1",
+      workspaceId,
       userId: "user-1",
       username: "admin-1",
-      workspacePath: "/tmp/agework-host-test/ws-1",
+      workspacePath: `/tmp/agework-host-test/${workspaceId}`,
     },
     agentProviderConfig: { agentType: "claude", source: "system" },
     input: { messages: [{ id: "msg-1" }] },
@@ -69,14 +72,17 @@ function makeSubmitInput(runId: string): SubmitRunInput {
 function injectProvider(
   host: RuntimeHost,
   start: ReturnType<typeof vi.fn>,
-  stop: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined)
+  stop: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined),
+  destroy: ReturnType<typeof vi.fn> = vi.fn().mockResolvedValue(undefined)
 ) {
   (host as unknown as { resolveProvider: unknown }).resolveProvider = () => ({
+    type: "native",
     start,
+    release: destroy,
     stop,
-    destroy: vi.fn(),
+    destroy,
   });
-  return { start, stop };
+  return { start, stop, destroy };
 }
 
 function poolOf(host: RuntimeHost): WorkerPool {
@@ -128,7 +134,9 @@ describe("RuntimeHost", () => {
 
     const { commands } = await host.pollCommands(workerId, { afterSeq: 0 });
     expect(commands.map((c) => c.payload.type)).toEqual(["user_message"]);
-    expect(host.getRunConfig("run-1")).toMatchObject({ runId: "run-1" });
+    expect(host.getRunConfig(workerId, "run-1")).toMatchObject({
+      runId: "run-1",
+    });
     expect(await host.listWorkers()).toEqual([
       expect.objectContaining({ workerId, runIds: ["run-1"] }),
     ]);
@@ -145,11 +153,105 @@ describe("RuntimeHost", () => {
     await settle();
 
     // 复用同一 worker,run-2 也必须能拉到自己的 RunConfig(曾经的缺口)
-    expect(host.getRunConfig("run-2")).toMatchObject({ runId: "run-2" });
+    expect(host.getRunConfig(workerId, "run-2")).toMatchObject({
+      runId: "run-2",
+    });
     const { commands } = await host.pollCommands(workerId, { afterSeq: 0 });
     expect(
       commands.filter((c) => c.payload.type === "user_message")
     ).toHaveLength(2);
+  });
+
+  it("shares one in-flight worker launch between concurrent runs for the same WorkerKey", async () => {
+    const start = vi
+      .fn()
+      .mockResolvedValue({ runtimeInstanceId: "inst-1" });
+    injectProvider(host, start);
+
+    await host.submitRun(makeSubmitInput("run-1"));
+    await host.submitRun(makeSubmitInput("run-2"));
+    await settle();
+
+    expect(start).toHaveBeenCalledTimes(1);
+
+    const entry = poolOf(host).get(KEY)!;
+    expect(host.registerWorker(entry.workerId, entry.startToken, {})).toBe(true);
+    await settle();
+
+    expect(await host.listWorkers()).toEqual([
+      expect.objectContaining({ runIds: ["run-1", "run-2"] }),
+    ]);
+    const { commands } = await host.pollCommands(entry.workerId, {
+      afterSeq: 0,
+    });
+    expect(
+      commands.filter((command) => command.payload.type === "user_message")
+    ).toHaveLength(2);
+  });
+
+  it("accepts concurrent submissions of the same runId exactly once", async () => {
+    const start = vi
+      .fn()
+      .mockResolvedValue({ runtimeInstanceId: "inst-1" });
+    injectProvider(host, start);
+
+    await Promise.all([
+      host.submitRun(makeSubmitInput("run-1")),
+      host.submitRun(makeSubmitInput("run-1")),
+    ]);
+    await settle();
+
+    expect(start).toHaveBeenCalledTimes(1);
+    const entry = poolOf(host).get(KEY)!;
+    expect(host.registerWorker(entry.workerId, entry.startToken, {})).toBe(true);
+    await settle();
+
+    const { commands } = await host.pollCommands(entry.workerId, {
+      afterSeq: 0,
+    });
+    expect(
+      commands.filter((command) => command.payload.type === "user_message")
+    ).toHaveLength(1);
+  });
+
+  it("does not launch after releaseRun wins the RunConfig preparation race", async () => {
+    let resolveCliPaths!: () => void;
+    const configGate = new Promise<void>((resolve) => {
+      resolveCliPaths = resolve;
+    });
+    const racingHost = new RuntimeHost(
+      makeConfig({
+        resolveCliPaths: async () => {
+          await configGate;
+          return { claude: null, codex: null, opencode: null };
+        },
+      })
+    );
+    racingHost.setUpstream(upstream);
+    const start = vi
+      .fn()
+      .mockResolvedValue({ runtimeInstanceId: "inst-too-late" });
+    injectProvider(racingHost, start);
+
+    const submission = racingHost.submitRun(makeSubmitInput("run-race"));
+    await racingHost.command({
+      runtimeHostId: "builtin",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-timeout",
+        runId: "run-race",
+        conversationId: "conversation-ws-1",
+      },
+    });
+    racingHost.releaseRun({ runtimeHostId: "builtin", runId: "run-race" });
+
+    resolveCliPaths();
+    await submission;
+    await settle();
+
+    expect(start).not.toHaveBeenCalled();
+    expect(await racingHost.listWorkers()).toEqual([]);
+    racingHost.drain();
   });
 
   it("absorbs a cancel that arrives before the worker is ready", async () => {
@@ -194,10 +296,129 @@ describe("RuntimeHost", () => {
     await host.submitRun(makeSubmitInput("run-1"));
     await settle();
 
-    expect(upstream.notifyRunFailed).toHaveBeenCalledWith(
-      "run-1",
-      expect.stringContaining("docker down")
+    await vi.waitFor(() => {
+      expect(upstream.notifyRunFailed).toHaveBeenCalledWith(
+        "run-1",
+        expect.stringContaining("docker down")
+      );
+    });
+    expect(await host.listWorkers()).toEqual([]);
+  });
+
+  it("destroys a launched runtime when registration times out", async () => {
+    vi.useFakeTimers();
+    try {
+      const timedHost = new RuntimeHost(makeConfig({ launchTimeoutMs: 1_000 }));
+      const timedUpstream = makeUpstream();
+      timedHost.setUpstream(timedUpstream);
+      const { destroy } = injectProvider(
+        timedHost,
+        vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-timeout" })
+      );
+
+      await timedHost.submitRun(makeSubmitInput("run-timeout"));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await vi.waitFor(() => {
+        expect(destroy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            workerId: expect.any(String),
+            runtimeInstanceId: "inst-timeout",
+          })
+        );
+      });
+      expect(await timedHost.listWorkers()).toEqual([]);
+      expect(timedUpstream.notifyRunFailed).toHaveBeenCalledWith(
+        "run-timeout",
+        expect.stringContaining("timed out")
+      );
+      timedHost.drain();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rolls back a provisioned runtime even when provider.start never settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const timedHost = new RuntimeHost(makeConfig({ launchTimeoutMs: 1_000 }));
+      timedHost.setUpstream(upstream);
+      const start = vi.fn(
+        (
+          _context: unknown,
+          _onExit: unknown,
+          onProvisioned: (runtimeInstanceId: string) => void
+        ) => {
+          onProvisioned("inst-stuck");
+          return new Promise<never>(() => {});
+        }
+      );
+      const { destroy } = injectProvider(timedHost, start);
+
+      await timedHost.submitRun(makeSubmitInput("run-stuck"));
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      await vi.waitFor(() => {
+        expect(destroy).toHaveBeenCalledWith(
+          expect.objectContaining({ runtimeInstanceId: "inst-stuck" })
+        );
+      });
+      expect(await timedHost.listWorkers()).toEqual([]);
+      timedHost.drain();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reports an unexpected worker exit and clears every active run owned by it", async () => {
+    let onExit!: () => void;
+    injectProvider(
+      host,
+      vi.fn().mockImplementation(
+        (_context: unknown, exit: () => void) => {
+          onExit = exit;
+          return Promise.resolve({ runtimeInstanceId: "inst-1" });
+        }
+      )
     );
+    const workerId = await submitAndHandshake(host, "run-1");
+
+    onExit();
+    await settle();
+
+    expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
+      "run-1",
+      expect.stringContaining("exited")
+    );
+    expect(await host.listWorkers()).toEqual([]);
+    expect(host.getRunConfig(workerId, "run-1")).toBeUndefined();
+  });
+
+  it("authorizes run config reads by worker ownership", async () => {
+    injectProvider(
+      host,
+      vi.fn().mockImplementation(async (context: { ownerId: string }) => ({
+        runtimeInstanceId: `inst-${context.ownerId}`,
+      }))
+    );
+    const workerOne = await submitAndHandshake(host, "run-1");
+
+    await host.submitRun(makeSubmitInput("run-2", "ws-2"));
+    await settle();
+    const secondKey = "workspace:ws-2#native" as WorkerKey;
+    const second = poolOf(host).get(secondKey)!;
+    expect(
+      host.registerWorker(second.workerId, second.startToken, { pid: 2 })
+    ).toBe(true);
+    await settle();
+
+    expect(host.getRunConfig(workerOne, "run-1")).toMatchObject({
+      runId: "run-1",
+    });
+    expect(host.getRunConfig(second.workerId, "run-1")).toBeUndefined();
+    await expect(
+      host.postEvent(second.workerId, "run-1", {})
+    ).rejects.toThrow(/does not own run/);
   });
 
   it("fences a worker whose heartbeat went stale(判死注入)", async () => {
@@ -208,7 +429,7 @@ describe("RuntimeHost", () => {
       );
       const fencedUpstream = makeUpstream();
       fencedHost.setUpstream(fencedUpstream);
-      const { stop } = injectProvider(
+      const { destroy } = injectProvider(
         fencedHost,
         vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-1" })
       );
@@ -227,7 +448,7 @@ describe("RuntimeHost", () => {
         expect.stringContaining("fence")
       );
       expect(poolOf(fencedHost).get(KEY)).toBeUndefined();
-      expect(stop).toHaveBeenCalled();
+      expect(destroy).toHaveBeenCalled();
       fencedHost.drain();
     } finally {
       vi.useRealTimers();
@@ -268,7 +489,7 @@ describe("RuntimeHost", () => {
   });
 
   it("stopWorker stops the runtime instance and reports workerLost for its active runs", async () => {
-    const { stop } = injectProvider(
+    const { destroy } = injectProvider(
       host,
       vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-1" })
     );
@@ -276,7 +497,7 @@ describe("RuntimeHost", () => {
 
     await host.stopWorker({ runtimeHostId: "", key: KEY });
 
-    expect(stop).toHaveBeenCalled();
+    expect(destroy).toHaveBeenCalled();
     expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
       "run-1",
       "worker stopped"
@@ -301,14 +522,14 @@ describe("RuntimeHost", () => {
       host,
       vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-1" })
     );
-    await submitAndHandshake(host, "run-1");
+    const workerId = await submitAndHandshake(host, "run-1");
 
     host.releaseRun({ runtimeHostId: "builtin", runId: "run-1" });
 
-    expect(host.getRunConfig("run-1")).toBeUndefined();
+    expect(host.getRunConfig(workerId, "run-1")).toBeUndefined();
     // releaseRun 后同 runId 重新提交不再被幂等吸收
     await host.submitRun(makeSubmitInput("run-1"));
     await settle();
-    expect(host.getRunConfig("run-1")).toBeDefined();
+    expect(host.getRunConfig(workerId, "run-1")).toBeDefined();
   });
 });

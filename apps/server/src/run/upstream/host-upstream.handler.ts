@@ -5,18 +5,18 @@ import type {
   CommandResultPayload,
   CommandTracePayload,
   RunExecutionHandle,
-  RuntimeHostContract,
+  RuntimeHostExecution,
   RuntimeHostUpstream,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
+import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
 import { RunRepository } from "../run.repository";
 import { swallow } from "../../common/swallow";
-import { isTerminalRunStatus } from "@agework/shared";
+import { generateId, isTerminalRunStatus } from "@agework/shared";
 import { type RunStatusDecision } from "../status/run-status.policy";
 import { RunStatusService } from "../status/run-status.service";
 import { UpstreamSeqStore } from "./upstream-seq.store";
@@ -53,8 +53,8 @@ export class HostUpstreamHandler
     private readonly aguiEvents: HostAgUiEventHandler,
     private readonly seqGate: UpstreamSeqStore,
     private readonly runRepository: RunRepository,
-    @Inject(RUNTIME_HOST_CONTRACT)
-    private readonly runtimeHost: RuntimeHostContract
+    @Inject(RUNTIME_HOST_EXECUTION)
+    private readonly runtimeHost: RuntimeHostExecution
   ) {}
 
   /** 端口自接线:本类是契约上行与超时端口的实现者,启动期注册给下层调用方。 */
@@ -202,6 +202,19 @@ export class HostUpstreamHandler
     runtimeHandle: RunExecutionHandle
   ): Promise<void> {
     try {
+      await this.runtimeHost
+        .command({
+          runtimeHostId: runtimeHandle.runtimeHostId,
+          payload: {
+            type: "cancel",
+            commandId: generateId(),
+            runId,
+            conversationId: runtimeHandle.conversationId,
+          },
+        })
+        .catch(
+          swallow(this.logger, `cancel timed out run ${runId} execution`)
+        );
       await this.forceErrorStatus(runId, "run timeout");
     } finally {
       this.logger.warn("terminating run session", {

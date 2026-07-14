@@ -4,7 +4,8 @@ import {
   userOwnerKey,
   workspaceOwnerKey,
   type OwnerKey,
-  type RuntimeHostContract,
+  type RuntimeHostDiagnostics,
+  type RuntimeHostOperations,
   type WorkerSnapshot,
 } from "@agework/shared/protocol";
 import {
@@ -23,7 +24,10 @@ import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
 } from "../../runtime/runtime.events";
-import { RUNTIME_HOST_CONTRACT } from "../runtime-host.types";
+import {
+  RUNTIME_HOST_DIAGNOSTICS,
+  RUNTIME_HOST_OPERATIONS,
+} from "../runtime-host.types";
 
 /**
  * owner 生命周期 → Host worker 释放的协调点(设计文档 §3.5 场景 4)。
@@ -42,8 +46,10 @@ export class OwnerHostListener {
   private readonly logger = new Logger(OwnerHostListener.name);
 
   constructor(
-    @Inject(RUNTIME_HOST_CONTRACT)
-    private readonly hostContract: RuntimeHostContract,
+    @Inject(RUNTIME_HOST_OPERATIONS)
+    private readonly hostOperations: RuntimeHostOperations,
+    @Inject(RUNTIME_HOST_DIAGNOSTICS)
+    private readonly hostDiagnostics: RuntimeHostDiagnostics,
     private readonly workspaceService: WorkspaceService,
     private readonly userService: UserService
   ) {}
@@ -55,7 +61,7 @@ export class OwnerHostListener {
   }: WorkspaceDeletedEvent): Promise<void> {
     const owner = workspaceOwnerKey(workspaceId);
     try {
-      await this.hostContract.releaseOwner({ runtimeHostId, owner });
+      await this.hostOperations.releaseOwner({ runtimeHostId, owner });
     } catch (err) {
       this.logger.warn(
         `releaseOwner(${owner}) failed for workspace ${workspaceId} on host ${runtimeHostId}: ${
@@ -70,7 +76,7 @@ export class OwnerHostListener {
     userId,
   }: UserDisabledEvent | UserDeletedEvent): Promise<void> {
     try {
-      const workers = await this.hostContract.listWorkers();
+      const workers = await this.hostDiagnostics.listWorkers();
       const hostIds = new Set(
         workers
           .filter(
@@ -95,7 +101,7 @@ export class OwnerHostListener {
     runtimeHostId,
   }: RuntimeHostConnectedEvent): Promise<void> {
     try {
-      const workers = (await this.hostContract.listWorkers()).filter(
+      const workers = (await this.hostDiagnostics.listWorkers()).filter(
         (worker) => worker.runtimeHostId === runtimeHostId
       );
       await this.reconcileWorkspaceOwners(runtimeHostId, workers);
@@ -151,7 +157,7 @@ export class OwnerHostListener {
     owner: OwnerKey
   ): Promise<void> {
     try {
-      await this.hostContract.releaseOwner({ runtimeHostId, owner });
+      await this.hostOperations.releaseOwner({ runtimeHostId, owner });
     } catch (err) {
       this.logger.warn(
         `releaseOwner(${owner}) failed on host ${runtimeHostId}: ${

@@ -25,10 +25,13 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   constructor(private readonly config: RuntimeConfig) {}
 
   async start(
-    ctx: RuntimeLaunchContext
+    ctx: RuntimeLaunchContext,
+    _onExit?: () => void,
+    onProvisioned?: (runtimeInstanceId: string) => void
   ): Promise<{ runtimeInstanceId: string }> {
     const input = buildSandboxStartInput(ctx, this.config);
     const containerId = await this.runContainer(input);
+    onProvisioned?.(containerId);
     return { runtimeInstanceId: containerId };
   }
 
@@ -36,6 +39,11 @@ export class DockerRuntimeProvider implements RuntimeProvider {
     await this.stopContainer(ref.runtimeInstanceId).catch(
       swallow(this.logger, `stop container ${ref.runtimeInstanceId}`)
     );
+  }
+
+  /** 尚无独立 cache registry/TTL，释放时删除，避免 Host 丢索引后残留容器。 */
+  async release(ref: RuntimeInstanceRef): Promise<void> {
+    await this.destroy(ref);
   }
 
   async destroy(ref: RuntimeInstanceRef): Promise<void> {

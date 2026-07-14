@@ -64,6 +64,7 @@ describe("HostUpstreamHandler", () => {
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockRuntimeHost = {
+      command: vi.fn().mockResolvedValue(undefined),
       releaseRun: vi.fn(),
       setUpstream: vi.fn(),
     };
@@ -272,7 +273,7 @@ describe("HostUpstreamHandler", () => {
     );
   });
 
-  it("markRunTimedOut marks error and releases the run", async () => {
+  it("markRunTimedOut cancels execution before marking error and releasing the run", async () => {
     const runtimeHandle = {
       runId: "run-1",
       runtimeHostId: "builtin",
@@ -282,6 +283,14 @@ describe("HostUpstreamHandler", () => {
 
     await workerEventsService.markRunTimedOut("run-1", runtimeHandle);
 
+    expect(mockRuntimeHost.command).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      payload: expect.objectContaining({
+        type: "cancel",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      }),
+    });
     expect(mockRunRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "run timeout"

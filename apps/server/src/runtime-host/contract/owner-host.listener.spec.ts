@@ -32,7 +32,12 @@ function makeListener(
   workspaceService = makeWorkspaceService(),
   userService = makeUserService()
 ) {
-  return new OwnerHostListener(hostContract, workspaceService, userService);
+  return new OwnerHostListener(
+    hostContract,
+    hostContract,
+    workspaceService,
+    userService
+  );
 }
 
 function worker(

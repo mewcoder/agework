@@ -17,6 +17,7 @@ import {
 } from "./logging/worker-log.js";
 import { TraceLogWriter } from "./logging/trace.js";
 import { createAgentDriver, toAgentRunInput } from "./agent/index.js";
+import { AgentRunOutcome } from "./agent/agent-run-outcome.js";
 
 const SHUTDOWN_GRACE_MS = 8_000;
 
@@ -47,6 +48,7 @@ export async function runRunner() {
   await emitStatus(transport, { status: "running" });
 
   const processedCommands = new Set<string>();
+  const agentOutcome = new AgentRunOutcome();
   let stopRequested = false;
   let forcedExitRequested = false;
   let finalizePromise: Promise<void> | undefined;
@@ -66,20 +68,14 @@ export async function runRunner() {
     switch (command.type) {
       case "cancel":
         stopRequested = true;
-        void driver.cancel(conversationId).catch((err) => {
-          const error = String(err);
-          emitCommandTrace(transport, "failed", command, error);
-        });
-        emitCommandTrace(transport, "handled", command);
-        emitCommandResult(transport, command, "ok");
+        void settleDriverCommand(
+          transport,
+          command,
+          driver.cancel(conversationId)
+        );
         break;
       case "interrupt":
-        void driver.interrupt().catch((err) => {
-          const error = String(err);
-          emitCommandTrace(transport, "failed", command, error);
-        });
-        emitCommandTrace(transport, "handled", command);
-        emitCommandResult(transport, command, "ok");
+        void settleDriverCommand(transport, command, driver.interrupt());
         break;
       case "approval_resolved":
         void Promise.resolve(driver.resolveControl(command))
@@ -107,13 +103,15 @@ export async function runRunner() {
 
   driver.run(toAgentRunInput(config.input, conversationId)).subscribe({
     next: (event: unknown) => {
+      agentOutcome.observe(event);
       trace.writeAgui(event);
       transport
         .emit({ type: "agui.event", payload: event as AGUIEvent })
         .catch(() => {});
     },
     complete: () => {
-      void finalize(stopRequested ? "cancelled" : "finished");
+      const outcome = agentOutcome.onComplete(stopRequested);
+      void finalize(outcome.status, outcome.error);
     },
     error: (err: Error) => {
       if (stopRequested) {
@@ -257,4 +255,20 @@ function emitCommandResult(
       },
     })
     .catch(() => {});
+}
+
+async function settleDriverCommand(
+  transport: RunChannel,
+  command: CommandPayload,
+  operation: Promise<void>
+): Promise<void> {
+  try {
+    await operation;
+    emitCommandTrace(transport, "handled", command);
+    emitCommandResult(transport, command, "ok");
+  } catch (err) {
+    const error = String(err);
+    emitCommandTrace(transport, "failed", command, error);
+    emitCommandResult(transport, command, "error", error);
+  }
 }

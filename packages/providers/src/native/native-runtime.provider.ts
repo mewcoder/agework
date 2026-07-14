@@ -30,7 +30,8 @@ export class NativeRuntimeProvider implements RuntimeProvider {
    *  onExit 是调用方本地专属的退出钩子(不进 ctx,见 RuntimeProvider.start 文档)。 */
   start(
     ctx: RuntimeLaunchContext,
-    onExit?: () => void
+    onExit?: () => void,
+    onProvisioned?: (runtimeInstanceId: string) => void
   ): Promise<{ runtimeInstanceId: string }> {
     const startToken = randomUUID();
     const child = fork(this.config.native.runtimeEntryPath, [], {
@@ -44,6 +45,7 @@ export class NativeRuntimeProvider implements RuntimeProvider {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
     const runtimeInstanceId = `${child.pid}:${startToken}`;
+    onProvisioned?.(runtimeInstanceId);
     this.logger.log(
       `native worker forked ${safeLogJson({ runId: ctx.runId, pid: child.pid })}`
     );
@@ -58,6 +60,10 @@ export class NativeRuntimeProvider implements RuntimeProvider {
   }
 
   /** owner 仍在:SIGTERM owner 持有的进程句柄。 */
+  release(ref: RuntimeInstanceRef): void {
+    this.stop(ref);
+  }
+
   stop(ref: RuntimeInstanceRef): void {
     this.terminateChannel(ref.ownerId);
   }
