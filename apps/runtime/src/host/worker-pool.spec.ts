@@ -80,7 +80,7 @@ describe("WorkerPool", () => {
     expect(pool.consumeCancelled(KEY, "run-1")).toBe(false);
   });
 
-  it("listByOwner filters by OwnerKey prefix (releaseOwner)", () => {
+  it("listByOwner filters by OwnerKey (releaseOwner)", () => {
     const pool = new WorkerPool();
     pool.put(makeEntry(KEY, "worker-1"));
     pool.put(makeEntry(OTHER_KEY, "worker-2"));
@@ -88,5 +88,18 @@ describe("WorkerPool", () => {
     const owned = pool.listByOwner("workspace:ws-1");
 
     expect(owned.map((w) => w.workerId)).toEqual(["worker-1"]);
+  });
+
+  it("listByOwner does not match owners sharing a plain string prefix (ws-1 vs ws-10)", () => {
+    const pool = new WorkerPool();
+    pool.put(makeEntry(KEY, "worker-1"));
+    pool.put(makeEntry("workspace:ws-10#native" as WorkerKey, "worker-10"));
+
+    const owned = pool.listByOwner("workspace:ws-1");
+
+    expect(owned.map((w) => w.workerId)).toEqual(["worker-1"]);
+    expect(pool.listByOwner("workspace:ws-10").map((w) => w.workerId)).toEqual([
+      "worker-10",
+    ]);
   });
 });

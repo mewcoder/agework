@@ -216,7 +216,7 @@ export class TunnelClient {
         await hostContract.command(request.params);
         return;
       case "host.releaseOwner":
-        await hostContract.releaseOwner(request.params.owner);
+        await hostContract.releaseOwner(request.params);
         return;
       case "host.detectEnv":
         return hostContract.detectEnv(request.params.runtimeHostId);
@@ -239,7 +239,7 @@ export class TunnelClient {
         const workers = await hostContract.listWorkers();
         return { workers };
       case "host.stopWorker":
-        return await hostContract.stopWorker(request.params.key);
+        return await hostContract.stopWorker(request.params);
     }
   }
 
@@ -373,7 +373,12 @@ export async function runRegisteredRuntime(): Promise<void> {
       .listWorkers()
       .then((workers) =>
         Promise.allSettled(
-          workers.map((w) => runtimeHost.stopWorker(w.workerKey))
+          workers.map((w) =>
+            runtimeHost.stopWorker({
+              runtimeHostId: w.runtimeHostId,
+              key: w.workerKey,
+            })
+          )
         )
       );
     const timeout = new Promise((resolve) => setTimeout(resolve, 10_000));

@@ -310,61 +310,95 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("观测与 owner 级动作", () => {
-    it("listWorkers merges the in-process host with all tunnel hosts", async () => {
-      builtinHost.listWorkers.mockResolvedValue([{ id: "w-local" }]);
+    it("listWorkers merges hosts and stamps each snapshot with its runtimeHostId", async () => {
+      builtinHost.listWorkers.mockResolvedValue([
+        { workerId: "w-local", runtimeHostId: "" },
+      ]);
       runtimeService.listConnectedRuntimeHostIds.mockReturnValue([
-        "builtin",
         "rt-registered-1",
       ]);
       runtimeService.sendTunnelRequest.mockResolvedValue({
-        workers: [{ id: "w-remote" }],
+        workers: [{ workerId: "w-remote", runtimeHostId: "" }],
       });
 
       const workers = await adapter.listWorkers();
 
-      expect(workers.map((w) => w.id)).toEqual([
-        "w-local",
-        "w-remote",
-        "w-remote",
+      expect(workers.map((w) => [w.workerId, w.runtimeHostId])).toEqual([
+        ["w-local", "builtin"],
+        ["w-remote", "rt-registered-1"],
       ]);
     });
 
     it("listWorkers tolerates an unreachable tunnel host", async () => {
-      builtinHost.listWorkers.mockResolvedValue([{ id: "w-local" }]);
+      builtinHost.listWorkers.mockResolvedValue([{ workerId: "w-local" }]);
       runtimeService.listConnectedRuntimeHostIds.mockReturnValue(["rt-dead"]);
       runtimeService.sendTunnelRequest.mockRejectedValue(new Error("timeout"));
 
-      await expect(adapter.listWorkers()).resolves.toEqual([{ id: "w-local" }]);
-    });
-
-    it("stopWorker hits the in-process host and broadcasts to tunnel hosts", async () => {
-      runtimeService.listConnectedRuntimeHostIds.mockReturnValue(["builtin"]);
-
-      await adapter.stopWorker("workspace:ws-1#native");
-
-      expect(builtinHost.stopWorker).toHaveBeenCalledWith(
-        "workspace:ws-1#native"
-      );
-      const call = runtimeService.sendTunnelRequest.mock.calls.find(
-        ([, request]) =>
-          (request as { method: string }).method === "host.stopWorker"
-      );
-      expect(call?.[0]).toBe("builtin");
-    });
-
-    it("releaseOwner hits the in-process host and broadcasts to tunnel hosts", async () => {
-      runtimeService.listConnectedRuntimeHostIds.mockReturnValue([
-        "rt-registered-1",
+      await expect(adapter.listWorkers()).resolves.toEqual([
+        { workerId: "w-local", runtimeHostId: "builtin" },
       ]);
+    });
 
-      await adapter.releaseOwner("workspace:ws-1");
+    it("stopWorker routes builtin to the in-process host without touching the tunnel", async () => {
+      await adapter.stopWorker({
+        runtimeHostId: "builtin",
+        key: "workspace:ws-1#native",
+      });
 
-      expect(builtinHost.releaseOwner).toHaveBeenCalledWith("workspace:ws-1");
-      const call = runtimeService.sendTunnelRequest.mock.calls.find(
-        ([, request]) =>
-          (request as { method: string }).method === "host.releaseOwner"
-      );
-      expect(call?.[0]).toBe("rt-registered-1");
+      expect(builtinHost.stopWorker).toHaveBeenCalledWith({
+        runtimeHostId: "builtin",
+        key: "workspace:ws-1#native",
+      });
+      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+    });
+
+    it("stopWorker routes registered hosts through their own tunnel only", async () => {
+      await adapter.stopWorker({
+        runtimeHostId: "rt-registered-1",
+        key: "workspace:ws-1#native",
+      });
+
+      expect(builtinHost.stopWorker).not.toHaveBeenCalled();
+      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
+      const [runtimeHostId, request] = runtimeService.sendTunnelRequest.mock
+        .calls[0] as [string, { method: string; params: unknown }];
+      expect(runtimeHostId).toBe("rt-registered-1");
+      expect(request.method).toBe("host.stopWorker");
+      expect(request.params).toEqual({
+        runtimeHostId: "rt-registered-1",
+        key: "workspace:ws-1#native",
+      });
+    });
+
+    it("releaseOwner routes builtin to the in-process host without touching the tunnel", async () => {
+      await adapter.releaseOwner({
+        runtimeHostId: "builtin",
+        owner: "workspace:ws-1",
+      });
+
+      expect(builtinHost.releaseOwner).toHaveBeenCalledWith({
+        runtimeHostId: "builtin",
+        owner: "workspace:ws-1",
+      });
+      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+    });
+
+    it("releaseOwner routes registered hosts through their own tunnel only", async () => {
+      await adapter.releaseOwner({
+        runtimeHostId: "rt-registered-1",
+        owner: "workspace:ws-1",
+      });
+
+      expect(builtinHost.releaseOwner).not.toHaveBeenCalled();
+      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
+      const [runtimeHostId, request] = runtimeService.sendTunnelRequest.mock
+        .calls[0] as [string, { method: string; params: unknown }];
+      expect(runtimeHostId).toBe("rt-registered-1");
+      expect(request.method).toBe("host.releaseOwner");
+      expect(request.params).toEqual({
+        runtimeHostId: "rt-registered-1",
+        owner: "workspace:ws-1",
+      });
     });
   });
 

@@ -144,7 +144,9 @@ export class RuntimeTunnelHandler
   ): Promise<Result> {
     const socket = this.connections.get(runtimeHostId);
     if (!socket) {
-      return Promise.reject(new Error(`runtime ${runtimeHostId} is not connected`));
+      return Promise.reject(
+        new Error(`runtime ${runtimeHostId} is not connected`)
+      );
     }
     return new Promise<Result>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -206,9 +208,8 @@ export class RuntimeTunnelHandler
   }
 
   private attach(runtimeHostId: string, ws: WebSocket): void {
-    this.connections.get(runtimeHostId)?.close(CLOSE_REPLACED, "replaced");
-    this.connections.set(runtimeHostId, ws);
-
+    // token 鉴权只决定连接可以说话;路由身份(connections 绑定)在 register
+    // 握手校验通过后才建立——未注册的连接不可被 RPC/广播触达,也不会顶掉在线连接。
     ws.on("message", (data: RawData) => {
       void this.onMessage(runtimeHostId, ws, data).catch((err: unknown) => {
         this.logger.warn(
@@ -254,11 +255,19 @@ export class RuntimeTunnelHandler
     try {
       parsed = JSON.parse(text);
     } catch {
-      this.logger.warn(`runtime ${runtimeHostId} sent malformed tunnel message`);
+      this.logger.warn(
+        `runtime ${runtimeHostId} sent malformed tunnel message`
+      );
       return;
     }
 
     if (isRpcResponse(parsed)) {
+      if (this.connections.get(runtimeHostId) !== ws) {
+        this.logger.warn(
+          `dropped RPC response from an unregistered connection of runtime ${runtimeHostId}`
+        );
+        return;
+      }
       this.onRpcResponse(runtimeHostId, parsed);
       return;
     }
@@ -295,6 +304,12 @@ export class RuntimeTunnelHandler
           ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
           return;
         }
+        // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
+        const previous = this.connections.get(runtimeHostId);
+        if (previous && previous !== ws) {
+          previous.close(CLOSE_REPLACED, "replaced");
+        }
+        this.connections.set(runtimeHostId, ws);
         if (message.version && message.version !== AGEWORK_VERSION) {
           this.logger.warn(
             `runtime ${runtimeHostId} version mismatch: manager=${message.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
@@ -312,6 +327,12 @@ export class RuntimeTunnelHandler
         return;
       }
       case "heartbeat": {
+        if (this.connections.get(runtimeHostId) !== ws) {
+          this.logger.warn(
+            `dropped heartbeat from an unregistered connection of runtime ${runtimeHostId}`
+          );
+          return;
+        }
         const found = await this.repository.touchHeartbeat(runtimeHostId);
         if (!found) {
           ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
@@ -360,13 +381,13 @@ export class RuntimeTunnelHandler
     if (envelope.notification === undefined) {
       const legacy = envelope as unknown as HostUpstreamNotification;
       if ("kind" in legacy) {
-        void Promise.resolve(this.upstreamHandler?.(runtimeHostId, legacy)).catch(
-          (err: unknown) => {
-            this.logger.warn(
-              `legacy upstream handler failed for runtime ${runtimeHostId}: ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
-        );
+        void Promise.resolve(
+          this.upstreamHandler?.(runtimeHostId, legacy)
+        ).catch((err: unknown) => {
+          this.logger.warn(
+            `legacy upstream handler failed for runtime ${runtimeHostId}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        });
       }
       return;
     }
@@ -391,7 +412,11 @@ export class RuntimeTunnelHandler
       .catch(() => {});
   }
 
-  private sendUpstreamAck(runtimeHostId: string, ws: WebSocket, seq: number): void {
+  private sendUpstreamAck(
+    runtimeHostId: string,
+    ws: WebSocket,
+    seq: number
+  ): void {
     if (ws.readyState !== ws.OPEN) return;
     if (this.connections.get(runtimeHostId) !== ws) return;
     ws.send(

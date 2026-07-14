@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { StopWorkerKeyDto } from "./stop-worker-key.dto";
+import { StopWorkerDto } from "./stop-worker.dto";
 import { RUNTIME_HOST_CONTRACT } from "../runtime-host.types";
 import type { RuntimeHostContract, WorkerKey } from "@agework/shared/protocol";
 
@@ -25,9 +25,10 @@ export class AdminWorkerController {
 
   @Get("stats")
   async getWorkerStats() {
+    // Host 内存池只保留活跃 worker(starting/ready),快照条数即活跃数
     const workers = await this.hostContract.listWorkers();
     return {
-      activeWorkers: workers.filter((w) => w.status === "running").length,
+      activeWorkers: workers.length,
     };
   }
 
@@ -37,10 +38,13 @@ export class AdminWorkerController {
     return { list: await this.hostContract.listWorkers() };
   }
 
-  /** Phase 3：唯一停止端点,通过 WorkerKey 停止 worker。 */
+  /** Phase 3:唯一停止端点,按 runtimeHostId 定向停止目标 Host 上的 worker。 */
   @Post("resources/stop")
-  async stopWorker(@Body() body: StopWorkerKeyDto) {
-    await this.hostContract.stopWorker(body.workerKey as WorkerKey);
+  async stopWorker(@Body() body: StopWorkerDto) {
+    await this.hostContract.stopWorker({
+      runtimeHostId: body.runtimeHostId,
+      key: body.workerKey as WorkerKey,
+    });
     return { ok: true };
   }
 }

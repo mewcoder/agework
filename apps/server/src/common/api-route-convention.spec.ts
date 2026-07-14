@@ -260,12 +260,7 @@ describe("external API route convention", () => {
     expectRoute(AdminWorkerController, "getRuntimePolicy", "get", "policy");
     expectRoute(AdminWorkerController, "getWorkerStats", "get", "stats");
     expectRoute(AdminWorkerController, "listResources", "get", "resources");
-    expectRoute(
-      AdminWorkerController,
-      "stopWorker",
-      "post",
-      "resources/stop"
-    );
+    expectRoute(AdminWorkerController, "stopWorker", "post", "resources/stop");
 
     expect(controllerPath(AdminWorkspaceController)).toBe("admin/workspaces");
     expectRoute(AdminWorkspaceController, "listAll", "get", "list");
@@ -296,7 +291,9 @@ describe("external API route convention", () => {
 
   it("does not mark any controller public at class level", () => {
     expect(
-      CONTROLLERS.filter((controller) => isPublic(controller)).map(controllerPath)
+      CONTROLLERS.filter((controller) => isPublic(controller)).map(
+        controllerPath
+      )
     ).toEqual([]);
   });
 

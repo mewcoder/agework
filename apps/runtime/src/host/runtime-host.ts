@@ -13,6 +13,7 @@ import type {
   OwnerKey,
   ReadFileDiffInput,
   ReadFileInput,
+  ReleaseOwnerInput,
   RunChannelMessage,
   RunConfig,
   RunPlacement,
@@ -22,6 +23,7 @@ import type {
   RuntimeHostUpstream,
   RuntimeSpec,
   SearchFilesInput,
+  StopWorkerInput,
   SubmitRunInput,
   WorkerKey,
   WorkerSnapshot,
@@ -218,10 +220,10 @@ export class RuntimeHost implements RuntimeHostContract {
 
   // ── 业务级收尾 ──────────────────────────────────────────────────────
 
-  async releaseOwner(owner: OwnerKey): Promise<void> {
-    const workers = this.pool.listByOwner(owner);
+  async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
+    const workers = this.pool.listByOwner(input.owner);
     for (const worker of workers) {
-      await this.stopWorker(worker.key);
+      await this.stopWorkerByKey(worker.key);
     }
   }
 
@@ -307,23 +309,29 @@ export class RuntimeHost implements RuntimeHostContract {
   // ── 观测 ────────────────────────────────────────────────────────────
 
   async listWorkers(): Promise<WorkerSnapshot[]> {
-    return this.pool.list().map((w) => ({
-      id: w.workerId,
-      workerKey: w.key,
-      runtimeType: w.key.split("#")[1] ?? "unknown",
-      scope: parseOwnerKey(w.key.split("#")[0] as OwnerKey).scope,
-      ownerId: parseOwnerKey(w.key.split("#")[0] as OwnerKey).id,
-      runIds: [...w.activeRuns],
-      runtimeInstanceId: w.runtimeInstanceId,
-      status: w.status,
-      expiresAt: null,
-      createdAt: new Date(w.lastSeen).toISOString(),
-      updatedAt: new Date(w.lastSeen).toISOString(),
-      workspaceBindings: [],
-    }));
+    // 内存池条目(WorkerEntry)的直投影;runtimeHostId 由 server 路由层盖章
+    return this.pool.list().map((w) => {
+      const owner = parseOwnerKey(w.key.split("#")[0] as OwnerKey);
+      return {
+        runtimeHostId: "",
+        workerId: w.workerId,
+        workerKey: w.key,
+        runtimeType: w.key.split("#")[1] ?? "unknown",
+        scope: owner.scope,
+        ownerId: owner.id,
+        runIds: [...w.activeRuns],
+        runtimeInstanceId: w.runtimeInstanceId,
+        status: w.status,
+        lastSeenAt: new Date(w.lastSeen).toISOString(),
+      };
+    });
   }
 
-  async stopWorker(key: WorkerKey): Promise<void> {
+  async stopWorker(input: StopWorkerInput): Promise<void> {
+    await this.stopWorkerByKey(input.key);
+  }
+
+  private async stopWorkerByKey(key: WorkerKey): Promise<void> {
     const entry = this.pool.remove(key);
     if (!entry) return;
 

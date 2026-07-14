@@ -31,13 +31,14 @@ export class WorkspaceHostListener {
   @OnEvent(WORKSPACE_DELETED_EVENT)
   async onWorkspaceDeleted({
     workspaceId,
+    runtimeHostId,
   }: WorkspaceDeletedEvent): Promise<void> {
     const owner = workspaceOwnerKey(workspaceId);
     try {
-      await this.hostContract.releaseOwner(owner);
+      await this.hostContract.releaseOwner({ runtimeHostId, owner });
     } catch (err) {
       this.logger.warn(
-        `releaseOwner(${owner}) failed for workspace ${workspaceId}: ${
+        `releaseOwner(${owner}) failed for workspace ${workspaceId} on host ${runtimeHostId}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );

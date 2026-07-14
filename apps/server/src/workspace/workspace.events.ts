@@ -9,5 +9,7 @@ export class WorkspaceDeletedEvent {
   constructor(
     readonly workspaceId: string,
     readonly userId: string,
+    /** 该 workspace 配置的执行 Host,下游定向清理 worker 用。 */
+    readonly runtimeHostId: string
   ) {}
 }

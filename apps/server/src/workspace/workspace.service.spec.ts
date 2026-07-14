@@ -703,7 +703,9 @@ describe("WorkspaceService", () => {
     it("emits WorkspaceDeletedEvent so downstream can clean up runtime resources", async () => {
       const emit = vi.fn();
       const repo = makeRepo({
-        getOwnedId: vi.fn().mockResolvedValue({ id: workspaceId }),
+        getOwnedId: vi
+          .fn()
+          .mockResolvedValue({ id: workspaceId, runtimeHostId: "builtin" }),
       });
       const conversations = makeConversationService();
       const config = makeConfig();
@@ -733,7 +735,7 @@ describe("WorkspaceService", () => {
       );
       expect(emit).toHaveBeenCalledWith(
         WORKSPACE_DELETED_EVENT,
-        new WorkspaceDeletedEvent(workspaceId, userId)
+        new WorkspaceDeletedEvent(workspaceId, userId, "builtin")
       );
     });
   });

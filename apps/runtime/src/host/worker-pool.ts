@@ -1,4 +1,4 @@
-import type { WorkerKey } from "@agework/shared/protocol";
+import type { OwnerKey, WorkerKey } from "@agework/shared/protocol";
 
 /**
  * 一个 worker 在池中的条目。worker 是 Host 上的常驻执行代理：
@@ -115,8 +115,10 @@ export class WorkerPool {
     return [...this.workers.values()];
   }
 
-  /** 按 OwnerKey 前缀过滤 worker（releaseOwner 用）。 */
-  listByOwner(ownerPrefix: string): WorkerEntry[] {
-    return this.list().filter((w) => w.key.startsWith(ownerPrefix));
+  /** 按 OwnerKey 过滤 worker（releaseOwner 用）。 */
+  listByOwner(owner: OwnerKey): WorkerEntry[] {
+    // WorkerKey = `${OwnerKey}#${RuntimeType}`,必须带 `#` 分隔符整段匹配,
+    // 否则 owner "workspace:ws-1" 会误匹配 "workspace:ws-10#..." 的 worker。
+    return this.list().filter((w) => w.key.startsWith(`${owner}#`));
   }
 }

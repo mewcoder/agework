@@ -140,7 +140,7 @@ describe("WorkspaceRepository", () => {
 
     expect(findFirst).toHaveBeenCalledWith({
       where: { id: "ws-1", userId: "user-1", deletedAt: null },
-      select: { id: true },
+      select: { id: true, runtimeHostId: true },
     });
   });
 

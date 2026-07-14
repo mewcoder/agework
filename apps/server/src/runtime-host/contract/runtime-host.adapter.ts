@@ -11,17 +11,17 @@ import type {
   InstallCliResult,
   ListChangedFilesInput,
   ListDirectoryInput,
-  OwnerKey,
   ReadFileDiffInput,
   ReadFileInput,
+  ReleaseOwnerInput,
   RunStatusPayload,
   RuntimeHostContract,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   RuntimeHostUpstream,
   SearchFilesInput,
+  StopWorkerInput,
   SubmitRunInput,
-  WorkerKey,
   WorkerSnapshot,
   WorkspaceFileQuery,
 } from "@agework/shared/protocol";
@@ -35,7 +35,7 @@ import type {
 } from "@agework/shared/api";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { isBuiltinHostId } from "../../runtime/runtime.types";
+import { BUILTIN_HOST_ID, isBuiltinHostId } from "../../runtime/runtime.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
@@ -196,28 +196,22 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
 
   // ── 环境 / 文件 / 观测 契约方法 ─────────────────────────────────────
 
-  async releaseOwner(owner: OwnerKey): Promise<void> {
-    // 进程内 Host + 所有隧道在线 Host 广播(无该 owner 的 Host 是空操作,幂等)
-    await this.builtinHost.releaseOwner(owner);
-    for (const runtimeHostId of this.runtimeService.listConnectedRuntimeHostIds()) {
-      try {
-        const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-        await this.runtimeService.sendTunnelRequest<never>(
-          runtimeHostId,
-          {
-            jsonrpc: "2.0",
-            id: generateId(),
-            method: "host.releaseOwner",
-            params: { owner },
-          },
-          timeoutMs
-        );
-      } catch (err) {
-        this.logger.warn(
-          `host.releaseOwner failed for ${owner} on host ${runtimeHostId}: ${String(err)}`
-        );
-      }
+  async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
+    // 按 runtimeHostId 定向路由;目标 Host 无该 owner 的 worker 时为空操作(幂等)
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      await this.builtinHost.releaseOwner(input);
+      return;
     }
+    await this.runtimeService.sendTunnelRequest<never>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.releaseOwner",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
@@ -371,8 +365,13 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
 
   async listWorkers(): Promise<WorkerSnapshot[]> {
     // 进程内 builtin Host + 所有隧道在线的 registered Host 现场查询；
-    // 这是 worker 状态的唯一权威来源。
-    const result = await this.builtinHost.listWorkers();
+    // 这是 worker 状态的唯一权威来源。Host 本地不知道自己的注册 id,
+    // 快照的 runtimeHostId 在这里按路由来源盖章。
+    const builtinWorkers = await this.builtinHost.listWorkers();
+    const result = builtinWorkers.map((worker) => ({
+      ...worker,
+      runtimeHostId: BUILTIN_HOST_ID,
+    }));
     for (const runtimeHostId of this.runtimeService.listConnectedRuntimeHostIds()) {
       try {
         const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
@@ -387,7 +386,9 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
             },
             timeoutMs
           );
-        result.push(...hostResult.workers);
+        result.push(
+          ...hostResult.workers.map((worker) => ({ ...worker, runtimeHostId }))
+        );
       } catch (err) {
         this.logger.warn(
           `host.listWorkers failed for ${runtimeHostId}: ${String(err)}`
@@ -397,29 +398,22 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     return result;
   }
 
-  async stopWorker(key: WorkerKey): Promise<void> {
-    // WorkerKey = `${OwnerKey}#${RuntimeType}`。进程内 Host + 隧道广播,
-    // 持有该 key 的 Host 停掉对应 worker,其余 Host 空操作(幂等)。
-    await this.builtinHost.stopWorker(key);
-    for (const runtimeHostId of this.runtimeService.listConnectedRuntimeHostIds()) {
-      try {
-        const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-        await this.runtimeService.sendTunnelRequest<never>(
-          runtimeHostId,
-          {
-            jsonrpc: "2.0",
-            id: generateId(),
-            method: "host.stopWorker",
-            params: { key },
-          },
-          timeoutMs
-        );
-      } catch (err) {
-        this.logger.warn(
-          `host.stopWorker failed for ${key} on host ${runtimeHostId}: ${String(err)}`
-        );
-      }
+  async stopWorker(input: StopWorkerInput): Promise<void> {
+    // 按 runtimeHostId 定向路由;WorkerKey = `${OwnerKey}#${RuntimeType}`。
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      await this.builtinHost.stopWorker(input);
+      return;
     }
+    await this.runtimeService.sendTunnelRequest<never>(
+      input.runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.stopWorker",
+        params: input,
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 }
 

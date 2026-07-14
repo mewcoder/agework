@@ -120,11 +120,23 @@ async function createRunsTestingModule(
       drain: vi.fn(),
       listDirectory: vi.fn().mockResolvedValue({ path: "", entries: [] }),
       createDirectory: vi.fn().mockResolvedValue({ path: "" }),
-      listFiles: vi.fn().mockResolvedValue({ path: "", list: [], truncated: false }),
-      readFile: vi.fn().mockResolvedValue({ path: "", encoding: "utf8", content: "", size: 0, truncated: false }),
+      listFiles: vi
+        .fn()
+        .mockResolvedValue({ path: "", list: [], truncated: false }),
+      readFile: vi.fn().mockResolvedValue({
+        path: "",
+        encoding: "utf8",
+        content: "",
+        size: 0,
+        truncated: false,
+      }),
       searchFiles: vi.fn().mockResolvedValue({ list: [] }),
-      listChangedFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
-      readFileDiff: vi.fn().mockResolvedValue({ path: "", status: "", before: "", after: "" }),
+      listChangedFiles: vi
+        .fn()
+        .mockResolvedValue({ list: [], truncated: false }),
+      readFileDiff: vi
+        .fn()
+        .mockResolvedValue({ path: "", status: "", before: "", after: "" }),
     })
     .overrideProvider(ModelProviderService)
     .useValue({})

@@ -85,6 +85,8 @@ export type {
   SubmitRunInput,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
+  ReleaseOwnerInput,
+  StopWorkerInput,
   WorkerSnapshot,
   RuntimeHostContract,
   RuntimeHostUpstream,

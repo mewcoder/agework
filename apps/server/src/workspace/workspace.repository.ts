@@ -150,10 +150,13 @@ export class WorkspaceRepository {
     });
   }
 
-  getOwnedId(userId: string, id: string): Promise<{ id: string } | null> {
+  getOwnedId(
+    userId: string,
+    id: string
+  ): Promise<{ id: string; runtimeHostId: string } | null> {
     return this.prisma.workspace.findFirst({
       where: { id, userId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, runtimeHostId: true },
     });
   }
 

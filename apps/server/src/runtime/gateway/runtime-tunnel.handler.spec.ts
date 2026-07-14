@@ -75,6 +75,20 @@ describe("RuntimeTunnelHandler", () => {
     return JSON.parse(String(data));
   }
 
+  /** 发送 register 并等待 registered 回执(此后连接才被绑定为在线)。 */
+  async function register(ws: WebSocket): Promise<number> {
+    ws.send(
+      JSON.stringify({
+        type: "register",
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      })
+    );
+    const reply = (await nextMessage(ws)) as { epoch: number };
+    return reply.epoch;
+  }
+
   it("accepts a valid token, handles register and replies registered", async () => {
     const ws = connect();
     await once(ws, "open");
@@ -158,14 +172,27 @@ describe("RuntimeTunnelHandler", () => {
     repository.touchHeartbeat.mockResolvedValueOnce(false);
     const ws = connect();
     await once(ws, "open");
+    await register(ws);
     ws.send(JSON.stringify({ type: "heartbeat" }));
     const [code] = (await once(ws, "close")) as [number];
     expect(code).toBe(4410);
   });
 
-  it("marks the runtime offline when the connection drops (registered)", async () => {
+  it("ignores heartbeat from an unregistered connection", async () => {
     const ws = connect();
     await once(ws, "open");
+    ws.send(JSON.stringify({ type: "heartbeat" }));
+    // 用第二条注册连接的 registered 回执作同步屏障
+    const other = connect();
+    await once(other, "open");
+    await register(other);
+    expect(repository.touchHeartbeat).not.toHaveBeenCalled();
+  });
+
+  it("marks the runtime offline when the registered connection drops", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    await register(ws);
     ws.close();
     await once(ws, "close");
     await vi.waitFor(() => {
@@ -173,9 +200,29 @@ describe("RuntimeTunnelHandler", () => {
     });
   });
 
+  it("does not bind or mark offline for a connection that never registers", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    expect(handler.isConnected("rt-1")).toBe(false);
+    ws.close();
+    await once(ws, "close");
+    // close 是异步入队的,给事件循环一拍
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(repository.markOffline).not.toHaveBeenCalled();
+  });
+
+  it("binds the connection (isConnected) only after register", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    expect(handler.isConnected("rt-1")).toBe(false);
+    await register(ws);
+    expect(handler.isConnected("rt-1")).toBe(true);
+  });
+
   it("closeConnection kicks the live socket with 4410", async () => {
     const ws = connect();
     await once(ws, "open");
+    await register(ws);
     handler.closeConnection("rt-1");
     const [code] = (await once(ws, "close")) as [number];
     expect(code).toBe(4410);
@@ -191,19 +238,6 @@ describe("RuntimeTunnelHandler", () => {
   });
 
   describe("host.upstream envelope (ACK 水位 + epoch)", () => {
-    async function register(ws: WebSocket): Promise<number> {
-      ws.send(
-        JSON.stringify({
-          type: "register",
-          capabilities: {
-            docker: { available: true, scopes: ["user", "workspace"] },
-          },
-        })
-      );
-      const reply = (await nextMessage(ws)) as { epoch: number };
-      return reply.epoch;
-    }
-
     function sendUpstream(
       ws: WebSocket,
       seq: number,
@@ -328,6 +362,7 @@ describe("RuntimeTunnelHandler", () => {
     it("sends the request over the wire and resolves with the manager's result", async () => {
       const ws = connect();
       await once(ws, "open");
+      await register(ws);
       ws.on("message", (data: unknown) => {
         const message = JSON.parse(String(data)) as {
           id: string;
@@ -358,6 +393,7 @@ describe("RuntimeTunnelHandler", () => {
     it("rejects with the manager's error message on an RPC error response", async () => {
       const ws = connect();
       await once(ws, "open");
+      await register(ws);
       ws.on("message", (data: unknown) => {
         const message = JSON.parse(String(data)) as { id: string };
         ws.send(
@@ -386,6 +422,7 @@ describe("RuntimeTunnelHandler", () => {
     it("rejects on timeout when the manager never replies", async () => {
       const ws = connect();
       await once(ws, "open");
+      await register(ws);
 
       await expect(
         handler.sendRequest(
@@ -404,6 +441,7 @@ describe("RuntimeTunnelHandler", () => {
     it("rejects a still-pending request when the connection drops", async () => {
       const ws = connect();
       await once(ws, "open");
+      await register(ws);
 
       const pending = handler.sendRequest(
         "rt-1",

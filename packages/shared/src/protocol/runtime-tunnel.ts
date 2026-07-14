@@ -2,10 +2,10 @@ import type { RpcRequest, RpcResponse, RpcNotification } from "./rpc";
 import type { RunChannelMessage } from "./run-channel-message";
 import type {
   SubmitRunInput,
-  OwnerKey,
+  ReleaseOwnerInput,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
-  WorkerKey,
+  StopWorkerInput,
   WorkerSnapshot,
   HostCapabilityStatus,
   ListDirectoryInput,
@@ -81,10 +81,8 @@ export type HostSubmitRunRpcParams = SubmitRunInput;
 /** server → Host:下发 run 级命令。 */
 export type HostCommandRpcParams = RuntimeHostCommandInput;
 
-/** server → Host:owner 级释放。 */
-export type HostReleaseOwnerRpcParams = {
-  owner: OwnerKey;
-};
+/** server → Host:owner 级释放(定向路由,params 就是 RuntimeHostContract.releaseOwner 的入参)。 */
+export type HostReleaseOwnerRpcParams = ReleaseOwnerInput;
 
 /** Host → server:上行事件/终态事实通知(单向)。 */
 export type HostUpstreamNotification =
@@ -126,7 +124,7 @@ export type RuntimeTunnelHostRpcRequest =
   | RpcRequest<"host.searchFiles", SearchFilesInput>
   | RpcRequest<"host.listChangedFiles", ListChangedFilesInput>
   | RpcRequest<"host.listWorkers", Record<string, never>>
-  | RpcRequest<"host.stopWorker", { key: WorkerKey }>;
+  | RpcRequest<"host.stopWorker", StopWorkerInput>;
 
 /** host.listWorkers 响应：本 Host 的 worker 快照列表。 */
 export type HostListWorkersRpcResult = { workers: WorkerSnapshot[] };

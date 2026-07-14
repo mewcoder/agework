@@ -32,14 +32,10 @@ describe("AdminWorkerController", () => {
     expect(getRuntimePolicy).toHaveBeenCalled();
   });
 
-  it("getWorkerStats counts running workers from listWorkers", async () => {
+  it("getWorkerStats counts live pool entries from listWorkers", async () => {
     const listWorkers = vi
       .fn()
-      .mockResolvedValue([
-        { status: "running" },
-        { status: "running" },
-        { status: "stopped" },
-      ]);
+      .mockResolvedValue([{ status: "ready" }, { status: "starting" }]);
     const controller = makeController({}, { listWorkers });
 
     const result = await controller.getWorkerStats();
@@ -51,9 +47,10 @@ describe("AdminWorkerController", () => {
   it("listResources delegates to hostContract.listWorkers", async () => {
     const listWorkers = vi.fn().mockResolvedValue([
       {
-        id: "w-1",
+        runtimeHostId: "builtin",
+        workerId: "w-1",
         workerKey: "workspace:ws-1#native",
-        status: "running",
+        status: "ready",
       },
     ]);
     const controller = makeController({}, { listWorkers });
@@ -64,23 +61,28 @@ describe("AdminWorkerController", () => {
     expect(result).toEqual({
       list: [
         expect.objectContaining({
-          id: "w-1",
+          runtimeHostId: "builtin",
+          workerId: "w-1",
           workerKey: "workspace:ws-1#native",
-          status: "running",
+          status: "ready",
         }),
       ],
     });
   });
 
-  it("stopWorker delegates to hostContract.stopWorker with workerKey", async () => {
+  it("stopWorker delegates to hostContract.stopWorker with the target host and key", async () => {
     const stopWorker = vi.fn().mockResolvedValue(undefined);
     const controller = makeController({}, { stopWorker });
 
     const result = await controller.stopWorker({
+      runtimeHostId: "rt-1",
       workerKey: "workspace:ws-1#native",
     });
 
-    expect(stopWorker).toHaveBeenCalledWith("workspace:ws-1#native");
+    expect(stopWorker).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      key: "workspace:ws-1#native",
+    });
     expect(result).toEqual({ ok: true });
   });
 });

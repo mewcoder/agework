@@ -129,7 +129,7 @@ describe("RuntimeHost", () => {
     expect(commands.map((c) => c.payload.type)).toEqual(["user_message"]);
     expect(host.getRunConfig("run-1")).toMatchObject({ runId: "run-1" });
     expect(await host.listWorkers()).toEqual([
-      expect.objectContaining({ id: workerId, runIds: ["run-1"] }),
+      expect.objectContaining({ workerId, runIds: ["run-1"] }),
     ]);
   });
 
@@ -273,7 +273,7 @@ describe("RuntimeHost", () => {
     );
     await submitAndHandshake(host, "run-1");
 
-    await host.stopWorker(KEY);
+    await host.stopWorker({ runtimeHostId: "", key: KEY });
 
     expect(stop).toHaveBeenCalled();
     expect(upstream.notifyWorkerLost).toHaveBeenCalledWith(
@@ -283,14 +283,14 @@ describe("RuntimeHost", () => {
     expect(poolOf(host).get(KEY)).toBeUndefined();
   });
 
-  it("releaseOwner stops every worker under the owner prefix", async () => {
+  it("releaseOwner stops every worker under the owner", async () => {
     injectProvider(
       host,
       vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-1" })
     );
     await submitAndHandshake(host, "run-1");
 
-    await host.releaseOwner("workspace:ws-1");
+    await host.releaseOwner({ runtimeHostId: "", owner: "workspace:ws-1" });
 
     expect(poolOf(host).get(KEY)).toBeUndefined();
   });

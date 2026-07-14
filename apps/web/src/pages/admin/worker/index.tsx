@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { WorkerSnapshot } from "@/api/worker";
-import { useLiveWorkers, useStopLiveWorker } from "@/hooks/worker-hooks";
+import { useWorkers, useStopWorker } from "@/hooks/worker-hooks";
 import {
   DataTable,
   DataTableActions,
@@ -25,8 +25,8 @@ import { formatDateTime } from "@/utils/format";
 
 const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: "all", label: "全部状态" },
-  { value: "running", label: "运行中" },
-  { value: "stopped", label: "已停止" },
+  { value: "starting", label: "启动中" },
+  { value: "ready", label: "就绪" },
 ];
 
 function statusLabel(status: string) {
@@ -34,20 +34,25 @@ function statusLabel(status: string) {
 }
 
 function statusVariant(status: string) {
-  if (status === "running") return "default" as const;
-  if (status === "stopped") return "secondary" as const;
+  if (status === "ready") return "default" as const;
+  if (status === "starting") return "secondary" as const;
   return "outline" as const;
+}
+
+/** 同名 workerKey 可能出现在不同 Host 上,行标识必须带 Host。 */
+function workerRowId(worker: WorkerSnapshot) {
+  return `${worker.runtimeHostId}:${worker.workerKey}`;
 }
 
 export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
   const [status, setStatus] = useState<string>("all");
-  const [stoppingKey, setStoppingKey] = useState<string | null>(null);
+  const [stoppingId, setStoppingId] = useState<string | null>(null);
   const stopDialog = useBooleanConfirmDelete();
-  const [pendingStopKey, setPendingStopKey] = useState<string | null>(null);
+  const [pendingStop, setPendingStop] = useState<WorkerSnapshot | null>(null);
   const { pageNo, setPageNo, pageSize, goPrev, goNext } = usePagination();
 
-  const { data, isLoading } = useLiveWorkers();
-  const stopMutation = useStopLiveWorker();
+  const { data, isLoading } = useWorkers();
+  const stopMutation = useStopWorker();
 
   // 客户端筛选 + 分页（live 数据无服务端分页）
   const filtered = useMemo(() => {
@@ -62,20 +67,23 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
     return filtered.slice(start, start + pageSize);
   }, [filtered, pageNo, pageSize]);
 
-  function handleStop(workerKey: string) {
-    setPendingStopKey(workerKey);
+  function handleStop(worker: WorkerSnapshot) {
+    setPendingStop(worker);
     stopDialog.open();
   }
 
   async function confirmStop() {
-    if (!pendingStopKey) return;
-    setStoppingKey(pendingStopKey);
+    if (!pendingStop) return;
+    setStoppingId(workerRowId(pendingStop));
     stopDialog.close();
     try {
-      await stopMutation.mutateAsync(pendingStopKey);
+      await stopMutation.mutateAsync({
+        runtimeHostId: pendingStop.runtimeHostId,
+        workerKey: pendingStop.workerKey,
+      });
     } finally {
-      setStoppingKey(null);
-      setPendingStopKey(null);
+      setStoppingId(null);
+      setPendingStop(null);
     }
   }
 
@@ -109,12 +117,22 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       ),
     },
     {
-      id: "workspaceCount",
-      header: "关联工作空间",
+      id: "runtimeHost",
+      header: "Host",
       cell: ({ row }) => (
-        <DataTableText>
-          {row.original.workspaceBindings?.length ?? 0}
+        <DataTableText
+          className="max-w-[200px]"
+          title={row.original.runtimeHostId}
+        >
+          {row.original.runtimeHostId}
         </DataTableText>
+      ),
+    },
+    {
+      id: "activeRuns",
+      header: "活跃 Run",
+      cell: ({ row }) => (
+        <DataTableText>{row.original.runIds.length}</DataTableText>
       ),
     },
     {
@@ -127,17 +145,10 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       ),
     },
     {
-      id: "createdAt",
-      header: "创建时间",
+      id: "lastSeenAt",
+      header: "最后心跳",
       cell: ({ row }) => (
-        <DataTableText>{formatDateTime(row.original.createdAt)}</DataTableText>
-      ),
-    },
-    {
-      id: "updatedAt",
-      header: "更新时间",
-      cell: ({ row }) => (
-        <DataTableText>{formatDateTime(row.original.updatedAt)}</DataTableText>
+        <DataTableText>{formatDateTime(row.original.lastSeenAt)}</DataTableText>
       ),
     },
     {
@@ -149,14 +160,12 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       },
       cell: ({ row }) => (
         <DataTableActions>
-          {row.original.status === "running" && (
-            <DataTableButton
-              disabled={stoppingKey === row.original.workerKey}
-              onClick={() => handleStop(row.original.workerKey)}
-            >
-              {stoppingKey === row.original.workerKey ? "停止中…" : "停止"}
-            </DataTableButton>
-          )}
+          <DataTableButton
+            disabled={stoppingId === workerRowId(row.original)}
+            onClick={() => handleStop(row.original)}
+          >
+            {stoppingId === workerRowId(row.original) ? "停止中…" : "停止"}
+          </DataTableButton>
         </DataTableActions>
       ),
     },
@@ -203,7 +212,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
         isLoading={isLoading}
         emptyText="暂无运行中的 Worker"
         tableClassName="min-w-[960px]"
-        getRowId={(resource) => resource.workerKey}
+        getRowId={workerRowId}
       />
 
       <PaginationBar

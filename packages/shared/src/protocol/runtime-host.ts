@@ -79,9 +79,29 @@ export type RuntimeHostRunRef = {
   runId: string;
 };
 
-/** admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。 */
+/** owner 级释放的定向路由输入。 */
+export type ReleaseOwnerInput = {
+  /** 目标 Host。 */
+  runtimeHostId: string;
+  owner: OwnerKey;
+};
+
+/** stopWorker 的定向路由输入。 */
+export type StopWorkerInput = {
+  /** 目标 Host。 */
+  runtimeHostId: string;
+  /** 池键 `OwnerKey#RuntimeType`。 */
+  key: WorkerKey;
+};
+
+/**
+ * admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。
+ * 形状即 Host 内存池条目（WorkerEntry）的直投影，不再模拟已删除的 Worker 表行。
+ */
 export type WorkerSnapshot = {
-  id: string;
+  /** 所在 Host。Host 本地不知道自己的注册 id，置空串，由 server 路由层盖章。 */
+  runtimeHostId: string;
+  workerId: string;
   /** 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
   workerKey: WorkerKey;
   runtimeType: string;
@@ -90,16 +110,9 @@ export type WorkerSnapshot = {
   /** 仅供 admin 现场诊断关联 run，不持久化到 server。 */
   runIds: string[];
   runtimeInstanceId: string;
-  status: string;
-  expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  workspaceBindings: Array<{
-    id: string;
-    workspaceId: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
+  status: "starting" | "ready";
+  /** 最后一次心跳/事件上报时间（ISO）。 */
+  lastSeenAt: string;
 };
 
 // ── 环境 / 文件 / 观测动词 ─────────────────────────────────────────
@@ -212,9 +225,10 @@ export interface RuntimeHostContract {
 
   /**
    * owner 级释放：workspace 删除传 workspace:X，user 注销/禁用传 user:Y。
+   * 按 runtimeHostId 定向路由到目标 Host,不广播。
    * 幂等、可重试；目标键无 worker 时为空操作（见 §3.5 场景 4）。
    */
-  releaseOwner(owner: OwnerKey): Promise<void>;
+  releaseOwner(input: ReleaseOwnerInput): Promise<void>;
 
   // —— 环境 ——
 
@@ -254,8 +268,8 @@ export interface RuntimeHostContract {
   /** 现场查询 Host 上的 worker 快照列表（不入库）。 */
   listWorkers(): Promise<WorkerSnapshot[]>;
 
-  /** 按 WorkerKey 停止一个 worker（admin 诊断入口）。 */
-  stopWorker(key: WorkerKey): Promise<void>;
+  /** 按 runtimeHostId 定向停止目标 Host 上的一个 worker（admin 诊断入口）。 */
+  stopWorker(input: StopWorkerInput): Promise<void>;
 
   // —— 生命周期与上行端口 ——
 

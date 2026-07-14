@@ -488,7 +488,7 @@ export class WorkspaceService {
 
     this.events.emit(
       WORKSPACE_DELETED_EVENT,
-      new WorkspaceDeletedEvent(id, userId)
+      new WorkspaceDeletedEvent(id, userId, workspace.runtimeHostId)
     );
   }
 
