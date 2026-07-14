@@ -16,10 +16,10 @@ function makeController() {
 }
 
 describe("AdminRunController", () => {
-  describe("listAdmin()", () => {
+  describe("list()", () => {
     it("passes pagination and status filter to the run service", async () => {
       const { controller, runService } = makeController();
-      await controller.listAdmin({
+      await controller.list({
         status: "running",
         pageNo: 2,
         pageSize: 25,
@@ -33,7 +33,7 @@ describe("AdminRunController", () => {
 
     it("uses defaults when params are omitted", async () => {
       const { controller, runService } = makeController();
-      await controller.listAdmin({});
+      await controller.list({});
       expect(runService.listForAdmin).toHaveBeenCalledWith({
         status: undefined,
         take: 10,

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
-import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
+import { RuntimeRepository } from "./runtime.repository";
+import type { RuntimeHostRow } from "./runtime.types";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { RuntimeService } from "./runtime.service";
 
@@ -27,7 +28,7 @@ const local = vi.hoisted(() => ({
 vi.mock("@agework/shared/cli", () => ({
   detectEnvConfig: () => mockEnvConfig,
 }));
-vi.mock("./filesystem/directory-browser", () => ({
+vi.mock("@agework/shared/filesystem/directory-browser", () => ({
   listDirectory: local.listDirectory,
   createDirectory: local.createDirectory,
 }));

@@ -13,7 +13,7 @@ export class AdminRunController {
   constructor(private readonly runService: RunService) {}
 
   @Get("list")
-  listAdmin(@Query() query: AdminRunListQueryDto) {
+  list(@Query() query: AdminRunListQueryDto) {
     const { take, skip } = pageWindow(query);
     return this.runService.listForAdmin({ status: query.status, take, skip });
   }

@@ -1,16 +1,13 @@
-import { Body, Controller, Get, Post, Query } from "@nestjs/common";
+import { Controller, Get, Post, Query, Body } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
-import { Roles } from "../auth/decorators/roles.decorator";
 import type { JwtUser } from "../auth/auth.types";
 import { RuntimeService } from "./runtime.service";
-import { CreateRuntimeDto } from "./dto/create-runtime.dto";
-import { RuntimeHostIdDto } from "./dto/runtime-host-id.dto";
 import { ListRuntimeDirectoryDto } from "./dto/list-runtime-directory.dto";
 import { CreateRuntimeDirectoryDto } from "./dto/create-runtime-directory.dto";
 
 /**
- * Runtime Host 配对管理:list 对所有登录用户开放(查看可用 Host),
- * create/delete 限 admin(普通用户只读)。
+ * Runtime Host 用户面只读入口:查看可见 Host、浏览/新建目录。
+ * 配对管理(create/delete)是 admin 专属,在 admin/admin-runtime.controller.ts。
  */
 @Controller("runtimes")
 export class RuntimeController {
@@ -20,20 +17,6 @@ export class RuntimeController {
   @Get("list")
   list(@CurrentUser() user: JwtUser) {
     return this.runtimeService.list(user.userId);
-  }
-
-  /** admin:创建 registered Host 并生成配对 token。 */
-  @Roles("admin")
-  @Post("create")
-  create(@Body() body: CreateRuntimeDto, @CurrentUser() user: JwtUser) {
-    return this.runtimeService.create(user.userId, body.name);
-  }
-
-  /** admin:注销 registered Host（软删除）。 */
-  @Roles("admin")
-  @Post("delete")
-  delete(@Body() body: RuntimeHostIdDto, @CurrentUser() user: JwtUser) {
-    return this.runtimeService.delete(user.userId, body.id);
   }
 
   /** 所有用户:列出自己可见的某个 Host 上 path 下的子目录（不含文件）。 */

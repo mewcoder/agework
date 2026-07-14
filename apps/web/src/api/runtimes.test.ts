@@ -34,7 +34,7 @@ describe('runtimesApi', () => {
 
       await runtimesApi.create(body);
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/runtimes/create', body);
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtimes/create', body);
     });
   });
 
@@ -42,7 +42,7 @@ describe('runtimesApi', () => {
     it('发送 delete 请求', async () => {
       await runtimesApi.delete('rt-1');
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/runtimes/delete', { id: 'rt-1' });
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtimes/delete', { id: 'rt-1' });
     });
   });
 });

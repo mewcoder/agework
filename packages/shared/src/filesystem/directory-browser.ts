@@ -1,13 +1,13 @@
 /**
- * DirectoryBrowser：runtime manager 侧的目录浏览/新建能力，供 registered
- * RuntimeHost 的目录浏览契约调用。只列目录，不列文件。
- * server 端同步副本见 apps/server/src/runtime/filesystem/directory-browser.ts。
+ * DirectoryBrowser:本机目录浏览/新建。只列目录,不列文件。
+ * server(builtin Host)与 agework-runtime daemon(registered Host)共用,
+ * 取代此前两端各持一份的同步副本。
  */
 
 import { execSync } from "node:child_process";
 import { mkdirSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, sep } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 export type ListDirectoryResult = { path: string; entries: string[] };
 export type CreateDirectoryResult = { path: string };

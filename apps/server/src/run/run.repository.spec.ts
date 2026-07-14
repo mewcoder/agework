@@ -184,7 +184,7 @@ describe("RunRepository", () => {
       run: { findUnique: findRun },
     } as never);
 
-    const detail = await service.detailAdmin("run-1");
+    const detail = await service.findAdminDetail("run-1");
 
     expect(findRun).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "run-1" } })

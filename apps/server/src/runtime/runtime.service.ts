@@ -39,7 +39,8 @@ import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import type { RuntimeConfig, RuntimeType } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./local/runtime-config";
-import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
+import { RuntimeRepository } from "./runtime.repository";
+import type { RuntimeHostRow } from "./runtime.types";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
 import type { HostUpstreamPort } from "./runtime.types";
@@ -50,7 +51,7 @@ import {
 import {
   createDirectory as createDirectoryOnDisk,
   listDirectory as listDirectoryOnDisk,
-} from "./filesystem/directory-browser";
+} from "@agework/shared/filesystem/directory-browser";
 import {
   createFsTimeoutSignal,
   listFiles as listFilesDirect,
@@ -252,11 +253,13 @@ export class RuntimeService implements OnApplicationBootstrap {
    *   runtime 未连接时返回 null。
    */
   async detectEnv(id: string): Promise<DetectEnvResponse> {
+    // registered 未连接:不是错误,只是此刻无法检测(前端按离线展示)
     if (!this.tunnelHandler.isConnected(id) && !isBuiltinHostId(id)) {
       return { envConfig: null };
     }
+    let envConfig: RuntimeEnvConfig | undefined;
     try {
-      const envConfig = isBuiltinHostId(id)
+      envConfig = isBuiltinHostId(id)
         ? detectEnvConfig()
         : (
             await this.sendTunnelRequest<HostCapabilityStatus>(
@@ -270,15 +273,15 @@ export class RuntimeService implements OnApplicationBootstrap {
               this.configService.getLaunchTimeoutSeconds() * 1000
             )
           ).native?.cli;
-      if (!envConfig) return { envConfig: null };
-      await this.repository.updateEnvConfig(id, envConfig);
-      return { envConfig };
     } catch (err) {
-      this.logger.warn(
+      // 检测/RPC 失败与「未检出 CLI」是两回事,失败要让调用方看见
+      throw new BadRequestException(
         `detect-env for runtime ${id} failed: ${err instanceof Error ? err.message : String(err)}`
       );
-      return { envConfig: null };
     }
+    if (!envConfig) return { envConfig: null };
+    await this.repository.updateEnvConfig(id, envConfig);
+    return { envConfig };
   }
 
   /**

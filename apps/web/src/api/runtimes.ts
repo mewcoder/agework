@@ -23,9 +23,9 @@ export const runtimesApi = {
     apiGet<{ list: RuntimeResponse[] }>("/api/v1/admin/runtimes/list"),
 
   create: (body: CreateRuntimeRequest) =>
-    apiPost<CreateRuntimeResponse>("/api/v1/runtimes/create", body),
+    apiPost<CreateRuntimeResponse>("/api/v1/admin/runtimes/create", body),
 
-  delete: (id: string) => apiPost("/api/v1/runtimes/delete", { id }),
+  delete: (id: string) => apiPost("/api/v1/admin/runtimes/delete", { id }),
 
   /** admin: 覆盖 runtime 的 CLI 路径（per-agent）。 */
   updateEnvConfigOverride: (body: UpdateEnvConfigOverrideRequest) =>

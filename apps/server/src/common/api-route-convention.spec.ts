@@ -252,7 +252,7 @@ describe("external API route convention", () => {
     expectRoute(AdminConfigController, "reset", "post", "reset");
 
     expect(controllerPath(AdminRunController)).toBe("admin/runs");
-    expectRoute(AdminRunController, "listAdmin", "get", "list");
+    expectRoute(AdminRunController, "list", "get", "list");
     expectRoute(AdminRunController, "query", "get", "query");
     expectRoute(AdminRunController, "listEvents", "get", "events/list");
 

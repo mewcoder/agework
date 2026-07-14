@@ -47,7 +47,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
 
   async failInterruptedRuns(): Promise<void> {
     try {
-      const activeRuns = await this.runRepository.findAllActive();
+      const activeRuns = await this.runRepository.listActive();
       if (activeRuns.length === 0) {
         this.logger.log("No interrupted active runs found.");
       } else {
@@ -92,7 +92,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
   }
 
   private async sweepAbandonedRuns(): Promise<void> {
-    const activeRuns = await this.runRepository.findAllActive();
+    const activeRuns = await this.runRepository.listActive();
     if (activeRuns.length === 0) return;
     const graceMs = this.configService.getHeartbeatTimeoutSeconds() * 2 * 1000;
     const cutoff = Date.now() - graceMs;

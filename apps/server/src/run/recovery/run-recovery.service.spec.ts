@@ -27,7 +27,7 @@ function makeActiveRun(input: { id?: string; runtimeHostId?: string }) {
 
 function makeDeps(activeRuns: unknown[]) {
   const runRepository: Partial<RunRepository> = {
-    findAllActive: vi.fn().mockResolvedValue(activeRuns),
+    listActive: vi.fn().mockResolvedValue(activeRuns),
     markError: vi.fn().mockResolvedValue(undefined),
   };
   const conversationService: Partial<ConversationService> = {

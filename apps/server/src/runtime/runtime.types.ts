@@ -13,6 +13,24 @@ export interface HostUpstreamPort {
   ): Promise<void> | void;
 }
 
+/**
+ * RuntimeHost 表行的跨模块契约形状(workspace / run / runtime-host 经根 Service
+ * 的公开方法消费)。tokenHash 永不出现在此形状里。
+ */
+export type RuntimeHostRow = {
+  id: string;
+  name: string;
+  source: string;
+  ownerId: string | null;
+  status: string;
+  lastHeartbeatAt: Date | null;
+  createdAt: Date;
+  capabilities: unknown;
+  envConfig: unknown;
+  envConfigOverride: unknown;
+  removedAt: Date | null;
+};
+
 /** builtin（本机 in-process）RuntimeHost 的固定 id。所有 runtimeType 都走这一个 Host。 */
 export const BUILTIN_HOST_ID = "builtin";
 

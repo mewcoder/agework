@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import type { AgentContextUsage, RunUsage } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
@@ -93,7 +93,7 @@ export class RunRepository {
     });
   }
 
-  async findAllActive() {
+  async listActive() {
     return this.prisma.run.findMany({
       where: { status: { in: ACTIVE_RUN_STATUSES } },
       // 恢复路径需要知道 run 落在哪台 Host 上(registered 不判死、走 ACK 续传)
@@ -131,7 +131,7 @@ export class RunRepository {
     return run?.conversationId ?? null;
   }
 
-  async listAdmin(params: { status?: string; take: number; skip: number }) {
+  async listForAdmin(params: { status?: string; take: number; skip: number }) {
     const { status, take, skip } = params;
     const where = status ? { status } : undefined;
 
@@ -170,12 +170,11 @@ export class RunRepository {
         workspaceName: conversation.workspace.name,
       })),
       total,
-      pageNo: skip / take + 1,
-      pageSize: take,
     };
   }
 
-  async detailAdmin(id: string) {
+  /** 管理端详情视图(可空,不抛异常;非空守卫在 Service)。 */
+  async findAdminDetail(id: string) {
     const run = await this.prisma.run.findUnique({
       where: { id },
       include: {
@@ -200,9 +199,7 @@ export class RunRepository {
       },
     });
 
-    if (!run) {
-      throw new NotFoundException(`Run ${id} 不存在`);
-    }
+    if (!run) return null;
 
     const { conversation, ...runData } = run;
     const workspace = conversation.workspace;

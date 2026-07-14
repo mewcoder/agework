@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  NotFoundException,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { generateId } from "@agework/shared";
@@ -48,13 +49,22 @@ export class RunService implements OnApplicationBootstrap {
   }
 
   /** 管理端：分页查询 run 列表。 */
-  listForAdmin(params: { status?: string; take: number; skip: number }) {
-    return this.runRepository.listAdmin(params);
+  async listForAdmin(params: { status?: string; take: number; skip: number }) {
+    const { list, total } = await this.runRepository.listForAdmin(params);
+    return {
+      list,
+      total,
+      pageNo: params.skip / params.take + 1,
+      pageSize: params.take,
+    };
   }
 
   /** 管理端：单个 run 详情；worker 快照经执行面契约的观测口补齐。 */
   async getDetailForAdmin(id: string) {
-    const detail = await this.runRepository.detailAdmin(id);
+    const detail = await this.runRepository.findAdminDetail(id);
+    if (!detail) {
+      throw new NotFoundException(`Run ${id} 不存在`);
+    }
     const workers = await this.runtimeHost.listWorkers();
     const worker = workers.find((w) => w.runIds.includes(id)) ?? null;
     return { ...detail, worker };

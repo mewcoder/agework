@@ -77,7 +77,7 @@ import { HandshakeStore } from "./handshake-store";
 import {
   createDirectory as createDirectoryOnDisk,
   listDirectory as listDirectoryOnDisk,
-} from "../filesystem/directory-browser";
+} from "@agework/shared/filesystem/directory-browser";
 
 /**
  * RuntimeHost 的配置：由 server 侧（builtin 场景）或 daemon 侧（registered 场景）提供。
