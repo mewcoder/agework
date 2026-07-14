@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { StopWorkerDto } from "./stop-worker.dto";
-import { RUNTIME_HOST_DIAGNOSTICS } from "../host-dispatch.types";
+import { RUNTIME_HOST_DIAGNOSTICS } from "../runtime-host.types";
 import type {
   RuntimeHostDiagnostics,
   WorkerKey,

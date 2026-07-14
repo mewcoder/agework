@@ -16,8 +16,7 @@ import { HostAgUiEventHandler } from "./upstream/host-agui-event.handler";
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
 
-// deps（向下依赖：runtime-host / run-event / conversation / runtime）
-import { HostDispatchModule } from "../host-dispatch/host-dispatch.module";
+// deps（向下依赖：runtime-host / run-event / conversation）
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
 import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
@@ -30,12 +29,7 @@ import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
  * RunStatusService / RunLauncher 直接注入 ConversationService 回写会话状态与消息。
  */
 @Module({
-  imports: [
-    HostDispatchModule,
-    RunEventModule,
-    ConversationModule,
-    RuntimeHostModule,
-  ],
+  imports: [RuntimeHostModule, RunEventModule, ConversationModule],
   controllers: [AdminRunController],
   providers: [
     RunRepository,

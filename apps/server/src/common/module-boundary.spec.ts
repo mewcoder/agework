@@ -24,7 +24,6 @@ const FEATURES = new Set([
   "conversation",
   "model-provider",
   "prisma",
-  "host-dispatch",
   "run",
   "run-event",
   "runtime-host",

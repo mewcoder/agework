@@ -19,7 +19,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import {
   RUNTIME_HOST_DIAGNOSTICS,
   RUNTIME_HOST_EXECUTION,
-} from "../host-dispatch/host-dispatch.types";
+} from "../runtime-host/runtime-host.types";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";

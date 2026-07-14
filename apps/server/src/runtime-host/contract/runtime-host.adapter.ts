@@ -34,11 +34,8 @@ import type {
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import type { RuntimeHost } from "@agework/runtime/host";
-import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
-import {
-  BUILTIN_HOST_ID,
-  isBuiltinHostId,
-} from "../../runtime-host/runtime-host.types";
+import { RuntimeHostService } from "../runtime-host.service";
+import { BUILTIN_HOST_ID, isBuiltinHostId } from "../runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";

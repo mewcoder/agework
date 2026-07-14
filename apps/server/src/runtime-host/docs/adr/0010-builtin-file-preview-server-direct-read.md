@@ -1,9 +1,9 @@
 > **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
 
-# ADR-0005: builtin runtime 文件预览走 server 直读，不经 worker
+# ADR-0010: builtin runtime 文件预览走 server 直读，不经 worker
 
 > 状态: 已拍板
-> 前置: ADR-0004（文件命令走独立 owner-scoped 通道）
+> 前置: ADR-0009（文件命令走独立 owner-scoped 通道）
 > 变更: 推翻 `docs/todo/workspace-file-preview-design.md` §3 中"为什么 local / docker 也不走 server 直读"的结论——builtin runtime 文件预览改为 server 直读，registered runtime 保持 worker 代理不变。
 
 ## 1. 背景
@@ -145,7 +145,7 @@ WorkspaceService 查出 rootPath 后传进去。这符合架构决策链第 2 �
 
 ## 6. 不改的部分
 
-- **registered runtime 的文件预览**: 继续走 worker 代理（ADR-0004 的独立通道），协议不变。
+- **registered runtime 的文件预览**: 继续走 worker 代理（ADR-0009 的独立通道），协议不变。
 - **Worker 端文件浏览器**: `workspace-file-browser.ts` / `workspace-file-command.handler.ts` 保留，registered runtime 的 worker 仍然需要它们。安全校验逻辑提取到 shared 后，worker 改为调用 shared 版本，本地实现删除。
 - **前端 API 契约**: `GET /api/v1/workspaces/files/list` / `GET /api/v1/workspaces/files/read` 不变，前端不感知后端路由变化。
 - **Worker 命令协议**: `WorkspaceFileCommandPayload` / `WorkspaceFileCommandResult` / `OwnerCommand` 不变，registered 分支继续用。

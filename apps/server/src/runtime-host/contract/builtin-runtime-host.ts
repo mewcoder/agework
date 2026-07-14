@@ -3,7 +3,7 @@ import type { FactoryProvider } from "@nestjs/common";
 import { RuntimeHost, WorkerHttpServer } from "@agework/runtime/host";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
+import { RuntimeHostService } from "../runtime-host.service";
 import { RunEventService } from "../../run-event/run-event.service";
 
 /**

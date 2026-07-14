@@ -6,7 +6,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeHostAdapter } from "./runtime-host.adapter";
-import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
+import type { RuntimeHostService } from "../runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
 import type { RunEventService } from "../../run-event/run-event.service";
 

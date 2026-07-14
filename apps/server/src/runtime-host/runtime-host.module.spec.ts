@@ -8,6 +8,7 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { RuntimeHostService } from "./runtime-host.service";
 import { RuntimeHostModule } from "./runtime-host.module";
+import { BUILTIN_RUNTIME_HOST } from "./contract/builtin-runtime-host";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
@@ -50,20 +51,25 @@ describe("RuntimeHostModule wiring", () => {
 async function createRuntimeTestingModule(
   runtimeImports: Parameters<typeof Test.createTestingModule>[0]["imports"]
 ): Promise<TestingModule> {
-  return Test.createTestingModule({
-    // EventEmitterModule 在 app 根是全局注册,测试装配里手动补上
-    imports: [
-      ConfigModule,
-      PrismaModule,
-      EventEmitterModule.forRoot(),
-      ...(runtimeImports ?? []),
-    ],
-  })
-    .overrideProvider(ConfigService)
-    .useValue(createConfigServiceMock())
-    .overrideProvider(PrismaService)
-    .useValue({})
-    .compile();
+  return (
+    Test.createTestingModule({
+      // EventEmitterModule 在 app 根是全局注册,测试装配里手动补上
+      imports: [
+        ConfigModule,
+        PrismaModule,
+        EventEmitterModule.forRoot(),
+        ...(runtimeImports ?? []),
+      ],
+    })
+      .overrideProvider(ConfigService)
+      .useValue(createConfigServiceMock())
+      .overrideProvider(PrismaService)
+      .useValue({})
+      // builtin Host 工厂会装配 WorkerHttpServer,模块装配测试不需要真实例
+      .overrideProvider(BUILTIN_RUNTIME_HOST)
+      .useValue({})
+      .compile()
+  );
 }
 
 function createConfigServiceMock(): Partial<ConfigService> {

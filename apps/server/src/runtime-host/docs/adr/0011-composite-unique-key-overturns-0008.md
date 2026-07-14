@@ -2,11 +2,11 @@
 
 # Worker 防重键升级为 (ownerId, runtimeId, isolationScope) 复合唯一约束
 
-> 推翻 [ADR-0003](./0003-worker-concurrency-key-stays-owner-id.md)。
+> 推翻 [ADR-0008](./0008-worker-concurrency-key-stays-owner-id.md)。
 
 ## 背景
 
-ADR-0003 决定维持 `Worker.ownerId @unique`（裸列），理由是 worker-manager 的整条
+ADR-0008 决定维持 `Worker.ownerId @unique`（裸列），理由是 worker-manager 的整条
 控制面协议（长轮询、握手、心跳、fence）全部只用裸 `ownerId` 当 key，DB 约束放开到
 复合键后协议层撑不住——两个物理进程回连时握手表会用同一个 `ownerId` 键互相覆盖。
 
@@ -17,7 +17,7 @@ ADR-0003 决定维持 `Worker.ownerId @unique`（裸列），理由是 worker-ma
 
 ### 为什么现在能做
 
-ADR-0003 的担忧仍然成立——协议层确实只用裸 `ownerId`。本次采取**分步推进**策略：
+ADR-0008 的担忧仍然成立——协议层确实只用裸 `ownerId`。本次采取**分步推进**策略：
 
 1. **Ticket 02（本 ADR）**：先破 DB 层。`@@unique([ownerId, runtimeId, isolationScope])`
    替换裸 `ownerId @unique`。`findActiveByOwnerId` 临时改用 `findFirst`（按 ownerId +
@@ -40,5 +40,5 @@ ADR-0003 的担忧仍然成立——协议层确实只用裸 `ownerId`。本次�
   `(ownerId, runtimeId, isolationScope)` 复合字符串。
 - `findActiveByOwnerId` 临时使用 `findFirst`（非 `findUnique`），Ticket 03 将替换为
   `findActiveByWorkerId`。
-- ADR-0003 的"一个用户同时只能有一个活跃 user-scope Worker"限制在 Ticket 03 完成后
+- ADR-0008 的"一个用户同时只能有一个活跃 user-scope Worker"限制在 Ticket 03 完成后
   彻底解除。

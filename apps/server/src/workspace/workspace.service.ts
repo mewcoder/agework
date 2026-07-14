@@ -136,14 +136,6 @@ export class WorkspaceService {
   }
 
   /**
-   * 给定 id 集合中仍存活(未软删)的 workspace id。
-   * 供执行面重连对账用:不在结果里的 workspace 已删,其 worker 应被释放。
-   */
-  listActiveIds(ids: string[]): Promise<string[]> {
-    return this.repo.listActiveIds(ids);
-  }
-
-  /**
    * 返回当前部署允许创建工作空间时选择的 runtime / runtimeType 能力。
    */
   getCapabilities() {

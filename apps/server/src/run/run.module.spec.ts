@@ -4,7 +4,7 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
-import { BUILTIN_RUNTIME_HOST } from "../host-dispatch/contract/builtin-runtime-host";
+import { BUILTIN_RUNTIME_HOST } from "../runtime-host/contract/builtin-runtime-host";
 import { ConversationService } from "../conversation/conversation.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -13,7 +13,7 @@ import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunService } from "./run.service";
 import { HostUpstreamHandler } from "./upstream/host-upstream.handler";
-import { RuntimeHostAdapter } from "../host-dispatch/contract/runtime-host.adapter";
+import { RuntimeHostAdapter } from "../runtime-host/contract/runtime-host.adapter";
 import { RunModule } from "./run.module";
 
 const MOCK_CONVERSATION_SERVICE = {

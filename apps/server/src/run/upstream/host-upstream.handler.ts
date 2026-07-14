@@ -9,7 +9,7 @@ import type {
   RuntimeHostUpstream,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import { RUNTIME_HOST_EXECUTION } from "../../host-dispatch/host-dispatch.types";
+import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,

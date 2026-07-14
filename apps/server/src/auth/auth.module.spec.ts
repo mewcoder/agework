@@ -9,6 +9,7 @@ import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
+import { BUILTIN_RUNTIME_HOST } from "../runtime-host/contract/builtin-runtime-host";
 const previousJwtSecret = vi.hoisted(() => {
   const previousSecret = process.env.AGEWORK_PRIVATE_JWT_SECRET;
   process.env.AGEWORK_PRIVATE_JWT_SECRET = "auth-module-wiring-secret";
@@ -83,19 +84,24 @@ function makeDownstreamAuthConsumerModule(AuthModule: Type<unknown>) {
 async function createAuthTestingModule(
   authImports: Parameters<typeof Test.createTestingModule>[0]["imports"]
 ): Promise<TestingModule> {
-  return Test.createTestingModule({
-    imports: [
-      EventEmitterModule.forRoot(),
-      ConfigModule,
-      PrismaModule,
-      ...(authImports ?? []),
-    ],
-  })
-    .overrideProvider(ConfigService)
-    .useValue(createConfigServiceMock())
-    .overrideProvider(PrismaService)
-    .useValue({})
-    .compile();
+  return (
+    Test.createTestingModule({
+      imports: [
+        EventEmitterModule.forRoot(),
+        ConfigModule,
+        PrismaModule,
+        ...(authImports ?? []),
+      ],
+    })
+      .overrideProvider(ConfigService)
+      .useValue(createConfigServiceMock())
+      .overrideProvider(PrismaService)
+      .useValue({})
+      // UserModule → RuntimeHostModule 会装配 builtin Host,测试不需要真实例
+      .overrideProvider(BUILTIN_RUNTIME_HOST)
+      .useValue({})
+      .compile()
+  );
 }
 
 function createConfigServiceMock(): Partial<ConfigService> {
@@ -105,6 +111,8 @@ function createConfigServiceMock(): Partial<ConfigService> {
     requiresAdminInitKey: vi.fn().mockReturnValue(false),
     getAdminInitKey: vi.fn().mockReturnValue(undefined),
     isProduction: vi.fn().mockReturnValue(false),
+    getApiBasePath: vi.fn().mockReturnValue("/api/v1"),
+    getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
   };
 }
 
