@@ -372,30 +372,36 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       ...worker,
       runtimeHostId: BUILTIN_HOST_ID,
     }));
-    for (const runtimeHostId of this.runtimeService.listConnectedRuntimeHostIds()) {
-      try {
-        const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-        const hostResult =
-          await this.runtimeService.sendTunnelRequest<HostListWorkersRpcResult>(
-            runtimeHostId,
-            {
-              jsonrpc: "2.0",
-              id: generateId(),
-              method: "host.listWorkers",
-              params: {},
-            },
-            timeoutMs
-          );
-        result.push(
-          ...hostResult.workers.map((worker) => ({ ...worker, runtimeHostId }))
-        );
-      } catch (err) {
-        this.logger.warn(
-          `host.listWorkers failed for ${runtimeHostId}: ${String(err)}`
-        );
-      }
-    }
-    return result;
+    const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+    const tunnelWorkers = await Promise.all(
+      this.runtimeService
+        .listConnectedRuntimeHostIds()
+        .map(async (runtimeHostId): Promise<WorkerSnapshot[]> => {
+          try {
+            const hostResult =
+              await this.runtimeService.sendTunnelRequest<HostListWorkersRpcResult>(
+                runtimeHostId,
+                {
+                  jsonrpc: "2.0",
+                  id: generateId(),
+                  method: "host.listWorkers",
+                  params: {},
+                },
+                timeoutMs
+              );
+            return hostResult.workers.map((worker) => ({
+              ...worker,
+              runtimeHostId,
+            }));
+          } catch (err) {
+            this.logger.warn(
+              `host.listWorkers failed for ${runtimeHostId}: ${String(err)}`
+            );
+            return [];
+          }
+        })
+    );
+    return result.concat(tunnelWorkers.flat());
   }
 
   async stopWorker(input: StopWorkerInput): Promise<void> {

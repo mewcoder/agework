@@ -223,7 +223,7 @@ export class RuntimeHost implements RuntimeHostContract {
   async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
     const workers = this.pool.listByOwner(input.owner);
     for (const worker of workers) {
-      await this.stopWorkerByKey(worker.key);
+      await this.stopWorkerByKey(worker.key, "worker stopped");
     }
   }
 
@@ -328,34 +328,39 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   async stopWorker(input: StopWorkerInput): Promise<void> {
-    await this.stopWorkerByKey(input.key);
+    await this.stopWorkerByKey(input.key, "worker stopped");
   }
 
-  private async stopWorkerByKey(key: WorkerKey): Promise<void> {
+  /** 停止一个 worker 的完整收尾:出池、清信箱、通知名下 run、停物理载体。 */
+  private async stopWorkerByKey(
+    key: WorkerKey,
+    reason: string
+  ): Promise<void> {
     const entry = this.pool.remove(key);
     if (!entry) return;
 
     this.mailbox.cleanup(entry.workerId);
 
-    // 停止物理载体
+    // 先通知 upstream 名下所有 run:run 终结不依赖载体停止(可能耗时/失败)
+    for (const runId of entry.activeRuns) {
+      this.upstream.notifyWorkerLost(runId, reason).catch(() => {});
+    }
+
+    // best-effort 停止物理载体
     const runtimeType = key.split("#")[1] ?? "native";
     if (!isRuntimeType(runtimeType)) return;
+    const owner = parseOwnerKey(key.split("#")[0] as OwnerKey);
     const ref: RuntimeInstanceRef = {
       runtimeType,
-      ownerId: parseOwnerKey(key.split("#")[0] as OwnerKey).id,
+      ownerId: owner.id,
       workerId: entry.workerId,
       runtimeInstanceId: entry.runtimeInstanceId,
-      scope: parseOwnerKey(key.split("#")[0] as OwnerKey).scope,
+      scope: owner.scope,
     };
     try {
       await this.resolveProvider(runtimeType).stop(ref);
     } catch {
       // best-effort
-    }
-
-    // 通知 upstream 名下所有 run
-    for (const runId of entry.activeRuns) {
-      this.upstream.notifyWorkerLost(runId, "worker stopped").catch(() => {});
     }
   }
 
@@ -745,38 +750,16 @@ export class RuntimeHost implements RuntimeHostContract {
 
   /**
    * 心跳判死扫描：pool 中 lastSeen 超过 heartbeatTimeoutMs 的 worker 判死。
-   * 判死即从 pool 移除、清理信箱、通知 upstream 其名下所有 run。
+   * 判死走与 stopWorker 相同的收尾(出池、清信箱、通知名下 run、停载体)。
    */
   private sweepFence(): void {
     const now = Date.now();
     const timeoutMs = this.config.heartbeatTimeoutMs;
-    const workers = this.pool.list();
-    for (const worker of workers) {
+    for (const worker of this.pool.list()) {
       if (worker.status !== "ready") continue;
       if (now - worker.lastSeen < timeoutMs) continue;
-      // 通知 upstream 名下所有 run
-      for (const runId of worker.activeRuns) {
-        this.upstream
-          .notifyWorkerLost(runId, "worker heartbeat timeout (fence)")
-          .catch(() => {});
-      }
-      // 从 pool 移除、清理信箱
-      this.pool.remove(worker.key);
-      this.mailbox.cleanup(worker.workerId);
-      // best-effort 停物理载体
-      const runtimeType = worker.key.split("#")[1] ?? "native";
-      if (isRuntimeType(runtimeType)) {
-        const ref: RuntimeInstanceRef = {
-          runtimeType,
-          ownerId: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).id,
-          workerId: worker.workerId,
-          runtimeInstanceId: worker.runtimeInstanceId,
-          scope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).scope,
-        };
-        Promise.resolve(this.resolveProvider(runtimeType).stop(ref)).catch(
-          () => {}
-        );
-      }
+      // stopWorkerByKey 内部吞掉载体停止失败,不会 reject
+      void this.stopWorkerByKey(worker.key, "worker heartbeat timeout (fence)");
     }
   }
 }
