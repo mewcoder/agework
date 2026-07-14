@@ -3,14 +3,14 @@ import { Module } from "@nestjs/common";
 // core
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { WorkerEventService } from "./upstream/worker-event.service";
+import { WorkerEventHandler } from "./upstream/worker-event.handler";
 import { WorkerSeqStore } from "./upstream/worker-seq.store";
 import { RunStatusService } from "./status/run-status.service";
 import { RunFinalizationStore } from "./status/run-finalization.store";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
 import { RunService } from "./run.service";
-import { RunLauncher } from "./launch/run-launcher";
+import { RunLauncher } from "./launch/run.launcher";
 import { WorkerAgUiEventHandler } from "./upstream/worker-agui-event.handler";
 
 // controllers
@@ -40,7 +40,7 @@ import { RuntimeModule } from "../runtime/runtime.module";
   providers: [
     RunRepository,
     LiveRunRegistry,
-    WorkerEventService,
+    WorkerEventHandler,
     WorkerSeqStore,
     RunRecoveryService,
     RunStatusService,

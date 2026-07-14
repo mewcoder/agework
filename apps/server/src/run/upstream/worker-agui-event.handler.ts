@@ -49,7 +49,7 @@ export class WorkerAgUiEventHandler {
     if (evt.type === "RUN_CANCELLED") return;
 
     // Resume streams use accumulated snapshots instead of raw AG-UI events.
-    if (!handle.stream.isSnapshotMode) {
+    if (!handle.stream.snapshotMode) {
       handle.stream.writeEvent(event);
     }
 
@@ -136,7 +136,7 @@ export class WorkerAgUiEventHandler {
   }
 
   private writeSnapshotToHandle(handle: LiveRunHandle): void {
-    if (!handle.stream.isSnapshotMode) {
+    if (!handle.stream.snapshotMode) {
       return;
     }
     const snap = handle.aggregator.build(false, "streaming");

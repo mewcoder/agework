@@ -25,7 +25,7 @@ export class RunStream {
     this.setHeaders(response);
   }
 
-  get isSnapshotMode(): boolean {
+  get snapshotMode(): boolean {
     return this.mode === "snapshots";
   }
 

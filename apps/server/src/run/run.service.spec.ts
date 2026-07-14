@@ -5,7 +5,7 @@ import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
-import { RunLauncher } from "./launch/run-launcher";
+import { RunLauncher } from "./launch/run.launcher";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 describe("RunService", () => {

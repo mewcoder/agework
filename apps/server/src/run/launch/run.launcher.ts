@@ -32,7 +32,7 @@ import { errorLogFields } from "../../common/logging";
 import { RunEventService } from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
-import { RunStream } from "../streaming/run-stream";
+import { RunStream } from "../streaming/run.stream";
 
 type SaveRun = (
   complete: boolean,
@@ -168,12 +168,9 @@ export class RunLauncher {
     userId: string;
   }): RunPlacement {
     const { workspace, userId } = input;
-    const isRegistered = workspace.runtimeSource === "registered";
+    const registered = workspace.runtimeSource === "registered";
     const runtimeType = workspace.runtimeType;
-    if (
-      !isRegistered &&
-      !this.configService.isRuntimeTypeAllowed(runtimeType)
-    ) {
+    if (!registered && !this.configService.isRuntimeTypeAllowed(runtimeType)) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
     if (!isRuntimeType(runtimeType)) {
@@ -196,7 +193,7 @@ export class RunLauncher {
     }
     if (
       runtimeType !== "native" &&
-      !isRegistered &&
+      !registered &&
       !this.configService.isWorkerScopeAllowed(requestedWorkerScope)
     ) {
       throw new BadRequestException("当前部署不支持该工作空间的运行范围");

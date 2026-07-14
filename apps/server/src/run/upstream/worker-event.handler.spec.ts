@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { WorkerEventService } from "./worker-event.service";
+import { WorkerEventHandler } from "./worker-event.handler";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import type { ConversationService } from "../../conversation/conversation.service";
@@ -10,7 +10,7 @@ import { RunFinalizationStore } from "../status/run-finalization.store";
 import { WorkerSeqStore } from "./worker-seq.store";
 import type { ConfigService } from "../../config/config.service";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
-import { RunStream } from "../streaming/run-stream";
+import { RunStream } from "../streaming/run.stream";
 import { WorkerAgUiEventHandler } from "./worker-agui-event.handler";
 
 function makeConfig(): ConfigService {
@@ -34,8 +34,8 @@ function makeStream(res = makeRes(), mode: "events" | "snapshots" = "events") {
   return new RunStream(res, mode);
 }
 
-describe("WorkerEventService", () => {
-  let workerEventsService: WorkerEventService;
+describe("WorkerEventHandler", () => {
+  let workerEventsService: WorkerEventHandler;
   let liveRuns: LiveRunRegistry;
   let mockRunRepository: Partial<RunRepository>;
   let mockConversations: Partial<ConversationService>;
@@ -84,7 +84,7 @@ describe("WorkerEventService", () => {
       aguiEvents,
       mockRunEvents
     );
-    workerEventsService = new WorkerEventService(
+    workerEventsService = new WorkerEventHandler(
       liveRuns,
       mockRunEvents,
       runStatusService,

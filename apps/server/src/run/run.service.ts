@@ -17,8 +17,8 @@ import { type IncompleteMessageReason } from "./upstream/assistant-message.aggre
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import type { StartRunInput } from "./run.types";
-import { RunStream } from "./streaming/run-stream";
-import { RunLauncher } from "./launch/run-launcher";
+import { RunStream } from "./streaming/run.stream";
+import { RunLauncher } from "./launch/run.launcher";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 
 @Injectable()

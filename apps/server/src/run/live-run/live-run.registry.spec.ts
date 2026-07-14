@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveRunRegistry, type LiveRunHandle } from "./live-run.registry";
 import type { ConfigService } from "../../config/config.service";
-import { RunStream } from "../streaming/run-stream";
+import { RunStream } from "../streaming/run.stream";
 
 function makeConfig(timeoutSeconds = 60): ConfigService {
   return {

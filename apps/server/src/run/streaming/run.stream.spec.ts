@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Response } from "express";
-import { RunStream } from "./run-stream";
+import { RunStream } from "./run.stream";
 
 function makeRes(writableLength = 0) {
   const res = {

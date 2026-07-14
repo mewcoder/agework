@@ -41,10 +41,10 @@ function payloadTag(payload: unknown): string | undefined {
 }
 
 @Injectable()
-export class WorkerEventService
+export class WorkerEventHandler
   implements OnModuleInit, RuntimeHostUpstream, RunTimeoutErrorPort
 {
-  private readonly logger = new Logger(WorkerEventService.name);
+  private readonly logger = new Logger(WorkerEventHandler.name);
 
   constructor(
     private readonly liveRuns: LiveRunRegistry,
@@ -79,7 +79,7 @@ export class WorkerEventService
 
     await this.publish(message).catch((err) => {
       this.logger.warn(
-        `WorkerEventService.publish failed for runId=${runId}: ${String(err)}`
+        `WorkerEventHandler.publish failed for runId=${runId}: ${String(err)}`
       );
     });
 

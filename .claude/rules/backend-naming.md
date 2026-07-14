@@ -61,7 +61,7 @@
 
 动词总览(第 15-19 条共用参考):`get` / `find` / `query` / `list` / `count` / `save` / `create` / `update` / `delete` / `remove` / `archive`。
 
-15.【强制】外部 API 采用 RPC-over-HTTP 风格,只用 `GET`(查询,参数放 Query)和 `POST`(操作,参数放 Body)。URL 资源段复数 kebab-case,动作名放最后一段;不通过 Path 传实体 ID,目标 ID 统一命名 `id`。`GET` 查询参数 ≤3 个时直接 `@Query()` + pipe,不封装 DTO;参数 >3 个时改用 `POST` + Body DTO,不新增 Query DTO。
+15.【强制】外部 API 采用 RPC-over-HTTP 风格,只用 `GET`(查询,参数放 Query)和 `POST`(操作,参数放 Body)。URL 资源段复数 kebab-case,动作名放最后一段;不通过 Path 传实体 ID,目标 ID 统一命名 `id`。`GET` 查询参数 ≤3 个时直接 `@Query()` + pipe,不封装 DTO;参数 >3 个时改用 `POST` + Body DTO,不新增 Query DTO。例外:admin 只读列表的复杂筛选(如 `admin/runs/events/list` 的多维过滤)保持 `GET`,参数 >3 个时允许封装 Query DTO——这是仓库 admin 面的既有统一模式,子资源正例即此类。
 正例:`GET /api/v1/conversations/list`、`POST /api/v1/conversations/delete`(URL 动作名,Controller 方法名用 `delete`)、`POST /api/v1/conversations/archive`、`removePermission()`(移除权限方法名)。
 反例:`/conversations/:id/update`(路径传 ID)、`POST /conversations/remove`(URL 应用 `delete`)、`deletePermission()`(移除权限应用 `remove`)。
 说明:通用动作名 `create` / `update` / `delete` / `query` / `list`,不新增同义词。URL 删除动作统一用 `delete`(对应 Controller 方法名 `delete`);Service 内部删除方法可用 `delete`。移除场景(移除权限 / 成员等)用 `remove`。领域动作保留业务语义,参考动词总览。

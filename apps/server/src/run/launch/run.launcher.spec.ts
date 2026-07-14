@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BadRequestException } from "@nestjs/common";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
-import { RunLauncher, type StopActiveRun } from "./run-launcher";
+import { RunLauncher, type StopActiveRun } from "./run.launcher";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import type { ConversationService } from "../../conversation/conversation.service";

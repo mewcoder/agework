@@ -12,7 +12,7 @@ import { WorkerSeqStore } from "../upstream/worker-seq.store";
 import type { WorkerAgUiEventHandler } from "../upstream/worker-agui-event.handler";
 import type { RunEventService } from "../../run-event/run-event.service";
 import type { ConfigService } from "../../config/config.service";
-import { RunStream } from "../streaming/run-stream";
+import { RunStream } from "../streaming/run.stream";
 
 function makeConfig(): ConfigService {
   return {

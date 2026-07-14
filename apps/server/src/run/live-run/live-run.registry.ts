@@ -6,7 +6,7 @@ import type {
 } from "../upstream/assistant-message.aggregator";
 import { ConfigService } from "../../config/config.service";
 import { errorLogFields } from "../../common/logging";
-import type { RunStream } from "../streaming/run-stream";
+import type { RunStream } from "../streaming/run.stream";
 
 export interface RunTimeoutErrorPort {
   markRunTimedOut(

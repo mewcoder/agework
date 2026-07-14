@@ -13,7 +13,7 @@ export type RunTerminalIncompleteReason = "cancelled" | "error";
 export type RunStatusEffect = {
   status: RunStatus;
   persistenceAction?: RunStatusPersistenceAction;
-  isTerminal: boolean;
+  terminal: boolean;
   savePartialMessage: boolean;
   terminalConversationStatus?: RunTerminalConversationStatus;
   terminalMessageComplete?: boolean;
@@ -38,35 +38,35 @@ export const RUNNING_MUTABLE_STATUSES: RunStatus[] = [
 const RUN_STATUS_EFFECTS: Record<RunStatus, RunStatusEffect> = {
   queued: {
     status: "queued",
-    isTerminal: false,
+    terminal: false,
     savePartialMessage: false,
   },
   preparing: {
     status: "preparing",
-    isTerminal: false,
+    terminal: false,
     savePartialMessage: false,
   },
   running: {
     status: "running",
     persistenceAction: "markRunning",
-    isTerminal: false,
+    terminal: false,
     savePartialMessage: false,
   },
   requires_action: {
     status: "requires_action",
     persistenceAction: "markRequiresAction",
-    isTerminal: false,
+    terminal: false,
     savePartialMessage: true,
   },
   cancelling: {
     status: "cancelling",
-    isTerminal: false,
+    terminal: false,
     savePartialMessage: false,
   },
   finished: {
     status: "finished",
     persistenceAction: "markFinished",
-    isTerminal: true,
+    terminal: true,
     savePartialMessage: false,
     terminalConversationStatus: "idle",
     terminalMessageComplete: true,
@@ -74,7 +74,7 @@ const RUN_STATUS_EFFECTS: Record<RunStatus, RunStatusEffect> = {
   error: {
     status: "error",
     persistenceAction: "markError",
-    isTerminal: true,
+    terminal: true,
     savePartialMessage: false,
     terminalConversationStatus: "error",
     terminalMessageComplete: false,
@@ -83,7 +83,7 @@ const RUN_STATUS_EFFECTS: Record<RunStatus, RunStatusEffect> = {
   cancelled: {
     status: "cancelled",
     persistenceAction: "markCancelled",
-    isTerminal: true,
+    terminal: true,
     savePartialMessage: false,
     terminalConversationStatus: "idle",
     terminalMessageComplete: false,

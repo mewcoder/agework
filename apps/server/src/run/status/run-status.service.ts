@@ -56,14 +56,14 @@ export class RunStatusService {
     effect: RunStatusEffect;
   }): Promise<void> {
     const { runId, payload, effect } = input;
-    const isTerminal = effect.isTerminal;
-    this.logger[isTerminal ? "log" : "debug"]("run status", {
+    const terminal = effect.terminal;
+    this.logger[terminal ? "log" : "debug"]("run status", {
       runId,
       status: payload.status,
       pendingAction: payload.pendingAction,
       error: payload.error,
     });
-    if (isTerminal) {
+    if (terminal) {
       this.finalization.beginFinalizing(runId);
     }
     this.recordStatusEvent(runId, payload);
@@ -81,7 +81,7 @@ export class RunStatusService {
       // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
       // 必须在 saveRun/stream write 等可能抛异常的操作之前设置，
       // 否则异常会跳过记录，导致终态 guard 失效。
-      if (isTerminal) {
+      if (terminal) {
         this.finalization.markCompleted(runId);
       }
 
@@ -105,12 +105,12 @@ export class RunStatusService {
           );
       }
 
-      if (isTerminal && handle) {
+      if (terminal && handle) {
         await this.applyTerminalEffects(runId, payload, effect, handle);
       }
     } finally {
       // 终态收敛的统一清理点:解除守卫 + 一次性遗忘全部 per-run 内存态。
-      if (isTerminal) {
+      if (terminal) {
         this.finalization.endFinalizing(runId);
         this.seqGate.forget(runId);
         this.aguiEvents.clearRun(runId);
@@ -286,7 +286,7 @@ export class RunStatusService {
     effect: RunStatusEffect,
     handle: LiveRunHandle
   ): void {
-    if (handle.stream.isSnapshotMode) {
+    if (handle.stream.snapshotMode) {
       const incompleteReason =
         handle.stopReason ?? effect.terminalIncompleteReason;
       handle.stream.writeSnapshot(

@@ -26,10 +26,10 @@ describe("run lifecycle policy", () => {
     expect(isTerminalRunStatus("requires_action")).toBe(false);
   });
 
-  it("effect 表的 isTerminal 标志与 shared 终态集合双向一致(漂移守卫)", () => {
+  it("effect 表的 terminal 标志与 shared 终态集合双向一致(漂移守卫)", () => {
     for (const status of ALL_RUN_STATUSES) {
       expect(
-        runStatusEffect(status).isTerminal,
+        runStatusEffect(status).terminal,
         `effect table vs shared TERMINAL_RUN_STATUSES: ${status}`
       ).toBe(isTerminalRunStatus(status));
     }
@@ -50,23 +50,23 @@ describe("run lifecycle policy", () => {
   it("returns the side effects for key run statuses", () => {
     expect(runStatusEffect("running")).toMatchObject({
       persistenceAction: "markRunning",
-      isTerminal: false,
+      terminal: false,
       savePartialMessage: false,
     });
     expect(runStatusEffect("requires_action")).toMatchObject({
       persistenceAction: "markRequiresAction",
-      isTerminal: false,
+      terminal: false,
       savePartialMessage: true,
     });
     expect(runStatusEffect("finished")).toMatchObject({
       persistenceAction: "markFinished",
-      isTerminal: true,
+      terminal: true,
       terminalConversationStatus: "idle",
       terminalMessageComplete: true,
     });
     expect(runStatusEffect("error")).toMatchObject({
       persistenceAction: "markError",
-      isTerminal: true,
+      terminal: true,
       terminalConversationStatus: "error",
       terminalMessageComplete: false,
       terminalIncompleteReason: "error",
