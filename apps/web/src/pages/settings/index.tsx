@@ -26,7 +26,7 @@ import { CliStatusPanel } from '@/pages/admin/cli-status';
 import { RuntimeHostPanel } from '@/pages/admin/runtime-host';
 import { RunPanel } from '@/pages/admin/run';
 import { WorkspacePanel } from '@/pages/admin/workspace';
-import { WorkerPanel } from '@/pages/admin/worker';
+import { WorkerPanel } from '@/pages/admin/runtime-host/worker-panel';
 import { SystemConfigPanel } from '@/pages/admin/system-config';
 import { AccountSettings } from '@/pages/settings/account';
 import { GeneralSettings } from '@/pages/settings/general';
