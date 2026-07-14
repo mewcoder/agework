@@ -1,7 +1,7 @@
 import type { RuntimeCapabilities } from "../protocol/runtime-capabilities";
 import type { AgentType, RuntimeEnvConfig } from "../common";
 
-export type RuntimeStatus = "online" | "offline";
+export type RuntimeHostStatus = "online" | "offline";
 
 // ── EnvConfig 类型（见 runtime 模块 ADR-0002 两层分离）──────────────────
 //
@@ -10,7 +10,7 @@ export type RuntimeStatus = "online" | "offline";
 export type { AgentDetectedEnv, RuntimeEnvConfig } from "../common";
 
 /** 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。per-runtime per-agent 粒度。 */
-export type RuntimeEnvConfigOverride = {
+export type RuntimeHostEnvConfigOverride = {
   claude?: { executablePath: string };
   codex?: { executablePath: string };
   opencode?: { executablePath: string };
@@ -32,7 +32,7 @@ export type AgentEnvStatus = {
 };
 
 /** Runtime 展示层 env 状态（claude + codex 各一条派生结果）。 */
-export type RuntimeEnvStatus = {
+export type RuntimeHostEnvStatus = {
   claude: AgentEnvStatus;
   codex: AgentEnvStatus;
   opencode: AgentEnvStatus;
@@ -40,35 +40,35 @@ export type RuntimeEnvStatus = {
   detectedAt: string | null;
 };
 
-/** /api/v1/runtimes/list 的条目（builtin 本机 Host + registered 远程 Host）。 */
-export type RuntimeResponse = {
+/** /api/v1/runtime-hosts/list 的条目（builtin 本机 Host + registered 远程 Host）。 */
+export type RuntimeHostResponse = {
   id: string;
   name: string;
   /** "registered"=远程机器注册, "builtin"=本机内置(全局,不可删除)。 */
   source: string;
   /** null = 全局 builtin,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
   ownerId: string | null;
-  status: RuntimeStatus;
+  status: RuntimeHostStatus;
   capabilities: RuntimeCapabilities | null;
   /** runtime manager 上报的环境检测原始值；未上报为 null。 */
   envConfig: RuntimeEnvConfig | null;
   /** 管理员覆盖；未覆盖为 null。 */
-  envConfigOverride: RuntimeEnvConfigOverride | null;
+  envConfigOverride: RuntimeHostEnvConfigOverride | null;
   /** override + detected 合并后的展示层派生结果；envConfig 为 null 时整体为 null。 */
-  envStatus: RuntimeEnvStatus | null;
+  envStatus: RuntimeHostEnvStatus | null;
   /** ISO 8601 */
   lastHeartbeatAt: string | null;
   /** ISO 8601 */
   createdAt: string;
 };
 
-export type CreateRuntimeRequest = {
+export type CreateRuntimeHostRequest = {
   name: string;
 };
 
 /** 创建响应:配对 token 明文只在这里出现一次,之后不可再取。 */
-export type CreateRuntimeResponse = {
-  runtime: RuntimeResponse;
+export type CreateRuntimeHostResponse = {
+  runtimeHost: RuntimeHostResponse;
   token: string;
 };
 
@@ -98,8 +98,8 @@ export type InstallCliRequest = {
   agentType: AgentType;
 };
 
-/** GET /api/v1/runtimes/directories/list 的查询参数。 */
-export type ListRuntimeDirectoryRequest = {
+/** GET /api/v1/runtime-hosts/directories/list 的查询参数。 */
+export type ListHostDirectoryRequest = {
   /** 目标 Runtime Host id。 */
   runtimeHostId: string;
   /** 省略时列出该 Host 所在机器的用户主目录。 */
@@ -107,13 +107,13 @@ export type ListRuntimeDirectoryRequest = {
 };
 
 /** 目录浏览响应:path 为浏览到的绝对路径,list 为其下子目录的完整绝对路径(不含文件)。 */
-export type RuntimeDirectoryResponse = {
+export type HostDirectoryResponse = {
   path: string;
   list: string[];
 };
 
-/** POST /api/v1/runtimes/directories/create 的请求 body。 */
-export type CreateRuntimeDirectoryRequest = {
+/** POST /api/v1/runtime-hosts/directories/create 的请求 body。 */
+export type CreateHostDirectoryRequest = {
   /** 目标 Runtime Host id。 */
   runtimeHostId: string;
   /** 要新建的目录绝对路径。 */
@@ -121,6 +121,6 @@ export type CreateRuntimeDirectoryRequest = {
 };
 
 /** 新建目录响应,path 为新建目录的绝对路径。 */
-export type CreateRuntimeDirectoryResponse = {
+export type CreateHostDirectoryResponse = {
   path: string;
 };

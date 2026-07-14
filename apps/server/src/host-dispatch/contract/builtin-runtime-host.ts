@@ -3,7 +3,7 @@ import type { FactoryProvider } from "@nestjs/common";
 import { RuntimeHost, WorkerHttpServer } from "@agework/runtime/host";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { RunEventService } from "../../run-event/run-event.service";
 
 /**
@@ -21,10 +21,10 @@ const logger = new Logger("BuiltinRuntimeHost");
 
 export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
   provide: BUILTIN_RUNTIME_HOST,
-  inject: [ConfigService, RuntimeService, RunEventService],
+  inject: [ConfigService, RuntimeHostService, RunEventService],
   useFactory: async (
     configService: ConfigService,
-    runtimeService: RuntimeService,
+    runtimeService: RuntimeHostService,
     runEvents: RunEventService
   ): Promise<RuntimeHost> => {
     const workerPort = configService.getBuiltinWorkerHttpPort();

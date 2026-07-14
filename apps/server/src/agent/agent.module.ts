@@ -2,7 +2,7 @@ import { Module } from "@nestjs/common";
 import { ConversationModule } from "../conversation/conversation.module";
 import { ModelProviderModule } from "../model-provider/model-provider.module";
 import { RunModule } from "../run/run.module";
-import { RuntimeModule } from "../runtime/runtime.module";
+import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 import { WorkspaceModule } from "../workspace/workspace.module";
 import { AgentController } from "./agent.controller";
 import { AgentService } from "./agent.service";
@@ -19,7 +19,7 @@ import { AgentSkillsScanner } from "./skills/agent-skills.scanner";
     WorkspaceModule,
     ModelProviderModule,
     RunModule,
-    RuntimeModule, // AgentService resolves CLI paths via RuntimeService
+    RuntimeHostModule, // AgentService resolves CLI paths via RuntimeHostService
   ],
   controllers: [AgentController],
   providers: [AgentService, AgentSkillsScanner],

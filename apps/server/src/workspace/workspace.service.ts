@@ -22,7 +22,7 @@ import {
   WorkspaceDirectoryHandler,
 } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
-import { RuntimeService } from "../runtime/runtime.service";
+import { RuntimeHostService } from "../runtime-host/runtime-host.service";
 import type { RuntimeType } from "@agework/providers";
 import type { WorkerScope } from "@agework/shared/protocol";
 import type {
@@ -65,7 +65,7 @@ export class WorkspaceService {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeService: RuntimeService
+    private readonly runtimeService: RuntimeHostService
   ) {}
 
   /**

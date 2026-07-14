@@ -3,7 +3,7 @@ import {
   SettingsSection,
   SettingsItem,
 } from "@/components/settings/settings-section";
-import { useRuntimes, type Runtime } from "@/hooks/use-runtime";
+import { useRuntimeHosts, type RuntimeHost } from "@/hooks/use-runtime-host";
 import type { AgentEnvStatus } from "@agework/shared/api";
 import type { AgentType } from "@agework/shared";
 import { formatDateTime } from "@/utils/format";
@@ -67,9 +67,9 @@ function ReadOnlyAgentItem({
   );
 }
 
-// ── 只读 Runtime 区块 ─────────────────────────────────────────────────
+// ── 只读 RuntimeHost 区块 ─────────────────────────────────────────────────
 
-function ReadOnlyRuntimeSection({ runtime }: { runtime: Runtime }) {
+function ReadOnlyRuntimeSection({ runtime }: { runtime: RuntimeHost }) {
   const env = runtime.envStatus;
 
   return (
@@ -114,7 +114,7 @@ export function CliStatusPanel({
   mode?: "admin" | "user";
   showHeader?: boolean;
 }) {
-  const { data: runtimes = [], isLoading } = useRuntimes();
+  const { data: runtimes = [], isLoading } = useRuntimeHosts();
 
   return (
     <div className="space-y-4">
@@ -122,7 +122,7 @@ export function CliStatusPanel({
         <div>
           <h2 className="text-lg font-semibold">CLI 环境状态</h2>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            当前运行环境检测到的 Agent CLI 信息（只读）
+            当前运行节点检测到的 Agent CLI 信息（只读）
           </p>
         </div>
       )}
@@ -139,7 +139,7 @@ export function CliStatusPanel({
       ) : runtimes.length === 0 ? (
         <SettingsSection>
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            暂无运行环境
+            暂无运行节点
           </div>
         </SettingsSection>
       ) : (

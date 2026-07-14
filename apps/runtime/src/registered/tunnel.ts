@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { WebSocket, type RawData } from "ws";
 import {
   RUNTIME_TUNNEL_CLOSE_GONE,
-  type RuntimeTunnelRegisterMessage,
-  type RuntimeTunnelServerMessage,
-  type RuntimeTunnelAllRpcRequest,
-  type RuntimeTunnelHostNotification,
+  type HostTunnelRegisterMessage,
+  type HostTunnelServerMessage,
+  type HostTunnelAllRpcRequest,
+  type HostTunnelHostNotification,
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
   type InstallCliResult,
@@ -146,7 +146,7 @@ export class TunnelClient {
 
   private tunnelUrl(): string {
     const base = this.options.config.serverBaseUrl;
-    return `${base.replace(/^http/, "ws")}/runtimes/tunnel`;
+    return `${base.replace(/^http/, "ws")}/runtime-hosts/tunnel`;
   }
 
   private connect(): void {
@@ -159,7 +159,7 @@ export class TunnelClient {
       // 上行通道在收到 registered(带会话 epoch)后才接线,这个窗口内的
       // 通知只入 TunnelUpstream 缓冲,注册完成后按 seq 补发。
       const envConfig = detectEnvConfig();
-      const register: RuntimeTunnelRegisterMessage = {
+      const register: HostTunnelRegisterMessage = {
         type: "register",
         capabilities:
           this.options.capabilities ??
@@ -194,13 +194,13 @@ export class TunnelClient {
     }
 
     if (isRpcRequest(parsed)) {
-      this.onRpcRequest(ws, parsed as RuntimeTunnelAllRpcRequest);
+      this.onRpcRequest(ws, parsed as HostTunnelAllRpcRequest);
       return;
     }
 
     // Phase 2: server 的单向通知——ACK 水位清缓冲 / run 终结清状态
     if (isRpcNotification(parsed)) {
-      const notification = parsed as RuntimeTunnelHostNotification;
+      const notification = parsed as HostTunnelHostNotification;
       if (notification.method === "host.upstreamAck") {
         const { seq } = notification.params;
         this.options.tunnelUpstream?.onAck(seq);
@@ -210,7 +210,7 @@ export class TunnelClient {
       return;
     }
 
-    const message = parsed as RuntimeTunnelServerMessage;
+    const message = parsed as HostTunnelServerMessage;
     if (message.type === "registered") {
       log(
         `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
@@ -224,7 +224,7 @@ export class TunnelClient {
 
   private onRpcRequest(
     ws: WebSocket,
-    request: RuntimeTunnelAllRpcRequest
+    request: HostTunnelAllRpcRequest
   ): void {
     const handled = this.dispatch(request).then(
       (result) => rpcSuccess(request.id, result ?? null),
@@ -242,7 +242,7 @@ export class TunnelClient {
   }
 
   private async dispatch(
-    request: RuntimeTunnelAllRpcRequest
+    request: HostTunnelAllRpcRequest
   ): Promise<
     | { runtimeInstanceId: string }
     | { envConfig: RuntimeEnvConfig }

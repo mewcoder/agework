@@ -3,7 +3,7 @@ import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRecoveryService } from "./run-recovery.service";
 import type { RunRepository } from "../run.repository";
 import type { ConversationService } from "../../conversation/conversation.service";
-import type { RuntimeService } from "../../runtime/runtime.service";
+import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
 
 function makeRuntimeHost(
@@ -33,7 +33,7 @@ function makeDeps(activeRuns: unknown[]) {
   const conversationService: Partial<ConversationService> = {
     setConversationRunState: vi.fn().mockResolvedValue(undefined),
   };
-  const runtimeService: Partial<RuntimeService> = {
+  const runtimeService: Partial<RuntimeHostService> = {
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
   // check 间隔 60s;判死窗口 300s → 兜底 grace 600s(2×),
@@ -52,7 +52,7 @@ function makeService(
   return new RunRecoveryService(
     deps.runRepository as RunRepository,
     deps.conversationService as unknown as ConversationService,
-    deps.runtimeService as RuntimeService,
+    deps.runtimeService as RuntimeHostService,
     deps.configService as ConfigService,
     runtimeHost as RuntimeHostContract
   );

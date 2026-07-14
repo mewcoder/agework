@@ -8,19 +8,19 @@ vi.mock('@/lib/http', () => ({
   apiPost: (...args: unknown[]) => mockApiPost(...args),
 }));
 
-import { runtimesApi } from './runtimes';
+import { runtimeHostsApi } from './runtime-hosts';
 
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('runtimesApi', () => {
+describe('runtimeHostsApi', () => {
   describe('list', () => {
     it('调用 list 端点', async () => {
       mockApiGet.mockResolvedValue({ list: [] });
-      await runtimesApi.list();
+      await runtimeHostsApi.list();
 
-      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/runtimes/list');
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/runtime-hosts/list');
     });
   });
 
@@ -32,17 +32,17 @@ describe('runtimesApi', () => {
         token: 'secret',
       });
 
-      await runtimesApi.create(body);
+      await runtimeHostsApi.create(body);
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtimes/create', body);
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtime-hosts/create', body);
     });
   });
 
   describe('delete', () => {
     it('发送 delete 请求', async () => {
-      await runtimesApi.delete('rt-1');
+      await runtimeHostsApi.delete('rt-1');
 
-      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtimes/delete', { id: 'rt-1' });
+      expect(mockApiPost).toHaveBeenCalledWith('/api/v1/admin/runtime-hosts/delete', { id: 'rt-1' });
     });
   });
 });

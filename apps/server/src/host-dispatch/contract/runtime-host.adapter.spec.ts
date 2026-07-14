@@ -6,7 +6,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeHostAdapter } from "./runtime-host.adapter";
-import type { RuntimeService } from "../../runtime/runtime.service";
+import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
 import type { RunEventService } from "../../run-event/run-event.service";
 
@@ -92,7 +92,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     runtimeService = makeRuntimeService();
     runEvents = makeRunEvents();
     adapter = new RuntimeHostAdapter(
-      runtimeService as unknown as RuntimeService,
+      runtimeService as unknown as RuntimeHostService,
       makeConfigService() as unknown as ConfigService,
       runEvents as unknown as RunEventService,
       builtinHost as unknown as RuntimeHost

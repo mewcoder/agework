@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { WorkerSnapshot } from "@/api/workers";
-import { useWorkers, useStopWorker } from "@/hooks/worker-hooks";
+import type { WorkerSnapshot } from "@/api/runtime-hosts";
+import { useWorkers, useStopWorker } from "@/hooks/use-runtime-host";
 import {
   DataTable,
   DataTableActions,

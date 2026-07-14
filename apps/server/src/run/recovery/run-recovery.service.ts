@@ -6,10 +6,10 @@ import {
 } from "@nestjs/common";
 import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
-import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
+import { RUNTIME_HOST_EXECUTION } from "../../host-dispatch/host-dispatch.types";
 import { ConversationService } from "../../conversation/conversation.service";
-import { RuntimeService } from "../../runtime/runtime.service";
-import { isBuiltinHostId } from "../../runtime/runtime.types";
+import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
+import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
 
@@ -32,7 +32,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
-    private readonly runtimeService: RuntimeService,
+    private readonly runtimeService: RuntimeHostService,
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution

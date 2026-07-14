@@ -2,7 +2,7 @@ import { Body, Controller, Get, Post } from "@nestjs/common";
 import { CurrentUser } from "../../auth/decorators/current-user.decorator";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import type { JwtUser } from "../../auth/auth.types";
-import { RuntimeService } from "../runtime.service";
+import { RuntimeHostService } from "../runtime-host.service";
 import { CreateRuntimeHostDto } from "../dto/create-runtime-host.dto";
 import { UpdateEnvConfigOverrideDto } from "../dto/update-env-config-override.dto";
 import { InstallCliDto } from "../dto/install-cli.dto";
@@ -10,13 +10,13 @@ import { RuntimeHostIdDto } from "../dto/runtime-host-id.dto";
 
 /**
  * Runtime 管理后台:配对管理(create/delete)、列出全部 Runtime、CLI 状态查看、
- * envConfig 覆盖、触发重检。只调 RuntimeService 根 Service,不直接注入
+ * envConfig 覆盖、触发重检。只调 RuntimeHostService 根 Service,不直接注入
  * repository / tunnel handler。
  */
 @Roles("admin")
 @Controller("admin/runtime-hosts")
 export class AdminRuntimeHostController {
-  constructor(private readonly runtimeService: RuntimeService) {}
+  constructor(private readonly runtimeService: RuntimeHostService) {}
 
   /** 列出全部 Runtime（builtin + 所有用户的 registered），不含已注销。 */
   @Get("list")

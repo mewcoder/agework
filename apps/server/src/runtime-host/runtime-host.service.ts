@@ -39,11 +39,11 @@ import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import type { RuntimeConfig, RuntimeType } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./builtin/runtime-config";
-import { RuntimeRepository } from "./runtime.repository";
-import type { RuntimeHostRow } from "./runtime.types";
+import { RuntimeHostRepository } from "./runtime-host.repository";
+import type { RuntimeHostRow } from "./runtime-host.types";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
-import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
-import type { HostUpstreamPort } from "./runtime.types";
+import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime-host.types";
+import type { HostUpstreamPort } from "./runtime-host.types";
 import {
   detectEnvConfig,
   installCli as installLocalCli,
@@ -71,12 +71,12 @@ const INSTALL_CLI_TIMEOUT_MS = 150_000;
  * worker 生命周期只经 RuntimeHostContract；本类不再持有第二套 Runtime 抽象。
  */
 @Injectable()
-export class RuntimeService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(RuntimeService.name);
+export class RuntimeHostService implements OnApplicationBootstrap {
+  private readonly logger = new Logger(RuntimeHostService.name);
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly repository: RuntimeRepository,
+    private readonly repository: RuntimeHostRepository,
     private readonly tunnelHandler: HostTunnelHandler
   ) {}
 
@@ -118,17 +118,6 @@ export class RuntimeService implements OnApplicationBootstrap {
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
   resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
     return resolveRuntimeSpec(input);
-  }
-
-  /** 返回当前运行时策略配置(默认/可选 runtimeType、scope、空闲超时秒数),供前端展示与校验用。 */
-  getRuntimePolicy() {
-    return {
-      defaultRuntimeType: this.configService.getDefaultRuntimeType(),
-      allowedRuntimeTypes: this.configService.getAllowedRuntimeTypes(),
-      defaultScope: this.configService.getDefaultWorkerScope(),
-      allowedScopes: this.configService.getAllowedScopes(),
-      idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
-    };
   }
 
   /** 创建 Registered Runtime 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */

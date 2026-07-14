@@ -6,21 +6,21 @@ import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
 import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
-import { RuntimeService } from "./runtime.service";
-import { RuntimeModule } from "./runtime.module";
+import { RuntimeHostService } from "./runtime-host.service";
+import { RuntimeHostModule } from "./runtime-host.module";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
-  constructor(readonly runtimeService: RuntimeService) {}
+  constructor(readonly runtimeService: RuntimeHostService) {}
 }
 
 @Module({
-  imports: [RuntimeModule],
+  imports: [RuntimeHostModule],
   providers: [DownstreamRuntimeConsumer],
 })
 class DownstreamRuntimeConsumerModule {}
 
-describe("RuntimeModule wiring", () => {
+describe("RuntimeHostModule wiring", () => {
   let testingModule: TestingModule | undefined;
 
   afterEach(async () => {
@@ -29,19 +29,21 @@ describe("RuntimeModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("assembles the runtime module and resolves RuntimeService", async () => {
-    testingModule = await createRuntimeTestingModule([RuntimeModule]);
+  it("assembles the runtime module and resolves RuntimeHostService", async () => {
+    testingModule = await createRuntimeTestingModule([RuntimeHostModule]);
 
-    expect(testingModule.get(RuntimeService)).toBeInstanceOf(RuntimeService);
+    expect(testingModule.get(RuntimeHostService)).toBeInstanceOf(
+      RuntimeHostService
+    );
   });
 
-  it("exports only RuntimeService to downstream modules", async () => {
+  it("exports only RuntimeHostService to downstream modules", async () => {
     testingModule = await createRuntimeTestingModule([
       DownstreamRuntimeConsumerModule,
     ]);
 
     const consumer = testingModule.get(DownstreamRuntimeConsumer);
-    expect(consumer.runtimeService).toBe(testingModule.get(RuntimeService));
+    expect(consumer.runtimeService).toBe(testingModule.get(RuntimeHostService));
   });
 });
 

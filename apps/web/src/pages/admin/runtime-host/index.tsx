@@ -26,21 +26,21 @@ import {
 import { AgentIcon } from "@/components/icons/agent";
 import { useConfirmDelete } from "@/hooks/use-confirm-delete";
 import {
-  useCreateRuntime,
-  useDeleteRuntime,
-  useAdminRuntimes,
+  useCreateRuntimeHost,
+  useDeleteRuntimeHost,
+  useAdminRuntimeHosts,
   useDetectEnv,
   useUpdateEnvConfigOverride,
   useInstallCli,
-  type CreateRuntimeResponse,
-  type Runtime,
-} from "@/hooks/use-runtime";
+  type CreateRuntimeHostResponse,
+  type RuntimeHost,
+} from "@/hooks/use-runtime-host";
 import type { AgentEnvStatus } from "@agework/shared/api";
 import type { AgentType } from "@agework/shared";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/utils/format";
 import { errorMessage } from "@/utils/error";
-import { IssuedRuntimeTokenDialog } from "@/pages/settings/runtime/issued-runtime-token-dialog";
+import { IssuedHostTokenDialog } from "@/pages/settings/runtime-host/issued-host-token-dialog";
 
 const NAME_MAX_LENGTH = 40;
 
@@ -227,7 +227,7 @@ function OverrideEditor({
   );
 }
 
-// ── 单个 Runtime 区块 ─────────────────────────────────────────────────
+// ── 单个 RuntimeHost 区块 ─────────────────────────────────────────────────
 //
 // 结构：
 //   SettingsSection（卡片容器）
@@ -239,8 +239,8 @@ function RuntimeSection({
   runtime,
   onDelete,
 }: {
-  runtime: Runtime;
-  onDelete: (rt: Runtime) => void;
+  runtime: RuntimeHost;
+  onDelete: (rt: RuntimeHost) => void;
 }) {
   const detectMutation = useDetectEnv();
   const env = runtime.envStatus;
@@ -302,7 +302,7 @@ function RuntimeSection({
               variant="ghost"
               size="icon"
               className="h-7 w-7 text-muted-foreground hover:text-destructive"
-              aria-label={`删除运行环境 ${runtime.name}`}
+              aria-label={`删除运行节点 ${runtime.name}`}
               onClick={() => onDelete(runtime)}
             >
               <Trash2 className="size-3.5" />
@@ -334,13 +334,13 @@ function RuntimeSection({
 
 // ── 主面板 ────────────────────────────────────────────────────────────
 
-/** Admin「运行环境」：Runtime 列表 + create/delete + CLI 路径覆盖/重检。 */
-export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
-  const { data: runtimes = [], isLoading } = useAdminRuntimes();
-  const deleteRuntime = useDeleteRuntime();
-  const deleteDialog = useConfirmDelete<Runtime>();
+/** Admin「运行节点」：RuntimeHost 列表 + create/delete + CLI 路径覆盖/重检。 */
+export function RuntimeHostPanel({ showHeader = true }: { showHeader?: boolean }) {
+  const { data: runtimes = [], isLoading } = useAdminRuntimeHosts();
+  const deleteRuntime = useDeleteRuntimeHost();
+  const deleteDialog = useConfirmDelete<RuntimeHost>();
   const [createOpen, setCreateOpen] = useState(false);
-  const [issuedToken, setIssuedToken] = useState<CreateRuntimeResponse | null>(
+  const [issuedToken, setIssuedToken] = useState<CreateRuntimeHostResponse | null>(
     null
   );
 
@@ -354,9 +354,9 @@ export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
       >
         {showHeader && (
           <div>
-            <h2 className="text-lg font-semibold">运行环境</h2>
+            <h2 className="text-lg font-semibold">运行节点</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              管理运行环境及 Agent CLI
+              管理运行节点及 Agent CLI
             </p>
           </div>
         )}
@@ -378,7 +378,7 @@ export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
       ) : runtimes.length === 0 ? (
         <SettingsSection>
           <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-            暂无运行环境
+            暂无运行节点
           </div>
         </SettingsSection>
       ) : (
@@ -399,7 +399,7 @@ export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
         onCreated={setIssuedToken}
       />
 
-      <IssuedRuntimeTokenDialog
+      <IssuedHostTokenDialog
         result={issuedToken}
         onOpenChange={(open) => {
           if (!open) setIssuedToken(null);
@@ -416,7 +416,7 @@ export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
           });
         }}
         isPending={deleteRuntime.isPending}
-        title="确认删除运行环境？"
+        title="确认删除运行节点？"
         targetName={deleteDialog.target?.name}
         description={
           deleteDialog.target
@@ -437,11 +437,11 @@ function CreateRuntimeDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreated: (result: CreateRuntimeResponse) => void;
+  onCreated: (result: CreateRuntimeHostResponse) => void;
 }) {
   const formId = "create-runtime-form";
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const createRuntime = useCreateRuntime();
+  const createRuntime = useCreateRuntimeHost();
   const form = useForm<CreateRuntimeFormValues>({
     resolver: zodResolver(createRuntimeFormSchema),
     defaultValues: { name: "" },
@@ -458,7 +458,7 @@ function CreateRuntimeDialog({
           onCreated(result);
         },
         onError: (error) =>
-          setSubmitError(errorMessage(error, "添加运行环境失败")),
+          setSubmitError(errorMessage(error, "添加运行节点失败")),
       }
     );
   }

@@ -24,12 +24,12 @@ const FEATURES = new Set([
   "conversation",
   "model-provider",
   "prisma",
+  "host-dispatch",
   "run",
   "run-event",
-  "runtime",
+  "runtime-host",
   "system",
   "user",
-  "runtime-host",
   "workspace",
 ]);
 

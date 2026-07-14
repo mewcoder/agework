@@ -9,7 +9,7 @@ import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
 import { ConfigService } from "../config/config.service";
 import { getLLMClient } from "../common/llm";
-import { RuntimeService } from "../runtime/runtime.service";
+import { RuntimeHostService } from "../runtime-host/runtime-host.service";
 import { ModelProviderRepository } from "./model-provider.repository";
 
 const SYSTEM_MODEL_PROVIDER_ID = "system";
@@ -74,7 +74,7 @@ export class ModelProviderService {
   constructor(
     private repo: ModelProviderRepository,
     private configService: ConfigService,
-    private runtimeService: RuntimeService
+    private runtimeService: RuntimeHostService
   ) {}
 
   private validateBaseUrl(baseUrl: string) {

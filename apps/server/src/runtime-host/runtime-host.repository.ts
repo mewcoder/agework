@@ -6,12 +6,12 @@ import type {
   RuntimeHostEnvConfigOverride,
 } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
-import type { RuntimeHostRow } from "./runtime.types";
+import type { RuntimeHostRow } from "./runtime-host.types";
 
 /** RuntimeHost 表(builtin + registered 部署实例)的数据访问唯一入口。tokenHash 只进不出:
  *  按 hash 反查用于隧道鉴权,select 默认挡住该列。 */
 @Injectable()
-export class RuntimeRepository {
+export class RuntimeHostRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   private readonly rowSelect = {

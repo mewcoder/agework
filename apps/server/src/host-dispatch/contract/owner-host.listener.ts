@@ -23,11 +23,11 @@ import { UserService } from "../../user/user.service";
 import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
-} from "../../runtime/runtime.events";
+} from "../../runtime-host/runtime-host.events";
 import {
   RUNTIME_HOST_DIAGNOSTICS,
   RUNTIME_HOST_OPERATIONS,
-} from "../runtime-host.types";
+} from "../host-dispatch.types";
 
 /**
  * owner 生命周期 → Host worker 释放的协调点(设计文档 §3.5 场景 4)。

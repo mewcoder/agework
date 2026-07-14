@@ -20,7 +20,7 @@ import {
 import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
+import { RUNTIME_HOST_EXECUTION } from "../../host-dispatch/host-dispatch.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,

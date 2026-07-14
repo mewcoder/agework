@@ -213,11 +213,11 @@ export type {
 } from "./rpc";
 
 export type {
-  RuntimeTunnelClientMessage,
-  RuntimeTunnelHeartbeatMessage,
-  RuntimeTunnelRegisterMessage,
-  RuntimeTunnelRegisteredMessage,
-  RuntimeTunnelServerMessage,
+  HostTunnelClientMessage,
+  HostTunnelHeartbeatMessage,
+  HostTunnelRegisterMessage,
+  HostTunnelRegisteredMessage,
+  HostTunnelServerMessage,
   HostSubmitRunRpcParams,
   HostCommandRpcParams,
   HostReleaseOwnerRpcParams,
@@ -225,13 +225,13 @@ export type {
   HostUpstreamEnvelope,
   HostUpstreamAckParams,
   HostReleaseRunParams,
-  RuntimeTunnelHostRpcRequest,
-  RuntimeTunnelHostRpcResponse,
-  RuntimeTunnelHostNotification,
-  RuntimeTunnelAllRpcRequest,
-  RuntimeTunnelAllRpcResponse,
+  HostTunnelHostRpcRequest,
+  HostTunnelHostRpcResponse,
+  HostTunnelHostNotification,
+  HostTunnelAllRpcRequest,
+  HostTunnelAllRpcResponse,
   HostListWorkersRpcResult,
-} from "./runtime-tunnel";
+} from "./host-tunnel";
 
 /** 隧道 WS 关闭码:runtime 已被删除(撤 token),manager 收到后应退出而不是重连。
  *  (运行时值必须内联在本入口文件,原因见 common/index.ts 的 generateId 注释。) */

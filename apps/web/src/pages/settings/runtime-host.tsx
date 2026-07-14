@@ -5,7 +5,7 @@ import {
   DataTableText,
   type DataTableColumnDef,
 } from "@/components/data-table";
-import { useRuntimes, type Runtime } from "@/hooks/use-runtime";
+import { useRuntimeHosts, type RuntimeHost } from "@/hooks/use-runtime-host";
 import { SettingsPageHeader } from "@/components/settings/settings-panel";
 import { formatDateTime } from "@/utils/format";
 
@@ -22,11 +22,11 @@ function runtimeTypeLabel(runtimeType: string | null) {
   }
 }
 
-/** 用户侧「运行环境」：纯只读列表，展示当前可用的 Runtime。 */
-export function RuntimeSettings() {
-  const { data: runtimes = [], isLoading } = useRuntimes();
+/** 用户侧「运行节点」：纯只读列表，展示当前可用的 RuntimeHost。 */
+export function RuntimeHostSettings() {
+  const { data: runtimes = [], isLoading } = useRuntimeHosts();
 
-  const columns: DataTableColumnDef<Runtime>[] = [
+  const columns: DataTableColumnDef<RuntimeHost>[] = [
     {
       id: "name",
       header: "名称",
@@ -83,15 +83,15 @@ export function RuntimeSettings() {
   return (
     <div className="space-y-6">
       <SettingsPageHeader
-        title="运行环境"
-        description="查看当前可用的运行环境"
+        title="运行节点"
+        description="查看当前可用的运行节点"
       />
 
       <DataTable
         columns={columns}
         data={runtimes}
         isLoading={isLoading}
-        emptyText="暂无运行环境"
+        emptyText="暂无运行节点"
         tableClassName="min-w-[640px]"
         wrapperClassName="max-h-[calc(100vh-280px)] overflow-auto rounded-lg border overscroll-contain"
         getRowId={(runtime) => runtime.id}

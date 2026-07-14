@@ -6,10 +6,10 @@ import { WorkspaceRepository } from "./workspace.repository";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { ConversationModule } from "../conversation/conversation.module";
-import { RuntimeModule } from "../runtime/runtime.module";
+import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 
 @Module({
-  imports: [ConversationModule, RuntimeModule],
+  imports: [ConversationModule, RuntimeHostModule],
   controllers: [WorkspaceController, AdminWorkspaceController],
   providers: [
     WorkspaceService,

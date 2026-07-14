@@ -26,12 +26,12 @@ import {
 } from "@agework/shared/protocol/rpc";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeRepository } from "../runtime.repository";
+import { RuntimeHostRepository } from "../runtime-host.repository";
 import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
-} from "../runtime.events";
-import type { HostUpstreamPort } from "../runtime.types";
+} from "../runtime-host.events";
+import type { HostUpstreamPort } from "../runtime-host.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
@@ -74,7 +74,7 @@ export class HostTunnelHandler
   };
 
   constructor(
-    private readonly repository: RuntimeRepository,
+    private readonly repository: RuntimeHostRepository,
     private readonly configService: ConfigService,
     private readonly httpAdapterHost: HttpAdapterHost,
     private readonly events: EventEmitter2

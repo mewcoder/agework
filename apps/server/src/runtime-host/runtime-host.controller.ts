@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Query, Body } from "@nestjs/common";
 import { CurrentUser } from "../auth/decorators/current-user.decorator";
 import type { JwtUser } from "../auth/auth.types";
-import { RuntimeService } from "./runtime.service";
+import { RuntimeHostService } from "./runtime-host.service";
 import { ListHostDirectoryDto } from "./dto/list-host-directory.dto";
 import { CreateHostDirectoryDto } from "./dto/create-host-directory.dto";
 
@@ -10,8 +10,8 @@ import { CreateHostDirectoryDto } from "./dto/create-host-directory.dto";
  * 配对管理(create/delete)是 admin 专属,在 admin/admin-runtime-host.controller.ts。
  */
 @Controller("runtime-hosts")
-export class RuntimeController {
-  constructor(private readonly runtimeService: RuntimeService) {}
+export class RuntimeHostController {
+  constructor(private readonly runtimeService: RuntimeHostService) {}
 
   /** 所有用户:列出自己可见的 Host（自己的 registered + 全局 builtin）。 */
   @Get("list")

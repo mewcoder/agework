@@ -7,9 +7,8 @@ import {
   Post,
 } from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
-import { RuntimeService } from "../../runtime/runtime.service";
 import { StopWorkerDto } from "./stop-worker.dto";
-import { RUNTIME_HOST_DIAGNOSTICS } from "../runtime-host.types";
+import { RUNTIME_HOST_DIAGNOSTICS } from "../host-dispatch.types";
 import type {
   RuntimeHostDiagnostics,
   WorkerKey,
@@ -19,28 +18,13 @@ import type {
  * Admin 运行资源诊断面：worker 现场查询(走 Host contract) + 运行策略查询。
  * Phase 3 清尾：Worker 表已删,admin 不再读库,全部走 contract 现场查询。
  */
-@Controller("admin/workers")
+@Controller("admin/runtime-hosts/workers")
 @Roles("admin")
 export class AdminWorkerController {
   constructor(
-    private readonly runtimeService: RuntimeService,
     @Inject(RUNTIME_HOST_DIAGNOSTICS)
     private readonly hostContract: RuntimeHostDiagnostics
   ) {}
-
-  @Get("policy")
-  getRuntimePolicy() {
-    return this.runtimeService.getRuntimePolicy();
-  }
-
-  @Get("stats")
-  async getWorkerStats() {
-    // Host 内存池只保留活跃 worker(starting/ready),快照条数即活跃数
-    const workers = await this.hostContract.listWorkers();
-    return {
-      activeWorkers: workers.length,
-    };
-  }
 
   /** Phase 3：唯一资源列表端点,现场查询 Host 上的 worker 快照。 */
   @Get("list")

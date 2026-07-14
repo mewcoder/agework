@@ -36,7 +36,7 @@ import type { RuntimeEnvConfig } from "../common";
 export type { RuntimeCapabilities } from "./runtime-capabilities";
 
 /** manager → server:注册(隧道建连后第一条消息)。 */
-export interface RuntimeTunnelRegisterMessage {
+export interface HostTunnelRegisterMessage {
   type: "register";
   capabilities: RuntimeCapabilities;
   /** manager 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
@@ -46,16 +46,16 @@ export interface RuntimeTunnelRegisterMessage {
 }
 
 /** manager → server:心跳。 */
-export interface RuntimeTunnelHeartbeatMessage {
+export interface HostTunnelHeartbeatMessage {
   type: "heartbeat";
 }
 
-export type RuntimeTunnelClientMessage =
-  | RuntimeTunnelRegisterMessage
-  | RuntimeTunnelHeartbeatMessage;
+export type HostTunnelClientMessage =
+  | HostTunnelRegisterMessage
+  | HostTunnelHeartbeatMessage;
 
 /** server → manager:注册成功回执,带心跳节奏。 */
-export interface RuntimeTunnelRegisteredMessage {
+export interface HostTunnelRegisteredMessage {
   type: "registered";
   runtimeHostId: string;
   heartbeatIntervalSeconds: number;
@@ -65,7 +65,7 @@ export interface RuntimeTunnelRegisteredMessage {
   epoch?: number;
 }
 
-export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
+export type HostTunnelServerMessage = HostTunnelRegisteredMessage;
 
 // ── 执行面隧道协议 ──────────────────────────────────────────────────
 //
@@ -109,7 +109,7 @@ export type HostUpstreamAckParams = { seq: number };
 /** server → Host:run 已终结,Host 清理该 run 的状态(单向,best-effort)。 */
 export type HostReleaseRunParams = RuntimeHostRunRef;
 
-export type RuntimeTunnelHostRpcRequest =
+export type HostTunnelHostRpcRequest =
   | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>
   | RpcRequest<"host.command", HostCommandRpcParams>
   | RpcRequest<"host.releaseOwner", HostReleaseOwnerRpcParams>
@@ -128,7 +128,7 @@ export type RuntimeTunnelHostRpcRequest =
 /** host.listWorkers 响应：本 Host 的 worker 快照列表。 */
 export type HostListWorkersRpcResult = { workers: WorkerSnapshot[] };
 
-export type RuntimeTunnelHostRpcResponse =
+export type HostTunnelHostRpcResponse =
   | RpcResponse<HostCapabilityStatus>
   | RpcResponse<DirectoryListing>
   | RpcResponse<WorkspaceFileListResponse>
@@ -140,16 +140,16 @@ export type RuntimeTunnelHostRpcResponse =
   | RpcResponse<InstallCliResult>
   | RpcResponse<null>;
 
-export type RuntimeTunnelHostNotification =
+export type HostTunnelHostNotification =
   | RpcNotification<"host.upstream", HostUpstreamEnvelope>
   | RpcNotification<"host.upstreamAck", HostUpstreamAckParams>
   | RpcNotification<"host.releaseRun", HostReleaseRunParams>;
 
 /** Runtime Host 控制隧道的全量 RPC 请求类型。 */
-export type RuntimeTunnelAllRpcRequest = RuntimeTunnelHostRpcRequest;
+export type HostTunnelAllRpcRequest = HostTunnelHostRpcRequest;
 
 /** Runtime Host 控制隧道的全量 RPC 响应类型。 */
-export type RuntimeTunnelAllRpcResponse = RuntimeTunnelHostRpcResponse;
+export type HostTunnelAllRpcResponse = HostTunnelHostRpcResponse;
 
 // 注意:本文件只放类型。隧道关闭码 RUNTIME_TUNNEL_CLOSE_GONE 是运行时值,
 // 内联在 protocol/index.ts(shared 源码直连消费,跨文件 re-export 值会 ERR_MODULE_NOT_FOUND)。

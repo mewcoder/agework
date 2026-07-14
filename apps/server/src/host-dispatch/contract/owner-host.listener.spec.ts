@@ -4,7 +4,7 @@ import type { WorkspaceService } from "../../workspace/workspace.service";
 import type { UserService } from "../../user/user.service";
 import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { UserDisabledEvent } from "../../user/user.events";
-import { RuntimeHostConnectedEvent } from "../../runtime/runtime.events";
+import { RuntimeHostConnectedEvent } from "../../runtime-host/runtime-host.events";
 import { OwnerHostListener } from "./owner-host.listener";
 
 function makeHostContract(overrides: Record<string, unknown> = {}) {

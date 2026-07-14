@@ -17,10 +17,10 @@ import { HostAgUiEventHandler } from "./upstream/host-agui-event.handler";
 import { AdminRunController } from "./admin/admin-run.controller";
 
 // deps（向下依赖：runtime-host / run-event / conversation / runtime）
-import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
+import { HostDispatchModule } from "../host-dispatch/host-dispatch.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
-import { RuntimeModule } from "../runtime/runtime.module";
+import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。执行只经
@@ -31,10 +31,10 @@ import { RuntimeModule } from "../runtime/runtime.module";
  */
 @Module({
   imports: [
-    RuntimeHostModule,
+    HostDispatchModule,
     RunEventModule,
     ConversationModule,
-    RuntimeModule,
+    RuntimeHostModule,
   ],
   controllers: [AdminRunController],
   providers: [

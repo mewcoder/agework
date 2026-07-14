@@ -5,5 +5,5 @@ export type * from "./auth";
 export type * from "./model-providers";
 export type * from "./runs";
 export type * from "./agents";
-export type * from "./runtimes";
+export type * from "./runtime-hosts";
 export type * from "./workspace-files";

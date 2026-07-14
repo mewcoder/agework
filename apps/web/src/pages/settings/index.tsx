@@ -7,7 +7,6 @@ import {
   Container,
   FolderIcon,
   Folders,
-  ServerIcon,
   SettingsIcon,
   SlidersHorizontal,
   UsersIcon,
@@ -19,11 +18,12 @@ import {
   type SettingsNavGroup,
   type SettingsNavSection,
 } from '@/components/settings/settings-panel';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuthStore } from '@/stores/auth-store';
 import { UserPanel } from '@/pages/admin/user';
 import { ModelProviderPanel } from '@/pages/admin/model-provider';
 import { CliStatusPanel } from '@/pages/admin/cli-status';
-import { RuntimePanel } from '@/pages/admin/runtime';
+import { RuntimeHostPanel } from '@/pages/admin/runtime-host';
 import { RunPanel } from '@/pages/admin/run';
 import { WorkspacePanel } from '@/pages/admin/workspace';
 import { WorkerPanel } from '@/pages/admin/worker';
@@ -33,7 +33,7 @@ import { GeneralSettings } from '@/pages/settings/general';
 import { ModelProvider } from '@/pages/settings/model-provider';
 import { ArchivedConversations } from '@/pages/settings/archived-conversation';
 import { WorkspaceSettings } from '@/pages/settings/workspace';
-import { RuntimeSettings } from '@/pages/settings/runtime';
+import { RuntimeHostSettings } from '@/pages/settings/runtime-host';
 import { isAdmin as checkIsAdmin } from '@/utils/auth';
 
 type UserCategory =
@@ -41,14 +41,13 @@ type UserCategory =
   | 'general'
   | 'model'
   | 'workspaces'
-  | 'runtimes'
+  | 'runtime-hosts'
   | 'archived';
 type AdminCategory =
   | 'users'
   | 'workspaces-overview'
   | 'model-providers'
   | 'runtime-management'
-  | 'workers'
   | 'runs'
   | 'system-config';
 type Category = UserCategory | AdminCategory;
@@ -58,7 +57,7 @@ const USER_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'general', label: '通用', icon: SettingsIcon },
   { id: 'model', label: '模型配置', icon: Bot },
   { id: 'workspaces', label: '工作空间', icon: FolderIcon },
-  { id: 'runtimes', label: '运行环境', icon: Container },
+  { id: 'runtime-hosts', label: '运行节点', icon: Container },
   { id: 'archived', label: '已归档对话', icon: Archive },
 ];
 
@@ -66,8 +65,7 @@ const ADMIN_NAV_ITEMS: SettingsNavGroup<Category>['items'] = [
   { id: 'users', label: '用户管理', icon: UsersIcon },
   { id: 'workspaces-overview', label: '工作空间管理', icon: Folders },
   { id: 'model-providers', label: '模型服务管理', icon: Bot },
-  { id: 'runtime-management', label: '运行环境管理', icon: Boxes },
-  { id: 'workers', label: 'Worker 管理', icon: ServerIcon },
+  { id: 'runtime-management', label: '运行节点管理', icon: Boxes },
   { id: 'runs', label: '运行日志', icon: Activity },
   { id: 'system-config', label: '系统配置', icon: SlidersHorizontal },
 ];
@@ -159,8 +157,8 @@ export default function SettingsPage() {
         </div>
       )}
       {activeCategory === 'workspaces' && <WorkspaceSettings />}
-      {activeCategory === 'runtimes' && <RuntimeSettings />}
-      {!isAdmin && activeCategory === 'runtimes' && (
+      {activeCategory === 'runtime-hosts' && <RuntimeHostSettings />}
+      {!isAdmin && activeCategory === 'runtime-hosts' && (
         <CliStatusPanel showHeader={false} />
       )}
       {activeCategory === 'archived' && <ArchivedConversations />}
@@ -185,10 +183,21 @@ export default function SettingsPage() {
       {isAdmin && activeCategory === 'runtime-management' && (
         <div className="space-y-6">
           <SettingsPageHeader
-            title="运行环境管理"
-            description="管理运行环境及 Agent CLI"
+            title="运行节点管理"
+            description="管理运行节点、Agent CLI 及其上的 Worker"
           />
-          <RuntimePanel showHeader={false} />
+          <Tabs defaultValue="hosts">
+            <TabsList>
+              <TabsTrigger value="hosts">节点</TabsTrigger>
+              <TabsTrigger value="workers">Worker</TabsTrigger>
+            </TabsList>
+            <TabsContent value="hosts">
+              <RuntimeHostPanel showHeader={false} />
+            </TabsContent>
+            <TabsContent value="workers">
+              <WorkerPanel showHeader={false} />
+            </TabsContent>
+          </Tabs>
         </div>
       )}
       {isAdmin && activeCategory === 'workspaces-overview' && (
@@ -207,15 +216,6 @@ export default function SettingsPage() {
             description="查看所有用户的 Agent 运行日志"
           />
           <RunPanel showHeader={false} />
-        </div>
-      )}
-      {isAdmin && activeCategory === 'workers' && (
-        <div className="space-y-6">
-          <SettingsPageHeader
-            title="Worker 管理"
-            description="查看和管理各用户 / 工作空间下常驻的 Worker"
-          />
-          <WorkerPanel showHeader={false} />
         </div>
       )}
       {isAdmin && activeCategory === 'system-config' && (

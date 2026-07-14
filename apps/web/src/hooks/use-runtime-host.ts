@@ -1,55 +1,55 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { runtimesApi } from "@/api/runtimes";
+import { runtimeHostsApi, workerApi } from "@/api/runtime-hosts";
 import type {
-  CreateRuntimeDirectoryRequest,
-  CreateRuntimeRequest,
+  CreateHostDirectoryRequest,
+  CreateRuntimeHostRequest,
   InstallCliRequest,
   UpdateEnvConfigOverrideRequest,
 } from "@agework/shared/api";
-export type { Runtime, CreateRuntimeResponse } from "@/api/runtimes";
+export type { RuntimeHost, CreateRuntimeHostResponse } from "@/api/runtime-hosts";
 
 /** runtime 相关 react-query 键的唯一 factory:define 与 invalidate 共用。 */
-const runtimeKeys = {
-  all: ["runtimes"] as const,
-  adminAll: ["admin-runtimes"] as const,
+const runtimeHostKeys = {
+  all: ["runtime-hosts"] as const,
+  adminAll: ["admin-runtime-hosts"] as const,
   directory: (runtimeHostId: string | undefined, path: string | undefined) => [
-    "runtime-directory",
+    "host-directory",
     runtimeHostId,
     path ?? null,
   ],
 };
 
-export function useRuntimes() {
+export function useRuntimeHosts() {
   return useQuery({
-    queryKey: runtimeKeys.all,
-    queryFn: () => runtimesApi.list(),
+    queryKey: runtimeHostKeys.all,
+    queryFn: () => runtimeHostsApi.list(),
     select: (data) => data.list,
   });
 }
 
-/** admin: 列出全部 Runtime Host（builtin + 所有用户的 registered）。 */
-export function useAdminRuntimes() {
+/** admin: 列出全部 RuntimeHost Host（builtin + 所有用户的 registered）。 */
+export function useAdminRuntimeHosts() {
   return useQuery({
-    queryKey: runtimeKeys.adminAll,
-    queryFn: () => runtimesApi.adminList(),
+    queryKey: runtimeHostKeys.adminAll,
+    queryFn: () => runtimeHostsApi.adminList(),
     select: (data) => data.list,
   });
 }
 
-export function useCreateRuntime() {
+export function useCreateRuntimeHost() {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: (data: CreateRuntimeRequest) => runtimesApi.create(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.all }),
+    mutationFn: (data: CreateRuntimeHostRequest) => runtimeHostsApi.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeHostKeys.all }),
   });
 }
 
-export function useDeleteRuntime() {
+export function useDeleteRuntimeHost() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => runtimesApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.all }),
+    mutationFn: (id: string) => runtimeHostsApi.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeHostKeys.all }),
   });
 }
 
@@ -58,8 +58,8 @@ export function useUpdateEnvConfigOverride() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: UpdateEnvConfigOverrideRequest) =>
-      runtimesApi.updateEnvConfigOverride(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
+      runtimeHostsApi.updateEnvConfigOverride(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeHostKeys.adminAll }),
   });
 }
 
@@ -67,8 +67,8 @@ export function useUpdateEnvConfigOverride() {
 export function useDetectEnv() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => runtimesApi.detectEnv(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
+    mutationFn: (id: string) => runtimeHostsApi.detectEnv(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeHostKeys.adminAll }),
   });
 }
 
@@ -77,21 +77,21 @@ export function useInstallCli() {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: (data: InstallCliRequest) => runtimesApi.installCli(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeKeys.adminAll }),
+    mutationFn: (data: InstallCliRequest) => runtimeHostsApi.installCli(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runtimeHostKeys.adminAll }),
   });
 }
 
 /** 列出 runtime 上 path 下的子目录（不含文件），供目录浏览弹层用。 */
-export function useRuntimeDirectory(
+export function useHostDirectory(
   runtimeHostId: string | undefined,
   path: string | undefined,
   enabled: boolean
 ) {
   return useQuery({
-    queryKey: runtimeKeys.directory(runtimeHostId, path),
+    queryKey: runtimeHostKeys.directory(runtimeHostId, path),
     queryFn: () =>
-      runtimesApi.listDirectory({ runtimeHostId: runtimeHostId!, path }),
+      runtimeHostsApi.listDirectory({ runtimeHostId: runtimeHostId!, path }),
     enabled: enabled && !!runtimeHostId,
     // 导航时保留上一个目录的数据，避免闪烁
     placeholderData: (prev) => prev,
@@ -99,10 +99,37 @@ export function useRuntimeDirectory(
 }
 
 /** 在 runtime 上新建目录,供目录浏览弹层用。 */
-export function useCreateRuntimeDirectory() {
+export function useCreateHostDirectory() {
   return useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: (body: CreateRuntimeDirectoryRequest) =>
-      runtimesApi.createDirectory(body),
+    mutationFn: (body: CreateHostDirectoryRequest) =>
+      runtimeHostsApi.createDirectory(body),
+  });
+}
+
+// ── worker 子资源 hooks(admin 诊断面)────────────────────────────────
+
+/** admin worker 子资源 react-query 键的唯一 factory:define 与 invalidate 共用。 */
+const adminWorkerKeys = {
+  workers: ["admin", "runtime-hosts", "workers"] as const,
+};
+
+/** 现场查询所有 Host（builtin + registered）的 worker 快照。 */
+export function useWorkers() {
+  return useQuery({
+    queryKey: adminWorkerKeys.workers,
+    queryFn: () => workerApi.list(),
+  });
+}
+
+/** 定向停止目标 Host 上的 worker。 */
+export function useStopWorker() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { runtimeHostId: string; workerKey: string }) =>
+      workerApi.stopWorker(input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminWorkerKeys.workers });
+    },
   });
 }

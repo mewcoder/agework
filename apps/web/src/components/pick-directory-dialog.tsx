@@ -21,14 +21,14 @@ import {
   DirectoryPicker,
   type DirectoryListing,
 } from "@/components/directory-picker";
-import { useRuntimes, useCreateRuntimeDirectory } from "@/hooks/use-runtime";
+import { useRuntimeHosts, useCreateHostDirectory } from "@/hooks/use-runtime-host";
 import { useCreateWorkspace } from "@/hooks/use-workspace";
 import { errorMessage } from "@/utils/error";
 import {
   basename as pathBasename,
   normalizeFilesystemPath,
 } from "@/utils/path";
-import { runtimesApi } from "@/api/runtimes";
+import { runtimeHostsApi } from "@/api/runtime-hosts";
 import type { WorkspaceRuntimeType } from "@agework/shared/api";
 
 interface PickDirectoryDialogProps {
@@ -68,14 +68,14 @@ export function PickDirectoryDialog({
   const [error, setError] = useState<string | null>(null);
 
   const createWorkspace = useCreateWorkspace();
-  const { data: runtimes = [] } = useRuntimes();
-  const createDirMutation = useCreateRuntimeDirectory();
+  const { data: hosts = [] } = useRuntimeHosts();
+  const createDirMutation = useCreateHostDirectory();
 
   // builtin Host 就在 server 所在机器上；「选择本地文件夹」只在这里浏览，
   // 不含已配对的远程机器(那台机器上的目录不属于"本地")。
   const builtinRuntimes = useMemo(
-    () => runtimes.filter((r) => r.source === "builtin"),
-    [runtimes]
+    () => hosts.filter((r) => r.source === "builtin"),
+    [hosts]
   );
 
   const defaultRuntimeHostId = builtinRuntimes[0]?.id;
@@ -98,7 +98,7 @@ export function PickDirectoryDialog({
   const listDirectories = useMemo(() => {
     if (!selectedRuntimeHostId) return undefined;
     return async (dir: string | undefined): Promise<DirectoryListing> => {
-      const res = await runtimesApi.listDirectory({
+      const res = await runtimeHostsApi.listDirectory({
         runtimeHostId: selectedRuntimeHostId,
         path: dir,
       });
@@ -173,7 +173,7 @@ export function PickDirectoryDialog({
 
         {builtinRuntimes.length > 1 && (
           <Field>
-            <FieldLabel htmlFor="pick-directory-runtime">运行环境</FieldLabel>
+            <FieldLabel htmlFor="pick-directory-runtime">运行节点</FieldLabel>
             <Select
               items={builtinRuntimes.map((runtime) => ({
                 value: runtime.id,
@@ -211,7 +211,7 @@ export function PickDirectoryDialog({
           />
         ) : (
           <p className="rounded-md border p-4 text-sm text-muted-foreground">
-            正在加载运行环境...
+            正在加载运行节点...
           </p>
         )}
 

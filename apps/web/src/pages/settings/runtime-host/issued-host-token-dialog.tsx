@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ClipboardIcon } from "lucide-react";
-import type { CreateRuntimeResponse } from "@/hooks/use-runtime";
+import type { CreateRuntimeHostResponse } from "@/hooks/use-runtime-host";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,11 +12,11 @@ import {
 import { copyToClipboard } from "@/utils/clipboard";
 import { apiUrl } from "@/lib/http";
 
-export function IssuedRuntimeTokenDialog({
+export function IssuedHostTokenDialog({
   result,
   onOpenChange,
 }: {
-  result: CreateRuntimeResponse | null;
+  result: CreateRuntimeHostResponse | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -49,7 +49,7 @@ export function IssuedRuntimeTokenDialog({
               {command}
             </div>
             <div className="text-sm text-muted-foreground">
-              机器：{result.runtime.name}
+              机器：{result.runtimeHost.name}
             </div>
             <Button
               type="button"

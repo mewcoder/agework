@@ -1,46 +1,28 @@
 import { Module } from "@nestjs/common";
 
-import { RuntimeModule } from "../runtime/runtime.module";
-import { RunEventModule } from "../run-event/run-event.module";
-import { WorkspaceModule } from "../workspace/workspace.module";
-import { UserModule } from "../user/user.module";
-import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
-import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
-import { OwnerHostListener } from "./contract/owner-host.listener";
-import {
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_OPERATIONS,
-} from "./runtime-host.types";
-import { AdminWorkerController } from "./admin/admin-worker.controller";
+import { RuntimeHostService } from "./runtime-host.service";
+import { RuntimeHostController } from "./runtime-host.controller";
+import { AdminRuntimeHostController } from "./admin/admin-runtime-host.controller";
+import { RuntimeHostRepository } from "./runtime-host.repository";
+import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
+import { HostLivenessWatchdog } from "./gateway/host-liveness.watchdog";
 
 /**
- * Runtime Host 组合根：装配 builtin Host、registered Host 路由适配器和
- * admin 观测面。worker 数据面由每个 Host 自己的 WorkerHttpServer 承接。
+ * Runtime Host 资源域组合根：门面 Service + builtin 状态 + registered 配对/隧道。
+ * `HostTunnelHandler`(隧道 WS 端点)、`HostLivenessWatchdog`(Host 级判死)
+ * 都是 internal provider,不 export。
  *
- * 同一个 adapter 按 execution / operations / diagnostics 三个角色暴露；run
- * 模块只消费执行面契约，
- * 不感知 builtin/registered 的路由细节。
- *
- * 与 runtime 模块的边界：本模块管「契约语义」(submitRun 路由、builtin 装配、
- * worker 观测),runtime 管「机器资源」(注册行、隧道传输、Host 级判死),
- * 隧道管道经 RuntimeService 借用。
+ * 与 host-dispatch 模块的边界：本模块管「节点资源」(注册行、隧道传输、Host 级判死),
+ * host-dispatch 管「下发」(submitRun 路由、builtin 装配、worker 观测)。
  */
 @Module({
-  imports: [RuntimeModule, RunEventModule, WorkspaceModule, UserModule],
-  controllers: [AdminWorkerController],
   providers: [
-    builtinRuntimeHostProvider,
-    RuntimeHostAdapter,
-    OwnerHostListener,
-    { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_OPERATIONS, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
+    RuntimeHostService,
+    RuntimeHostRepository,
+    HostTunnelHandler,
+    HostLivenessWatchdog,
   ],
-  exports: [
-    RUNTIME_HOST_EXECUTION,
-    RUNTIME_HOST_OPERATIONS,
-    RUNTIME_HOST_DIAGNOSTICS,
-  ],
+  controllers: [RuntimeHostController, AdminRuntimeHostController],
+  exports: [RuntimeHostService],
 })
 export class RuntimeHostModule {}

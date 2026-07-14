@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
-import { RuntimeRepository } from "./runtime.repository";
-import type { RuntimeHostRow } from "./runtime.types";
+import { RuntimeHostRepository } from "./runtime-host.repository";
+import type { RuntimeHostRow } from "./runtime-host.types";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
-import { RuntimeService } from "./runtime.service";
+import { RuntimeHostService } from "./runtime-host.service";
 
 const mockEnvConfig = {
   claude: {
@@ -62,7 +62,7 @@ function makeRow(overrides: Partial<RuntimeHostRow> = {}): RuntimeHostRow {
 }
 
 // RuntimeHost 的 worker 生命周期由 apps/runtime 测试；这里测注册表、策略与 Host 路由。
-describe("RuntimeService", () => {
+describe("RuntimeHostService", () => {
   let configService: Partial<ConfigService>;
   let repository: {
     create: ReturnType<typeof vi.fn>;
@@ -80,7 +80,7 @@ describe("RuntimeService", () => {
     isConnected: ReturnType<typeof vi.fn>;
     sendRequest: ReturnType<typeof vi.fn>;
   };
-  let service: RuntimeService;
+  let service: RuntimeHostService;
 
   beforeEach(() => {
     configService = {
@@ -136,9 +136,9 @@ describe("RuntimeService", () => {
       isConnected: vi.fn().mockReturnValue(false),
       sendRequest: vi.fn(),
     };
-    service = new RuntimeService(
+    service = new RuntimeHostService(
       configService as ConfigService,
-      repository as unknown as RuntimeRepository,
+      repository as unknown as RuntimeHostRepository,
       tunnelHandler as unknown as HostTunnelHandler
     );
   });
@@ -164,16 +164,6 @@ describe("RuntimeService", () => {
     });
     expect(result.runtimeType).toBe("native");
     expect(result.ownerId).toBe("ws-1");
-  });
-
-  it("getRuntimePolicy reads from ConfigService", () => {
-    expect(service.getRuntimePolicy()).toEqual({
-      defaultRuntimeType: "native",
-      allowedRuntimeTypes: ["native", "docker", "opensandbox"],
-      defaultScope: "user",
-      allowedScopes: ["user", "workspace"],
-      idleTimeoutSeconds: 600,
-    });
   });
 
   it("onApplicationBootstrap: upserts one multi-runtimeType builtin Host", async () => {

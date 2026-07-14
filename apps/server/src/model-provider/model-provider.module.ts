@@ -3,10 +3,10 @@ import { AdminModelProviderController } from "./admin/admin-model-provider.contr
 import { ModelProviderController } from "./model-provider.controller";
 import { ModelProviderService } from "./model-provider.service";
 import { ModelProviderRepository } from "./model-provider.repository";
-import { RuntimeModule } from "../runtime/runtime.module";
+import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 
 @Module({
-  imports: [RuntimeModule],
+  imports: [RuntimeHostModule],
   controllers: [ModelProviderController, AdminModelProviderController],
   providers: [ModelProviderService, ModelProviderRepository],
   exports: [ModelProviderService],

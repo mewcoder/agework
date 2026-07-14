@@ -5,7 +5,7 @@ import {
   type OnApplicationShutdown,
 } from "@nestjs/common";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeRepository } from "../runtime.repository";
+import { RuntimeHostRepository } from "../runtime-host.repository";
 
 /**
  * Runtime 级判死:定时把 online 但心跳超时的 Runtime 行标记 offline。
@@ -21,7 +21,7 @@ export class HostLivenessWatchdog
   private timer?: NodeJS.Timeout;
 
   constructor(
-    private readonly repository: RuntimeRepository,
+    private readonly repository: RuntimeHostRepository,
     private readonly configService: ConfigService
   ) {}
 

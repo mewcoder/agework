@@ -16,7 +16,7 @@ import { ConfigService } from "../../config/config.service";
 export function resolveRuntimeEntry(entryOverride?: string): string {
   if (entryOverride) return entryOverride;
 
-  // dist/src/runtime/builtin/runtime-config.js → dist/agework-runtime/main.mjs
+  // dist/src/runtime-host/builtin/runtime-config.js → dist/agework-runtime/main.mjs
   const embedded = join(__dirname, "../../../agework-runtime/main.mjs");
   if (existsSync(embedded)) return embedded;
 

@@ -34,8 +34,8 @@ import type { UpdateWorkspaceInput } from "@/api/workspaces";
 import type { WorkspaceScope, WorkspaceRuntimeType } from "@agework/shared/api";
 import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
-import { useRuntimes } from "@/hooks/use-runtime";
-import type { Runtime } from "@/hooks/use-runtime";
+import { useRuntimeHosts } from "@/hooks/use-runtime-host";
+import type { RuntimeHost } from "@/hooks/use-runtime-host";
 interface WorkspaceDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,14 +52,14 @@ const SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["builtin", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
-function supportedRuntimeTypes(runtime: Runtime): WorkspaceRuntimeType[] {
+function supportedRuntimeTypes(runtime: RuntimeHost): WorkspaceRuntimeType[] {
   return RUNTIME_TYPES.filter(
     (runtimeType) => runtime.capabilities?.[runtimeType]?.available
   );
 }
 
 function supportedWorkerScopes(
-  runtime: Runtime | undefined,
+  runtime: RuntimeHost | undefined,
   runtimeType: WorkspaceRuntimeType
 ): WorkspaceScope[] {
   return (runtime?.capabilities?.[runtimeType]?.scopes ?? []).filter(
@@ -68,8 +68,8 @@ function supportedWorkerScopes(
 }
 
 /** 只列出已完成配对且至少有一种可用 runtimeType 的 Registered Host。 */
-function eligibleRuntimes(runtimes: Runtime[]): Runtime[] {
-  return runtimes.filter(
+function eligibleHosts(hosts: RuntimeHost[]): RuntimeHost[] {
+  return hosts.filter(
     (runtime) =>
       runtime.source === "registered" &&
       supportedRuntimeTypes(runtime).length > 0
@@ -117,14 +117,14 @@ const workspaceDialogFormSchema = z
         ctx.addIssue({
           code: "custom",
           path: ["runtimeHostId"],
-          message: "请选择运行环境",
+          message: "请选择运行节点",
         });
       }
       if (!values.rootPath?.trim()) {
         ctx.addIssue({
           code: "custom",
           path: ["rootPath"],
-          message: "请填写该运行环境上的绝对路径",
+          message: "请填写该运行节点上的绝对路径",
         });
       }
       return;
@@ -200,8 +200,8 @@ function WorkspaceDialogForm({
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
   const { data: capabilities } = useWorkspaceCapabilities();
-  const { data: runtimes = [] } = useRuntimes();
-  const registeredRuntimes = eligibleRuntimes(runtimes);
+  const { data: hosts = [] } = useRuntimeHosts();
+  const registeredHosts = eligibleHosts(hosts);
   const form = useForm<WorkspaceDialogFormValues>({
     resolver: zodResolver(workspaceDialogFormSchema),
     defaultValues: {
@@ -353,8 +353,8 @@ function WorkspaceDialogForm({
   const scope = form.watch("scope");
   const rootPathValue = form.watch("rootPath") ?? "";
   const runtimeHostId = form.watch("runtimeHostId");
-  const showPlacementToggle = !isEdit && registeredRuntimes.length > 0;
-  const selectedRuntime = registeredRuntimes.find(
+  const showPlacementToggle = !isEdit && registeredHosts.length > 0;
+  const selectedRuntime = registeredHosts.find(
     (r) => r.id === runtimeHostId
   );
   const selectedRuntimeTypes = useMemo(
@@ -471,7 +471,7 @@ function WorkspaceDialogForm({
                       平台托管
                     </ToggleGroupItem>
                     <ToggleGroupItem value="registered" className="w-full">
-                      我的运行环境
+                      我的运行节点
                     </ToggleGroupItem>
                   </ToggleGroup>
                 </Field>
@@ -513,7 +513,7 @@ function WorkspaceDialogForm({
                   <Field data-invalid={fieldState.invalid}>
                     <FieldLabel>选择机器</FieldLabel>
                     <Select
-                      items={registeredRuntimes.map((runtime) => ({
+                      items={registeredHosts.map((runtime) => ({
                         value: runtime.id,
                         label: runtime.name,
                       }))}
@@ -527,7 +527,7 @@ function WorkspaceDialogForm({
                         <SelectValue placeholder="选择机器" />
                       </SelectTrigger>
                       <SelectContent>
-                        {registeredRuntimes.map((runtime) => (
+                        {registeredHosts.map((runtime) => (
                           <SelectItem
                             key={runtime.id}
                             value={runtime.id}
@@ -639,7 +639,7 @@ function WorkspaceDialogForm({
                         {...field}
                         id="workspace-remote-root-path"
                         aria-invalid={fieldState.invalid}
-                        placeholder="该运行环境上的绝对路径"
+                        placeholder="该运行节点上的绝对路径"
                         autoComplete="off"
                         onBlur={() => {
                           const normalized = normalizeFilesystemPath(
@@ -653,8 +653,8 @@ function WorkspaceDialogForm({
                     </div>
                     <FieldDescription>
                       {browserDisabled
-                        ? "该运行环境未连接,暂时无法浏览,请手动填写绝对路径"
-                        : "选择或填写该运行环境上的绝对路径"}
+                        ? "该运行节点未连接,暂时无法浏览,请手动填写绝对路径"
+                        : "选择或填写该运行节点上的绝对路径"}
                     </FieldDescription>
                     {fieldState.invalid && (
                       <FieldError errors={[fieldState.error]} />
@@ -671,7 +671,7 @@ function WorkspaceDialogForm({
                   control={form.control}
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel>运行环境</FieldLabel>
+                      <FieldLabel>运行节点</FieldLabel>
                       <Select
                         items={allowedRuntimeTypes.map((type) => ({
                           value: type,

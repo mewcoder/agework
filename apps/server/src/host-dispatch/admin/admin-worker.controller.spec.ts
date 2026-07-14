@@ -1,49 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 import { AdminWorkerController } from "./admin-worker.controller";
 
-function makeController(
-  runtimeService: Record<string, unknown> = {},
-  hostContract: Record<string, unknown> = {}
-) {
-  return new AdminWorkerController(
-    {
-      getRuntimePolicy: vi
-        .fn()
-        .mockReturnValue({ defaultRuntimeType: "native" }),
-      ...runtimeService,
-    } as never,
-    {
-      listWorkers: vi.fn().mockResolvedValue([]),
-      stopWorker: vi.fn().mockResolvedValue(undefined),
-      ...hostContract,
-    }
-  );
+function makeController(hostContract: Record<string, unknown> = {}) {
+  return new AdminWorkerController({
+    listWorkers: vi.fn().mockResolvedValue([]),
+    stopWorker: vi.fn().mockResolvedValue(undefined),
+    ...hostContract,
+  });
 }
 
 describe("AdminWorkerController", () => {
-  it("delegates policy to RuntimeService", () => {
-    const getRuntimePolicy = vi
-      .fn()
-      .mockReturnValue({ defaultRuntimeType: "native" });
-    const controller = makeController({ getRuntimePolicy });
-
-    controller.getRuntimePolicy();
-
-    expect(getRuntimePolicy).toHaveBeenCalled();
-  });
-
-  it("getWorkerStats counts live pool entries from listWorkers", async () => {
-    const listWorkers = vi
-      .fn()
-      .mockResolvedValue([{ status: "ready" }, { status: "starting" }]);
-    const controller = makeController({}, { listWorkers });
-
-    const result = await controller.getWorkerStats();
-
-    expect(listWorkers).toHaveBeenCalled();
-    expect(result).toEqual({ activeWorkers: 2 });
-  });
-
   it("list delegates to hostContract.listWorkers", async () => {
     const listWorkers = vi.fn().mockResolvedValue([
       {
@@ -53,7 +19,7 @@ describe("AdminWorkerController", () => {
         status: "ready",
       },
     ]);
-    const controller = makeController({}, { listWorkers });
+    const controller = makeController({ listWorkers });
 
     const result = await controller.list();
 
@@ -72,7 +38,7 @@ describe("AdminWorkerController", () => {
 
   it("stop delegates to hostContract.stopWorker with the target host and key", async () => {
     const stopWorker = vi.fn().mockResolvedValue(undefined);
-    const controller = makeController({}, { stopWorker });
+    const controller = makeController({ stopWorker });
 
     const result = await controller.stop({
       runtimeHostId: "rt-1",
@@ -90,7 +56,7 @@ describe("AdminWorkerController", () => {
     const stopWorker = vi
       .fn()
       .mockRejectedValue(new Error("runtime rt-1 is not connected"));
-    const controller = makeController({}, { stopWorker });
+    const controller = makeController({ stopWorker });
 
     await expect(
       controller.stop({

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { AGENT_DIR_PREFIX, isAgentType, type AgentType } from "@agework/shared";
 import type { SlashCommandItem } from "@agework/shared/api";
 import { WorkspaceService } from "../../workspace/workspace.service";
-import { RuntimeService } from "../../runtime/runtime.service";
+import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 
 /**
  * 扫描工作空间目录下的 skill SKILL.md 文件，解析 frontmatter 得到
@@ -19,7 +19,7 @@ export class AgentSkillsScanner {
 
   constructor(
     private readonly workspaceService: WorkspaceService,
-    private readonly runtimeService: RuntimeService
+    private readonly runtimeService: RuntimeHostService
   ) {}
 
   async scan(

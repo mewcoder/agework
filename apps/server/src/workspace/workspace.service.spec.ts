@@ -911,7 +911,7 @@ describe("WorkspaceService", () => {
       };
     }
 
-    it("builtin listFiles routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin listFiles routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
@@ -933,7 +933,7 @@ describe("WorkspaceService", () => {
       });
     });
 
-    it("builtin readFile routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin readFile routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
@@ -957,7 +957,7 @@ describe("WorkspaceService", () => {
       });
     });
 
-    it("registered listFiles routes to RuntimeService with runtimeHostId, not worker proxy", async () => {
+    it("registered listFiles routes to RuntimeHostService with runtimeHostId, not worker proxy", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
@@ -974,7 +974,7 @@ describe("WorkspaceService", () => {
       );
     });
 
-    it("registered readFile routes to RuntimeService with runtimeHostId, not worker proxy", async () => {
+    it("registered readFile routes to RuntimeHostService with runtimeHostId, not worker proxy", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
@@ -992,7 +992,7 @@ describe("WorkspaceService", () => {
       expect(result.content).toBe("hello");
     });
 
-    it("builtin listChangedFiles routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin listChangedFiles routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
@@ -1009,7 +1009,7 @@ describe("WorkspaceService", () => {
       expect(result.list[0].path).toBe("a.ts");
     });
 
-    it("registered listChangedFiles routes to RuntimeService with runtimeHostId", async () => {
+    it("registered listChangedFiles routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
@@ -1025,7 +1025,7 @@ describe("WorkspaceService", () => {
       );
     });
 
-    it("builtin readFileDiff routes to RuntimeService with runtimeHostId", async () => {
+    it("builtin readFileDiff routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeBuiltinRunView()),
@@ -1043,7 +1043,7 @@ describe("WorkspaceService", () => {
       expect(result.after).toBe("new");
     });
 
-    it("registered readFileDiff routes to RuntimeService with runtimeHostId", async () => {
+    it("registered readFileDiff routes to RuntimeHostService with runtimeHostId", async () => {
       const repo = makeRepo({
         getOwnedId: vi.fn().mockResolvedValue({ id: "ws-1" }),
         findRunView: vi.fn().mockResolvedValue(makeRegisteredRunView()),
