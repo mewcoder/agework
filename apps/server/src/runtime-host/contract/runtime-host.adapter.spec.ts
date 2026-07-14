@@ -27,7 +27,7 @@ function makeRuntimeService() {
     sendTunnelRequest: vi.fn().mockResolvedValue(null),
     sendTunnelNotification: vi.fn(),
     listConnectedRuntimeHostIds: vi.fn().mockReturnValue([]),
-    setTunnelUpstreamHandler: vi.fn(),
+    setHostUpstreamPort: vi.fn(),
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
 }
@@ -105,12 +105,19 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     runtimeHostId: string,
     notification: HostUpstreamNotification
   ) => Promise<void> {
-    return runtimeService.setTunnelUpstreamHandler.mock.calls[0][0] as never;
+    const port = runtimeService.setHostUpstreamPort.mock.calls[0][0] as {
+      onHostUpstream: (
+        runtimeHostId: string,
+        notification: HostUpstreamNotification
+      ) => Promise<void>;
+    };
+    return (runtimeHostId, notification) =>
+      port.onHostUpstream(runtimeHostId, notification);
   }
 
-  it("setUpstream wires the in-process host and the tunnel upstream handler", () => {
+  it("setUpstream wires the in-process host and the host upstream port", () => {
     expect(builtinHost.setUpstream).toHaveBeenCalledWith(upstream);
-    expect(runtimeService.setTunnelUpstreamHandler).toHaveBeenCalledTimes(1);
+    expect(runtimeService.setHostUpstreamPort).toHaveBeenCalledTimes(1);
   });
 
   describe("submitRun", () => {

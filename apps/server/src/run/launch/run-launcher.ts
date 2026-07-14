@@ -29,10 +29,7 @@ import {
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
 import { errorLogFields } from "../../common/logging";
-import {
-  RunEventService,
-  compactData,
-} from "../../run-event/run-event.service";
+import { RunEventService } from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { RunStream } from "../streaming/run-stream";
@@ -443,7 +440,7 @@ export class RunLauncher {
             runtimeType,
             scope: parseOwnerKey(placement.owner).scope,
             error: err instanceof Error ? err.message : String(err),
-            data: compactData(errorLogFields(err)),
+            data: errorLogFields(err),
           })
         )
         .catch(

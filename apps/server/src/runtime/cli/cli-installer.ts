@@ -9,13 +9,15 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { AgentType } from "@agework/shared";
 import { resolveCliPackageName } from "@agework/shared/cli";
-import { AGEWORK_HOST_CLI_DIR } from "../../config/registry/defaults";
 
 const NPM_INSTALL_TIMEOUT_MS = 120_000;
 
-/** 把 agentType 对应的独立 CLI 装进专属目录，返回装好后的可执行文件绝对路径。 */
-export async function installCli(agentType: AgentType): Promise<string> {
-  const dir = join(AGEWORK_HOST_CLI_DIR, agentType);
+/** 把 agentType 对应的独立 CLI 装进 cliRootDir 下的专属目录，返回装好后的可执行文件绝对路径。 */
+export async function installCli(
+  agentType: AgentType,
+  cliRootDir: string
+): Promise<string> {
+  const dir = join(cliRootDir, agentType);
   mkdirSync(dir, { recursive: true });
 
   await runNpmInstall(dir, resolveCliPackageName(agentType));

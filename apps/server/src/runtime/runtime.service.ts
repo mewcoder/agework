@@ -11,7 +11,6 @@ import { generateId, type AgentType } from "@agework/shared";
 import type {
   DirectoryListing,
   HostCapabilityStatus,
-  HostUpstreamNotification,
   RuntimeCapabilities,
   RuntimeSpec,
   RuntimeTunnelAllRpcRequest,
@@ -42,6 +41,7 @@ import { toRuntimeConfig } from "./local/runtime-config";
 import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
+import type { HostUpstreamPort } from "./runtime.types";
 import { detectEnvConfig } from "@agework/shared/cli";
 import { installCli as installLocalCli } from "./cli/cli-installer";
 import {
@@ -216,7 +216,10 @@ export class RuntimeService implements OnApplicationBootstrap {
         `runtime ${id} is not a native runtime, cannot install CLI`
       );
     }
-    const executablePath = await installLocalCli(agentType);
+    const executablePath = await installLocalCli(
+      agentType,
+      this.configService.getHostCliDir()
+    );
     await this.updateEnvConfigOverride(id, agentType, executablePath);
     return this.detectEnv(id);
   }
@@ -548,15 +551,10 @@ export class RuntimeService implements OnApplicationBootstrap {
     this.tunnelHandler.sendNotification(runtimeHostId, notification);
   }
 
-  /** 注册 host.upstream 通知回调(Host → server 单向回流,进程内仅一个消费者)。
-   *  handler 返回 Promise 时按连接串行 await,处理完成后才向 Host 回 ACK 水位。 */
-  setTunnelUpstreamHandler(
-    handler: (
-      runtimeHostId: string,
-      notification: HostUpstreamNotification
-    ) => Promise<void> | void
-  ): void {
-    this.tunnelHandler.setUpstreamHandler(handler);
+  /** 接线 host.upstream 回流 Port(Host → server 单向回流,进程内仅一个实现方,
+   *  启动期一次)。契约见 `runtime.types.ts` 的 `HostUpstreamPort`。 */
+  setHostUpstreamPort(port: HostUpstreamPort): void {
+    this.tunnelHandler.setHostUpstreamPort(port);
   }
 
   /**

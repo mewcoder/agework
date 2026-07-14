@@ -9,9 +9,12 @@ import { join } from "path";
 import { isRuntimeType, type RuntimeType } from "@agework/providers";
 import type { WorkerScope } from "@agework/shared/protocol";
 import { SystemSettingRepository } from "./system-setting.repository";
+import { resolveApiBasePath } from "../common/api-path";
 import {
+  AGEWORK_HOST_CLI_DIR,
   AGEWORK_HOST_RUNTIME_LOG_DIR,
   AGEWORK_HOST_WORKSPACES_ROOT,
+  DEFAULT_RUNTIME_IMAGE,
   DEFAULT_API_BODY_LIMIT,
   DEFAULT_APP_NAME,
   DEFAULT_IDLE_TIMEOUT_SECONDS,
@@ -266,6 +269,36 @@ export class ConfigService implements OnModuleInit {
   getRuntimeLogDir(): string {
     mkdirSync(AGEWORK_HOST_RUNTIME_LOG_DIR, { recursive: true });
     return AGEWORK_HOST_RUNTIME_LOG_DIR;
+  }
+
+  /** builtin Host 上 agent CLI 一键安装的根目录。 */
+  getHostCliDir(): string {
+    return AGEWORK_HOST_CLI_DIR;
+  }
+
+  /** builtin Host docker/opensandbox 起 worker 运行实例用的镜像。 */
+  getWorkerImage(): string {
+    return DEFAULT_RUNTIME_IMAGE;
+  }
+
+  /** API base path(context + /api/v1)。 */
+  getApiBasePath(): string {
+    return resolveApiBasePath(getApiContext());
+  }
+
+  /** agework-runtime 产物入口的显式覆盖(部署/排障用),未配置返回 undefined。 */
+  getRuntimeLocalEntryOverride(): string | undefined {
+    return this.getEnv(EnvKey.RUNTIME_LOCAL_ENTRY)?.trim() || undefined;
+  }
+
+  /**
+   * worker 回连 server 的基地址:显式覆盖(远程部署)> loopback + 端口 + base path。
+   * docker/opensandbox provider 会自行把 loopback 换成 host.docker.internal。
+   */
+  getServerBaseUrl(): string {
+    const override = this.getEnv(EnvKey.SERVER_BASE_URL)?.trim();
+    if (override) return override;
+    return `http://127.0.0.1:${getPort()}${this.getApiBasePath()}`;
   }
 
   /**

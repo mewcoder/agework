@@ -3,6 +3,7 @@ import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../runtime.service";
 import { UpdateEnvConfigOverrideDto } from "../dto/update-env-config-override.dto";
 import { InstallCliDto } from "../dto/install-cli.dto";
+import { RuntimeHostIdDto } from "../dto/runtime-host-id.dto";
 
 /**
  * Runtime 管理后台：列出全部 Runtime、CLI 状态查看、envConfig 覆盖、触发重检。
@@ -21,12 +22,12 @@ export class AdminRuntimeController {
 
   /** 触发 runtime 重新检测本机 CLI 环境并上报。 */
   @Post("detect-env")
-  async detectEnv(@Body() body: { id: string }) {
+  async detectEnv(@Body() body: RuntimeHostIdDto) {
     return this.runtimeService.detectEnv(body.id);
   }
 
   /** 管理员覆盖 runtime 的 CLI 路径（per-agent）。 */
-  @Post("env-config")
+  @Post("update-env-config")
   async updateEnvConfigOverride(@Body() body: UpdateEnvConfigOverrideDto) {
     await this.runtimeService.updateEnvConfigOverride(
       body.id,

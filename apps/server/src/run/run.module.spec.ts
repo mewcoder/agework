@@ -153,6 +153,7 @@ function createConfigServiceMock(): Partial<ConfigService> {
   return {
     getRunTimeoutSeconds: () => 60,
     getLaunchTimeoutSeconds: () => 30,
+    getApiBasePath: () => "/api/v1",
     getIdleTimeoutSeconds: () => 600,
     getHeartbeatTimeoutSeconds: () => 60,
     getHeartbeatCheckIntervalSeconds: () => 30,

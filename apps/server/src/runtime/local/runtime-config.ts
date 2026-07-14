@@ -2,9 +2,6 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { RuntimeConfig } from "@agework/providers";
 import { ConfigService } from "../../config/config.service";
-import { DEFAULT_RUNTIME_IMAGE } from "../../config/registry/defaults";
-import { EnvKey } from "../../config/registry/env-key";
-import { resolveApiBasePath } from "../../common/api-path";
 
 /**
  * builtin Host 的 native provider fork 的 agework-runtime 产物入口（纯 JS bundle, ESM, `.mjs`）。
@@ -16,9 +13,8 @@ import { resolveApiBasePath } from "../../common/api-path";
  *    @agework/runtime build`,turbo `^build` 会带上)。
  * server 因此不 import @agework/worker,只消费 agework-runtime 这个外部产物。
  */
-export function resolveRuntimeEntry(): string {
-  const override = process.env[EnvKey.RUNTIME_LOCAL_ENTRY]?.trim();
-  if (override) return override;
+export function resolveRuntimeEntry(entryOverride?: string): string {
+  if (entryOverride) return entryOverride;
 
   // dist/src/runtime/local/runtime-config.js → dist/agework-runtime/main.mjs
   const embedded = join(__dirname, "../../../agework-runtime/main.mjs");
@@ -38,18 +34,16 @@ export function resolveRuntimeEntry(): string {
  * - local.runtimeEntryPath:agework-runtime 产物入口(见 resolveRuntimeEntry)。
  */
 export function toRuntimeConfig(configService: ConfigService): RuntimeConfig {
-  const port = process.env[EnvKey.PORT] ?? "3000";
-  const apiBasePath = resolveApiBasePath(process.env[EnvKey.CONTEXT]);
-  const serverBaseUrlOverride = process.env[EnvKey.SERVER_BASE_URL]?.trim();
   const openSandbox = configService.getOpenSandboxConfig();
 
   return {
-    workerImage: DEFAULT_RUNTIME_IMAGE,
+    workerImage: configService.getWorkerImage(),
     runtimeLogHostPath: configService.getRuntimeLogDir(),
-    serverBaseUrl:
-      serverBaseUrlOverride || `http://127.0.0.1:${port}${apiBasePath}`,
+    serverBaseUrl: configService.getServerBaseUrl(),
     native: {
-      runtimeEntryPath: resolveRuntimeEntry(),
+      runtimeEntryPath: resolveRuntimeEntry(
+        configService.getRuntimeLocalEntryOverride()
+      ),
     },
     openSandbox: {
       domain: openSandbox.domain,

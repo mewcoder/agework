@@ -23,7 +23,8 @@ type RunEventBase = {
   chainId?: string;
   refs?: RunEventRefs;
   summary?: string;
-  data?: RunEventData;
+  /** 附加明细,builder 内部统一 compactData 规范化,调用方传原始对象即可。 */
+  data?: Record<string, unknown>;
 };
 
 /**

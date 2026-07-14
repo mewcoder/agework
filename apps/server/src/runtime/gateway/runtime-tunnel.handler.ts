@@ -16,7 +16,6 @@ import {
   type RuntimeTunnelRegisteredMessage,
   type RuntimeTunnelAllRpcRequest,
   type RuntimeTunnelHostNotification,
-  type HostUpstreamNotification,
   type HostUpstreamEnvelope,
 } from "@agework/shared/protocol";
 import {
@@ -26,13 +25,13 @@ import {
   type RpcResponse,
 } from "@agework/shared/protocol/rpc";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import { getApiContext, ConfigService } from "../../config/config.service";
-import { resolveApiBasePath } from "../../common/api-path";
+import { ConfigService } from "../../config/config.service";
 import { RuntimeRepository } from "../runtime.repository";
 import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
 } from "../runtime.events";
+import type { HostUpstreamPort } from "../runtime.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
@@ -56,15 +55,12 @@ export class RuntimeTunnelHandler
   implements OnApplicationBootstrap, OnApplicationShutdown
 {
   private readonly logger = new Logger(RuntimeTunnelHandler.name);
-  private readonly tunnelPath = `${resolveApiBasePath(getApiContext())}/runtimes/tunnel`;
+  private readonly tunnelPath: string;
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
-  /** Phase 2: host.upstream 通知回调，由 RuntimeHostAdapter 注册。
-   *  返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
-  private upstreamHandler?: (
-    runtimeHostId: string,
-    notification: HostUpstreamNotification
-  ) => Promise<void> | void;
+  /** host.upstream 回流 Port(契约见 runtime.types.ts),由 RuntimeHostAdapter 实现接线。
+   *  处理返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
+  private hostUpstreamPort?: HostUpstreamPort;
   /** Phase 2: 每个 runtime 的隧道会话状态。epoch 每次 register 递增,
    *  非当前 epoch 的上行信封丢弃(防脑裂);chain 串行化上行处理保事件顺序。 */
   private readonly hostSessions = new Map<
@@ -82,7 +78,9 @@ export class RuntimeTunnelHandler
     private readonly configService: ConfigService,
     private readonly httpAdapterHost: HttpAdapterHost,
     private readonly events: EventEmitter2
-  ) {}
+  ) {
+    this.tunnelPath = `${configService.getApiBasePath()}/runtimes/tunnel`;
+  }
 
   onApplicationBootstrap(): void {
     const httpServer = this.httpAdapterHost.httpAdapter?.getHttpServer() as
@@ -121,14 +119,9 @@ export class RuntimeTunnelHandler
     return [...this.connections.keys()];
   }
 
-  /** Phase 2: 注册 host.upstream 通知回调。 */
-  setUpstreamHandler(
-    handler: (
-      runtimeHostId: string,
-      notification: HostUpstreamNotification
-    ) => Promise<void> | void
-  ): void {
-    this.upstreamHandler = handler;
+  /** 接线 host.upstream 回流 Port(启动期一次)。 */
+  setHostUpstreamPort(port: HostUpstreamPort): void {
+    this.hostUpstreamPort = port;
   }
 
   /** 向目标 runtimeHostId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
@@ -413,7 +406,10 @@ export class RuntimeTunnelHandler
     session.chain = session.chain
       .then(async () => {
         try {
-          await this.upstreamHandler?.(runtimeHostId, envelope.notification);
+          await this.hostUpstreamPort?.onHostUpstream(
+            runtimeHostId,
+            envelope.notification
+          );
         } catch (err) {
           this.logger.warn(
             `upstream handler failed for runtime ${runtimeHostId} seq=${envelope.seq}: ${err instanceof Error ? err.message : String(err)}`

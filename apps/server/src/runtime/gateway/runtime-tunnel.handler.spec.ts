@@ -45,6 +45,7 @@ describe("RuntimeTunnelHandler", () => {
     events = { emit: vi.fn() };
     const configService = {
       getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(30),
+      getApiBasePath: vi.fn().mockReturnValue("/api/v1"),
     } as unknown as ConfigService;
     adapterHost = {
       httpAdapter: { getHttpServer: () => server },
@@ -240,6 +241,7 @@ describe("RuntimeTunnelHandler", () => {
       repository as never,
       {
         getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(0.05),
+        getApiBasePath: vi.fn().mockReturnValue("/api/v1"),
       } as unknown as ConfigService,
       adapterHost,
       events as never
@@ -295,8 +297,10 @@ describe("RuntimeTunnelHandler", () => {
 
     it("dispatches the notification to the handler and acks the seq", async () => {
       const received: unknown[] = [];
-      handler.setUpstreamHandler((runtimeHostId, notification) => {
-        received.push({ runtimeHostId, notification });
+      handler.setHostUpstreamPort({
+        onHostUpstream: (runtimeHostId, notification) => {
+          received.push({ runtimeHostId, notification });
+        },
       });
       const ws = connect();
       await once(ws, "open");
@@ -319,8 +323,10 @@ describe("RuntimeTunnelHandler", () => {
     });
 
     it("acks even when the handler throws (处理 best-effort,传输不丢)", async () => {
-      handler.setUpstreamHandler(() => {
-        throw new Error("handler boom");
+      handler.setHostUpstreamPort({
+        onHostUpstream: () => {
+          throw new Error("handler boom");
+        },
       });
       const ws = connect();
       await once(ws, "open");
@@ -333,8 +339,10 @@ describe("RuntimeTunnelHandler", () => {
 
     it("drops stale-epoch envelopes without acking", async () => {
       const received: unknown[] = [];
-      handler.setUpstreamHandler((_runtimeId, notification) => {
-        received.push(notification);
+      handler.setHostUpstreamPort({
+        onHostUpstream: (_runtimeId, notification) => {
+          received.push(notification);
+        },
       });
       // 第一次注册拿 epoch 1,再注册把会话推进到 epoch 2
       const first = connect();
@@ -354,8 +362,10 @@ describe("RuntimeTunnelHandler", () => {
 
     it("drops a bare notification without an envelope (双栈兼容分支已删)", async () => {
       const received: unknown[] = [];
-      handler.setUpstreamHandler((_runtimeId, notification) => {
-        received.push(notification);
+      handler.setHostUpstreamPort({
+        onHostUpstream: (_runtimeId, notification) => {
+          received.push(notification);
+        },
       });
       const ws = connect();
       await once(ws, "open");

@@ -29,7 +29,7 @@ export const runtimesApi = {
 
   /** admin: 覆盖 runtime 的 CLI 路径（per-agent）。 */
   updateEnvConfigOverride: (body: UpdateEnvConfigOverrideRequest) =>
-    apiPost("/api/v1/admin/runtimes/env-config", body),
+    apiPost("/api/v1/admin/runtimes/update-env-config", body),
 
   /** admin: 触发 runtime 重新检测本机 CLI 环境。 */
   detectEnv: (id: string) =>
