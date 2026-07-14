@@ -77,18 +77,15 @@ export class RunEventService {
     this.seqStore.forget(runId);
   }
 
-  /** 构建 run.created 事件：run 创建时记录 agent/runtime 类型与隔离粒度。 */
+  /** 构建 run.created 事件：run 创建时记录 agent/runtime 类型与复用范围。 */
   runCreated(input: {
     runId: string;
     conversationId: string;
     workspaceId?: string;
     agentType: string;
     runtimeType: string;
-    /**
-     * 隔离粒度，仅 sandbox run 有值（user/workspace）。
-     * local run 无容器隔离语义，此字段为 undefined。
-     */
-    isolationScope?: string;
+    /** Worker 复用范围（user/workspace）；native 固定为 workspace。 */
+    scope: string;
   }): RecordRunEventInput {
     return {
       runId: input.runId,
@@ -104,7 +101,7 @@ export class RunEventService {
         workspaceId: input.workspaceId,
         agentType: input.agentType,
         runtimeType: input.runtimeType,
-        isolationScope: input.isolationScope,
+        scope: input.scope,
       }),
     };
   }
@@ -136,13 +133,12 @@ export class RunEventService {
     };
   }
 
-  /** 构建 runtime.status_changed 事件：记录 runtime 实例的状态与隔离/引擎信息。 */
+  /** 构建 runtime.status_changed 事件：记录 runtimeType 的状态与 scope 信息。 */
   runtimeStatusChanged(
     input: RunEventBase & {
       status: string;
       runtimeType?: string;
-      runtimeInstanceId?: string;
-      isolationScope?: string;
+      scope?: string;
       error?: string;
     }
   ): RecordRunEventInput {
@@ -159,8 +155,7 @@ export class RunEventService {
       data: compactData({
         status: input.status,
         runtimeType: input.runtimeType,
-        runtimeInstanceId: input.runtimeInstanceId,
-        isolationScope: input.isolationScope,
+        scope: input.scope,
         error: input.error,
         ...input.data,
       }),

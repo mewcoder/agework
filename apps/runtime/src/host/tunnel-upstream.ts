@@ -1,6 +1,5 @@
 import { WebSocket } from "ws";
 import type {
-  ExecutionRef,
   RunChannelMessage,
   RuntimeHostUpstream,
   HostUpstreamNotification,
@@ -8,7 +7,7 @@ import type {
 } from "@agework/shared/protocol";
 
 /** 未 ACK 缓冲上限。溢出时先丢最旧的中间事件(agui 流可断档),
- *  终态事实(runFailed/runCancelled/workerLost/executionRef 与 run.status)永不丢——
+ *  终态事实(runFailed/runCancelled/workerLost 与 run.status)永不丢——
  *  聊天流断档可由 runner raw jsonl 事后补查,run 生死真相不能丢(设计 §8-6)。 */
 const MAX_BUFFERED = 5000;
 
@@ -57,7 +56,10 @@ export class TunnelUpstream implements RuntimeHostUpstream {
     return this.buffer.length;
   }
 
-  async emit(runId: string, message: RunChannelMessage<unknown>): Promise<void> {
+  async emit(
+    runId: string,
+    message: RunChannelMessage<unknown>
+  ): Promise<void> {
     this.send({ kind: "emit", runId, message });
   }
 
@@ -71,10 +73,6 @@ export class TunnelUpstream implements RuntimeHostUpstream {
 
   async notifyWorkerLost(runId: string, reason: string): Promise<void> {
     this.send({ kind: "workerLost", runId, reason });
-  }
-
-  notifyExecutionRef(runId: string, ref: ExecutionRef): void {
-    this.send({ kind: "executionRef", runId, ref });
   }
 
   private send(notification: HostUpstreamNotification): void {

@@ -17,10 +17,10 @@ function makeWorkspaceView(
     workspaceId: "ws-1",
     workspaceRootPath: "/tmp/ws",
     runtimeType: "native",
-    isolationScope: "workspace",
+    scope: "workspace",
     username: "admin-1",
-    runtimeHostId: "managed-native",
-    runtimeSource: "managed",
+    runtimeHostId: "builtin",
+    runtimeSource: "builtin",
     ...overrides,
   };
 }
@@ -79,7 +79,6 @@ describe("RunLauncher", () => {
       markCancelling: vi.fn().mockResolvedValue(undefined),
       markFinished: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
-      updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
     mockLiveRunRegistry = {
       register: vi.fn(),
@@ -102,10 +101,10 @@ describe("RunLauncher", () => {
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
-      getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
+      getDefaultWorkerScope: vi.fn().mockReturnValue("user"),
       isRuntimeTypeAllowed: (t: string): t is "native" | "docker" =>
         t === "native" || t === "docker",
-      isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
+      isWorkerScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
     };
     launcher = new RunLauncher(
@@ -137,9 +136,8 @@ describe("RunLauncher", () => {
       conversationId: "conversation-1",
       placement: {
         owner: "workspace:ws-1",
-        isolationScope: "workspace",
         runtimeType: "native",
-        runtimeHostId: "managed-native",
+        runtimeHostId: "builtin",
         workspaceId: "ws-1",
         userId: "user-1",
         username: "admin-1",
@@ -160,8 +158,8 @@ describe("RunLauncher", () => {
         agentType: "claude",
         runtimeHandle: expect.objectContaining({
           runId: "run-1",
+          runtimeHostId: "builtin",
           runtimeType: "native",
-          runtimeInstanceId: "",
         }),
         stream: expect.objectContaining({}),
       })
@@ -173,12 +171,12 @@ describe("RunLauncher", () => {
     expect(typeof registered.onAgentSessionId).toBe("function");
   });
 
-  it("derives a user-scope owner key for user-isolated sandbox workspaces", async () => {
+  it("derives a user owner key for user-scope sandbox workspaces", async () => {
     await launch(
       makeStartInput({
         workspace: makeWorkspaceView({
           runtimeType: "docker",
-          isolationScope: "user",
+          scope: "user",
         }),
       })
     );
@@ -187,7 +185,6 @@ describe("RunLauncher", () => {
       expect.objectContaining({
         placement: expect.objectContaining({
           owner: "user:user-1",
-          isolationScope: "user",
           runtimeType: "docker",
         }),
       })
@@ -223,6 +220,32 @@ describe("RunLauncher", () => {
     ): _t is "native" | "docker" => false;
     await expect(launch()).rejects.toThrow(BadRequestException);
     expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
+  });
+
+  it("uses the registered Host capability snapshot instead of the builtin allow-list", async () => {
+    mockConfigService.isRuntimeTypeAllowed = (
+      _t: string
+    ): _t is "native" | "docker" => false;
+
+    await launch(
+      makeStartInput({
+        workspace: makeWorkspaceView({
+          runtimeHostId: "host-remote-1",
+          runtimeSource: "registered",
+          runtimeType: "docker",
+          scope: "workspace",
+        }),
+      })
+    );
+
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placement: expect.objectContaining({
+          runtimeHostId: "host-remote-1",
+          runtimeType: "docker",
+        }),
+      })
+    );
   });
 
   it("attaches the accepted user message to the created run", async () => {

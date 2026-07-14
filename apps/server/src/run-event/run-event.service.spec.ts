@@ -78,7 +78,7 @@ describe("RunEventService events", () => {
         workspaceId: "ws-1",
         agentType: "claude",
         runtimeType: "sandbox",
-        isolationScope: "workspace",
+        scope: "workspace",
       })
     ).toMatchObject({
       type: "run.created",
@@ -91,7 +91,7 @@ describe("RunEventService events", () => {
         workspaceId: "ws-1",
         agentType: "claude",
         runtimeType: "sandbox",
-        isolationScope: "workspace",
+        scope: "workspace",
       },
     });
   });

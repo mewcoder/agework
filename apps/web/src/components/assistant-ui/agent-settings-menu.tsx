@@ -202,8 +202,8 @@ function ModelSettingsSelector({
   const targetWorkspace = selectedWorkspaceId
     ? workspaces.find((w) => w.id === selectedWorkspaceId)
     : undefined;
-  const runtimeId = targetWorkspace?.runtimeId ?? undefined;
-  const { data: modelProviders = [], isLoading } = useModelProviders(selectedAgentType, runtimeId);
+  const runtimeHostId = targetWorkspace?.runtimeHostId ?? undefined;
+  const { data: modelProviders = [], isLoading } = useModelProviders(selectedAgentType, runtimeHostId);
   const selectedModelProviderId = selectedModelProviderIds[selectedAgentType];
   const matchedModelProvider = modelProviders.find(
     (modelProvider) => modelProvider.modelProviderId === selectedModelProviderId,

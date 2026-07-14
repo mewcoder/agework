@@ -11,7 +11,7 @@ export class ModelProviderController {
   list(@Query() query: ModelProviderAgentQueryDto) {
     return this.modelProviderService.listEnabled(
       query.agentType,
-      query.runtimeId
+      query.runtimeHostId
     );
   }
 

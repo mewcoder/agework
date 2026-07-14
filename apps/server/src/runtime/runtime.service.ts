@@ -7,13 +7,18 @@ import {
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
-import { type AgentType } from "@agework/shared";
+import { generateId, type AgentType } from "@agework/shared";
 import type {
+  DirectoryListing,
+  HostCapabilityStatus,
   HostUpstreamNotification,
+  RuntimeCapabilities,
   RuntimeSpec,
   RuntimeTunnelAllRpcRequest,
   RuntimeTunnelHostNotification,
+  WorkerScope,
 } from "@agework/shared/protocol";
+import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
   CreateRuntimeDirectoryResponse,
   CreateRuntimeResponse,
@@ -31,21 +36,32 @@ import type {
 } from "@agework/shared/api";
 import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
-import type { RuntimeConfig } from "@agework/providers";
-import { ConfigService, type RuntimeType } from "../config/config.service";
-import { LocalRuntime } from "./local/local-runtime";
+import type { RuntimeConfig, RuntimeType } from "@agework/providers";
+import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./local/runtime-config";
-import { RemoteRuntime } from "./remote/remote-runtime";
 import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
-import { ManagedRuntimeSupervisor } from "./managed/supervisor";
-import type { Runtime } from "./runtime.types";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
+import { detectEnvConfig } from "@agework/shared/cli";
+import { installCli as installLocalCli } from "./cli/cli-installer";
+import {
+  createDirectory as createDirectoryOnDisk,
+  listDirectory as listDirectoryOnDisk,
+} from "./filesystem/directory-browser";
+import {
+  createFsTimeoutSignal,
+  listFiles as listFilesDirect,
+  readFile as readFileDirect,
+  searchFiles as searchFilesDirect,
+} from "@agework/shared/filesystem";
+import {
+  listChangedFiles as listChangedFilesDirect,
+  readFileDiff as readFileDiffDirect,
+} from "@agework/shared/git";
 
 /**
- * Runtime 领域门面:解析目标 `Runtime` 实现 + placement 计算 + 运行时策略
- * + Registered Runtime 的配对管理(create/list/revoke)+ managed Runtime 的注册表。
- * 起/停/毁 worker 的具体分发在 `Runtime` 实现内(见 `runtime.types.ts`)。
+ * RuntimeHost 注册领域门面：管理 Host 注册表、placement 配置、能力与隧道传输。
+ * worker 生命周期只经 RuntimeHostContract；本类不再持有第二套 Runtime 抽象。
  */
 @Injectable()
 export class RuntimeService implements OnApplicationBootstrap {
@@ -53,67 +69,42 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   constructor(
     private readonly configService: ConfigService,
-    private readonly localRuntime: LocalRuntime,
     private readonly repository: RuntimeRepository,
-    private readonly tunnelHandler: RuntimeTunnelHandler,
-    private readonly supervisor: ManagedRuntimeSupervisor
+    private readonly tunnelHandler: RuntimeTunnelHandler
   ) {}
 
-  /** 启动时按部署允许的 runtimeType 初始化 managed Runtime:
-   *  - native:upsert managed 行(无 token)+ LocalRuntime 进程内检测 CLI 环境。
-   *  - docker/opensandbox:生成 managed token → upsert managed 行(tokenHash 非空)→
-   *    supervisor fork 独立 runtime 进程(注入 loopback + token)。envConfig 由
-   *    runtime 进程注册时上报(register 消息),不走 LocalRuntime.detectEnv。 */
+  /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
   async onApplicationBootstrap(): Promise<void> {
-    for (const runtimeType of this.configService.getAllowedRuntimeTypes()) {
-      if (runtimeType === "native") {
-        await this.upsertBuiltin(runtimeType, {
-          isolationScopes: managedIsolationScopes(runtimeType),
-        });
-        const id = BUILTIN_HOST_ID;
-        const envConfig = await this.localRuntime.detectEnv();
-        await this.repository.updateEnvConfig(id, envConfig);
-      } else {
-        const token = randomBytes(32).toString("hex");
-        const tokenHash = createHash("sha256").update(token).digest("hex");
-        await this.upsertBuiltin(
-          runtimeType,
-          { isolationScopes: managedIsolationScopes(runtimeType) },
-          tokenHash
-        );
-        this.supervisor.startManagedRuntime(runtimeType, token);
-      }
+    const allowedRuntimeTypes = this.configService.getAllowedRuntimeTypes();
+    const capabilities: RuntimeCapabilities = {};
+    for (const runtimeType of allowedRuntimeTypes) {
+      capabilities[runtimeType] = {
+        available: true,
+        scopes: runtimeTypeScopes(runtimeType),
+      };
+    }
+    await this.repository.upsertBuiltin({
+      name: BUILTIN_HOST_ID,
+      capabilities,
+      tokenHash: null,
+    });
+
+    if (allowedRuntimeTypes.includes("native")) {
+      const envConfig = detectEnvConfig();
+      await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
     }
     this.logger.log(
-      `managed runtimes ready: ${this.configService.getAllowedRuntimeTypes().join(", ")}`
+      `builtin Runtime Host ready: ${allowedRuntimeTypes.join(", ")}`
     );
   }
 
-  /**
-   * 解析目标 `Runtime` 实现(server 起/停/毁 worker 的唯一入口)。
-   * - managed-native:LocalRuntime(进程内直读)。
-   * - managed-docker/opensandbox + registered:RemoteRuntime(隧道 RPC)。
-   * RemoteRuntime 每次都新建,不持有连接本身(连接归 RuntimeTunnelHandler 管),
-   * 构造零开销。
-   */
-  runtimeFor(runtimeId: string): Runtime {
-    if (isBuiltinHostId(runtimeId)) {
-      return this.localRuntime;
-    }
-    return new RemoteRuntime(
-      runtimeId,
-      this.tunnelHandler,
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+  /** 是否是 builtin（本机 in-process）Host。 */
+  isBuiltinHost(runtimeHostId: string): boolean {
+    return isBuiltinHostId(runtimeHostId);
   }
 
-  /** 是否是 managed(本机 in-process)Runtime id。供上层判断 Managed/Registered。 */
-  isManaged(runtimeId: string): boolean {
-    return isBuiltinHostId(runtimeId);
-  }
-
-  /** managed Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
-  getManagedRuntimeId(runtimeType: RuntimeType): string {
+  /** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
+  getBuiltinHostId(): string {
     return BUILTIN_HOST_ID;
   }
 
@@ -125,26 +116,12 @@ export class RuntimeService implements OnApplicationBootstrap {
   /** 返回当前运行时策略配置(默认/可选 runtimeType、scope、空闲超时秒数),供前端展示与校验用。 */
   getRuntimePolicy() {
     return {
-      runtimeType: this.configService.getDefaultRuntimeType(),
+      defaultRuntimeType: this.configService.getDefaultRuntimeType(),
       allowedRuntimeTypes: this.configService.getAllowedRuntimeTypes(),
-      scope: this.configService.getDefaultIsolationScope(),
-      allowedIsolationScopes: this.configService.getAllowedIsolationScopes(),
+      defaultScope: this.configService.getDefaultWorkerScope(),
+      allowedScopes: this.configService.getAllowedScopes(),
       idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
     };
-  }
-
-  /** 服务启动时 upsert 一个 managed Runtime 行(id 固定,幂等)。
-   *  tokenHash:native 传 null(进程内);docker/opensandbox 传 sha256(managed token)。 */
-  private upsertBuiltin(
-    runtimeType: RuntimeType,
-    capabilities: { isolationScopes: string[] },
-    tokenHash: string | null = null
-  ) {
-    return this.repository.upsertBuiltin({
-      name: BUILTIN_HOST_ID,
-      capabilities,
-      tokenHash,
-    });
   }
 
   /** 创建 Registered Runtime 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
@@ -162,21 +139,21 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  /** 列出当前用户可见的 Runtime:自己的 Registered + 全局 managed。 */
+  /** 列出当前用户可见的 Host：自己的 registered + 全局 builtin。 */
   async list(ownerId: string): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listVisibleToOwner(ownerId);
     return { list: rows.map(toRuntimeResponse) };
   }
 
-  /** admin: 列出全部 Runtime(managed + 所有用户的 registered),不含已注销。 */
+  /** admin: 列出全部 Host（builtin + 所有用户的 registered），不含已注销。 */
   async listAll(): Promise<{ list: RuntimeResponse[] }> {
     const rows = await this.repository.listAll();
     return { list: rows.map(toRuntimeResponse) };
   }
 
   /**
-   * 查询 Runtime 是否存在且对该用户可见(自己的 Registered 或全局 managed,且未注销);
-   * 返回 null 表示不存在/不可见/已注销。供上层入口(如创建 workspace 时校验目标 runtime)
+   * 查询 Host 是否存在且对该用户可见（自己的 registered 或全局 builtin，且未注销）；
+   * 返回 null 表示不存在/不可见/已注销。供上层入口（如创建 workspace 时校验目标 Host）
    * 做归属校验,由调用方决定如何处理 null。
    */
   getOwned(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
@@ -184,10 +161,10 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 
   /**
-   * 注销 Runtime(撤 token,软删除,行永久保留):只拦"以后不能再绑定新 workspace",
+   * 注销 registered Host（撤 token、软删除、行永久保留）：只拦"以后不能再绑定新 workspace"，
    * 不主动踢断在线隧道连接——这台机器上可能还有活跃 Worker 在跑,断连接等于强制判死,
    * 跟"放任其自然结束"的设计矛盾(见 runtime 模块 ADR-0001)。连接的存活/掉线继续按
-   * 心跳机制走,不因注销而改变。managed 行 ownerId=null,不会匹配任何真实 userId,
+   * 心跳机制走，不因注销而改变。builtin 行 ownerId=null，不会匹配任何真实 userId，
    * 天然不可被此方法注销。
    */
   async delete(ownerId: string, id: string): Promise<void> {
@@ -239,15 +216,15 @@ export class RuntimeService implements OnApplicationBootstrap {
         `runtime ${id} is not a native runtime, cannot install CLI`
       );
     }
-    const executablePath = await this.localRuntime.installCli(agentType);
+    const executablePath = await installLocalCli(agentType);
     await this.updateEnvConfigOverride(id, agentType, executablePath);
     return this.detectEnv(id);
   }
 
   /**
    * 管理员触发 runtime 重新检测 CLI 环境。
-   * - managed runtime: LocalRuntime 进程内检测。
-   * - registered runtime: 通过隧道发 detect-env RPC,manager 重检后返回新 envConfig。
+   * - builtin Host:进程内检测。
+   * - registered Host:通过 host.detectEnv RPC 重检能力矩阵。
    *   runtime 未连接时返回 null。
    */
   async detectEnv(id: string): Promise<DetectEnvResponse> {
@@ -255,7 +232,21 @@ export class RuntimeService implements OnApplicationBootstrap {
       return { envConfig: null };
     }
     try {
-      const envConfig = await this.runtimeFor(id).detectEnv();
+      const envConfig = isBuiltinHostId(id)
+        ? detectEnvConfig()
+        : (
+            await this.sendTunnelRequest<HostCapabilityStatus>(
+              id,
+              {
+                jsonrpc: "2.0",
+                id: generateId(),
+                method: "host.detectEnv",
+                params: { runtimeHostId: id },
+              },
+              this.configService.getLaunchTimeoutSeconds() * 1000
+            )
+          ).native?.cli;
+      if (!envConfig) return { envConfig: null };
       await this.repository.updateEnvConfig(id, envConfig);
       return { envConfig };
     } catch (err) {
@@ -278,7 +269,18 @@ export class RuntimeService implements OnApplicationBootstrap {
   ): Promise<RuntimeDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      const result = await this.runtimeFor(id).listDirectory(path);
+      const result = isBuiltinHostId(id)
+        ? listDirectoryOnDisk(path)
+        : await this.sendTunnelRequest<DirectoryListing>(
+            id,
+            {
+              jsonrpc: "2.0",
+              id: generateId(),
+              method: "host.listDirectory",
+              params: { runtimeHostId: id, path },
+            },
+            this.configService.getLaunchTimeoutSeconds() * 1000
+          );
       return { path: result.path, list: result.entries };
     } catch (err) {
       throw new BadRequestException(
@@ -295,7 +297,18 @@ export class RuntimeService implements OnApplicationBootstrap {
   ): Promise<CreateRuntimeDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      return await this.runtimeFor(id).createDirectory(path);
+      if (isBuiltinHostId(id)) return createDirectoryOnDisk(path);
+      await this.sendTunnelRequest<never>(
+        id,
+        {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.createDirectory",
+          params: { runtimeHostId: id, path },
+        },
+        this.configService.getLaunchTimeoutSeconds() * 1000
+      );
+      return { path };
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -303,20 +316,40 @@ export class RuntimeService implements OnApplicationBootstrap {
     }
   }
 
-  // ── 文件预览(ADR-0005: managed native 直读, docker/opensandbox/registered 隧道 RPC) ─────
+  // ── 文件预览 ───────────────────────────────────────────────────────
 
   /**
-   * 文件预览直读:managed native 在 server 进程内直读本机硬盘;docker/opensandbox/
-   * registered 经隧道 RPC 调 runtime 进程。安全校验复用 shared/fileBrowser(与
-   * worker 同一份代码)。rootPath 由 WorkspaceService 查出后传入。
+   * builtin Host 直读本机硬盘；registered Host 经 host.* 隧道 RPC。
+   * 安全校验复用 shared/fileBrowser，rootPath 由 WorkspaceService 查出后传入。
    */
   async listFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      return await this.runtimeFor(runtimeId).listFiles(rootPath, relativePath);
+      if (!isBuiltinHostId(runtimeHostId)) {
+        return await this.sendTunnelRequest<WorkspaceFileListResponse>(
+          runtimeHostId,
+          {
+            jsonrpc: "2.0",
+            id: generateId(),
+            method: "host.listFiles",
+            params: { runtimeHostId, rootPath, path: relativePath },
+          },
+          this.configService.getLaunchTimeoutSeconds() * 1000
+        );
+      }
+      const result = await listFilesDirect(
+        rootPath,
+        relativePath,
+        createFsTimeoutSignal()
+      );
+      return {
+        path: result.path,
+        list: result.list,
+        truncated: result.truncated,
+      };
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -326,12 +359,35 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 文件预览直读(ADR-0005),同 listFiles。 */
   async readFile(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      return await this.runtimeFor(runtimeId).readFile(rootPath, relativePath);
+      if (!isBuiltinHostId(runtimeHostId)) {
+        return await this.sendTunnelRequest<WorkspaceFileReadResponse>(
+          runtimeHostId,
+          {
+            jsonrpc: "2.0",
+            id: generateId(),
+            method: "host.readFile",
+            params: { runtimeHostId, rootPath, path: relativePath },
+          },
+          this.configService.getLaunchTimeoutSeconds() * 1000
+        );
+      }
+      const result = await readFileDirect(
+        rootPath,
+        relativePath,
+        createFsTimeoutSignal()
+      );
+      return {
+        path: result.path,
+        encoding: result.encoding,
+        content: result.content,
+        size: result.size,
+        truncated: result.truncated,
+      };
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -342,16 +398,27 @@ export class RuntimeService implements OnApplicationBootstrap {
   // ── 变更查看(diff,只读) ──────
 
   /**
-   * 变更查看:managed native 在本机 workspace 目录直跑 git;docker/opensandbox/
-   * registered 经隧道 RPC 调 runtime 进程。rootPath 由 WorkspaceService 查出后传入。
+   * 变更查看：builtin Host 在本机 workspace 目录直跑 git；registered Host 经
+   * host.* 隧道 RPC。rootPath 由 WorkspaceService 查出后传入。
    * 非 git 目录 → BadRequestException(可区分「非 git」);git 失败 → BadRequestException。
    */
   async listChangedFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return await this.runtimeFor(runtimeId).listChangedFiles(rootPath);
+      return isBuiltinHostId(runtimeHostId)
+        ? await listChangedFilesDirect(rootPath)
+        : await this.sendTunnelRequest<WorkspaceChangedFilesResponse>(
+            runtimeHostId,
+            {
+              jsonrpc: "2.0",
+              id: generateId(),
+              method: "host.listChangedFiles",
+              params: { runtimeHostId, rootPath },
+            },
+            this.configService.getLaunchTimeoutSeconds() * 1000
+          );
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -359,15 +426,27 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 单文件 diff,同 listChangedFiles。 */
   async readFileDiff(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string,
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return await this.runtimeFor(runtimeId).readFileDiff(
-        rootPath,
-        relativePath
-      );
+      return isBuiltinHostId(runtimeHostId)
+        ? await readFileDiffDirect(rootPath, relativePath)
+        : await this.sendTunnelRequest<WorkspaceFileDiffResponse>(
+            runtimeHostId,
+            {
+              jsonrpc: "2.0",
+              id: generateId(),
+              method: "host.readFileDiff",
+              params: {
+                runtimeHostId,
+                rootPath,
+                path: relativePath,
+              },
+            },
+            this.configService.getLaunchTimeoutSeconds() * 1000
+          );
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -375,11 +454,22 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 文件搜索(git ls-files，供 `@` 文件提及),同 listFiles。 */
   async searchFiles(
-    runtimeId: string,
+    runtimeHostId: string,
     rootPath: string
   ): Promise<WorkspaceFileSearchResponse> {
     try {
-      return await this.runtimeFor(runtimeId).searchFiles(rootPath);
+      return isBuiltinHostId(runtimeHostId)
+        ? await searchFilesDirect(rootPath)
+        : await this.sendTunnelRequest<WorkspaceFileSearchResponse>(
+            runtimeHostId,
+            {
+              jsonrpc: "2.0",
+              id: generateId(),
+              method: "host.searchFiles",
+              params: { runtimeHostId, rootPath },
+            },
+            this.configService.getLaunchTimeoutSeconds() * 1000
+          );
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -421,7 +511,7 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /**
    * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 local/runtime-config.ts)。
-   * Phase 2:worker-manager 侧进程内 RuntimeHost(managed-native)构造时用。
+   * 供进程内 builtin RuntimeHost 构造 provider 配置。
    */
   getProviderRuntimeConfig(): RuntimeConfig {
     return toRuntimeConfig(this.configService);
@@ -429,40 +519,40 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   // ── Phase 2 隧道公开面(对 RuntimeTunnelHandler 的薄转发)────────────
   //
-  // worker-manager 的 RuntimeHostAdapter 经这里走隧道,不直接 reach
+  // RuntimeHostAdapter 经这里走隧道,不直接 reach
   // gateway 内部文件(模块边界:跨模块只调根 Service)。
 
   /** 向已建连的 registered Host 发一次隧道 RPC(host.* / launch/stop/destroy)。 */
   sendTunnelRequest<Result>(
-    runtimeId: string,
+    runtimeHostId: string,
     request: RuntimeTunnelAllRpcRequest,
     timeoutMs: number
   ): Promise<Result> {
     return this.tunnelHandler.sendRequest<Result>(
-      runtimeId,
+      runtimeHostId,
       request,
       timeoutMs
     );
   }
 
-  /** 列出所有隧道在线的 runtime id(managed-native 不走隧道,不会出现在结果里)。 */
-  listConnectedRuntimeIds(): string[] {
+  /** 列出所有隧道在线的 registered Host id（builtin Host 不走隧道）。 */
+  listConnectedRuntimeHostIds(): string[] {
     return this.tunnelHandler.listConnected();
   }
 
   /** 向目标 Host 发一条单向隧道通知(不等回应,不在线即丢弃,best-effort)。 */
   sendTunnelNotification(
-    runtimeId: string,
+    runtimeHostId: string,
     notification: RuntimeTunnelHostNotification
   ): void {
-    this.tunnelHandler.sendNotification(runtimeId, notification);
+    this.tunnelHandler.sendNotification(runtimeHostId, notification);
   }
 
   /** 注册 host.upstream 通知回调(Host → server 单向回流,进程内仅一个消费者)。
    *  handler 返回 Promise 时按连接串行 await,处理完成后才向 Host 回 ACK 水位。 */
   setTunnelUpstreamHandler(
     handler: (
-      runtimeId: string,
+      runtimeHostId: string,
       notification: HostUpstreamNotification
     ) => Promise<void> | void
   ): void {
@@ -471,7 +561,7 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /**
    * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
-   * 供 RunLauncher 对 local 类型提取 CLI 路径写入 RunConfig。
+   * 供 RunLauncher 对 native 类型提取 CLI 路径写入 RunConfig。
    */
   async getResolvedCliPaths(id: string): Promise<{
     claude: string | null;
@@ -502,15 +592,20 @@ export class RuntimeService implements OnApplicationBootstrap {
 function toRuntimeResponse(row: RuntimeHostRow): RuntimeResponse {
   const envConfig = row.envConfig as RuntimeEnvConfig | null;
   const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
+  const normalizedCapabilities = row.capabilities
+    ? normalizeRuntimeCapabilities(row.capabilities)
+    : null;
+  const capabilities =
+    normalizedCapabilities && Object.keys(normalizedCapabilities).length > 0
+      ? normalizedCapabilities
+      : null;
   return {
     id: row.id,
     name: row.name,
     source: row.source,
     ownerId: row.ownerId,
-    runtimeType: null,
     status: row.status === "online" ? "online" : "offline",
-    capabilities:
-      (row.capabilities as RuntimeResponse["capabilities"] | null) ?? null,
+    capabilities,
     envConfig,
     envConfigOverride: override,
     envStatus: envConfig ? computeEnvStatus(envConfig, override) : null,
@@ -551,9 +646,9 @@ function mergeAgent(
   };
 }
 
-/** native 没有容器,没有隔离概念,只有 workspace 独占子进程;docker/opensandbox 都有容器
- *  边界兜底,user 级共享安全,两种隔离都支持。 */
-function managedIsolationScopes(runtimeType: RuntimeType): string[] {
+/** native 没有容器,只允许 workspace 范围的独占子进程;docker/opensandbox 有容器
+ *  边界兜底,支持 user/workspace 两种复用范围。 */
+function runtimeTypeScopes(runtimeType: RuntimeType): WorkerScope[] {
   return runtimeType === "native" ? ["workspace"] : ["user", "workspace"];
 }
 

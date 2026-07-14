@@ -53,11 +53,13 @@ const makeCtx = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-const makeRef = (over: Partial<RuntimeInstanceRef> = {}): RuntimeInstanceRef => ({
+const makeRef = (
+  over: Partial<RuntimeInstanceRef> = {}
+): RuntimeInstanceRef => ({
   runtimeType: "native",
   ownerId: "owner-1",
   runtimeInstanceId: "12345:some-token",
-  isolationScope: "workspace",
+  scope: "workspace",
   ...over,
 });
 
@@ -75,7 +77,9 @@ describe("NativeRuntimeProvider", () => {
       const provider = makeProvider();
 
       const { runtimeInstanceId } = await provider.start(
-        makeCtx({ workerEnv: { AGEWORK_WORKER_START_TOKEN: "provisioner-tok" } })
+        makeCtx({
+          workerEnv: { AGEWORK_WORKER_START_TOKEN: "provisioner-tok" },
+        })
       );
 
       expect(forkMock.fork).toHaveBeenCalledWith(
@@ -150,7 +154,9 @@ describe("NativeRuntimeProvider", () => {
       const killSpy = vi.spyOn(process, "kill").mockReturnValue(true);
       const provider = makeProvider();
 
-      provider.destroy(makeRef({ runtimeInstanceId: "not-a-valid-runtime-id" }));
+      provider.destroy(
+        makeRef({ runtimeInstanceId: "not-a-valid-runtime-id" })
+      );
 
       expect(killSpy).not.toHaveBeenCalled();
       killSpy.mockRestore();

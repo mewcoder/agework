@@ -1,6 +1,6 @@
 /**
  * DirectoryBrowser：runtime manager 侧的目录浏览/新建能力，供 registered
- * 隧道的 runtime.list-dir / runtime.create-dir RPC 调用。只列目录，不列文件。
+ * RuntimeHost 的目录浏览契约调用。只列目录，不列文件。
  * server 端同步副本见 apps/server/src/runtime/filesystem/directory-browser.ts。
  */
 

@@ -7,7 +7,7 @@ import {
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { isRuntimeType, type RuntimeType } from "@agework/providers";
-import type { IsolationScope } from "@agework/shared/protocol";
+import type { WorkerScope } from "@agework/shared/protocol";
 import { SystemSettingRepository } from "./system-setting.repository";
 import {
   AGEWORK_HOST_RUNTIME_LOG_DIR,
@@ -26,7 +26,7 @@ import {
   DEFAULT_OPENSANDBOX_TIMEOUT_SECONDS,
   DEFAULT_OPENSANDBOX_USE_SERVER_PROXY,
   DEFAULT_ALLOWED_RUNTIME_TYPES,
-  DEFAULT_ALLOWED_ISOLATION_SCOPES,
+  DEFAULT_ALLOWED_SCOPES,
   DEFAULT_PORT,
   DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB,
   DEFAULT_BUILTIN_WORKER_HTTP_PORT,
@@ -93,18 +93,10 @@ export function getJwtSecret(): string {
   );
 }
 
-// RuntimeType / isRuntimeType 的权威来源是 @agework/providers（design §4.2），
-// IsolationScope 的权威来源是 @agework/shared/protocol。re-export 保持现有消费者
-// 从 config.service 引入的路径不破。
-export type { RuntimeType, IsolationScope };
+const SCOPES = ["user", "workspace"] as const satisfies readonly WorkerScope[];
 
-const ISOLATION_SCOPES = [
-  "user",
-  "workspace",
-] as const satisfies readonly IsolationScope[];
-
-function isIsolationScope(value: string): value is IsolationScope {
-  return (ISOLATION_SCOPES as readonly string[]).includes(value);
+function isWorkerScope(value: string): value is WorkerScope {
+  return (SCOPES as readonly string[]).includes(value);
 }
 
 /**
@@ -245,38 +237,30 @@ export class ConfigService implements OnModuleInit {
     );
   }
 
-  getAllowedIsolationScopes(): IsolationScope[] {
-    const raw = this.getEnv(EnvKey.RUNTIME_ALLOWED_ISOLATION_SCOPES);
+  getAllowedScopes(): WorkerScope[] {
+    const raw = this.getEnv(EnvKey.RUNTIME_ALLOWED_SCOPES);
     const values = raw
       ? raw
           .split(",")
           .map((value) => value.trim())
           .filter(Boolean)
-      : [...DEFAULT_ALLOWED_ISOLATION_SCOPES];
+      : [...DEFAULT_ALLOWED_SCOPES];
 
-    if (
-      values.length === 0 ||
-      values.some((value) => !isIsolationScope(value))
-    ) {
+    if (values.length === 0 || values.some((value) => !isWorkerScope(value))) {
       throw new Error(
-        `AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES expects comma-separated values from "user", "workspace", got: ${raw ?? values.join(",")}`
+        `AGEWORK_RUNTIME_ALLOWED_SCOPES expects comma-separated values from "user", "workspace", got: ${raw ?? values.join(",")}`
       );
     }
 
-    return Array.from(new Set(values)) as IsolationScope[];
+    return Array.from(new Set(values)) as WorkerScope[];
   }
 
-  getDefaultIsolationScope(): IsolationScope {
-    return this.getAllowedIsolationScopes()[0];
+  getDefaultWorkerScope(): WorkerScope {
+    return this.getAllowedScopes()[0];
   }
 
-  isIsolationScopeAllowed(
-    scope: string
-  ): scope is IsolationScope {
-    return (
-      isIsolationScope(scope) &&
-      this.getAllowedIsolationScopes().includes(scope)
-    );
+  isWorkerScopeAllowed(scope: string): scope is WorkerScope {
+    return isWorkerScope(scope) && this.getAllowedScopes().includes(scope);
   }
 
   getRuntimeLogDir(): string {

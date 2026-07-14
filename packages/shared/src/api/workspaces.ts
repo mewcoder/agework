@@ -1,7 +1,8 @@
 import type { ListResponse, PaginatedListResponse } from "../common";
+import type { WorkerScope } from "../protocol/channel";
 
 export type WorkspaceRuntimeType = "native" | "docker" | "opensandbox";
-export type WorkspaceIsolationScope = "user" | "workspace";
+export type WorkspaceScope = WorkerScope;
 export type WorkspaceDirectorySource = "managed" | "external" | "remote";
 
 export type WorkspaceResponse = {
@@ -11,13 +12,13 @@ export type WorkspaceResponse = {
   directoryStatus: string;
   directorySource: WorkspaceDirectorySource;
   runtimeType: WorkspaceRuntimeType;
-  isolationScope?: WorkspaceIsolationScope | null;
+  scope: WorkspaceScope;
   gitUrl?: string | null;
   /** 创建时选定的 git 分支;非 git / 未选时为 null。创建后只读。 */
   gitBranch?: string | null;
   description?: string | null;
-  /** 绑定的 Registered Runtime id;null = Managed(本机 in-process)。创建后不可改。 */
-  runtimeId?: string | null;
+  /** 绑定的 Runtime Host id（builtin 或 registered）。创建后不可改。 */
+  runtimeHostId: string;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601 */
@@ -39,10 +40,9 @@ export type CreateWorkspaceRequest = {
   gitBranch?: string;
   rootPath?: string;
   runtimeType?: WorkspaceRuntimeType;
-  isolationScope?: WorkspaceIsolationScope;
-  /** 绑定到某个已配对的 Registered Runtime;与 runtimeType 互斥
-   *  (选 Runtime 即定运行方式,runtimeType 由该 Runtime 注册的类型决定,不由前端传)。 */
-  runtimeId?: string;
+  scope?: WorkspaceScope;
+  /** 绑定到某个已配对的 Registered Runtime Host；runtimeType 选择其一种能力。 */
+  runtimeHostId?: string;
 };
 
 export type UpdateWorkspaceRequest = {
@@ -54,22 +54,27 @@ export type UpdateWorkspaceRequest = {
 export type WorkspaceIdRequest = { id: string };
 
 export type WorkspaceListResponse = ListResponse<WorkspaceResponse>;
-export type AdminWorkspaceListResponse = PaginatedListResponse<AdminWorkspaceResponse>;
+export type AdminWorkspaceListResponse =
+  PaginatedListResponse<AdminWorkspaceResponse>;
 
 /** GET /api/v1/workspaces/git-branches/list 的响应,分支名列表。 */
 export type WorkspaceGitBranchListResponse = ListResponse<string>;
 
 export type WorkspaceCapabilitiesResponse = {
   canSelectLocalDirectory: boolean;
-  runtimeType: WorkspaceRuntimeType;
+  defaultRuntimeType: WorkspaceRuntimeType;
   allowedRuntimeTypes: WorkspaceRuntimeType[];
-  isolationScope: WorkspaceIsolationScope;
-  allowedIsolationScopes: WorkspaceIsolationScope[];
+  defaultScope: WorkspaceScope;
+  allowedScopes: WorkspaceScope[];
 };
 
 // ── 变更查看(diff,只读,只支持本地 runtime) ──
 
-export type WorkspaceChangeStatus = "added" | "modified" | "deleted" | "renamed";
+export type WorkspaceChangeStatus =
+  | "added"
+  | "modified"
+  | "deleted"
+  | "renamed";
 
 /** 一个变更文件条目。additions/deletions 为 null 表示未跟踪或二进制(无 numstat)。 */
 export type ChangedFileEntry = {

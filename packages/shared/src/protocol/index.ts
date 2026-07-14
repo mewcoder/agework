@@ -1,5 +1,6 @@
 import type { RunChannelMessage } from "./run-channel-message";
-import type { CommandPayload } from "./channel";
+import type { CommandPayload, WorkerScope } from "./channel";
+import type { RuntimeCapabilities } from "./runtime-capabilities";
 
 export type { RunChannelMessage } from "./run-channel-message";
 
@@ -68,24 +69,22 @@ export type {
   UpstreamMessageInput,
   Unsubscribe,
   RuntimeChannel,
-  WorkerExecutionHandle,
-  WorkerExecutionStartInput,
+  RunExecutionHandle,
   WorkerRegisterRequest,
-  AcquireInstanceResult,
-  IsolationScope,
+  WorkerScope,
   RuntimeSpec,
   NativeRuntimeSpec,
   SandboxRuntimeSpec,
   SandboxPlacementInfo,
 } from "./channel";
 export type {
-  WorkerScope,
-  Isolation,
+  RuntimeType,
   OwnerKey,
   WorkerKey,
   RunPlacement,
   SubmitRunInput,
-  ExecutionRef,
+  RuntimeHostCommandInput,
+  RuntimeHostRunRef,
   WorkerSnapshot,
   RuntimeHostContract,
   RuntimeHostUpstream,
@@ -102,13 +101,59 @@ export type {
   InstallCliInput,
   InstallCliResult,
 } from "./runtime-host";
+export type { RuntimeCapabilities } from "./runtime-capabilities";
+
+/** 校验并规范化一机多 runtimeType 的能力矩阵。 */
+export function normalizeRuntimeCapabilities(
+  value: unknown
+): RuntimeCapabilities {
+  if (!isRecord(value)) return {};
+
+  const capabilities: RuntimeCapabilities = {};
+  for (const [runtimeType, rawStatus] of Object.entries(value)) {
+    if (!isRecord(rawStatus) || typeof rawStatus.available !== "boolean") {
+      continue;
+    }
+    capabilities[runtimeType] = {
+      available: rawStatus.available,
+      scopes: Array.isArray(rawStatus.scopes)
+        ? normalizeScopes(rawStatus.scopes)
+        : [],
+      ...(typeof rawStatus.reason === "string"
+        ? { reason: rawStatus.reason }
+        : {}),
+      ...(isRecord(rawStatus.cli)
+        ? { cli: rawStatus.cli as RuntimeCapabilities[string]["cli"] }
+        : {}),
+    };
+  }
+  return capabilities;
+}
+
+/** 可被新 Workspace 选择的 runtimeType 列表。 */
+export function availableRuntimeTypes(
+  capabilities: RuntimeCapabilities | null | undefined
+): string[] {
+  if (!capabilities) return [];
+  return Object.entries(capabilities)
+    .filter(([, status]) => status.available)
+    .map(([runtimeType]) => runtimeType);
+}
+
+function normalizeScopes(scopes: unknown[]): WorkerScope[] {
+  return scopes.filter(
+    (scope): scope is WorkerScope => scope === "workspace" || scope === "user"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 // ── owner/worker key 构造器(运行时值必须内联在本入口文件,原因见
 //    common/index.ts 的 generateId 注释;类型定义在 runtime-host.ts) ──
 
-export function workspaceOwnerKey(
-  workspaceId: string
-): `workspace:${string}` {
+export function workspaceOwnerKey(workspaceId: string): `workspace:${string}` {
   return `workspace:${workspaceId}`;
 }
 
@@ -118,9 +163,9 @@ export function userOwnerKey(userId: string): `user:${string}` {
 
 export function workerKey(
   owner: `workspace:${string}` | `user:${string}`,
-  isolation: string
+  runtimeType: string
 ): `${"workspace" | "user"}:${string}#${string}` {
-  return `${owner}#${isolation}` as `${"workspace" | "user"}:${string}#${string}`;
+  return `${owner}#${runtimeType}` as `${"workspace" | "user"}:${string}#${string}`;
 }
 
 /** 拆 owner 键。仅接受上面构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
@@ -158,33 +203,11 @@ export type {
 } from "./rpc";
 
 export type {
-  RuntimeCapabilities,
   RuntimeTunnelClientMessage,
   RuntimeTunnelHeartbeatMessage,
   RuntimeTunnelRegisterMessage,
   RuntimeTunnelRegisteredMessage,
   RuntimeTunnelServerMessage,
-  RuntimeLaunchRpcParams,
-  RuntimeInstanceRefRpcParams,
-  RuntimeTunnelRpcRequest,
-  RuntimeLaunchRpcResult,
-  RuntimeDetectEnvRpcParams,
-  RuntimeDetectEnvRpcResult,
-  RuntimeListDirRpcParams,
-  RuntimeListDirRpcResult,
-  RuntimeCreateDirRpcParams,
-  RuntimeCreateDirRpcResult,
-  RuntimeListFilesRpcParams,
-  RuntimeListFilesRpcResult,
-  RuntimeReadFileRpcParams,
-  RuntimeReadFileRpcResult,
-  RuntimeListChangedFilesRpcParams,
-  RuntimeListChangedFilesRpcResult,
-  RuntimeReadFileDiffRpcParams,
-  RuntimeReadFileDiffRpcResult,
-  RuntimeSearchFilesRpcParams,
-  RuntimeSearchFilesRpcResult,
-  RuntimeTunnelRpcResponse,
   HostSubmitRunRpcParams,
   HostCommandRpcParams,
   HostReleaseOwnerRpcParams,

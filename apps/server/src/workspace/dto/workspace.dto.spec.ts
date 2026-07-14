@@ -41,7 +41,7 @@ describe("CreateWorkspaceDto", () => {
     expect(result.scope).toBe("workspace");
   });
 
-  it("rejects invalid runtime runtimeType scope in create payloads", async () => {
+  it("rejects an invalid worker scope in create payloads", async () => {
     await expect(
       transformBody(CreateWorkspaceDto, {
         name: "My Workspace",

@@ -2,7 +2,7 @@
  * 工作空间文件浏览器（纯异步 fs/promises，无运行时依赖）。
  *
  * 提取自 `packages/worker/src/files/workspace-file-browser.ts`，供 worker
- * 和 server（LocalRuntime managed 直读）共用同一份安全校验 + fs 读取逻辑。
+ * 和 server builtin Host 文件入口共用同一份安全校验 + fs 读取逻辑。
  *
  * 安全校验：相对路径、NUL/`..`/绝对路径拒绝、realpath 前缀判断挡 symlink 逃逸、
  * O_NOFOLLOW 打开文件消除 TOCTOU（Windows 降级为 lstat 预检）。
@@ -403,8 +403,15 @@ const SEARCH_GIT_TIMEOUT_MS = 5_000;
 const SEARCH_GIT_MAX_BUFFER = 16 * 1024 * 1024; // 16 MiB
 const WALK_DEPTH_LIMIT = 15;
 const WALK_DENYLIST = new Set([
-  "node_modules", ".git", "dist", "build", ".next",
-  ".venv", "target", "vendor", "coverage",
+  "node_modules",
+  ".git",
+  "dist",
+  "build",
+  ".next",
+  ".venv",
+  "target",
+  "vendor",
+  "coverage",
 ]);
 
 /**
@@ -417,16 +424,30 @@ const WALK_DENYLIST = new Set([
  * 返回相对路径数组（`/` 分隔），与 `git ls-files` 一致。
  */
 export async function searchFiles(
-  rootPath: string,
+  rootPath: string
 ): Promise<{ list: string[]; truncated: boolean }> {
   // Try git first
   try {
     const out = await new Promise<string>((resolve, reject) => {
       execFile(
         "git",
-        ["-C", rootPath, "ls-files", "--cached", "--others", "--exclude-standard", "-z"],
-        { encoding: "utf8", timeout: SEARCH_GIT_TIMEOUT_MS, maxBuffer: SEARCH_GIT_MAX_BUFFER },
-        (err, stdout) => { err ? reject(err) : resolve(stdout as string); },
+        [
+          "-C",
+          rootPath,
+          "ls-files",
+          "--cached",
+          "--others",
+          "--exclude-standard",
+          "-z",
+        ],
+        {
+          encoding: "utf8",
+          timeout: SEARCH_GIT_TIMEOUT_MS,
+          maxBuffer: SEARCH_GIT_MAX_BUFFER,
+        },
+        (err, stdout) => {
+          err ? reject(err) : resolve(stdout as string);
+        }
       );
     });
     const list = out.split("\0").filter((s) => s.length > 0);
@@ -443,7 +464,7 @@ export async function searchFiles(
 
 /** 递归遍历回退（非 git 目录）。denylist + 深度/数量上限。 */
 async function searchByWalk(
-  rootPath: string,
+  rootPath: string
 ): Promise<{ list: string[]; truncated: boolean }> {
   const list: string[] = [];
   await walkDir(rootPath, "", list);
@@ -457,7 +478,7 @@ async function searchByWalk(
 async function walkDir(
   rootPath: string,
   relPath: string,
-  list: string[],
+  list: string[]
 ): Promise<void> {
   if (list.length >= SEARCH_FILES_LIMIT) return;
   const absPath = relPath ? join(rootPath, relPath) : rootPath;

@@ -15,7 +15,7 @@ describe("owner/worker key builders", () => {
     expect(userOwnerKey("u-1")).toBe("user:u-1");
   });
 
-  it("builds worker key with isolation segment", () => {
+  it("builds worker key with runtimeType segment", () => {
     expect(workerKey(userOwnerKey("u-1"), "docker")).toBe("user:u-1#docker");
     expect(workerKey(workspaceOwnerKey("ws-1"), "native")).toBe(
       "workspace:ws-1#native"

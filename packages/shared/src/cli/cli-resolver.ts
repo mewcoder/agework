@@ -1,7 +1,7 @@
 /**
  * Agent CLI 环境检测（纯 child_process + fs，无运行时依赖）。
  *
- * 供 server（LocalRuntime managed native 进程内检测）、apps/runtime（manager 注册时
+ * 供 server builtin Host 进程内检测、apps/runtime（Host 注册时
  * 上报）、packages/worker（run 执行时 fallback）共用同一份 PATH 查找 + 已知位置搜索 +
  * 版本解析逻辑。提取自原 apps/server 与 apps/runtime 各自的 cli-resolver 副本，
  * 消除"改一份忘一份"（Windows npm shim .cmd 检测 bug 即因此暴露）。
@@ -31,7 +31,7 @@ import type { AgentDetectedEnv, RuntimeEnvConfig } from "../api/runtimes";
 
 /**
  * 检测本机 agent CLI 环境，返回完整的 envConfig（claude + codex）。
- * builtin/managed native runtime 启动时、registered runtime 注册时、admin 触发重检时各调一次。
+ * builtin Host 启动时、registered Host 注册时、admin 触发重检时各调一次。
  */
 export function detectEnvConfig(): RuntimeEnvConfig {
   return {
@@ -165,14 +165,35 @@ function claudeKnownLocations(): string[] {
   if (isWindows) {
     paths.push(join(home, ".claude", "local", "claude.exe"));
     paths.push(join(home, "AppData", "Local", "Claude", "claude.exe"));
-    paths.push(join(process.env.ProgramFiles || "C:\\Program Files", "Claude", "claude.exe"));
-    paths.push(join(process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)", "Claude", "claude.exe"));
+    paths.push(
+      join(
+        process.env.ProgramFiles || "C:\\Program Files",
+        "Claude",
+        "claude.exe"
+      )
+    );
+    paths.push(
+      join(
+        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+        "Claude",
+        "claude.exe"
+      )
+    );
     paths.push(join(home, ".local", "bin", "claude.exe"));
     // npm global（Windows 上 npm 全局安装只产出 .cmd shim，无 .exe）
     if (process.env.APPDATA) {
       paths.push(join(process.env.APPDATA, "npm", "claude.cmd"));
       paths.push(join(process.env.APPDATA, "npm", "claude.exe"));
-      paths.push(join(process.env.APPDATA, "npm", "node_modules", "@anthropic-ai", "claude-code", "cli.js"));
+      paths.push(
+        join(
+          process.env.APPDATA,
+          "npm",
+          "node_modules",
+          "@anthropic-ai",
+          "claude-code",
+          "cli.js"
+        )
+      );
     }
     // chocolatey
     paths.push(join("C:\\ProgramData", "chocolatey", "bin", "claude.exe"));

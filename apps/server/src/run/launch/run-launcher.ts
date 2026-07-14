@@ -7,19 +7,20 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 import {
+  parseOwnerKey,
   userOwnerKey,
   workspaceOwnerKey,
   type AgentProviderConfig,
   type RecordRunEventInput,
   type RunPlacement,
   type RuntimeHostContract,
-  type WorkerExecutionHandle,
+  type RunExecutionHandle,
   type WorkerScope,
 } from "@agework/shared/protocol";
 import { isRuntimeType } from "@agework/providers";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import {
   AssistantMessageAggregator,
@@ -91,8 +92,7 @@ export class RunLauncher {
     const agentType = agentProviderConfig.agentType;
     const placement = this.buildPlacement({ workspace, userId });
     const runtimeType = placement.runtimeType;
-    const isolationScope =
-      runtimeType !== "native" ? placement.isolationScope : undefined;
+    const scope = parseOwnerKey(placement.owner).scope;
     const stream = new RunStream(res);
 
     await this.claimRun({
@@ -119,7 +119,7 @@ export class RunLauncher {
       workspaceId: placement.workspaceId,
       agentType,
       runtimeType,
-      isolationScope,
+      scope,
     });
 
     const runCreated = await this.createRun({
@@ -128,7 +128,7 @@ export class RunLauncher {
       workspaceId: placement.workspaceId,
       agentType,
       runtimeType,
-      isolationScope,
+      scope,
       userMessageId,
       userId,
       stream,
@@ -160,9 +160,9 @@ export class RunLauncher {
   }
 
   /**
-   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 Managed 专属策略,
-   * Registered runtime 的 workspace 跳过——它的 runtimeType/isolationScope 已在
-   * 创建时对着该 Runtime 自己的注册类型/能力矩阵校验过(见
+   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 builtin Host 的策略，
+   * registered Host 的 workspace 跳过——它的 runtimeType/scope 已在
+   * 创建时对着该 Host 的能力矩阵校验过(见
    * WorkspaceService.resolveRegisteredPlacement)。执行机路径/RunConfig 派生
    * 不在这里:那是 Host 侧(契约实现)的职责。
    */
@@ -171,42 +171,46 @@ export class RunLauncher {
     userId: string;
   }): RunPlacement {
     const { workspace, userId } = input;
-    const isRegistered = workspace.runtimeSource !== "managed";
+    const isRegistered = workspace.runtimeSource === "registered";
     const runtimeType = workspace.runtimeType;
-    if (!isRegistered && !this.configService.isRuntimeTypeAllowed(runtimeType)) {
+    if (
+      !isRegistered &&
+      !this.configService.isRuntimeTypeAllowed(runtimeType)
+    ) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
     if (!isRuntimeType(runtimeType)) {
-      throw new BadRequestException(`工作空间的运行环境类型无效: ${runtimeType}`);
+      throw new BadRequestException(
+        `工作空间的运行环境类型无效: ${runtimeType}`
+      );
     }
 
-    // native 无容器边界,isolationScope 恒为 workspace(能力矩阵约束);sandbox 校验创建时的选择。
-    let isolationScope: WorkerScope = "workspace";
-    if (runtimeType !== "native") {
-      const requestedIsolationScope = workspace.isolationScope;
-      if (
-        !isRegistered &&
-        !this.configService.isIsolationScopeAllowed(requestedIsolationScope)
-      ) {
-        throw new BadRequestException("当前部署不支持该工作空间的隔离级别");
-      }
-      if (
-        requestedIsolationScope !== "user" &&
-        requestedIsolationScope !== "workspace"
-      ) {
-        throw new BadRequestException(
-          `工作空间的隔离级别无效: ${requestedIsolationScope}`
-        );
-      }
-      isolationScope = requestedIsolationScope;
+    const requestedWorkerScope = workspace.scope;
+    if (
+      requestedWorkerScope !== "user" &&
+      requestedWorkerScope !== "workspace"
+    ) {
+      throw new BadRequestException(
+        `工作空间的运行范围无效: ${requestedWorkerScope}`
+      );
     }
+    if (runtimeType === "native" && requestedWorkerScope !== "workspace") {
+      throw new BadRequestException("native 运行方式只支持 workspace 范围");
+    }
+    if (
+      runtimeType !== "native" &&
+      !isRegistered &&
+      !this.configService.isWorkerScopeAllowed(requestedWorkerScope)
+    ) {
+      throw new BadRequestException("当前部署不支持该工作空间的运行范围");
+    }
+    const scope: WorkerScope = requestedWorkerScope;
 
     return {
       owner:
-        isolationScope === "user"
+        scope === "user"
           ? userOwnerKey(userId)
           : workspaceOwnerKey(workspace.workspaceId),
-      isolationScope,
       runtimeType,
       runtimeHostId: workspace.runtimeHostId,
       workspaceId: workspace.workspaceId,
@@ -308,7 +312,7 @@ export class RunLauncher {
     workspaceId: string;
     agentType: string;
     runtimeType: string;
-    isolationScope?: string;
+    scope: string;
     userMessageId?: string;
     userId: string;
     stream: RunStream;
@@ -319,7 +323,7 @@ export class RunLauncher {
       workspaceId,
       agentType,
       runtimeType,
-      isolationScope,
+      scope,
       userMessageId,
       userId,
       stream,
@@ -339,7 +343,7 @@ export class RunLauncher {
           workspaceId,
           agentType,
           runtimeType,
-          isolationScope,
+          scope,
         }),
         `record run created for run ${runId}`
       );
@@ -387,7 +391,7 @@ export class RunLauncher {
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
     stream: RunStream;
-  }): Promise<WorkerExecutionHandle | null> {
+  }): Promise<RunExecutionHandle | null> {
     const {
       runId,
       conversationId,
@@ -404,8 +408,7 @@ export class RunLauncher {
           runId,
           status: "starting",
           runtimeType,
-          isolationScope:
-            runtimeType !== "native" ? placement.isolationScope : undefined,
+          scope: parseOwnerKey(placement.owner).scope,
         }),
         `record runtime starting for run ${runId}`
       );
@@ -416,11 +419,10 @@ export class RunLauncher {
         agentProviderConfig,
         input: runInput,
       });
-      // 执行载体标识在就绪后经 upstream.notifyExecutionRef 回流落库,这里先注册空句柄。
       return {
         runId,
+        runtimeHostId: placement.runtimeHostId,
         runtimeType,
-        runtimeInstanceId: "",
         conversationId,
       };
     } catch (err) {
@@ -438,6 +440,8 @@ export class RunLauncher {
           this.runEvents.runtimeStatusChanged({
             runId,
             status: "start_failed",
+            runtimeType,
+            scope: parseOwnerKey(placement.owner).scope,
             error: err instanceof Error ? err.message : String(err),
             data: compactData(errorLogFields(err)),
           })
@@ -474,7 +478,7 @@ export class RunLauncher {
     runId: string;
     conversationId: string;
     workspaceId: string;
-    runtimeHandle: WorkerExecutionHandle;
+    runtimeHandle: RunExecutionHandle;
     stream: RunStream;
     aggregator: AssistantMessageAggregator;
     agentType: string;
@@ -519,8 +523,8 @@ export class RunLauncher {
     this.logger.log("run registered", {
       runId,
       conversationId,
+      runtimeHostId: runtimeHandle.runtimeHostId,
       runtimeType: runtimeHandle.runtimeType,
-      runtimeInstanceId: runtimeHandle.runtimeInstanceId,
     });
   }
 }

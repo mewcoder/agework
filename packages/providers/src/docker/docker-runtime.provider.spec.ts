@@ -50,7 +50,7 @@ function makeCtx(
       runtimePath: "/workspace",
       runtimeLogDir: RUNTIME_LOG_MOUNT,
       sandbox: {
-        isolationScope: "workspace",
+        scope: "workspace",
         mountTarget: "/workspace",
       },
     } as never,
@@ -64,7 +64,7 @@ function makeRef(runtimeInstanceId = "container-abc"): RuntimeInstanceRef {
     runtimeType: "docker",
     ownerId: "ws-1",
     runtimeInstanceId,
-    isolationScope: "workspace",
+    scope: "workspace",
   };
 }
 
@@ -114,7 +114,7 @@ describe("DockerRuntimeProvider", () => {
 
       const runArgs = runArgsOf();
       expect(runArgs).toContain("agework.io/runtime-owner-id=ws-1");
-      expect(runArgs).toContain("agework.io/isolation-scope=workspace");
+      expect(runArgs).toContain("agework.io/scope=workspace");
     });
 
     it("passes workerEnv through as -e args", async () => {
@@ -312,9 +312,7 @@ describe("DockerRuntimeProvider", () => {
         callback(new Error(`unexpected docker command: ${cmdArgs.join(" ")}`));
       }) as any);
 
-      await expect(makeProvider().start(makeCtx())).rejects.toThrow(
-        "Conflict"
-      );
+      await expect(makeProvider().start(makeCtx())).rejects.toThrow("Conflict");
 
       expect(mockExecFile).not.toHaveBeenCalledWith(
         "docker",

@@ -24,7 +24,7 @@ function parseArgs(args) {
     appName: undefined,
     apiPort: undefined,
     runtimeTypes: undefined,
-    isolationScopes: undefined,
+    scopes: undefined,
     ctxPath: undefined,
     isProd: false,
     isDev: false,
@@ -109,18 +109,14 @@ function parseArgs(args) {
       continue;
     }
 
-    if (arg === "--isolation") {
-      options.isolationScopes = normalizeIsolationScopes(
-        readOptionValue(args, index, arg)
-      );
+    if (arg === "--scope") {
+      options.scopes = normalizeWorkerScopes(readOptionValue(args, index, arg));
       index += 1;
       continue;
     }
 
-    if (arg.startsWith("--isolation=")) {
-      options.isolationScopes = normalizeIsolationScopes(
-        arg.slice("--isolation=".length)
-      );
+    if (arg.startsWith("--scope=")) {
+      options.scopes = normalizeWorkerScopes(arg.slice("--scope=".length));
       continue;
     }
 
@@ -185,19 +181,16 @@ function normalizeRuntimeTypes(rawValue) {
     .filter(Boolean);
 
   const allowed = ["native", "docker", "opensandbox"];
-  if (
-    values.length === 0 ||
-    values.some((value) => !allowed.includes(value))
-  ) {
+  if (values.length === 0 || values.some((value) => !allowed.includes(value))) {
     throw new Error(
-      "--runtime expects comma-separated values from \"native\", \"docker\", \"opensandbox\""
+      '--runtime expects comma-separated values from "native", "docker", "opensandbox"'
     );
   }
 
   return [...new Set(values)].join(",");
 }
 
-function normalizeIsolationScopes(rawValue) {
+function normalizeWorkerScopes(rawValue) {
   const values = rawValue
     .split(",")
     .map((value) => value.trim().toLowerCase())
@@ -207,9 +200,7 @@ function normalizeIsolationScopes(rawValue) {
     values.length === 0 ||
     values.some((value) => value !== "user" && value !== "workspace")
   ) {
-    throw new Error(
-      "--isolation expects \"user\", \"workspace\" or \"user,workspace\""
-    );
+    throw new Error('--scope expects "user", "workspace" or "user,workspace"');
   }
 
   return [...new Set(values)].join(",");
@@ -232,7 +223,12 @@ function normalizeCtxPath(rawValue) {
 function normalizePath(value) {
   const trimmed = value?.trim();
 
-  if (!trimmed || trimmed === "." || trimmed === "./" || /^\/+$/.test(trimmed)) {
+  if (
+    !trimmed ||
+    trimmed === "." ||
+    trimmed === "./" ||
+    /^\/+$/.test(trimmed)
+  ) {
     return "";
   }
 
@@ -296,7 +292,8 @@ function generateJwtSecret() {
 function getDbPath() {
   const apiDir = resolve(repoRoot, "apps/server");
   const dbUrl = existsSync(apiEnv)
-    ? (readEnvValues(apiEnv).get("AGEWORK_PRIVATE_DATABASE_URL") ?? "file:./dev.db")
+    ? (readEnvValues(apiEnv).get("AGEWORK_PRIVATE_DATABASE_URL") ??
+      "file:./dev.db")
     : "file:./dev.db";
   return resolve(apiDir, dbUrl.replace(/^file:/, ""));
 }
@@ -306,9 +303,12 @@ async function getDbTablesWithData() {
   if (!existsSync(dbPath)) return [];
   const { default: Database } = await import("better-sqlite3");
   const db = new Database(dbPath, { readonly: true });
-  const tables = db.prepare(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma_%' ORDER BY name`
-  ).all().map((r) => r.name);
+  const tables = db
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma_%' ORDER BY name`
+    )
+    .all()
+    .map((r) => r.name);
   const result = tables.filter((t) => {
     const row = db.prepare(`SELECT COUNT(*) as n FROM "${t}"`).get();
     return row.n > 0;
@@ -347,7 +347,9 @@ async function restoreDb(backups) {
     const stmt = db.prepare(
       `INSERT OR REPLACE INTO "${table}" (${colList}) VALUES (${placeholders})`
     );
-    db.transaction((rows) => { for (const row of rows) stmt.run(row); })(rows);
+    db.transaction((rows) => {
+      for (const row of rows) stmt.run(row);
+    })(rows);
     console.log(`  恢复 ${table}: ${rows.length} 条`);
   }
   db.close();
@@ -362,7 +364,10 @@ function apiModeDefaults(noAuth) {
 }
 
 async function promptYesNo(question, defaultYes) {
-  const result = await p.confirm({ message: question, initialValue: defaultYes });
+  const result = await p.confirm({
+    message: question,
+    initialValue: defaultYes,
+  });
   if (p.isCancel(result)) process.exit(0);
   return result;
 }
@@ -548,7 +553,7 @@ async function main() {
     appName,
     apiPort,
     runtimeTypes,
-    isolationScopes,
+    scopes,
     ctxPath,
     isProd,
     isDev,
@@ -562,19 +567,37 @@ async function main() {
   if (shouldShowHelp) {
     console.log("Usage:");
     console.log("  pnpm boot             Interactive mode");
-    console.log("  pnpm init:dev         Dev defaults (no-auth=true, no prompts)");
-    console.log("  pnpm init:prod        Prod defaults (no-auth=false, no prompts)");
+    console.log(
+      "  pnpm init:dev         Dev defaults (no-auth=true, no prompts)"
+    );
+    console.log(
+      "  pnpm init:prod        Prod defaults (no-auth=false, no prompts)"
+    );
     console.log("Options:");
-    console.log("  --dev            Dev defaults (no-auth=true, skip prompts); used by pnpm init:dev");
-    console.log("  --prod           Prod defaults (no-auth=false, skip prompts); used by pnpm init:prod");
-    console.log("  --no-auth        Disable authentication (sets AGEWORK_DEV_AUTH_DISABLED=true)");
-    console.log("  --reset          Reset .env defaults and recreate database data");
+    console.log(
+      "  --dev            Dev defaults (no-auth=true, skip prompts); used by pnpm init:dev"
+    );
+    console.log(
+      "  --prod           Prod defaults (no-auth=false, skip prompts); used by pnpm init:prod"
+    );
+    console.log(
+      "  --no-auth        Disable authentication (sets AGEWORK_DEV_AUTH_DISABLED=true)"
+    );
+    console.log(
+      "  --reset          Reset .env defaults and recreate database data"
+    );
     console.log("  --start          Start dev server after init");
-    console.log("  --ctx <path>     Set backend context and frontend paths, for example /agent");
+    console.log(
+      "  --ctx <path>     Set backend context and frontend paths, for example /agent"
+    );
     console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/server/.env");
     console.log("  --port <port>    Set backend PORT in apps/server/.env");
-    console.log("  --runtime <native|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)");
-    console.log("  --isolation <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES in apps/server/.env");
+    console.log(
+      "  --runtime <native|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)"
+    );
+    console.log(
+      "  --scope <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_SCOPES in apps/server/.env"
+    );
     console.log("  --no-install     Skip pnpm install");
     console.log("Default: runs pnpm install unless --no-install is set.");
     return;
@@ -583,10 +606,14 @@ async function main() {
   const interactive = !isDev && !isProd;
   if (interactive) p.intro("AgeWork 初始化");
   if (noAuth === undefined) {
-    noAuth = interactive ? !(await promptYesNo("启用登录验证？", false)) : !isProd;
+    noAuth = interactive
+      ? !(await promptYesNo("启用登录验证？", false))
+      : !isProd;
   }
   if (shouldReset === undefined) {
-    shouldReset = interactive ? await promptYesNo("重置数据库？", false) : false;
+    shouldReset = interactive
+      ? await promptYesNo("重置数据库？", false)
+      : false;
   }
   let backupTables = [];
   if (interactive && shouldReset) {
@@ -610,7 +637,10 @@ async function main() {
       options: [
         { value: "native", label: "native（只允许本机进程）" },
         { value: "docker", label: "docker（本机 Docker 容器）" },
-        { value: "opensandbox", label: "opensandbox（OpenSandbox Server + worker 镜像）" },
+        {
+          value: "opensandbox",
+          label: "opensandbox（OpenSandbox Server + worker 镜像）",
+        },
       ],
       initialValues: ["native"],
       required: true,
@@ -620,12 +650,12 @@ async function main() {
   }
   const runtimeTypeList = runtimeTypes?.split(",") ?? [];
   const allowsOpenSandbox = runtimeTypeList.includes("opensandbox");
-  // docker / opensandbox 都跑在容器里,需要 worker 镜像与隔离级别设置。
+  // docker / opensandbox 都跑在容器里,需要 worker 镜像与运行范围设置。
   const allowsContainer =
     allowsOpenSandbox || runtimeTypeList.includes("docker");
-  if (allowsContainer && isolationScopes === undefined && interactive) {
+  if (allowsContainer && scopes === undefined && interactive) {
     const result = await p.multiselect({
-      message: "允许的沙箱隔离级别（可多选）",
+      message: "允许的沙箱运行范围（可多选）",
       options: [
         { value: "user", label: "user（同一用户共享一个沙箱资源）" },
         { value: "workspace", label: "workspace（每个工作空间独立沙箱资源）" },
@@ -634,7 +664,7 @@ async function main() {
       required: true,
     });
     if (p.isCancel(result)) process.exit(0);
-    isolationScopes = [...new Set(result)].join(",");
+    scopes = [...new Set(result)].join(",");
   }
   if (shouldInstall) runPnpm(["install"]);
   const apiWasCreated = ensureEnv(apiEnv, apiEnvExample, "apps/server/.env", {
@@ -659,8 +689,8 @@ async function main() {
   if (appName) apiUpdates.AGEWORK_APP_NAME = appName;
   if (apiPort) apiUpdates.PORT = apiPort;
   if (runtimeTypes) apiUpdates.AGEWORK_RUNTIME_ALLOWED_TYPES = runtimeTypes;
-  if (isolationScopes) {
-    apiUpdates.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = isolationScopes;
+  if (scopes) {
+    apiUpdates.AGEWORK_RUNTIME_ALLOWED_SCOPES = scopes;
   }
   // Docker / OpenSandbox 都依赖同一个 worker 镜像。
   if (allowsContainer) {

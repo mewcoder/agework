@@ -11,7 +11,7 @@ import { RuntimeService } from "../../runtime/runtime.service";
  * SlashCommandItem 列表。不经过 agent，不需要 run。
  *
  * 路径：{AGENT_DIR_PREFIX[agentType]}/skills/<skill-name>/SKILL.md
- * managed native 直读本机硬盘；docker/registered 经隧道 RPC。
+ * builtin Host 直读本机硬盘；registered Host 经隧道 RPC。
  */
 @Injectable()
 export class AgentSkillsScanner {

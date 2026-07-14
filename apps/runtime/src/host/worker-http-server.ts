@@ -1,4 +1,9 @@
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type Server,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import {
   WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
@@ -10,11 +15,9 @@ import { AGEWORK_VERSION } from "@agework/shared";
 import type { RuntimeHost } from "./runtime-host.js";
 
 /**
- * Registered Host daemon 上的 worker HTTP 服务器。
+ * Runtime Host 自管的 worker HTTP 数据面服务器（builtin / registered 同构）。
  *
- * Phase 2 双栈切流：worker 数据面对端从 server 的 `/worker/*` 旧端点切到 Host。
- * 本服务器暴露与 server 旧端点同构的 `/worker/*` 路由，使 `WorkerHttpTransport`
- * 无需改动——只是 `AGEWORK_WORKER_API_BASE` 指向 Host 而非 server。
+ * 暴露 `/worker/*` 路由；`AGEWORK_WORKER_API_BASE` 始终指向拥有该 worker 的 Host。
  *
  * 路由：
  * - GET  /worker/:workerId/commands  → runtimeHost.pollCommands()
@@ -52,7 +55,10 @@ export class WorkerHttpServer {
     });
   }
 
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  private async handle(
+    req: IncomingMessage,
+    res: ServerResponse
+  ): Promise<void> {
     const url = new URL(req.url ?? "/", "http://placeholder");
     const pathname = url.pathname;
 
@@ -119,7 +125,8 @@ export class WorkerHttpServer {
     const body = (await this.readJsonBody(req)) as
       | { startToken?: string; pid?: number; version?: string }
       | undefined;
-    const startToken = typeof body?.startToken === "string" ? body.startToken : "";
+    const startToken =
+      typeof body?.startToken === "string" ? body.startToken : "";
     const pid = typeof body?.pid === "number" ? body.pid : undefined;
 
     const accepted = this.host.registerWorker(workerId, startToken, { pid });
@@ -186,8 +193,13 @@ export class WorkerHttpServer {
     workerId: string
   ): boolean {
     const token = req.headers[WORKER_TOKEN_HEADER];
-    if (typeof token !== "string" || !this.host.validateWorkerToken(workerId, token)) {
-      this.sendJson(res, 410, { error: `worker token rejected for worker ${workerId}` });
+    if (
+      typeof token !== "string" ||
+      !this.host.validateWorkerToken(workerId, token)
+    ) {
+      this.sendJson(res, 410, {
+        error: `worker token rejected for worker ${workerId}`,
+      });
       return false;
     }
     return true;

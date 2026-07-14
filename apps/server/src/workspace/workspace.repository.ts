@@ -30,12 +30,12 @@ export type WorkspaceCreateInput = {
   gitBranch?: string;
   description: string | null;
   userId: string;
-  isolationScope: string;
-  /** 隔离实现(native/docker/opensandbox),创建时快照写入(Phase 2 expand 列)。 */
+  scope: string;
+  /** 执行方式(native/docker/opensandbox),创建时快照写入(Phase 2 expand 列)。 */
   runtimeType: string;
   rootPath: string;
   directorySource: string;
-  /** 绑定的 Runtime(managed 或 registered)，必填。 */
+  /** 绑定的 Runtime Host（builtin 或 registered），必填。 */
   runtimeHostId: string;
 };
 
@@ -96,7 +96,7 @@ export class WorkspaceRepository {
           gitBranch: input.gitBranch,
           description: input.description,
           userId: input.userId,
-          isolationScope: input.isolationScope,
+          scope: input.scope,
           runtimeType: input.runtimeType,
           runtimeHostId: input.runtimeHostId,
         },
@@ -188,15 +188,5 @@ export class WorkspaceRepository {
       select: { username: true },
     });
     return user?.username ?? null;
-  }
-
-  /**
-   * Phase 2 expand 回填:runtimeType 为空的旧 workspace 按绑定 Runtime 的
-   * runtimeType 快照补齐。幂等——已回填的行不再触碰;Runtime 尚未配对
-   * (runtimeType 为 null)的跳过,等配对后下次启动再补。返回回填行数。
-   */
-  /** Phase 3:RuntimeHost.runtimeType 列已删,backfill 不再需要,no-op。 */
-  async backfillRuntimeTypeFromRuntimeHost(): Promise<number> {
-    return 0;
   }
 }

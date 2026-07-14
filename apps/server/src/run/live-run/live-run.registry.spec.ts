@@ -13,8 +13,8 @@ function makeHandle(runId = "run-1"): LiveRunHandle {
   return {
     runtimeHandle: {
       runId,
+      runtimeHostId: "builtin",
       runtimeType: "native",
-      runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },
     stream: new RunStream({

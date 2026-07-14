@@ -20,7 +20,7 @@ const CONFIG: RuntimeConfig = {
 
 function makeCtx(
   overrides: Partial<RuntimeLaunchContext> = {},
-  placementOverrides: Record<string, unknown> = {},
+  placementOverrides: Record<string, unknown> = {}
 ): RuntimeLaunchContext {
   return {
     runtimeType: "docker",
@@ -34,10 +34,13 @@ function makeCtx(
       hostPath: "/tmp/workspace",
       runtimePath: "/workspace",
       runtimeLogDir: "/home/agework/.agework/logs/runtime",
-      sandbox: { isolationScope: "workspace", mountTarget: "/workspace" },
+      sandbox: { scope: "workspace", mountTarget: "/workspace" },
       ...placementOverrides,
     } as never,
-    workerEnv: { AGEWORK_WORKER_OWNER_ID: "ws-1", AGEWORK_WORKER_ROLE: "worker" },
+    workerEnv: {
+      AGEWORK_WORKER_OWNER_ID: "ws-1",
+      AGEWORK_WORKER_ROLE: "worker",
+    },
     ...overrides,
   };
 }
@@ -49,7 +52,7 @@ describe("buildSandboxStartInput", () => {
     expect(input.env.AGEWORK_WORKER_ROLE).toBe("worker");
     expect(input.env.AGEWORK_WORKER_API_BASE).toContain("host.docker.internal");
     expect(input.env.AGEWORK_WORKER_LOG_DIR).toBe(
-      "/home/agework/.agework/logs/runtime",
+      "/home/agework/.agework/logs/runtime"
     );
   });
 
@@ -57,13 +60,13 @@ describe("buildSandboxStartInput", () => {
     const input = buildSandboxStartInput(makeCtx(), CONFIG);
     expect(input.metadata).toEqual({
       "agework.io/runtime-owner-id": "ws-1",
-      "agework.io/isolation-scope": "workspace",
+      "agework.io/scope": "workspace",
     });
   });
 
   it("workspace 挂载路径非绝对 → 抛错(两 provider 共享的校验)", () => {
     expect(() =>
-      buildSandboxStartInput(makeCtx({}, { hostPath: "relative/path" }), CONFIG),
+      buildSandboxStartInput(makeCtx({}, { hostPath: "relative/path" }), CONFIG)
     ).toThrow(/absolute/);
   });
 
@@ -72,7 +75,7 @@ describe("buildSandboxStartInput", () => {
       buildSandboxStartInput(makeCtx(), {
         ...CONFIG,
         runtimeLogHostPath: "logs/runtime",
-      }),
+      })
     ).toThrow(/absolute/);
   });
 

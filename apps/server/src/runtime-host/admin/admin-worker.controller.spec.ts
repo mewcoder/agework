@@ -7,7 +7,9 @@ function makeController(
 ) {
   return new AdminWorkerController(
     {
-      getRuntimePolicy: vi.fn().mockReturnValue({ runtimeType: "native" }),
+      getRuntimePolicy: vi
+        .fn()
+        .mockReturnValue({ defaultRuntimeType: "native" }),
       ...runtimeService,
     } as never,
     {
@@ -20,7 +22,9 @@ function makeController(
 
 describe("AdminWorkerController", () => {
   it("delegates policy to RuntimeService", () => {
-    const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "native" });
+    const getRuntimePolicy = vi
+      .fn()
+      .mockReturnValue({ defaultRuntimeType: "native" });
     const controller = makeController({ getRuntimePolicy });
 
     controller.getRuntimePolicy();
@@ -29,11 +33,13 @@ describe("AdminWorkerController", () => {
   });
 
   it("getWorkerStats counts running workers from listWorkers", async () => {
-    const listWorkers = vi.fn().mockResolvedValue([
-      { status: "running" },
-      { status: "running" },
-      { status: "stopped" },
-    ]);
+    const listWorkers = vi
+      .fn()
+      .mockResolvedValue([
+        { status: "running" },
+        { status: "running" },
+        { status: "stopped" },
+      ]);
     const controller = makeController({}, { listWorkers });
 
     const result = await controller.getWorkerStats();

@@ -73,7 +73,7 @@ class AdapterDriver implements AgentDriver {
     return this.adapter.resolveApproval(
       command.conversationId,
       command.payload,
-      command.resumeRunId,
+      command.resumeRunId
     );
   }
 }
@@ -87,7 +87,7 @@ export function createAgentDriver(
   ) => void
 ): AgentDriver {
   const { agentProviderConfig, runtimePath } = config;
-  // RunConfig 里的路径（local runtime 从 envConfig 提取）优先于 worker env。
+  // RunConfig 里的路径（native runtimeType 从 envConfig 提取）优先于 worker env。
   const envCliPaths = resolveCliPaths(process.env);
   const claudeExecutablePath =
     config.claudeExecutablePath ?? envCliPaths.claudeExecutablePath;

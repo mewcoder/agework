@@ -1,5 +1,5 @@
 /**
- * Agent CLI 一键安装（仅支持 local runtime）。
+ * Agent CLI 一键安装（仅支持 native runtimeType）。
  * 把独立 CLI 包装进 runtime 专属目录，不走全局 `npm install -g`，
  * 避免跟机器上已有的系统安装冲突。安装完成后由调用方把返回路径写成 envConfigOverride。
  */

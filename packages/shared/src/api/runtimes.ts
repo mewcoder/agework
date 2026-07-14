@@ -1,4 +1,4 @@
-import type { RuntimeCapabilities } from "../protocol/runtime-tunnel";
+import type { RuntimeCapabilities } from "../protocol/runtime-capabilities";
 import type { AgentType } from "../common";
 
 export type RuntimeStatus = "online" | "offline";
@@ -40,7 +40,7 @@ export type AgentEnvStatus = {
   source: EnvConfigSource;
   /** runtime 上报的原始检测路径。 */
   detectedPath: string | null;
- /** CLI --version 输出。 */
+  /** CLI --version 输出。 */
   version: string | null;
 };
 
@@ -53,16 +53,14 @@ export type RuntimeEnvStatus = {
   detectedAt: string | null;
 };
 
-/** /api/v1/runtimes/list 的条目(managed 本机内置 + Registered 部署实例)。 */
+/** /api/v1/runtimes/list 的条目（builtin 本机 Host + registered 远程 Host）。 */
 export type RuntimeResponse = {
   id: string;
   name: string;
-  /** "registered"=远程机器注册, "managed"=本机内置(全局,不可删除)。 */
+  /** "registered"=远程机器注册, "builtin"=本机内置(全局,不可删除)。 */
   source: string;
-  /** null = 全局 managed,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
+  /** null = 全局 builtin,所有人可用;有值 = 私有 registered,只有该用户可见/可删。 */
   ownerId: string | null;
-  /** manager 注册时上报,配对未完成时为 null。 */
-  runtimeType: string | null;
   status: RuntimeStatus;
   capabilities: RuntimeCapabilities | null;
   /** runtime manager 上报的环境检测原始值；未上报为 null。 */
@@ -87,11 +85,11 @@ export type CreateRuntimeResponse = {
   token: string;
 };
 
-export type RuntimeIdRequest = { id: string };
+export type RuntimeHostIdRequest = { id: string };
 
 /** admin 覆盖 envConfig 的请求 body：per-agent，只覆盖指定的 agent。 */
 export type UpdateEnvConfigOverrideRequest = {
-  /** 目标 runtime id。 */
+  /** 目标 Runtime Host id。 */
   id: string;
   /** 指定要覆盖的 agent。 */
   agentType: AgentType;
@@ -107,7 +105,7 @@ export type DetectEnvResponse = {
 
 /** admin 一键安装 runtime 独立 CLI 的请求 body：per-agent，仅支持 native runtime。 */
 export type InstallCliRequest = {
-  /** 目标 runtime id。 */
+  /** 目标 Runtime Host id。 */
   id: string;
   /** 指定要安装的 agent。 */
   agentType: AgentType;
@@ -115,9 +113,9 @@ export type InstallCliRequest = {
 
 /** GET /api/v1/runtimes/directories/list 的查询参数。 */
 export type ListRuntimeDirectoryRequest = {
-  /** 目标 runtime id。 */
-  runtimeId: string;
-  /** 省略时列出该 runtime 所在机器的用户主目录。 */
+  /** 目标 Runtime Host id。 */
+  runtimeHostId: string;
+  /** 省略时列出该 Host 所在机器的用户主目录。 */
   path?: string;
 };
 
@@ -129,8 +127,8 @@ export type RuntimeDirectoryResponse = {
 
 /** POST /api/v1/runtimes/directories/create 的请求 body。 */
 export type CreateRuntimeDirectoryRequest = {
-  /** 目标 runtime id。 */
-  runtimeId: string;
+  /** 目标 Runtime Host id。 */
+  runtimeHostId: string;
   /** 要新建的目录绝对路径。 */
   path: string;
 };

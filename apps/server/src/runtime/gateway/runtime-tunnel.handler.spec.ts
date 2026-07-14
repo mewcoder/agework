@@ -9,22 +9,13 @@ import { RuntimeTunnelHandler } from "./runtime-tunnel.handler";
 
 const GOOD_TOKEN = "good-token";
 const GOOD_HASH = createHash("sha256").update(GOOD_TOKEN).digest("hex");
-const MANAGED_TOKEN = "managed-token";
-const MANAGED_HASH = createHash("sha256").update(MANAGED_TOKEN).digest("hex");
-const MANAGED_RUNTIME_ID = "builtin";
 
 function makeRepository() {
   return {
     findByTokenHash: vi
       .fn()
       .mockImplementation((hash: string) =>
-        Promise.resolve(
-          hash === GOOD_HASH
-            ? { id: "rt-1" }
-            : hash === MANAGED_HASH
-              ? { id: MANAGED_RUNTIME_ID }
-              : null
-        )
+        Promise.resolve(hash === GOOD_HASH ? { id: "rt-1" } : null)
       ),
     markRegistered: vi.fn().mockResolvedValue(true),
     touchHeartbeat: vi.fn().mockResolvedValue(true),
@@ -90,33 +81,69 @@ describe("RuntimeTunnelHandler", () => {
     ws.send(
       JSON.stringify({
         type: "register",
-        runtimeType: "docker",
-        capabilities: { isolationScopes: ["user", "workspace"] },
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
       })
     );
     await expect(nextMessage(ws)).resolves.toEqual({
       type: "registered",
-      runtimeId: "rt-1",
+      runtimeHostId: "rt-1",
       heartbeatIntervalSeconds: 10,
       epoch: 1,
     });
     expect(repository.markRegistered).toHaveBeenCalledWith(
       "rt-1",
-      { isolationScopes: ["user", "workspace"] },
+      {
+        docker: {
+          available: true,
+          scopes: ["user", "workspace"],
+        },
+      },
       undefined
     );
+  });
+
+  it("rejects the removed single-runtime registration shape", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    ws.send(
+      JSON.stringify({
+        type: "register",
+        runtimeType: "docker",
+        capabilities: { scopes: ["user", "workspace"] },
+      })
+    );
+
+    const [code] = (await once(ws, "close")) as [number];
+    expect(code).toBe(1008);
+    expect(repository.markRegistered).not.toHaveBeenCalled();
   });
 
   it("increments the session epoch on each register (防脑裂)", async () => {
     const first = connect();
     await once(first, "open");
-    first.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+    first.send(
+      JSON.stringify({
+        type: "register",
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      })
+    );
     const firstReply = (await nextMessage(first)) as { epoch: number };
     expect(firstReply.epoch).toBe(1);
 
     const second = connect();
     await once(second, "open");
-    second.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+    second.send(
+      JSON.stringify({
+        type: "register",
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      })
+    );
     const secondReply = (await nextMessage(second)) as { epoch: number };
     expect(secondReply.epoch).toBe(2);
   });
@@ -146,16 +173,6 @@ describe("RuntimeTunnelHandler", () => {
     });
   });
 
-  it("does NOT mark managed runtime offline on disconnect (supervisor restarts)", async () => {
-    const ws = connect(MANAGED_TOKEN);
-    await once(ws, "open");
-    ws.close();
-    await once(ws, "close");
-    // Give the close handler time to run
-    await new Promise((r) => setTimeout(r, 50));
-    expect(repository.markOffline).not.toHaveBeenCalledWith(MANAGED_RUNTIME_ID);
-  });
-
   it("closeConnection kicks the live socket with 4410", async () => {
     const ws = connect();
     await once(ws, "open");
@@ -175,7 +192,14 @@ describe("RuntimeTunnelHandler", () => {
 
   describe("host.upstream envelope (ACK 水位 + epoch)", () => {
     async function register(ws: WebSocket): Promise<number> {
-      ws.send(JSON.stringify({ type: "register", runtimeType: "docker" }));
+      ws.send(
+        JSON.stringify({
+          type: "register",
+          capabilities: {
+            docker: { available: true, scopes: ["user", "workspace"] },
+          },
+        })
+      );
       const reply = (await nextMessage(ws)) as { epoch: number };
       return reply.epoch;
     }
@@ -201,8 +225,8 @@ describe("RuntimeTunnelHandler", () => {
 
     it("dispatches the notification to the handler and acks the seq", async () => {
       const received: unknown[] = [];
-      handler.setUpstreamHandler((runtimeId, notification) => {
-        received.push({ runtimeId, notification });
+      handler.setUpstreamHandler((runtimeHostId, notification) => {
+        received.push({ runtimeHostId, notification });
       });
       const ws = connect();
       await once(ws, "open");
@@ -218,7 +242,7 @@ describe("RuntimeTunnelHandler", () => {
       expect(ack.params.seq).toBe(7);
       expect(received).toEqual([
         {
-          runtimeId: "rt-1",
+          runtimeHostId: "rt-1",
           notification: { kind: "runCancelled", runId: "run-1" },
         },
       ]);
@@ -293,8 +317,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.launch",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           1000
         )
@@ -313,7 +337,7 @@ describe("RuntimeTunnelHandler", () => {
           JSON.stringify({
             jsonrpc: "2.0",
             id: message.id,
-            result: { runtimeInstanceId: "container-1" },
+            result: { workers: [] },
           })
         );
       });
@@ -323,12 +347,12 @@ describe("RuntimeTunnelHandler", () => {
         {
           jsonrpc: "2.0",
           id: "req-1",
-          method: "runtime.launch",
-          params: {} as never,
+          method: "host.listWorkers",
+          params: {},
         },
         1000
       );
-      expect(result).toEqual({ runtimeInstanceId: "container-1" });
+      expect(result).toEqual({ workers: [] });
     });
 
     it("rejects with the manager's error message on an RPC error response", async () => {
@@ -351,8 +375,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.launch",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           1000
         )
@@ -369,8 +393,8 @@ describe("RuntimeTunnelHandler", () => {
           {
             jsonrpc: "2.0",
             id: "req-1",
-            method: "runtime.stop",
-            params: {} as never,
+            method: "host.listWorkers",
+            params: {},
           },
           20
         )
@@ -386,8 +410,8 @@ describe("RuntimeTunnelHandler", () => {
         {
           jsonrpc: "2.0",
           id: "req-1",
-          method: "runtime.destroy",
-          params: {} as never,
+          method: "host.listWorkers",
+          params: {},
         },
         5000
       );

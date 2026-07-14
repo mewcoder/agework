@@ -53,7 +53,6 @@ describe("WorkerEventService", () => {
       markRequiresAction: vi.fn().mockResolvedValue(undefined),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
       recordUsage: vi.fn().mockResolvedValue(undefined),
-      updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
 
     mockConversations = {
@@ -120,8 +119,8 @@ describe("WorkerEventService", () => {
   it("emit releases the run on terminal run status", async () => {
     const runtimeHandle = {
       runId: "run-1",
+      runtimeHostId: "builtin",
       runtimeType: "native",
-      runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     };
     liveRuns.register("run-1", {
@@ -144,9 +143,7 @@ describe("WorkerEventService", () => {
       ts: new Date().toISOString(),
     });
 
-    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(
-      runtimeHandle.runId
-    );
+    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(runtimeHandle);
   });
 
   it("notifyRunFailed skips when run already terminal/finalizing", async () => {
@@ -209,45 +206,6 @@ describe("WorkerEventService", () => {
     await workerEventsService.notifyRunCancelled("run-1");
 
     expect(forceCancelledStatus).toHaveBeenCalledWith("run-1");
-  });
-
-  it("notifyExecutionRef persists the handle, records ready and syncs the live handle", async () => {
-    const runtimeHandle = {
-      runId: "run-1",
-      runtimeType: "docker",
-      runtimeInstanceId: "",
-      conversationId: "conversation-1",
-    };
-    liveRuns.register("run-1", {
-      runtimeHandle,
-      runId: "run-1",
-      conversationId: "conversation-1",
-      workspaceId: "ws-1",
-      agentType: "claude",
-      stream: makeStream(),
-      aggregator: { handle: vi.fn() } as any,
-      stopRequested: false,
-      saveRun: vi.fn(),
-    });
-
-    workerEventsService.notifyExecutionRef("run-1", {
-      runtimeType: "docker",
-      runtimeInstanceId: "container-abc",
-    });
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
-
-    expect(runtimeHandle.runtimeInstanceId).toBe("container-abc");
-    expect(mockRunRepository.updateRuntimeHandle).toHaveBeenCalledWith(
-      "run-1",
-      "docker",
-      "container-abc"
-    );
-    expect(mockRunEvents.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        eventKey: "runtime:container-abc:ready",
-        type: "runtime.status_changed",
-      })
-    );
   });
 
   it("should deduplicate messages by seq", async () => {
@@ -317,8 +275,8 @@ describe("WorkerEventService", () => {
   it("markRunTimedOut marks error and releases the run", async () => {
     const runtimeHandle = {
       runId: "run-1",
+      runtimeHostId: "builtin",
       runtimeType: "native",
-      runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     };
 
@@ -328,9 +286,7 @@ describe("WorkerEventService", () => {
       "run-1",
       "run timeout"
     );
-    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(
-      runtimeHandle.runId
-    );
+    expect(mockRuntimeHost.releaseRun).toHaveBeenCalledWith(runtimeHandle);
   });
 
   it("still applies terminal status when run event recording fails", async () => {
@@ -420,8 +376,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -461,8 +417,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -501,8 +457,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -544,8 +500,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -585,8 +541,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -615,8 +571,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -645,8 +601,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -716,8 +672,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-2", {
       runtimeHandle: {
         runId: "run-2",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "2:token",
         conversationId: "conversation-2",
       },
       runId: "run-2",
@@ -749,8 +705,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -799,8 +755,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -851,8 +807,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",
@@ -884,8 +840,8 @@ describe("WorkerEventService", () => {
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
+        runtimeHostId: "builtin",
         runtimeType: "native",
-        runtimeInstanceId: "1:token",
         conversationId: "conversation-1",
       },
       runId: "run-1",

@@ -3,11 +3,9 @@ import {
   Injectable,
   InternalServerErrorException,
 } from "@nestjs/common";
-import {
-  ConfigService,
-  type IsolationScope,
-  type RuntimeType,
-} from "../../config/config.service";
+import type { RuntimeType } from "@agework/providers";
+import type { WorkerScope } from "@agework/shared/protocol";
+import { ConfigService } from "../../config/config.service";
 
 @Injectable()
 export class WorkspaceRuntimePolicy {
@@ -15,19 +13,19 @@ export class WorkspaceRuntimePolicy {
 
   capabilities() {
     const allowedRuntimeTypes = this.config.getAllowedRuntimeTypes();
-    const allowedIsolationScopes = this.config.getAllowedIsolationScopes();
-    const runtimeType = this.config.getDefaultRuntimeType();
-    const isolationScope = this.config.getDefaultIsolationScope();
+    const allowedScopes = this.config.getAllowedScopes();
+    const defaultRuntimeType = this.config.getDefaultRuntimeType();
+    const defaultScope = this.config.getDefaultWorkerScope();
     const canSelectLocalDirectory =
       allowedRuntimeTypes.includes("native") ||
       (allowedRuntimeTypes.some((type) => type !== "native") &&
-        allowedIsolationScopes.includes("workspace"));
+        allowedScopes.includes("workspace"));
     return {
       canSelectLocalDirectory,
-      runtimeType,
+      defaultRuntimeType,
       allowedRuntimeTypes,
-      isolationScope,
-      allowedIsolationScopes,
+      defaultScope,
+      allowedScopes,
     };
   }
 
@@ -37,40 +35,32 @@ export class WorkspaceRuntimePolicy {
 
   resolveCreateRuntime(input: {
     runtimeType?: string;
-    isolationScope?: string;
+    scope?: string;
     hasCustomRootPath: boolean;
   }): {
     runtimeType: RuntimeType;
-    isolationScope: IsolationScope | null;
+    scope: WorkerScope;
   } {
     const runtimeType = this.normalizeRuntimeType(input.runtimeType);
-    const isolationScope = this.normalizeIsolationScope(
+    const scope = this.normalizeWorkerScope(
       runtimeType,
-      input.isolationScope,
+      input.scope,
       input.hasCustomRootPath
     );
-    return { runtimeType, isolationScope };
+    return { runtimeType, scope };
   }
 
-  resolveStoredIsolationScope(
-    isolationScope: string | null | undefined
-  ): IsolationScope {
-    if (isolationScope === "user" || isolationScope === "workspace") {
-      return isolationScope;
+  resolveStoredWorkerScope(scope: string): WorkerScope {
+    if (scope === "user" || scope === "workspace") {
+      return scope;
     }
-    if (isolationScope) {
-      throw new InternalServerErrorException(
-        `Workspace has invalid isolationScope: ${isolationScope}`
-      );
-    }
-    return this.config.getDefaultIsolationScope();
+    throw new InternalServerErrorException(
+      `Workspace has invalid scope: ${scope}`
+    );
   }
 
-  supportsCustomRootPath(
-    runtimeType: RuntimeType,
-    isolationScope: IsolationScope | null
-  ) {
-    return runtimeType === "native" || isolationScope === "workspace";
+  supportsCustomRootPath(runtimeType: RuntimeType, scope: WorkerScope) {
+    return runtimeType === "native" || scope === "workspace";
   }
 
   private normalizeRuntimeType(runtimeType?: string): RuntimeType {
@@ -83,21 +73,21 @@ export class WorkspaceRuntimePolicy {
     return value;
   }
 
-  private normalizeIsolationScope(
+  private normalizeWorkerScope(
     runtimeType: RuntimeType,
-    isolationScope: string | undefined,
+    scope: string | undefined,
     hasCustomRootPath: boolean
-  ): IsolationScope | null {
-    const value = isolationScope?.trim();
+  ): WorkerScope {
+    const value = scope?.trim();
     if (runtimeType === "native") {
-      if (value) {
-        throw new BadRequestException("本地工作空间不能设置 isolationScope");
+      if (value && value !== "workspace") {
+        throw new BadRequestException("native 运行方式只支持 workspace 范围");
       }
-      return null;
+      return "workspace";
     }
 
     if (hasCustomRootPath && !value) {
-      if (!this.config.isIsolationScopeAllowed("workspace")) {
+      if (!this.config.isWorkerScopeAllowed("workspace")) {
         throw new BadRequestException(
           "当前部署不支持沙箱工作空间使用自定义本地目录"
         );
@@ -105,15 +95,15 @@ export class WorkspaceRuntimePolicy {
       return "workspace";
     }
 
-    const resolved = value || this.config.getDefaultIsolationScope();
-    if (!this.config.isIsolationScopeAllowed(resolved)) {
+    const resolved = value || this.config.getDefaultWorkerScope();
+    if (!this.config.isWorkerScopeAllowed(resolved)) {
       throw new BadRequestException(
-        `当前部署不支持该沙箱隔离级别: ${resolved}`
+        `当前部署不支持该沙箱运行范围: ${resolved}`
       );
     }
     if (hasCustomRootPath && resolved !== "workspace") {
       throw new BadRequestException(
-        "沙箱工作空间指定本地目录时必须使用工作空间级隔离"
+        "沙箱工作空间指定本地目录时必须使用工作空间范围"
       );
     }
     return resolved;

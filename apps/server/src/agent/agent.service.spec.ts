@@ -45,7 +45,7 @@ describe("AgentService", () => {
         workspaceId: "proj-1",
         workspaceRootPath: "/tmp/ws",
         runtimeType: "native",
-        runtimeId: "managed-native",
+        runtimeHostId: "builtin",
         username: "mew",
       }),
     };

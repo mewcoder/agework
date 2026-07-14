@@ -128,18 +128,6 @@ describe("RunRepository", () => {
     });
   });
 
-  it("persists the runtime handle (runtimeType + runtimeInstanceId) for a run", async () => {
-    const update = vi.fn().mockResolvedValue({});
-    const service = new RunRepository({ run: { update } } as never);
-
-    await service.updateRuntimeHandle("run-1", "docker", "container-abc");
-
-    expect(update).toHaveBeenCalledWith({
-      where: { id: "run-1" },
-      data: { runtimeType: "docker", runtimeInstanceId: "container-abc" },
-    });
-  });
-
   it("records token usage for a run", async () => {
     const update = vi.fn().mockResolvedValue({});
     const service = new RunRepository({ run: { update } } as never);
@@ -169,7 +157,6 @@ describe("RunRepository", () => {
       conversationId: "conversation-1",
       agentType: "claude",
       runtimeType: "sandbox",
-      runtimeInstanceId: "container-abc",
       status: "running",
       phase: null,
       lastSeq: 2,
@@ -209,9 +196,7 @@ describe("RunRepository", () => {
       username: "mew",
       conversationTitle: "Fix login",
       workspaceName: "AgeWork",
-      // run 行自身携带 runtime handle，供 RunService 经 WorkerManagerService 补齐实例视图
       runtimeType: "sandbox",
-      runtimeInstanceId: "container-abc",
       conversation: {
         id: "conversation-1",
         runStatus: "running",

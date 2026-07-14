@@ -35,18 +35,6 @@ export class RunRepository {
     });
   }
 
-  /** 持久化运行句柄，供孤儿恢复时定位 runtime provider 与底层进程/容器。 */
-  async updateRuntimeHandle(
-    runId: string,
-    runtimeType: string,
-    runtimeInstanceId: string
-  ) {
-    await this.prisma.run.update({
-      where: { id: runId },
-      data: { runtimeType, runtimeInstanceId },
-    });
-  }
-
   async recordUsage(runId: string, usage: RunUsage) {
     await this.prisma.run.update({
       where: { id: runId },
@@ -219,7 +207,7 @@ export class RunRepository {
     const { conversation, ...runData } = run;
     const workspace = conversation.workspace;
 
-    // workerInstance 视图由 RunService 经 WorkerManagerService 补齐（runtime 领域所有）。
+    // workerInstance 视图由 RunService 经 RuntimeHostContract 现场查询补齐。
     return {
       ...runData,
       userId: workspace.userId,

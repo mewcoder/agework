@@ -13,14 +13,14 @@ const BASE: RuntimeSpecInput = {
   userWorkspaceRootPath: "/data/users/user-1",
   runtimeLogHostPath: "/data/logs/runtime",
   runtimeType: "docker",
-  isolationScope: "user",
+  scope: "user",
 };
 
 const resolve = (overrides: Partial<RuntimeSpecInput> = {}) =>
   resolveRuntimeSpec({ ...BASE, ...overrides } as RuntimeSpecInput);
 
 describe("resolveRuntimeSpec", () => {
-  describe("sandbox, user isolation", () => {
+  describe("sandbox, user scope", () => {
     it("hostPath=userRoot, runtimePath under /workspaces/, ownerId=userId", () => {
       const r = resolve();
       expect(r.runtimeType).toBe("docker");
@@ -30,7 +30,7 @@ describe("resolveRuntimeSpec", () => {
       expect(r.ownerId).toBe("user-1");
       expect(r.workspaceId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
-        isolationScope: "user",
+        scope: "user",
         mountTarget: CONTAINER_WORKSPACES_ROOT,
       });
     });
@@ -50,14 +50,14 @@ describe("resolveRuntimeSpec", () => {
     });
   });
 
-  describe("sandbox, workspace isolation", () => {
+  describe("sandbox, workspace scope", () => {
     it("hostPath=workspaceRoot, mountTarget per-workspace, ownerId=workspaceId", () => {
-      const r = resolve({ isolationScope: "workspace" });
+      const r = resolve({ scope: "workspace" });
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
       expect(r.ownerId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
-        isolationScope: "workspace",
+        scope: "workspace",
         mountTarget: `${CONTAINER_WORKSPACES_ROOT}/ws-1`,
       });
     });
@@ -76,7 +76,7 @@ describe("resolveRuntimeSpec", () => {
   });
 
   describe("validation", () => {
-    it("throws when workspaceRootPath is outside userWorkspaceRootPath (user isolation)", () => {
+    it("throws when workspaceRootPath is outside userWorkspaceRootPath (user scope)", () => {
       expect(() =>
         resolve({ workspaceRootPath: "/data/users/user-2/ws-1" })
       ).toThrow();

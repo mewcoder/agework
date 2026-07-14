@@ -35,8 +35,8 @@ function makeHandle(overrides: Partial<LiveRunHandle> = {}): LiveRunHandle {
   return {
     runtimeHandle: {
       runId: "run-1",
+      runtimeHostId: "builtin",
       runtimeType: "native",
-      runtimeInstanceId: "1:token",
       conversationId: "conversation-1",
     },
     stream: new RunStream(makeRes()),

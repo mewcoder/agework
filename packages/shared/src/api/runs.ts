@@ -17,7 +17,6 @@ export type AdminRunResponse = {
   userId: string;
   agentType: string;
   runtimeType: string;
-  runtimeInstanceId: string | null;
   status: RunStatus;
   phase: string | null;
   error: string | null;
@@ -39,7 +38,7 @@ export type AdminRunListResponse = PaginatedListResponse<AdminRunResponse>;
 export type AdminRunWorkerInstanceResponse = {
   id: string;
   runtimeType: string;
-  isolationScope: string;
+  scope: string;
   ownerId: string;
   runtimeInstanceId: string;
   status: string;
@@ -160,7 +159,7 @@ export type WorkerInstanceDiagnosticsResponse = {
 export type WorkerInstanceResponse = {
   id: string;
   runtimeType: string;
-  isolationScope: string;
+  scope: string;
   ownerId: string;
   runtimeInstanceId: string;
   status: WorkerInstanceStatus;

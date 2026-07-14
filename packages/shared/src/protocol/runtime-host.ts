@@ -1,4 +1,8 @@
-import type { AgentProviderConfig, CommandPayload } from "./channel";
+import type {
+  AgentProviderConfig,
+  CommandPayload,
+  WorkerScope,
+} from "./channel";
 import type { RunChannelMessage } from "./run-channel-message";
 import type { AgentType } from "../common";
 import type { RuntimeEnvConfig } from "../api/runtimes";
@@ -15,22 +19,17 @@ import type {
 // ── Server ↔ Runtime Host 契约 ──────────────────────────────────────
 //
 // 设计定案见 docs/design/server-runtime-worker-target-architecture.md §4.2。
-// Phase 1（契约先行）只收编 run 模块需要的执行面动词；环境/文件/观测全量动词
-// 在 Phase 2 执行面搬家时扩入。标注「过渡」的成员服务于 Phase 1 的委托实现，
-// Phase 2/3 收窄或删除。
-
-/** worker 的服务范围：对用户是独享/共享承诺，对 Host 是复用粒度。 */
-export type WorkerScope = "workspace" | "user";
+// run、环境、文件和观测能力统一经此契约进入目标 Host。
 
 /** native / docker / opensandbox，providers 扩展点决定取值。 */
-export type Isolation = string;
+export type RuntimeType = string;
 
 /** worker 复用的 owner 键：workspace-scope 用 workspaceId，user-scope 用 userId。 */
 export type OwnerKey = `workspace:${string}` | `user:${string}`;
 
 /**
- * worker 池的唯一键（不变量 2）：同一 (owner, isolation) 至多一个活跃 worker。
- * 池、观测、stopWorker、fence 全部用它，杜绝裸 ownerKey 在多 isolation 下撞车。
+ * worker 池的唯一键（不变量 2）：同一 (owner, runtimeType) 至多一个活跃 worker。
+ * 池、观测、stopWorker、fence 全部用它，杜绝裸 ownerKey 在多 runtimeType 下撞车。
  */
 export type WorkerKey = `${OwnerKey}#${string}`;
 
@@ -45,8 +44,7 @@ export type WorkerKey = `${OwnerKey}#${string}`;
  */
 export type RunPlacement = {
   owner: OwnerKey;
-  isolationScope: WorkerScope;
-  runtimeType: Isolation;
+  runtimeType: RuntimeType;
   runtimeHostId: string;
   workspaceId: string;
   userId: string;
@@ -69,23 +67,28 @@ export type SubmitRunInput = {
   input: unknown;
 };
 
-/**
- * 执行载体标识（过渡）：Phase 1/2 仍持久化到 run 行供 admin 详情与重启恢复用，
- * Phase 3 admin 改走 listWorkers 现场查询后随之收窄。
- */
-export type ExecutionRef = {
-  runtimeType: string;
-  runtimeInstanceId: string;
+/** Server → Runtime Host 的 run 级命令。runtimeHostId 只用于 server 路由。 */
+export type RuntimeHostCommandInput = {
+  runtimeHostId: string;
+  payload: CommandPayload;
+};
+
+/** run 终态后的 Host 内部状态清理路由。 */
+export type RuntimeHostRunRef = {
+  runtimeHostId: string;
+  runId: string;
 };
 
 /** admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。 */
 export type WorkerSnapshot = {
   id: string;
-  /** Phase 2: 池键 `OwnerKey#Isolation`，stopWorker 用。 */
+  /** 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
   workerKey: WorkerKey;
   runtimeType: string;
-  isolationScope: string;
+  scope: string;
   ownerId: string;
+  /** 仅供 admin 现场诊断关联 run，不持久化到 server。 */
+  runIds: string[];
   runtimeInstanceId: string;
   status: string;
   expiresAt: string | null;
@@ -99,18 +102,16 @@ export type WorkerSnapshot = {
   }>;
 };
 
-// ── Phase 2 expand: 环境 / 文件 / 观测 全量动词 ─────────────────────
+// ── 环境 / 文件 / 观测动词 ─────────────────────────────────────────
 //
-// 以下类型与方法是 Phase 2 执行面搬家时扩入的契约面（设计文档 §4.2）。
-// Phase 1 委托实现（RuntimeHostAdapter）以过渡方式兑现——
-// 标注「过渡」的入参字段（runtimeHostId）在 Phase 2 per-Host 实例就绪后删除。
+// RuntimeHostAdapter 使用 runtimeHostId 选择 builtin 或 registered Host；
+// Host 的具体执行能力由 runtimeType 显式表达。
 
 /**
- * Host 的能力矩阵动态部分：每种 isolation 的可用性 + CLI 检测结果。
- * 取代旧 RuntimeCapabilities（仅 isolationScopes 字符串数组）。
+ * Host 的能力矩阵动态部分：每种 runtimeType 的可用性 + CLI 检测结果。
  */
 export type HostCapabilityStatus = Record<
-  Isolation,
+  RuntimeType,
   {
     available: boolean;
     /** 不可用原因，如 "docker daemon not running"。 */
@@ -126,11 +127,10 @@ export type AgentCliStatus = RuntimeEnvConfig;
 
 // ── 文件操作输入/输出类型 ──
 //
-// 过渡期入参带 runtimeHostId（Phase 2 per-Host 实例就绪后删除——
-// Host 知道自己的 id，不需要调用方传入）。
+// runtimeHostId 是 server 侧路由选择器，和 runtimeType（执行能力）正交。
 
 export type ListDirectoryInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   path?: string;
 };
@@ -141,46 +141,46 @@ export type DirectoryListing = {
 };
 
 export type CreateDirectoryInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   path: string;
 };
 
 export type WorkspaceFileQuery = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type ReadFileInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type ReadFileDiffInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
   path: string;
 };
 
 export type SearchFilesInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
 };
 
 export type ListChangedFilesInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   rootPath: string;
 };
 
 export type InstallCliInput = {
-  /** 过渡：Phase 2 per-Host 实例就绪后删除。 */
+  /** 目标 Host。 */
   runtimeHostId: string;
   agentType: AgentType;
 };
@@ -190,8 +190,8 @@ export type InstallCliResult = {
 };
 
 /**
- * server → Runtime Host 的执行面契约。方向永远向下；Phase 1 由 worker-manager
- * 模块内的委托实现兑现（进程内），Phase 2 起 builtin 走库入口、registered 走隧道。
+ * server → Runtime Host 的执行面契约。方向永远向下；builtin 走进程内调用，
+ * registered 走控制隧道。
  */
 export interface RuntimeHostContract {
   // —— 执行 ——
@@ -206,7 +206,7 @@ export interface RuntimeHostContract {
    * run 级命令（cancel / approval_resolved 等）。worker 就绪前到达的 cancel
    * 由 Host 内部吸收（就绪那刻转 cancelled 回流），调用方不需要感知时序。
    */
-  command(runId: string, payload: CommandPayload): Promise<void>;
+  command(input: RuntimeHostCommandInput): Promise<void>;
 
   // —— 业务级收尾 ——
 
@@ -218,14 +218,10 @@ export interface RuntimeHostContract {
 
   // —— 环境 ——
 
-  /**
-   * 每种 isolation 的可用性 + CLI 检测结果，构成能力矩阵的动态部分。
-   * 过渡：Phase 1 委托实现需 runtimeHostId 路由到正确的 Runtime；
-   * Phase 2 per-Host 实例直接返回自身能力。
-   */
+  /** 每种 runtimeType 的可用性 + CLI 检测结果，构成目标 Host 的能力矩阵。 */
   detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus>;
 
-  /** 安装 agent CLI（仅 native isolation 有意义）。 */
+  /** 安装 agent CLI（仅 native runtimeType 有意义）。 */
   installCli(input: InstallCliInput): Promise<InstallCliResult>;
 
   // —— 工作空间文件（数据面统一入口） ——
@@ -249,7 +245,9 @@ export interface RuntimeHostContract {
   searchFiles(input: SearchFilesInput): Promise<WorkspaceFileSearchResponse>;
 
   /** 列出 rootPath 下相对 HEAD 的累计变更文件。 */
-  listChangedFiles(input: ListChangedFilesInput): Promise<WorkspaceChangedFilesResponse>;
+  listChangedFiles(
+    input: ListChangedFilesInput
+  ): Promise<WorkspaceChangedFilesResponse>;
 
   // —— 观测（admin 诊断面，显式例外） ——
 
@@ -259,26 +257,13 @@ export interface RuntimeHostContract {
   /** 按 WorkerKey 停止一个 worker（admin 诊断入口）。 */
   stopWorker(key: WorkerKey): Promise<void>;
 
-  // —— 过渡成员（Phase 1 委托实现专用，Phase 2/3 收窄或删除） ——
+  // —— 生命周期与上行端口 ——
 
   /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
-  releaseRun(runId: string): void;
+  releaseRun(input: RuntimeHostRunRef): void;
 
-  /** 接线上行端口（启动期一次）。Phase 2 变为隧道会话注册的一部分。 */
+  /** 接线上行端口（启动期一次）。 */
   setUpstream(upstream: RuntimeHostUpstream): void;
-
-  /**
-   * 过渡（server 重启恢复）：按持久化的执行载体标识向仍存活的 worker 发 cancel。
-   * Phase 2 后 server 重启不再打断 registered 上的 run，此动词收窄或删除。
-   */
-  sendRecoveryCancel(input: {
-    runId: string;
-    conversationId: string;
-    ref: ExecutionRef;
-  }): Promise<void>;
-
-  /** 过渡（admin run 详情）：按执行载体标识取 worker 快照。Phase 2 起并入 listWorkers。 */
-  getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null>;
 }
 
 /**
@@ -298,7 +283,4 @@ export interface RuntimeHostUpstream {
 
   /** worker 心跳超时被 fence 判死：记录事实并终结其名下 run。 */
   notifyWorkerLost(runId: string, reason: string): Promise<void>;
-
-  /** 执行载体就绪（过渡）：供 run 行持久化 ExecutionRef 给 admin/恢复流程用。 */
-  notifyExecutionRef(runId: string, ref: ExecutionRef): void;
 }

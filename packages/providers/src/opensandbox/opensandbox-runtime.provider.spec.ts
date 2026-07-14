@@ -79,7 +79,7 @@ function makeCtx(
       runtimePath: "/workspace",
       runtimeLogDir: RUNTIME_LOG_MOUNT,
       sandbox: {
-        isolationScope: "workspace",
+        scope: "workspace",
         mountTarget: "/workspace",
       },
     } as never,
@@ -93,7 +93,7 @@ function makeRef(runtimeInstanceId = "sandbox-abc"): RuntimeInstanceRef {
     runtimeType: "opensandbox",
     ownerId: "ws-1",
     runtimeInstanceId,
-    isolationScope: "workspace",
+    scope: "workspace",
   };
 }
 

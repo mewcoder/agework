@@ -1,23 +1,23 @@
-import { Badge } from '@/components/ui/badge';
+import { Badge } from "@/components/ui/badge";
 import {
   SettingsSection,
   SettingsItem,
-} from '@/components/settings/settings-section';
-import { useRuntimes, type Runtime } from '@/hooks/use-runtime';
-import type { AgentEnvStatus } from '@agework/shared/api';
-import type { AgentType } from '@agework/shared';
-import { formatDateTime } from '@/utils/format';
+} from "@/components/settings/settings-section";
+import { useRuntimes, type Runtime } from "@/hooks/use-runtime";
+import type { AgentEnvStatus } from "@agework/shared/api";
+import type { AgentType } from "@agework/shared";
+import { formatDateTime } from "@/utils/format";
 
 function runtimeTypeLabel(runtimeType: string | null) {
   switch (runtimeType) {
-    case 'native':
-      return '本地';
-    case 'docker':
-      return 'Docker';
-    case 'opensandbox':
-      return 'OpenSandbox';
+    case "native":
+      return "本地";
+    case "docker":
+      return "Docker";
+    case "opensandbox":
+      return "OpenSandbox";
     default:
-      return '待配对';
+      return "待配对";
   }
 }
 
@@ -46,7 +46,7 @@ function ReadOnlyAgentItem({
             </span>
           ) : (
             <span className="text-sm text-muted-foreground">
-              {status ? '未找到 CLI' : '未检测'}
+              {status ? "未找到 CLI" : "未检测"}
             </span>
           )}
         </div>
@@ -54,8 +54,8 @@ function ReadOnlyAgentItem({
       description={
         <div className="flex flex-wrap items-center gap-2">
           {status?.resolvedPath && (
-            <Badge variant={status.source === 'custom' ? 'default' : 'outline'}>
-              {status.source === 'custom' ? '覆盖' : '系统'}
+            <Badge variant={status.source === "custom" ? "default" : "outline"}>
+              {status.source === "custom" ? "覆盖" : "系统"}
             </Badge>
           )}
           {status?.version && (
@@ -79,12 +79,14 @@ function ReadOnlyRuntimeSection({ runtime }: { runtime: Runtime }) {
           <div className="flex items-center gap-2">
             <span className="font-medium">{runtime.name}</span>
             <Badge variant="outline">
-              {runtimeTypeLabel(runtime.runtimeType)}
+              {Object.keys(runtime.capabilities ?? {})
+                .map(runtimeTypeLabel)
+                .join(" / ") || "待配对"}
             </Badge>
             <Badge
-              variant={runtime.status === 'online' ? 'default' : 'secondary'}
+              variant={runtime.status === "online" ? "default" : "secondary"}
             >
-              {runtime.status === 'online' ? '在线' : '离线'}
+              {runtime.status === "online" ? "在线" : "离线"}
             </Badge>
           </div>
         }
@@ -109,7 +111,7 @@ function ReadOnlyRuntimeSection({ runtime }: { runtime: Runtime }) {
 export function CliStatusPanel({
   showHeader = true,
 }: {
-  mode?: 'admin' | 'user';
+  mode?: "admin" | "user";
   showHeader?: boolean;
 }) {
   const { data: runtimes = [], isLoading } = useRuntimes();

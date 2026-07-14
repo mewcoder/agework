@@ -103,14 +103,14 @@ export class ModelProviderService {
    *
    * 「系统环境」模型配置的可见性由两层 AND 决定（见 runtime 模块 CONTEXT.md）：
    * 1. admin 全局开关 SYSTEM_ENV_ENABLED
-   * 2. 传入 runtimeId 时，该 runtime 的 envConfig 检测到对应 agent 的 CLI（resolvedPath != null）
-   * 未传 runtimeId 时（如设置页）只检查开关，不做 runtime 检测。
+   * 2. 传入 runtimeHostId 时，该 runtime 的 envConfig 检测到对应 agent 的 CLI（resolvedPath != null）
+   * 未传 runtimeHostId 时（如设置页）只检查开关，不做 runtime 检测。
    * 系统环境不再作为数据库记录存在，开关打开时直接构造虚拟 DTO 返回。 */
-  async listEnabled(agentType: string, runtimeId?: string) {
+  async listEnabled(agentType: string, runtimeHostId?: string) {
     const resolvedAgentType = this.resolveAgentType(agentType);
     const systemAvailable = await this.isSystemEnvAvailable(
       resolvedAgentType,
-      runtimeId
+      runtimeHostId
     );
 
     // 获取已启用的自定义模型服务
@@ -129,15 +129,16 @@ export class ModelProviderService {
     return { list: result };
   }
 
-  /** 系统环境可用性判断：admin 全局开关 AND（传入 runtimeId 时）runtime 检测到 CLI。 */
+  /** 系统环境可用性判断：admin 全局开关 AND（传入 runtimeHostId 时）runtime 检测到 CLI。 */
   private async isSystemEnvAvailable(
     agentType: AgentType,
-    runtimeId?: string
+    runtimeHostId?: string
   ): Promise<boolean> {
     if (!this.configService.isSystemEnvEnabled()) return false;
-    if (!runtimeId) return true;
+    if (!runtimeHostId) return true;
 
-    const cliPaths = await this.runtimeService.getResolvedCliPaths(runtimeId);
+    const cliPaths =
+      await this.runtimeService.getResolvedCliPaths(runtimeHostId);
     if (!cliPaths) return false;
     const resolvedPath = cliPaths[agentType];
     return !!resolvedPath;

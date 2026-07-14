@@ -2,9 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
-  type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -25,7 +23,8 @@ import {
 } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeService } from "../runtime/runtime.service";
-import type { RuntimeType, IsolationScope } from "../config/config.service";
+import type { RuntimeType } from "@agework/providers";
+import type { WorkerScope } from "@agework/shared/protocol";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
@@ -33,6 +32,10 @@ import type {
   WorkspaceFileDiffResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
+import {
+  availableRuntimeTypes,
+  normalizeRuntimeCapabilities,
+} from "@agework/shared/protocol";
 
 const WORKSPACE_NAME_MAX_LENGTH = 20;
 const WORKSPACE_DESCRIPTION_MAX_LENGTH = 60;
@@ -49,32 +52,21 @@ type CreateWorkspaceInput = {
   description?: string;
   rootPath?: string;
   runtimeType?: string;
-  isolationScope?: string;
-  /** 绑定到某个已配对的 Registered Runtime;传入时 runtimeType/isolationScope
-   *  改由该 Runtime 自己决定,忽略 input 里另外传的 runtimeType。 */
+  scope?: string;
+  /** 绑定到某个已配对的 Registered Runtime Host。runtimeType 选择其一种能力。 */
   runtimeHostId?: string;
 };
 
 @Injectable()
-export class WorkspaceService implements OnApplicationBootstrap {
-  private readonly logger = new Logger(WorkspaceService.name);
-
+export class WorkspaceService {
   constructor(
     private readonly repo: WorkspaceRepository,
     private readonly conversations: ConversationService,
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeService: RuntimeService,
+    private readonly runtimeService: RuntimeService
   ) {}
-
-  /** Phase 2 expand:启动期幂等回填旧 workspace 的 runtimeType 快照列。 */
-  async onApplicationBootstrap(): Promise<void> {
-    const updated = await this.repo.backfillRuntimeTypeFromRuntimeHost();
-    if (updated > 0) {
-      this.logger.log(`backfilled workspace.runtimeType for ${updated} rows`);
-    }
-  }
 
   /**
    * 查询工作空间是否存在且属于该用户;返回 null 表示不存在或非属主。
@@ -127,8 +119,8 @@ export class WorkspaceService implements OnApplicationBootstrap {
       workspaceId: workspace.id,
       workspaceRootPath: workspace.directory.rootPath,
       // runtimeType 快照列(workspace.runtimeType),创建时写入。
-      runtimeType: (workspace.runtimeType ?? "native") as string,
-      isolationScope: workspace.isolationScope,
+      runtimeType: workspace.runtimeType ?? "native",
+      scope: workspace.scope,
       username: workspace.user.username,
       runtimeHostId: workspace.runtimeHostId,
       runtimeSource: workspace.runtimeHost.source,
@@ -174,7 +166,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
     }
   }
 
-  // ── 文件预览(managed native 直读, docker/opensandbox/registered 隧道 RPC) ──
+  // ── 文件预览（builtin 直读，registered 经隧道 RPC） ──
 
   /** 列出一层目录(根目录时 path 为空串)。 */
   async listFiles(
@@ -210,8 +202,8 @@ export class WorkspaceService implements OnApplicationBootstrap {
   // ── 变更查看(diff,只读) ──
 
   /**
-   * 列出工作空间相对 HEAD 的累计变更(git-only、只读)。managed native 直跑 git;
-   * docker/opensandbox/registered 经隧道 RPC 调 runtime 进程。
+   * 列出工作空间相对 HEAD 的累计变更（git-only、只读）。builtin Host 直跑 git；
+   * registered Host 经隧道 RPC 调用。
    */
   async listChangedFiles(
     userId: string,
@@ -254,7 +246,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
   }
 
   /**
-   * 属主校验 + 解析运行上下文。managed 和 registered 分支共用。
+   * 属主校验 + 解析运行上下文。builtin 和 registered 分支共用。
    */
   private async resolveFileContext(
     userId: string,
@@ -279,42 +271,38 @@ export class WorkspaceService implements OnApplicationBootstrap {
       description,
       rootPath: requestedRootPath,
       runtimeType: requestedRuntimeType,
-      isolationScope: requestedIsolationScope,
-      runtimeHostId: requestedRuntimeId,
+      scope: requestedWorkerScope,
+      runtimeHostId: requestedRuntimeHostId,
     } = input;
     const workspaceName = this.normalizeName(name);
     const workspaceDescription = this.normalizeDescription(description);
     const workspaceGitUrl = gitUrl?.trim();
     // 只有真的填了 git 地址,分支选择才有意义;否则忽略,gitBranch 留 null。
     const workspaceGitBranch = workspaceGitUrl ? gitBranch?.trim() : undefined;
-    const { runtimeType, isolationScope, targetRuntimeId } =
-      await this.resolvePlacement({
-        userId,
-        requestedRuntimeType,
-        requestedIsolationScope,
-        requestedRuntimeId,
-        hasCustomRootPath: Boolean(requestedRootPath?.trim()),
-      });
-    // native 没有隔离概念,isolationScope 解析结果是 null;Workspace.isolationScope
-    // 列必填,用 "workspace" 占位(与 Worker 侧同一约定,见 worker.provisioner.ts
-    // 的 identity())。
-    const storedIsolationScope = isolationScope ?? "workspace";
+    const { runtimeType, scope, runtimeHostId } = await this.resolvePlacement({
+      userId,
+      requestedRuntimeType,
+      requestedWorkerScope,
+      requestedRuntimeHostId,
+      hasCustomRootPath: Boolean(requestedRootPath?.trim()),
+    });
     const id = generateId();
-    // directoryHandler 用 targetRuntimeId 是否有值判断"目录在远程机器上,不碰本机
-    // 文件系统"——managed runtimeHostId 现在也总是有值,但 managed 就是 Managed(本机),
-    // 目录仍要走本机 fs 校验/创建,只有 registered 才传给它。
-    const remoteRuntimeId = this.runtimeService.isManaged(targetRuntimeId)
+    // directoryHandler 只接收 registered Host id；builtin Host 的目录仍走本机
+    // fs 校验/创建。
+    const registeredRuntimeHostId = this.runtimeService.isBuiltinHost(
+      runtimeHostId
+    )
       ? undefined
-      : targetRuntimeId;
+      : runtimeHostId;
     const directory = await this.directoryHandler.prepareCreate({
       userId,
       workspaceId: id,
       runtimeType,
-      isolationScope,
+      scope,
       gitUrl: workspaceGitUrl,
       gitBranch: workspaceGitBranch,
       requestedRootPath,
-      targetRuntimeId: remoteRuntimeId,
+      registeredRuntimeHostId,
     });
 
     try {
@@ -325,12 +313,12 @@ export class WorkspaceService implements OnApplicationBootstrap {
         gitBranch: workspaceGitBranch ?? directory.detectedGitBranch,
         description: workspaceDescription,
         userId,
-        isolationScope: storedIsolationScope,
-        // Phase 2 expand:创建时即写隔离实现快照,Phase 3 后成为唯一真相。
+        scope,
+        // Phase 2 expand:创建时即写执行方式快照,Phase 3 后成为唯一真相。
         runtimeType: runtimeType,
         rootPath: directory.rootPath,
         directorySource: directory.directorySource,
-        runtimeHostId: targetRuntimeId,
+        runtimeHostId,
       });
       return this.toWorkspaceDto(workspace);
     } catch (err) {
@@ -341,54 +329,53 @@ export class WorkspaceService implements OnApplicationBootstrap {
 
   /**
    * 解析 placement:Registered(传了 runtimeHostId)分支复用 resolveRegisteredPlacement;
-   * Managed 分支按部署策略解析 runtimeType/isolationScope 后,落到该 runtimeType
-   * 对应的 managed Runtime id。
+   * builtin 分支按部署策略解析 runtimeType/scope，Host id 固定为 builtin。
    */
   private async resolvePlacement(input: {
     userId: string;
     requestedRuntimeType?: string;
-    requestedIsolationScope?: string;
-    requestedRuntimeId?: string;
+    requestedWorkerScope?: string;
+    requestedRuntimeHostId?: string;
     hasCustomRootPath: boolean;
   }): Promise<{
     runtimeType: RuntimeType;
-    isolationScope: IsolationScope | null;
-    targetRuntimeId: string;
+    scope: WorkerScope;
+    runtimeHostId: string;
   }> {
-    if (input.requestedRuntimeId) {
+    if (input.requestedRuntimeHostId) {
       return this.resolveRegisteredPlacement(
         input.userId,
-        input.requestedRuntimeId,
-        input.requestedIsolationScope
+        input.requestedRuntimeHostId,
+        input.requestedRuntimeType,
+        input.requestedWorkerScope
       );
     }
-    const { runtimeType, isolationScope } =
-      this.runtimePolicy.resolveCreateRuntime({
-        runtimeType: input.requestedRuntimeType,
-        isolationScope: input.requestedIsolationScope,
-        hasCustomRootPath: input.hasCustomRootPath,
-      });
+    const { runtimeType, scope } = this.runtimePolicy.resolveCreateRuntime({
+      runtimeType: input.requestedRuntimeType,
+      scope: input.requestedWorkerScope,
+      hasCustomRootPath: input.hasCustomRootPath,
+    });
     return {
       runtimeType,
-      isolationScope,
-      targetRuntimeId: this.runtimeService.getManagedRuntimeId(runtimeType),
+      scope,
+      runtimeHostId: this.runtimeService.getBuiltinHostId(),
     };
   }
 
   /**
-   * Registered runtime 分支的 placement 解析:runtimeType 由该 Runtime 自己注册的
-   * 类型决定(选 Runtime 即定运行方式,不接受前端另传 runtimeType);isolationScope
-   * 按该 Runtime 上报的能力矩阵校验/收窄,而非部署级 ConfigService 允许列表
-   * (那是 Managed 专属的策略,与某一台具体机器的能力无关)。
+   * Registered Host 分支的 placement 解析:runtimeType 从该 Host 的能力矩阵中选择；
+   * scope 按所选 runtimeType 的 scopes 校验，而非部署级 ConfigService 允许列表
+   * (那是 builtin Host 的部署策略,与某一台 registered Host 的能力无关)。
    */
   private async resolveRegisteredPlacement(
     userId: string,
     runtimeHostId: string,
-    requestedIsolationScope?: string
+    requestedRuntimeType?: string,
+    requestedWorkerScope?: string
   ): Promise<{
     runtimeType: RuntimeType;
-    isolationScope: IsolationScope | null;
-    targetRuntimeId: string;
+    scope: WorkerScope;
+    runtimeHostId: string;
   }> {
     const registeredRuntime = await this.runtimeService.getOwned(
       userId,
@@ -400,28 +387,54 @@ export class WorkspaceService implements OnApplicationBootstrap {
     if (!registeredRuntime.capabilities) {
       throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
     }
-    const capabilities = registeredRuntime.capabilities as {
-      runtimeType?: string;
-      isolationScopes?: string[];
-    } | null;
-    const runtimeType = (capabilities?.runtimeType ?? "native") as RuntimeType;
-    if (runtimeType === "native") {
-      if (requestedIsolationScope) {
-        throw new BadRequestException("本地运行环境不能设置 isolationScope");
-      }
-      return { runtimeType, isolationScope: null, targetRuntimeId: runtimeHostId };
+    const capabilities = normalizeRuntimeCapabilities(
+      registeredRuntime.capabilities
+    );
+    const supportedRuntimeTypes = availableRuntimeTypes(capabilities);
+    if (supportedRuntimeTypes.length === 0) {
+      throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
     }
-    const allowedScopes = capabilities?.isolationScopes ?? [];
-    const isolationScope = requestedIsolationScope?.trim() || allowedScopes[0];
-    if (!isolationScope || !allowedScopes.includes(isolationScope)) {
+    const selectedRuntimeType =
+      requestedRuntimeType?.trim() ||
+      (supportedRuntimeTypes.length === 1
+        ? supportedRuntimeTypes[0]
+        : undefined);
+    if (!selectedRuntimeType) {
+      throw new BadRequestException("该运行环境提供多种运行方式,请选择一种");
+    }
+    if (!supportedRuntimeTypes.includes(selectedRuntimeType)) {
       throw new BadRequestException(
-        `该运行环境不支持隔离级别: ${isolationScope ?? "未指定"}`
+        `该运行环境不支持运行方式: ${selectedRuntimeType}`
+      );
+    }
+    const runtimeType = selectedRuntimeType as RuntimeType;
+    const capability = capabilities[runtimeType];
+    if (runtimeType === "native") {
+      if (requestedWorkerScope && requestedWorkerScope !== "workspace") {
+        throw new BadRequestException("native 运行方式只支持 workspace 范围");
+      }
+      return {
+        runtimeType,
+        scope: "workspace",
+        runtimeHostId,
+      };
+    }
+    const allowedScopes = capability.scopes;
+    const scope = requestedWorkerScope?.trim() || allowedScopes[0];
+    if (scope !== "user" && scope !== "workspace") {
+      throw new BadRequestException(
+        `该运行环境不支持运行范围: ${scope ?? "未指定"}`
+      );
+    }
+    if (!allowedScopes.includes(scope)) {
+      throw new BadRequestException(
+        `该运行环境不支持运行范围: ${scope ?? "未指定"}`
       );
     }
     return {
       runtimeType,
-      isolationScope: isolationScope as IsolationScope,
-      targetRuntimeId: runtimeHostId,
+      scope,
+      runtimeHostId,
     };
   }
 
@@ -475,7 +488,7 @@ export class WorkspaceService implements OnApplicationBootstrap {
 
     this.events.emit(
       WORKSPACE_DELETED_EVENT,
-      new WorkspaceDeletedEvent(id, userId),
+      new WorkspaceDeletedEvent(id, userId)
     );
   }
 
@@ -487,14 +500,14 @@ export class WorkspaceService implements OnApplicationBootstrap {
         source?: string | null;
       } | null;
       runtimeHost: { source: string };
-      isolationScope: string;
+      scope: string;
       runtimeType?: string | null;
     },
   >(workspace: T) {
     const {
       directory,
-      runtimeHost,
-      isolationScope: storedIsolationScope,
+      runtimeHost: _runtimeHost,
+      scope: storedWorkerScope,
       runtimeType: rtSnapshot,
       ...rest
     } = workspace;
@@ -503,16 +516,13 @@ export class WorkspaceService implements OnApplicationBootstrap {
         `Workspace ${(rest as { id?: string }).id ?? "unknown"} has no directory binding`
       );
     }
-    const runtimeType =
-      rtSnapshot ?? this.runtimePolicy.defaultRuntimeType();
-    const workspaceIsolationScope =
-      runtimeType !== "native"
-        ? this.runtimePolicy.resolveStoredIsolationScope(storedIsolationScope)
-        : null;
+    const runtimeType = rtSnapshot ?? this.runtimePolicy.defaultRuntimeType();
+    const workspaceWorkerScope =
+      this.runtimePolicy.resolveStoredWorkerScope(storedWorkerScope);
     return {
       ...rest,
       runtimeType,
-      isolationScope: workspaceIsolationScope,
+      scope: workspaceWorkerScope,
       rootPath: directory.rootPath,
       directoryStatus: directory.status,
       directorySource: normalizeDirectorySource(directory.source),

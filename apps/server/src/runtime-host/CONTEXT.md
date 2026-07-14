@@ -1,8 +1,8 @@
-# Worker Manager
+# Runtime Host
 
-Phase 3 清尾后，worker-manager 模块只剩 **contract 实现 + admin 观测面**。
+server 侧的 Runtime Host 组合根，负责 **contract 实现 + Host 路由 + admin 观测面**。
 
-旧执行栈（connection/instance/registry）、旧 `/worker/*` 端点、`WorkerManagerService` 已全部删除。worker 数据面由 builtin Host 自管的 `WorkerHttpServer` 承接（registered Host 各自的 `WorkerHttpServer`）。
+worker 数据面由 builtin Host 自管的 `WorkerHttpServer` 承接；registered Host 各自运行同构的 `WorkerHttpServer`。
 
 ## Language
 
@@ -22,7 +22,7 @@ worker 池的唯一键：`${OwnerKey}#${runtimeType}`。同一 (owner, runtimeTy
 _Avoid_: WorkerInstance（旧词）、ownerId 裸用（多 runtimeType 下撞车）
 
 **OwnerKey**:
-worker 复用的 owner 键：`workspace:${workspaceId}`（workspace 隔离）或 `user:${userId}`（user 隔离）。releaseOwner 据此清理 worker。
+worker 复用的 owner 键：`workspace:${workspaceId}`（workspace scope）或 `user:${userId}`（user scope）。releaseOwner 据此清理 worker。
 _Avoid_: Tenant、account
 
 **Builtin Host**:

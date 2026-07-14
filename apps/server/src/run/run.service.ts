@@ -12,7 +12,7 @@ import { swallow } from "../common/swallow";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import { RUNTIME_HOST_CONTRACT } from "../worker-manager/worker-manager.types";
+import { RUNTIME_HOST_CONTRACT } from "../runtime-host/runtime-host.types";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
@@ -55,12 +55,9 @@ export class RunService implements OnApplicationBootstrap {
   /** 管理端：单个 run 详情；worker 快照经执行面契约的观测口补齐。 */
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
-    const workerInstance = detail.runtimeInstanceId
-      ? await this.runtimeHost.getWorkerSnapshotForAdmin({
-          runtimeType: detail.runtimeType,
-          runtimeInstanceId: detail.runtimeInstanceId,
-        })
-      : null;
+    const workers = await this.runtimeHost.listWorkers();
+    const workerInstance =
+      workers.find((worker) => worker.runIds.includes(id)) ?? null;
     return { ...detail, workerInstance };
   }
 
@@ -156,12 +153,16 @@ export class RunService implements OnApplicationBootstrap {
     });
 
     const runId = handle.runtimeHandle.runId;
-    await this.runtimeHost.command(runId, {
-      type: "approval_resolved",
-      commandId: generateId(),
-      conversationId,
-      payload: status === "cancelled" ? { status: "cancelled" } : payload,
-      resumeRunId,
+    await this.runtimeHost.command({
+      runtimeHostId: handle.runtimeHandle.runtimeHostId,
+      payload: {
+        type: "approval_resolved",
+        commandId: generateId(),
+        runId,
+        conversationId,
+        payload: status === "cancelled" ? { status: "cancelled" } : payload,
+        resumeRunId,
+      },
     });
     this.runEvents
       .append(this.runEvents.permissionResolved({ runId }))
@@ -256,11 +257,14 @@ export class RunService implements OnApplicationBootstrap {
         options?.reason
       );
     }
-    await this.runtimeHost.command(handle.runtimeHandle.runId, {
-      type: "cancel",
-      commandId: generateId(),
-      runId: handle.runtimeHandle.runId,
-      conversationId,
+    await this.runtimeHost.command({
+      runtimeHostId: handle.runtimeHandle.runtimeHostId,
+      payload: {
+        type: "cancel",
+        commandId: generateId(),
+        runId: handle.runtimeHandle.runId,
+        conversationId,
+      },
     });
     if (options?.endResponse) {
       handle.saveRun(false, options.reason);

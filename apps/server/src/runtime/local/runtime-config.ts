@@ -7,7 +7,7 @@ import { EnvKey } from "../../config/registry/env-key";
 import { resolveApiBasePath } from "../../common/api-path";
 
 /**
- * Managed local provider fork 的 agework-runtime 产物入口(纯 JS bundle,ESM,`.mjs`)。
+ * builtin Host 的 native provider fork 的 agework-runtime 产物入口（纯 JS bundle, ESM, `.mjs`）。
  * 解析顺序:
  * 1. AGEWORK_RUNTIME_LOCAL_ENTRY 显式覆盖(部署/排障用);
  * 2. 随 server build 内嵌的产物(scripts/embed-runtime.mjs 复制到 dist/agework-runtime/main.mjs,

@@ -1,0 +1,29 @@
+import { Module } from "@nestjs/common";
+
+import { RuntimeModule } from "../runtime/runtime.module";
+import { RunEventModule } from "../run-event/run-event.module";
+import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
+import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
+import { WorkspaceHostListener } from "./contract/workspace-host.listener";
+import { RUNTIME_HOST_CONTRACT } from "./runtime-host.types";
+import { AdminWorkerController } from "./admin/admin-worker.controller";
+
+/**
+ * Runtime Host 组合根：装配 builtin Host、registered Host 路由适配器和
+ * admin 观测面。worker 数据面由每个 Host 自己的 WorkerHttpServer 承接。
+ *
+ * 对外只暴露 RUNTIME_HOST_CONTRACT token；run 模块只消费执行面契约，
+ * 不感知 builtin/registered 的路由细节。
+ */
+@Module({
+  imports: [RuntimeModule, RunEventModule],
+  controllers: [AdminWorkerController],
+  providers: [
+    builtinRuntimeHostProvider,
+    RuntimeHostAdapter,
+    WorkspaceHostListener,
+    { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
+  ],
+  exports: [RUNTIME_HOST_CONTRACT],
+})
+export class RuntimeHostModule {}

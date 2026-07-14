@@ -59,6 +59,7 @@ describe("WorkspaceController", () => {
         expect.objectContaining({
           userId: "user-1",
           name: "my-ws",
+          scope: "workspace",
         })
       );
     });

@@ -1,21 +1,30 @@
-import { useState } from 'react';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Controller, useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { PlusIcon, Trash2, RefreshCwIcon, PencilIcon } from 'lucide-react';
-import { FormDialog } from '@/components/form-dialog';
-import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Controller, useForm } from "react-hook-form";
+import { z } from "zod";
+import { PlusIcon, Trash2, RefreshCwIcon, PencilIcon } from "lucide-react";
+import { FormDialog } from "@/components/form-dialog";
+import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Field,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   SettingsSection,
   SettingsItem,
-} from '@/components/settings/settings-section';
-import { AgentIcon } from '@/components/icons/agent';
-import { useConfirmDelete } from '@/hooks/use-confirm-delete';
+} from "@/components/settings/settings-section";
+import { AgentIcon } from "@/components/icons/agent";
+import { useConfirmDelete } from "@/hooks/use-confirm-delete";
 import {
   useCreateRuntime,
   useDeleteRuntime,
@@ -25,19 +34,19 @@ import {
   useInstallCli,
   type CreateRuntimeResponse,
   type Runtime,
-} from '@/hooks/use-runtime';
-import type { AgentEnvStatus } from '@agework/shared/api';
-import type { AgentType } from '@agework/shared';
-import { cn } from '@/lib/utils';
-import { formatDateTime } from '@/utils/format';
-import { errorMessage } from '@/utils/error';
-import { IssuedRuntimeTokenDialog } from '@/pages/settings/runtime/issued-runtime-token-dialog';
+} from "@/hooks/use-runtime";
+import type { AgentEnvStatus } from "@agework/shared/api";
+import type { AgentType } from "@agework/shared";
+import { cn } from "@/lib/utils";
+import { formatDateTime } from "@/utils/format";
+import { errorMessage } from "@/utils/error";
+import { IssuedRuntimeTokenDialog } from "@/pages/settings/runtime/issued-runtime-token-dialog";
 
 const NAME_MAX_LENGTH = 40;
 
 const createRuntimeFormSchema = z.object({
   name: z.string().refine((value) => value.trim().length > 0, {
-    message: '请输入名称',
+    message: "请输入名称",
   }),
 });
 
@@ -45,14 +54,14 @@ type CreateRuntimeFormValues = z.infer<typeof createRuntimeFormSchema>;
 
 function runtimeTypeLabel(runtimeType: string | null) {
   switch (runtimeType) {
-    case 'native':
-      return '本地';
-    case 'docker':
-      return 'Docker';
-    case 'opensandbox':
-      return 'OpenSandbox';
+    case "native":
+      return "本地";
+    case "docker":
+      return "Docker";
+    case "opensandbox":
+      return "OpenSandbox";
     default:
-      return '待配对';
+      return "待配对";
   }
 }
 
@@ -64,18 +73,18 @@ function runtimeTypeLabel(runtimeType: string | null) {
 function AgentEnvItem({
   agentType,
   status,
-  runtimeId,
+  runtimeHostId,
   overridePath,
 }: {
   agentType: AgentType;
   status: AgentEnvStatus | null;
-  runtimeId: string;
+  runtimeHostId: string;
   overridePath: string | undefined;
 }) {
   return (
     <SettingsItem
       title={
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex min-w-0 items-center gap-2">
           <AgentIcon agent={agentType} size={14} />
           <span className="font-medium">{agentType}</span>
         </div>
@@ -84,10 +93,10 @@ function AgentEnvItem({
         status?.resolvedPath ? (
           <span className="flex flex-wrap items-center gap-2">
             <Badge
-              variant={status.source === 'custom' ? 'default' : 'secondary'}
+              variant={status.source === "custom" ? "default" : "secondary"}
               className="shrink-0"
             >
-              {status.source === 'custom' ? '自定义' : '系统'}
+              {status.source === "custom" ? "自定义" : "系统"}
             </Badge>
             {status.version && (
               <Badge variant="outline" className="shrink-0 font-mono">
@@ -102,16 +111,16 @@ function AgentEnvItem({
             </span>
           </span>
         ) : (
-          <span>{status ? '未找到 CLI' : '未检测'}</span>
+          <span>{status ? "未找到 CLI" : "未检测"}</span>
         )
       }
     >
       <div className="flex items-center gap-1.5">
         {status && !status.resolvedPath && (
-          <AgentInstallButton runtimeId={runtimeId} agentType={agentType} />
+          <AgentInstallButton runtimeHostId={runtimeHostId} agentType={agentType} />
         )}
         <OverrideEditor
-          runtimeId={runtimeId}
+          runtimeHostId={runtimeHostId}
           agentType={agentType}
           currentOverride={overridePath}
         />
@@ -121,10 +130,10 @@ function AgentEnvItem({
 }
 
 function AgentInstallButton({
-  runtimeId,
+  runtimeHostId,
   agentType,
 }: {
-  runtimeId: string;
+  runtimeHostId: string;
   agentType: AgentType;
 }) {
   const installMutation = useInstallCli();
@@ -135,30 +144,30 @@ function AgentInstallButton({
       size="sm"
       className="h-7"
       disabled={installMutation.isPending}
-      onClick={() => installMutation.mutate({ id: runtimeId, agentType })}
+      onClick={() => installMutation.mutate({ id: runtimeHostId, agentType })}
     >
-      {installMutation.isPending ? '安装中…' : '安装'}
+      {installMutation.isPending ? "安装中…" : "安装"}
     </Button>
   );
 }
 
 function OverrideEditor({
-  runtimeId,
+  runtimeHostId,
   agentType,
   currentOverride,
 }: {
-  runtimeId: string;
+  runtimeHostId: string;
   agentType: AgentType;
   currentOverride: string | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(currentOverride ?? '');
+  const [value, setValue] = useState(currentOverride ?? "");
   const overrideMutation = useUpdateEnvConfigOverride();
 
   const handleSave = () => {
     overrideMutation.mutate(
-      { id: runtimeId, agentType, executablePath: value.trim() },
-      { onSuccess: () => setOpen(false) },
+      { id: runtimeHostId, agentType, executablePath: value.trim() },
+      { onSuccess: () => setOpen(false) }
     );
   };
 
@@ -166,7 +175,7 @@ function OverrideEditor({
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (next) setValue(currentOverride ?? '');
+        if (next) setValue(currentOverride ?? "");
         setOpen(next);
       }}
     >
@@ -235,7 +244,8 @@ function RuntimeSection({
 }) {
   const detectMutation = useDetectEnv();
   const env = runtime.envStatus;
-  const canDelete = runtime.source !== 'managed';
+  const canDelete = runtime.source !== "builtin";
+  const hasNative = runtime.capabilities?.native?.available === true;
 
   return (
     <SettingsSection>
@@ -246,17 +256,19 @@ function RuntimeSection({
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold">{runtime.name}</span>
             <Badge
-              variant={runtime.source === 'managed' ? 'secondary' : 'outline'}
+              variant={runtime.source === "builtin" ? "secondary" : "outline"}
             >
-              {runtime.source === 'managed' ? '内置' : '注册'}
+              {runtime.source === "builtin" ? "内置" : "注册"}
             </Badge>
             <Badge variant="outline">
-              {runtimeTypeLabel(runtime.runtimeType)}
+              {Object.keys(runtime.capabilities ?? {})
+                .map(runtimeTypeLabel)
+                .join(" / ") || "待配对"}
             </Badge>
             <Badge
-              variant={runtime.status === 'online' ? 'default' : 'secondary'}
+              variant={runtime.status === "online" ? "default" : "secondary"}
             >
-              {runtime.status === 'online' ? '在线' : '离线'}
+              {runtime.status === "online" ? "在线" : "离线"}
             </Badge>
           </div>
           {env?.detectedAt && (
@@ -268,7 +280,7 @@ function RuntimeSection({
 
         {/* 右侧：操作按钮 — 紧凑对齐 */}
         <div className="flex shrink-0 items-center gap-1.5">
-          {runtime.runtimeType === 'native' && (
+          {hasNative && (
             <Button
               variant="outline"
               size="sm"
@@ -278,8 +290,8 @@ function RuntimeSection({
             >
               <RefreshCwIcon
                 className={cn(
-                  'size-3.5',
-                  detectMutation.isPending && 'animate-spin',
+                  "size-3.5",
+                  detectMutation.isPending && "animate-spin"
                 )}
               />
               检测 Agent
@@ -300,18 +312,18 @@ function RuntimeSection({
       </div>
 
       {/* CLI 环境行 */}
-      {runtime.runtimeType === 'native' ? (
+      {hasNative ? (
         <>
           <AgentEnvItem
             agentType="claude"
             status={env?.claude ?? null}
-            runtimeId={runtime.id}
+            runtimeHostId={runtime.id}
             overridePath={runtime.envConfigOverride?.claude?.executablePath}
           />
           <AgentEnvItem
             agentType="codex"
             status={env?.codex ?? null}
-            runtimeId={runtime.id}
+            runtimeHostId={runtime.id}
             overridePath={runtime.envConfigOverride?.codex?.executablePath}
           />
         </>
@@ -323,25 +335,21 @@ function RuntimeSection({
 // ── 主面板 ────────────────────────────────────────────────────────────
 
 /** Admin「运行环境」：Runtime 列表 + create/delete + CLI 路径覆盖/重检。 */
-export function RuntimePanel({
-  showHeader = true,
-}: {
-  showHeader?: boolean;
-}) {
+export function RuntimePanel({ showHeader = true }: { showHeader?: boolean }) {
   const { data: runtimes = [], isLoading } = useAdminRuntimes();
   const deleteRuntime = useDeleteRuntime();
   const deleteDialog = useConfirmDelete<Runtime>();
   const [createOpen, setCreateOpen] = useState(false);
   const [issuedToken, setIssuedToken] = useState<CreateRuntimeResponse | null>(
-    null,
+    null
   );
 
   return (
     <div className="space-y-6">
       <div
         className={cn(
-          'flex items-center gap-3',
-          showHeader ? 'justify-between' : 'justify-end',
+          "flex items-center gap-3",
+          showHeader ? "justify-between" : "justify-end"
         )}
       >
         {showHeader && (
@@ -431,12 +439,12 @@ function CreateRuntimeDialog({
   onOpenChange: (open: boolean) => void;
   onCreated: (result: CreateRuntimeResponse) => void;
 }) {
-  const formId = 'create-runtime-form';
+  const formId = "create-runtime-form";
   const [submitError, setSubmitError] = useState<string | null>(null);
   const createRuntime = useCreateRuntime();
   const form = useForm<CreateRuntimeFormValues>({
     resolver: zodResolver(createRuntimeFormSchema),
-    defaultValues: { name: '' },
+    defaultValues: { name: "" },
   });
 
   function handleSubmit(values: CreateRuntimeFormValues) {
@@ -445,13 +453,13 @@ function CreateRuntimeDialog({
       { name: values.name.trim() },
       {
         onSuccess: (result) => {
-          form.reset({ name: '' });
+          form.reset({ name: "" });
           onOpenChange(false);
           onCreated(result);
         },
         onError: (error) =>
-          setSubmitError(errorMessage(error, '添加运行环境失败')),
-      },
+          setSubmitError(errorMessage(error, "添加运行环境失败")),
+      }
     );
   }
 
@@ -459,7 +467,7 @@ function CreateRuntimeDialog({
     <FormDialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) form.reset({ name: '' });
+        if (!next) form.reset({ name: "" });
         onOpenChange(next);
       }}
       title="添加机器"
@@ -485,7 +493,9 @@ function CreateRuntimeDialog({
                   autoComplete="off"
                   autoFocus
                 />
-                {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+                {fieldState.invalid && (
+                  <FieldError errors={[fieldState.error]} />
+                )}
               </Field>
             )}
           />
