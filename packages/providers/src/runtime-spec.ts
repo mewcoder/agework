@@ -68,7 +68,7 @@ function resolveWorkspaceMount(input: RuntimeSpecInput): WorkspaceMount {
   };
 }
 
-/** 载体归属键:user scope 下全用户共享一个容器(userId),其余按 workspace。 */
+/** 运行实例归属键:user scope 下全用户共享一个容器(userId),其余按 workspace。 */
 function resolveOwnerId(input: RuntimeSpecInput): string {
   return input.runtimeType !== "native" && input.scope === "user"
     ? input.userId
@@ -76,7 +76,7 @@ function resolveOwnerId(input: RuntimeSpecInput): string {
 }
 
 /**
- * 组装一次 run 的目标运行环境:空间映射(resolveWorkspaceMount)+ 载体归属
+ * 组装一次 run 的目标运行环境:空间映射(resolveWorkspaceMount)+ 运行实例归属
  * (resolveOwnerId)拼成 RuntimeSpec。纯计算,不启动也不 attach worker。
  */
 export function resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {

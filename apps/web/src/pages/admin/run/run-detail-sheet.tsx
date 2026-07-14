@@ -193,48 +193,50 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
           <DetailSection title="Worker">
             <DetailGrid>
               <DetailItem label="类型" value={run.runtimeType} />
-              {run.workerInstance && (
+              {run.worker && (
                 <>
                   <DetailItem
-                    label="Resource ID"
-                    value={run.workerInstance.id}
+                    label="Worker ID"
+                    value={run.worker.workerId}
                     mono
                   />
                   <DetailItem
                     label="复用范围"
                     value={
                       <Badge variant="outline">
-                        {run.workerInstance.runtimeType === "native"
+                        {run.worker.runtimeType === "native"
                           ? "host"
-                          : run.workerInstance.scope}
+                          : run.worker.scope}
                       </Badge>
                     }
                   />
                   <DetailItem
-                    label="资源状态"
+                    label="Worker 状态"
                     value={
                       <Badge
-                        variant={statusVariant(run.workerInstance.status)}
-                        className={runStatusBadgeClassName(
-                          run.workerInstance.status
-                        )}
+                        variant={
+                          run.worker.status === "ready"
+                            ? "default"
+                            : "secondary"
+                        }
                       >
-                        {run.workerInstance.status}
+                        {run.worker.status}
                       </Badge>
                     }
                   />
+                  <DetailItem label="Owner" value={run.worker.ownerId} mono />
                   <DetailItem
-                    label="Owner"
-                    value={run.workerInstance.ownerId}
+                    label="Host"
+                    value={run.worker.runtimeHostId}
                     mono
                   />
                   <DetailItem
-                    label="绑定工作空间"
-                    value={String(run.workerInstance.workspaceBindings.length)}
+                    label="活跃 Run"
+                    value={String(run.worker.runIds.length)}
                   />
                   <DetailItem
-                    label="过期时间"
-                    value={formatDateTime(run.workerInstance.expiresAt)}
+                    label="最后心跳"
+                    value={formatDateTime(run.worker.lastSeenAt)}
                   />
                 </>
               )}

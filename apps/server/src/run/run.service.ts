@@ -56,9 +56,8 @@ export class RunService implements OnApplicationBootstrap {
   async getDetailForAdmin(id: string) {
     const detail = await this.runRepository.detailAdmin(id);
     const workers = await this.runtimeHost.listWorkers();
-    const workerInstance =
-      workers.find((worker) => worker.runIds.includes(id)) ?? null;
-    return { ...detail, workerInstance };
+    const worker = workers.find((w) => w.runIds.includes(id)) ?? null;
+    return { ...detail, worker };
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */

@@ -11,7 +11,7 @@ import type {
 
 /**
  * native 运行形态的 Provider:fork 一个 worker 子进程,IPC channel 只在内部用于
- * 接收进程 exit 信号与 SIGTERM 终止,业务收发走 HTTP。native 无独立载体,
+ * 接收进程 exit 信号与 SIGTERM 终止,业务收发走 HTTP。native 无独立运行实例,
  * `stop` 与 `destroy` 都是杀进程——`stop` 杀内存中跟踪的 channel,`destroy`
  * 在无内存态时(如 server 重启后清孤儿)按 `runtimeInstanceId` 里的 pid 杀。
  *

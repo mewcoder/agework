@@ -119,8 +119,8 @@ export type RuntimeInstanceRef = {
  * - start:建环境 + 起 worker（容器 create/start 合一，native 是 fork）。onExit 是
  *   调用方本地专属的子进程退出钩子,只有 native provider 真正接线(容器形态没有
  *   本地子进程可监听);registered Host 不传、providers 也不转发它。
- * - stop:owner 仍在,停 worker 但保留载体（容器 stop/pause，native 杀进程）。
- * - destroy:owner 永久消失,删除载体（容器 rm/delete，native 杀进程）。
+ * - stop:owner 仍在,停 worker 但保留运行实例（容器 stop/pause，native 杀进程）。
+ * - destroy:owner 永久消失,删除运行实例（容器 rm/delete，native 杀进程）。
  */
 export interface RuntimeProvider {
   readonly type: RuntimeType;

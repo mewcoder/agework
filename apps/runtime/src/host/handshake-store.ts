@@ -1,5 +1,5 @@
 /**
- * worker 启动握手存储：launch 拿到载体后挂 pending 握手，等 worker 进程回连注册
+ * worker 启动握手存储：launch 拿到运行实例后挂 pending 握手，等 worker 进程回连注册
  * 带匹配 startToken 才确认活着。不自带超时——由调用方包裹 withTimeout。
  *
  * 收编自 worker-manager/connection/worker-handshake.store.ts，去掉 NestJS 依赖。

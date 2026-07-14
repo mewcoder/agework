@@ -331,7 +331,7 @@ export class RuntimeHost implements RuntimeHostContract {
     await this.stopWorkerByKey(input.key, "worker stopped");
   }
 
-  /** 停止一个 worker 的完整收尾:出池、清信箱、通知名下 run、停物理载体。 */
+  /** 停止一个 worker 的完整收尾:出池、清信箱、通知名下 run、停运行实例。 */
   private async stopWorkerByKey(
     key: WorkerKey,
     reason: string
@@ -341,12 +341,12 @@ export class RuntimeHost implements RuntimeHostContract {
 
     this.mailbox.cleanup(entry.workerId);
 
-    // 先通知 upstream 名下所有 run:run 终结不依赖载体停止(可能耗时/失败)
+    // 先通知 upstream 名下所有 run:run 终结不依赖运行实例停止(可能耗时/失败)
     for (const runId of entry.activeRuns) {
       this.upstream.notifyWorkerLost(runId, reason).catch(() => {});
     }
 
-    // best-effort 停止物理载体
+    // best-effort 停止运行实例
     const runtimeType = key.split("#")[1] ?? "native";
     if (!isRuntimeType(runtimeType)) return;
     const owner = parseOwnerKey(key.split("#")[0] as OwnerKey);
@@ -750,7 +750,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
   /**
    * 心跳判死扫描：pool 中 lastSeen 超过 heartbeatTimeoutMs 的 worker 判死。
-   * 判死走与 stopWorker 相同的收尾(出池、清信箱、通知名下 run、停载体)。
+   * 判死走与 stopWorker 相同的收尾(出池、清信箱、通知名下 run、停运行实例)。
    */
   private sweepFence(): void {
     const now = Date.now();
@@ -758,7 +758,7 @@ export class RuntimeHost implements RuntimeHostContract {
     for (const worker of this.pool.list()) {
       if (worker.status !== "ready") continue;
       if (now - worker.lastSeen < timeoutMs) continue;
-      // stopWorkerByKey 内部吞掉载体停止失败,不会 reject
+      // stopWorkerByKey 内部吞掉运行实例停止失败,不会 reject
       void this.stopWorkerByKey(worker.key, "worker heartbeat timeout (fence)");
     }
   }

@@ -352,7 +352,7 @@ describe("RuntimeTunnelHandler", () => {
       expect(received).toEqual([{ kind: "runCancelled", runId: "live-run" }]);
     });
 
-    it("processes a legacy bare notification without acking (双栈兼容)", async () => {
+    it("drops a bare notification without an envelope (双栈兼容分支已删)", async () => {
       const received: unknown[] = [];
       handler.setUpstreamHandler((_runtimeId, notification) => {
         received.push(notification);
@@ -368,12 +368,11 @@ describe("RuntimeTunnelHandler", () => {
           params: { kind: "runCancelled", runId: "legacy-run" },
         })
       );
-      // 用一条带信封的通知作为同步屏障:它的 ACK 回来时,前面的裸通知必已处理
+      // 用一条带信封的通知作为同步屏障:它的 ACK 回来时,前面的裸通知必已被处理(丢弃)
       sendUpstream(ws, 1, epoch, "envelope-run");
       await nextMessage(ws);
 
       expect(received).toEqual([
-        { kind: "runCancelled", runId: "legacy-run" },
         { kind: "runCancelled", runId: "envelope-run" },
       ]);
     });

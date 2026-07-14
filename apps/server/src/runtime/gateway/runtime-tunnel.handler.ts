@@ -395,19 +395,12 @@ export class RuntimeTunnelHandler
       );
       return;
     }
-    // 双栈兼容:旧版 Host 直接发裸 notification(无 seq/epoch 信封),
-    // 照旧 best-effort 处理、不回 ACK。
+    // Host 只发带 seq/epoch 的信封(Phase 2 双栈兼容的裸 notification 分支已删),
+    // 不合形状的消息直接丢弃。
     if (envelope.notification === undefined) {
-      const legacy = envelope as unknown as HostUpstreamNotification;
-      if ("kind" in legacy) {
-        void Promise.resolve(
-          this.upstreamHandler?.(runtimeHostId, legacy)
-        ).catch((err: unknown) => {
-          this.logger.warn(
-            `legacy upstream handler failed for runtime ${runtimeHostId}: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
-      }
+      this.logger.warn(
+        `dropped malformed upstream envelope from runtime ${runtimeHostId}`
+      );
       return;
     }
     if (envelope.epoch !== undefined && envelope.epoch !== session?.epoch) {

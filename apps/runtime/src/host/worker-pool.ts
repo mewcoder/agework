@@ -9,7 +9,7 @@ export type WorkerEntry = {
   workerId: string;
   /** 池键：`${OwnerKey}#${RuntimeType}`（不变量 2）。 */
   key: WorkerKey;
-  /** 启动握手共享密钥，绑定"这次运行载体存活周期"。 */
+  /** 启动握手共享密钥，绑定"这次运行实例存活周期"。 */
   startToken: string;
   status: "starting" | "ready";
   /** 宿主实例标识（容器 ID / sandbox ID / pid:token）。 */

@@ -207,7 +207,7 @@ export class RunRepository {
     const { conversation, ...runData } = run;
     const workspace = conversation.workspace;
 
-    // workerInstance 视图由 RunService 经 RuntimeHostContract 现场查询补齐。
+    // worker 快照由 RunService 经 RuntimeHostContract 现场查询补齐。
     return {
       ...runData,
       userId: workspace.userId,

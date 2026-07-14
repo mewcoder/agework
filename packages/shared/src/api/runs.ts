@@ -7,6 +7,7 @@ import type {
   RunEventTargetType,
   RunEventType,
   RunUsage,
+  WorkerSnapshot,
 } from "../protocol";
 
 /** /api/v1/admin/runs/list 的条目。 */
@@ -35,24 +36,6 @@ export type AdminRunResponse = {
 
 export type AdminRunListResponse = PaginatedListResponse<AdminRunResponse>;
 
-export type AdminRunWorkerInstanceResponse = {
-  id: string;
-  runtimeType: string;
-  scope: string;
-  ownerId: string;
-  runtimeInstanceId: string;
-  status: string;
-  expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  workspaceBindings: Array<{
-    id: string;
-    workspaceId: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-};
-
 export type AdminRunDetailResponse = AdminRunResponse & {
   conversation: {
     id: string;
@@ -69,7 +52,8 @@ export type AdminRunDetailResponse = AdminRunResponse & {
     id: string;
     username: string | null;
   };
-  workerInstance: AdminRunWorkerInstanceResponse | null;
+  /** 该 run 当前所在 worker 的现场快照;run 已终结或 worker 已回收时为 null。 */
+  worker: WorkerSnapshot | null;
 };
 
 export type AdminRunEventResponse = {

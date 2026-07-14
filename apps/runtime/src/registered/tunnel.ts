@@ -368,7 +368,7 @@ export async function runRegisteredRuntime(): Promise<void> {
   });
   const shutdown = () => {
     client.stop();
-    // 停掉名下所有 worker 载体(目标架构不做跨重启容器复用),超时兜底强退
+    // 停掉名下所有 worker 运行实例(目标架构不做跨重启容器复用),超时兜底强退
     const stopAll = runtimeHost
       .listWorkers()
       .then((workers) =>

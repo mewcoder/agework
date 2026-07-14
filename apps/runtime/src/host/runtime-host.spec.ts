@@ -218,7 +218,7 @@ describe("RuntimeHost", () => {
       fencedHost.registerWorker(entry.workerId, entry.startToken, {});
       await vi.advanceTimersByTimeAsync(0);
 
-      // 心跳静默超过判死窗口 → fence:通知 workerLost、移出池、best-effort 停载体
+      // 心跳静默超过判死窗口 → fence:通知 workerLost、移出池、best-effort 停运行实例
       await vi.advanceTimersByTimeAsync(4_000);
 
       expect(fencedUpstream.notifyWorkerLost).toHaveBeenCalledWith(
@@ -266,7 +266,7 @@ describe("RuntimeHost", () => {
     }
   });
 
-  it("stopWorker stops the carrier and reports workerLost for its active runs", async () => {
+  it("stopWorker stops the runtime instance and reports workerLost for its active runs", async () => {
     const { stop } = injectProvider(
       host,
       vi.fn().mockResolvedValue({ runtimeInstanceId: "inst-1" })

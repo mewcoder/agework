@@ -18,9 +18,9 @@ export interface RegisteredRuntimeConfig {
   token: string;
   /** 本实例定死的一种运行方式(实例专一,不做全能节点)。 */
   runtimeType: RuntimeType;
-  /** 载体日志目录(容器内/宿主机路径,按 runtimeType 语义同 packages/providers)。 */
+  /** 运行实例日志目录(容器内/宿主机路径,按 runtimeType 语义同 packages/providers)。 */
   runtimeLogHostPath: string;
-  /** docker/opensandbox 起 worker 载体用的镜像 tag;native 不用。 */
+  /** docker/opensandbox 起 worker 运行实例用的镜像 tag;native 不用。 */
   workerImage?: string;
   /** native 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
  *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
