@@ -85,4 +85,21 @@ describe("AdminWorkerController", () => {
     });
     expect(result).toEqual({ ok: true });
   });
+
+  it("stopWorker maps contract failures to 502 (目标 Host 不可达)", async () => {
+    const stopWorker = vi
+      .fn()
+      .mockRejectedValue(new Error("runtime rt-1 is not connected"));
+    const controller = makeController({}, { stopWorker });
+
+    await expect(
+      controller.stopWorker({
+        runtimeHostId: "rt-1",
+        workerKey: "workspace:ws-1#native",
+      })
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("rt-1 is not connected"),
+    });
+  });
 });

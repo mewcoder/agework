@@ -144,6 +144,24 @@ describe("WorkspaceRepository", () => {
     });
   });
 
+  it("listActiveIds returns only non-deleted ids and skips the query for empty input", async () => {
+    const findMany = vi.fn().mockResolvedValue([{ id: "ws-1" }]);
+    const prisma = makePrisma({ workspace: { findMany } });
+    const repo = new WorkspaceRepository(prisma as never);
+
+    await expect(repo.listActiveIds(["ws-1", "ws-2"])).resolves.toEqual([
+      "ws-1",
+    ]);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["ws-1", "ws-2"] }, deletedAt: null },
+      select: { id: true },
+    });
+
+    findMany.mockClear();
+    await expect(repo.listActiveIds([])).resolves.toEqual([]);
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
   it("softDelete only soft-deletes the workspace boundary", async () => {
     const update = vi.fn().mockResolvedValue({ id: "ws-1" });
     const prisma = makePrisma({

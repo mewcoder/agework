@@ -25,9 +25,14 @@ import {
   type RpcId,
   type RpcResponse,
 } from "@agework/shared/protocol/rpc";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import { getApiContext, ConfigService } from "../../config/config.service";
 import { resolveApiBasePath } from "../../common/api-path";
 import { RuntimeRepository } from "../runtime.repository";
+import {
+  RUNTIME_HOST_CONNECTED_EVENT,
+  RuntimeHostConnectedEvent,
+} from "../runtime.events";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
@@ -75,7 +80,8 @@ export class RuntimeTunnelHandler
   constructor(
     private readonly repository: RuntimeRepository,
     private readonly configService: ConfigService,
-    private readonly httpAdapterHost: HttpAdapterHost
+    private readonly httpAdapterHost: HttpAdapterHost,
+    private readonly events: EventEmitter2
   ) {}
 
   onApplicationBootstrap(): void {
@@ -210,6 +216,13 @@ export class RuntimeTunnelHandler
   private attach(runtimeHostId: string, ws: WebSocket): void {
     // token 鉴权只决定连接可以说话;路由身份(connections 绑定)在 register
     // 握手校验通过后才建立——未注册的连接不可被 RPC/广播触达,也不会顶掉在线连接。
+    // 一个心跳判死窗口内没完成注册的连接直接踢掉,不让它无限挂着。
+    const registerTimer = setTimeout(() => {
+      if (this.connections.get(runtimeHostId) !== ws) {
+        ws.close(1008, "register timeout");
+      }
+    }, this.configService.getHeartbeatTimeoutSeconds() * 1000);
+    registerTimer.unref?.();
     ws.on("message", (data: RawData) => {
       void this.onMessage(runtimeHostId, ws, data).catch((err: unknown) => {
         this.logger.warn(
@@ -218,6 +231,7 @@ export class RuntimeTunnelHandler
       });
     });
     ws.on("close", () => {
+      clearTimeout(registerTimer);
       if (this.connections.get(runtimeHostId) !== ws) return; // 已被新连接顶掉
       this.connections.delete(runtimeHostId);
       this.rejectPendingFor(runtimeHostId, "connection closed");
@@ -324,6 +338,11 @@ export class RuntimeTunnelHandler
           epoch: this.nextEpoch(runtimeHostId),
         };
         ws.send(JSON.stringify(reply));
+        // 注册成功的事实:下游据此做重连对账(如补发离线期间丢失的 owner 级释放)
+        this.events.emit(
+          RUNTIME_HOST_CONNECTED_EVENT,
+          new RuntimeHostConnectedEvent(runtimeHostId)
+        );
         return;
       }
       case "heartbeat": {

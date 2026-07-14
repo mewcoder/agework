@@ -160,6 +160,16 @@ export class WorkspaceRepository {
     });
   }
 
+  /** 给定 id 集合中仍存活(未软删)的 workspace id。 */
+  async listActiveIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.workspace.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   /** run 启动视图：目录 + runtimeHost 配置 + 属主用户名。 */
   findRunView(id: string) {
     return this.prisma.workspace.findFirst({

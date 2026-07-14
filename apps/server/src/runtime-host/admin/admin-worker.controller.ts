@@ -1,4 +1,11 @@
-import { Body, Controller, Get, Inject, Post } from "@nestjs/common";
+import {
+  BadGatewayException,
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Post,
+} from "@nestjs/common";
 import { Roles } from "../../auth/decorators/roles.decorator";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { StopWorkerDto } from "./stop-worker.dto";
@@ -41,10 +48,19 @@ export class AdminWorkerController {
   /** Phase 3:唯一停止端点,按 runtimeHostId 定向停止目标 Host 上的 worker。 */
   @Post("resources/stop")
   async stopWorker(@Body() body: StopWorkerDto) {
-    await this.hostContract.stopWorker({
-      runtimeHostId: body.runtimeHostId,
-      key: body.workerKey as WorkerKey,
-    });
+    try {
+      await this.hostContract.stopWorker({
+        runtimeHostId: body.runtimeHostId,
+        key: body.workerKey as WorkerKey,
+      });
+    } catch (err) {
+      // 目标 Host 离线/超时是预期失败,按上游不可达报告
+      throw new BadGatewayException(
+        `stop worker failed on host ${body.runtimeHostId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
     return { ok: true };
   }
 }

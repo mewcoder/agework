@@ -1,4 +1,5 @@
 import { Injectable, Module } from "@nestjs/common";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
@@ -48,7 +49,13 @@ async function createRuntimeTestingModule(
   runtimeImports: Parameters<typeof Test.createTestingModule>[0]["imports"]
 ): Promise<TestingModule> {
   return Test.createTestingModule({
-    imports: [ConfigModule, PrismaModule, ...(runtimeImports ?? [])],
+    // EventEmitterModule 在 app 根是全局注册,测试装配里手动补上
+    imports: [
+      ConfigModule,
+      PrismaModule,
+      EventEmitterModule.forRoot(),
+      ...(runtimeImports ?? []),
+    ],
   })
     .overrideProvider(ConfigService)
     .useValue(createConfigServiceMock())

@@ -27,6 +27,8 @@ describe("RuntimeTunnelHandler", () => {
   let server: Server;
   let baseUrl: string;
   let repository: ReturnType<typeof makeRepository>;
+  let events: { emit: ReturnType<typeof vi.fn> };
+  let adapterHost: HttpAdapterHost;
   let handler: RuntimeTunnelHandler;
   let sockets: WebSocket[];
 
@@ -40,16 +42,18 @@ describe("RuntimeTunnelHandler", () => {
     }
     baseUrl = `ws://127.0.0.1:${address.port}`;
     repository = makeRepository();
+    events = { emit: vi.fn() };
     const configService = {
       getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(30),
     } as unknown as ConfigService;
-    const adapterHost = {
+    adapterHost = {
       httpAdapter: { getHttpServer: () => server },
     } as unknown as HttpAdapterHost;
     handler = new RuntimeTunnelHandler(
       repository as never,
       configService,
-      adapterHost
+      adapterHost,
+      events as never
     );
     handler.onApplicationBootstrap();
     sockets = [];
@@ -217,6 +221,38 @@ describe("RuntimeTunnelHandler", () => {
     expect(handler.isConnected("rt-1")).toBe(false);
     await register(ws);
     expect(handler.isConnected("rt-1")).toBe(true);
+  });
+
+  it("emits runtime-host.connected after a successful register", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    await register(ws);
+    expect(events.emit).toHaveBeenCalledWith(
+      "runtime-host.connected",
+      expect.objectContaining({ runtimeHostId: "rt-1" })
+    );
+  });
+
+  it("kicks a connection that never registers within the register window", async () => {
+    // 用极短心跳窗口构造一个独立 handler(注册窗口 = 心跳判死窗口)
+    handler.onApplicationShutdown();
+    const fastHandler = new RuntimeTunnelHandler(
+      repository as never,
+      {
+        getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(0.05),
+      } as unknown as ConfigService,
+      adapterHost,
+      events as never
+    );
+    fastHandler.onApplicationBootstrap();
+    try {
+      const ws = connect();
+      await once(ws, "open");
+      const [code] = (await once(ws, "close")) as [number];
+      expect(code).toBe(1008);
+    } finally {
+      fastHandler.onApplicationShutdown();
+    }
   });
 
   it("closeConnection kicks the live socket with 4410", async () => {
