@@ -9,7 +9,7 @@ import { RunRepository } from "../run.repository";
 import { RUNTIME_HOST_CONTRACT } from "../../worker-manager/worker-manager.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { isManagedRuntimeId } from "../../runtime/runtime.types";
+import { isBuiltinHostId } from "../../runtime/runtime.types";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
 
@@ -53,8 +53,8 @@ export class RunRecoveryService implements OnApplicationShutdown {
         this.logger.log("No interrupted active runs found.");
       } else {
         for (const run of activeRuns) {
-          const runtimeHostId = run.conversation.workspace.runtimeId;
-          if (!isManagedRuntimeId(runtimeHostId)) {
+          const runtimeHostId = run.conversation.workspace.runtimeHostId;
+          if (!isBuiltinHostId(runtimeHostId)) {
             // registered Host 上的 run 等 Host 重连按 ACK 水位续传,不判死;
             // Host 一直不回来由 sweepAbandonedRuns 兜底。
             this.logger.log(
@@ -105,8 +105,8 @@ export class RunRecoveryService implements OnApplicationShutdown {
     // 同一台 Host 的行只查一次
     const hostStatus = new Map<string, boolean>();
     for (const run of activeRuns) {
-      const runtimeHostId = run.conversation.workspace.runtimeId;
-      if (isManagedRuntimeId(runtimeHostId)) continue;
+      const runtimeHostId = run.conversation.workspace.runtimeHostId;
+      if (isBuiltinHostId(runtimeHostId)) continue;
       let abandoned = hostStatus.get(runtimeHostId);
       if (abandoned === undefined) {
         abandoned = await this.hostAbandoned(runtimeHostId, cutoff);
@@ -129,7 +129,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
     runtimeHostId: string,
     cutoffMs: number
   ): Promise<boolean> {
-    const row = await this.runtimeService.getRuntimeRow(runtimeHostId);
+    const row = await this.runtimeService.getRuntimeHostRow(runtimeHostId);
     if (!row) return true; // Runtime 行不存在:无从续传,判死
     if (row.status === "online") return false;
     const heartbeatAt = row.lastHeartbeatAt?.getTime() ?? 0;

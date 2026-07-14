@@ -29,6 +29,7 @@ import {
   DEFAULT_ALLOWED_ISOLATION_SCOPES,
   DEFAULT_PORT,
   DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB,
+  DEFAULT_BUILTIN_WORKER_HTTP_PORT,
 } from "./registry/defaults";
 import { EnvKey } from "./registry/env-key";
 import {
@@ -270,11 +271,11 @@ export class ConfigService implements OnModuleInit {
   }
 
   isIsolationScopeAllowed(
-    isolationScope: string
-  ): isolationScope is IsolationScope {
+    scope: string
+  ): scope is IsolationScope {
     return (
-      isIsolationScope(isolationScope) &&
-      this.getAllowedIsolationScopes().includes(isolationScope)
+      isIsolationScope(scope) &&
+      this.getAllowedIsolationScopes().includes(scope)
     );
   }
 
@@ -297,6 +298,15 @@ export class ConfigService implements OnModuleInit {
         ? Math.floor(parsed)
         : DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB;
     return { enabled, maxFileMb };
+  }
+
+  /** Builtin Host 的 worker HTTP 服务器端口（Phase 3：worker 数据面不再连 server 旧端点）。 */
+  getBuiltinWorkerHttpPort(): number {
+    const raw = this.getEnv(EnvKey.BUILTIN_WORKER_HTTP_PORT);
+    const port = Number(raw);
+    return Number.isFinite(port) && port > 0
+      ? port
+      : DEFAULT_BUILTIN_WORKER_HTTP_PORT;
   }
 
   getIdleTimeoutSeconds(): number {

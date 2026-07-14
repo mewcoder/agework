@@ -52,7 +52,7 @@ describe("WorkspaceController", () => {
         description: "test",
         rootPath: "/tmp",
         runtimeType: "native",
-        isolationScope: "workspace",
+        scope: "workspace",
       } as never;
       await controller.create(body, mockUser);
       expect(service.create).toHaveBeenCalledWith(

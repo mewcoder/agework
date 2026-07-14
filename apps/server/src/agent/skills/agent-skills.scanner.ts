@@ -39,7 +39,7 @@ export class AgentSkillsScanner {
     let dirEntries: { name: string; type: string }[];
     try {
       const result = await this.runtimeService.listFiles(
-        ctx.runtimeId,
+        ctx.runtimeHostId,
         ctx.workspaceRootPath,
         skillsDir
       );
@@ -60,7 +60,7 @@ export class AgentSkillsScanner {
         try {
           const filePath = join(skillsDir, dirName, "SKILL.md");
           const result = await this.runtimeService.readFile(
-            ctx.runtimeId,
+            ctx.runtimeHostId,
             ctx.workspaceRootPath,
             filePath
           );

@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
+
 # Worker 为主概念,runtime 是无状态的运行载体
 
 worker-manager 里 `worker`(server 管理的常驻执行单元)是主概念,`runtime`(容器 / fork 进程)是为 worker 服务的运行载体。系统里唯一被持久化的状态是 worker 被 server 观测到的存活(`WorkerInstance.status`:starting/running/stopped/error);runtime **没有独立状态**,只被创建与拆除,其存在被 worker 的存活吸收。之所以能把二者压成一行一状态(`WorkerInstance`),是因为下面这条不变量成立。

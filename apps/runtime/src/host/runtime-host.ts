@@ -65,6 +65,7 @@ import {
   rpcNotificationToUpstreamMessage,
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
+export { WorkerHttpServer } from "./worker-http-server.js";
 import { WorkerPool, type WorkerEntry } from "./worker-pool";
 import { CommandMailbox } from "./command-mailbox";
 import { HandshakeStore } from "./handshake-store";
@@ -174,7 +175,7 @@ export class RuntimeHost implements RuntimeHostContract {
     const runConfig = await this.makeRunConfig(input, runtimeTarget);
     this.runConfigs.set(runId, runConfig);
 
-    const wKey = workerKey(placement.owner, placement.isolation);
+    const wKey = workerKey(placement.owner, placement.runtimeType);
     const existing = this.pool.get(wKey);
 
     this.states.set(runId, {
@@ -373,7 +374,7 @@ export class RuntimeHost implements RuntimeHostContract {
     if (existing?.status === "ready") return existing;
 
     const { placement } = input;
-    const isolation = placement.isolation;
+    const isolation = placement.runtimeType;
     if (!isRuntimeType(isolation)) {
       throw new Error(`unsupported isolation: ${isolation}`);
     }
@@ -456,7 +457,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
     // 通知 ExecutionRef（过渡）
     this.upstream.notifyExecutionRef(runId, {
-      runtimeType: input.placement.isolation,
+      runtimeType: input.placement.runtimeType,
       runtimeInstanceId: entry.runtimeInstanceId,
     });
 
@@ -482,7 +483,7 @@ export class RuntimeHost implements RuntimeHostContract {
   ): void {
     this.pool.associateRun(entry.key, runId);
     this.upstream.notifyExecutionRef(runId, {
-      runtimeType: input.placement.isolation,
+      runtimeType: input.placement.runtimeType,
       runtimeInstanceId: entry.runtimeInstanceId,
     });
     this.dispatch(entry.workerId, runId, {
@@ -586,7 +587,7 @@ export class RuntimeHost implements RuntimeHostContract {
   // ── placement → 执行机细节派生 ──────────────────────────────────────
 
   private resolveSpec(placement: RunPlacement): RuntimeSpec {
-    const isolation = placement.isolation;
+    const isolation = placement.runtimeType;
     if (!isRuntimeType(isolation)) {
       throw new Error(`unsupported isolation: ${isolation}`);
     }
@@ -603,7 +604,7 @@ export class RuntimeHost implements RuntimeHostContract {
     return resolveRuntimeSpec({
       ...base,
       runtimeType: isolation,
-      isolationScope: placement.scope,
+      isolationScope: placement.isolationScope,
     });
   }
 
@@ -700,7 +701,7 @@ export class RuntimeHost implements RuntimeHostContract {
       AGEWORK_WORKER_ID: workerId,
       AGEWORK_WORKER_START_TOKEN: startToken,
       AGEWORK_WORKER_RUNTIME_TYPE: isolation,
-      AGEWORK_WORKER_ISOLATION_SCOPE: placement.scope,
+      AGEWORK_WORKER_ISOLATION_SCOPE: placement.isolationScope,
       AGEWORK_WORKER_WORKSPACE_PATH: runtimeTarget.runtimePath,
     };
     if (runConfig.workerLogFilePath) {

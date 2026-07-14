@@ -19,7 +19,7 @@ function makeWorkspaceView(
     runtimeType: "native",
     isolationScope: "workspace",
     username: "admin-1",
-    runtimeId: "managed-native",
+    runtimeHostId: "managed-native",
     runtimeSource: "managed",
     ...overrides,
   };
@@ -137,8 +137,8 @@ describe("RunLauncher", () => {
       conversationId: "conversation-1",
       placement: {
         owner: "workspace:ws-1",
-        scope: "workspace",
-        isolation: "native",
+        isolationScope: "workspace",
+        runtimeType: "native",
         runtimeHostId: "managed-native",
         workspaceId: "ws-1",
         userId: "user-1",
@@ -187,8 +187,8 @@ describe("RunLauncher", () => {
       expect.objectContaining({
         placement: expect.objectContaining({
           owner: "user:user-1",
-          scope: "user",
-          isolation: "docker",
+          isolationScope: "user",
+          runtimeType: "docker",
         }),
       })
     );

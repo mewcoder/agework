@@ -22,10 +22,7 @@ import type {
 /** worker 的服务范围：对用户是独享/共享承诺，对 Host 是复用粒度。 */
 export type WorkerScope = "workspace" | "user";
 
-/**
- * 隔离实现（native / docker / opensandbox），providers 扩展点决定取值。
- * 取代旧词 runtimeType——"runtime" 从此只出现在 Runtime Host 一个名字里。
- */
+/** native / docker / opensandbox，providers 扩展点决定取值。 */
 export type Isolation = string;
 
 /** worker 复用的 owner 键：workspace-scope 用 workspaceId，user-scope 用 userId。 */
@@ -48,9 +45,8 @@ export type WorkerKey = `${OwnerKey}#${string}`;
  */
 export type RunPlacement = {
   owner: OwnerKey;
-  scope: WorkerScope;
-  isolation: Isolation;
-  /** 目标 Host。过渡期沿用 Runtime 行 id（workspace.runtimeId），Phase 3 正名。 */
+  isolationScope: WorkerScope;
+  runtimeType: Isolation;
   runtimeHostId: string;
   workspaceId: string;
   userId: string;

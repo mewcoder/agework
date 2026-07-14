@@ -32,6 +32,8 @@ export const DEFAULT_LAUNCH_TIMEOUT_SECONDS = 120;
 export const DEFAULT_HEARTBEAT_TIMEOUT_SECONDS = 75;
 export const DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS = 20;
 export const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
+/** Builtin Host 的 worker HTTP 服务器端口（Phase 3：worker 数据面切到 Host 自管）。 */
+export const DEFAULT_BUILTIN_WORKER_HTTP_PORT = 7101;
 
 export const DEFAULT_OPENSANDBOX_DOMAIN = "localhost:8080";
 export const DEFAULT_OPENSANDBOX_PROTOCOL = "http";

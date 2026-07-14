@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
+
 # ADR-0005: builtin runtime 文件预览走 server 直读，不经 worker
 
 > 状态: 已拍板

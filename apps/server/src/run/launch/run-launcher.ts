@@ -90,9 +90,9 @@ export class RunLauncher {
     } = input;
     const agentType = agentProviderConfig.agentType;
     const placement = this.buildPlacement({ workspace, userId });
-    const runtimeType = placement.isolation;
+    const runtimeType = placement.runtimeType;
     const isolationScope =
-      runtimeType !== "native" ? placement.scope : undefined;
+      runtimeType !== "native" ? placement.isolationScope : undefined;
     const stream = new RunStream(res);
 
     await this.claimRun({
@@ -172,17 +172,17 @@ export class RunLauncher {
   }): RunPlacement {
     const { workspace, userId } = input;
     const isRegistered = workspace.runtimeSource !== "managed";
-    const isolation = workspace.runtimeType;
-    if (!isRegistered && !this.configService.isRuntimeTypeAllowed(isolation)) {
+    const runtimeType = workspace.runtimeType;
+    if (!isRegistered && !this.configService.isRuntimeTypeAllowed(runtimeType)) {
       throw new BadRequestException("当前部署不支持该工作空间的运行环境");
     }
-    if (!isRuntimeType(isolation)) {
-      throw new BadRequestException(`工作空间的运行环境类型无效: ${isolation}`);
+    if (!isRuntimeType(runtimeType)) {
+      throw new BadRequestException(`工作空间的运行环境类型无效: ${runtimeType}`);
     }
 
-    // native 无容器边界,scope 恒为 workspace(能力矩阵约束);sandbox 校验创建时的选择。
-    let scope: WorkerScope = "workspace";
-    if (isolation !== "native") {
+    // native 无容器边界,isolationScope 恒为 workspace(能力矩阵约束);sandbox 校验创建时的选择。
+    let isolationScope: WorkerScope = "workspace";
+    if (runtimeType !== "native") {
       const requestedIsolationScope = workspace.isolationScope;
       if (
         !isRegistered &&
@@ -198,17 +198,17 @@ export class RunLauncher {
           `工作空间的隔离级别无效: ${requestedIsolationScope}`
         );
       }
-      scope = requestedIsolationScope;
+      isolationScope = requestedIsolationScope;
     }
 
     return {
       owner:
-        scope === "user"
+        isolationScope === "user"
           ? userOwnerKey(userId)
           : workspaceOwnerKey(workspace.workspaceId),
-      scope,
-      isolation,
-      runtimeHostId: workspace.runtimeId,
+      isolationScope,
+      runtimeType,
+      runtimeHostId: workspace.runtimeHostId,
       workspaceId: workspace.workspaceId,
       userId,
       username: workspace.username,
@@ -396,7 +396,7 @@ export class RunLauncher {
       runInput,
       stream,
     } = input;
-    const runtimeType = placement.isolation;
+    const runtimeType = placement.runtimeType;
 
     try {
       this.recordRunEvent(
@@ -405,7 +405,7 @@ export class RunLauncher {
           status: "starting",
           runtimeType,
           isolationScope:
-            runtimeType !== "native" ? placement.scope : undefined,
+            runtimeType !== "native" ? placement.isolationScope : undefined,
         }),
         `record runtime starting for run ${runId}`
       );

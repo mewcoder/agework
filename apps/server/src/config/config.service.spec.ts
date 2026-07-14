@@ -132,7 +132,7 @@ describe("runtime capability config", () => {
     );
   });
 
-  it("defaults to user isolation when AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES is unset", async () => {
+  it("defaults to user runtimeType when AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES is unset", async () => {
     delete process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES;
     const { service } = createService([]);
 
@@ -140,7 +140,7 @@ describe("runtime capability config", () => {
     expect(service.getDefaultIsolationScope()).toBe("user");
   });
 
-  it("parses allowed isolation scopes and uses the first as the create default", async () => {
+  it("parses allowed runtimeType scopes and uses the first as the create default", async () => {
     process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = "workspace,user";
     const { service } = createService([]);
 
@@ -149,7 +149,7 @@ describe("runtime capability config", () => {
     expect(service.isIsolationScopeAllowed("user")).toBe(true);
   });
 
-  it("fails fast on invalid isolation capability values", async () => {
+  it("fails fast on invalid runtimeType capability values", async () => {
     process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = "user,bogus";
     const { service } = createService([]);
 

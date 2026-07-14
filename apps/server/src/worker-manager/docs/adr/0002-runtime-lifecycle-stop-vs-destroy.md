@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
+
 # Runtime 载体收尾分 stop(留)与 destroy(删),RuntimeProvider 扁平化为 start/stop/destroy
 
 原本 runtime 载体只有一个收尾动作 `teardown`,底下是 `docker stop` / `pauseSandbox`(**保留**载体),而所有终态调用点(fence 判死、admin 手动停、删 workspace/user)都走它。结果:删掉一个 workspace 后,它的容器只是 stop、没有 rm,而 `ownerId = workspaceId` 再也不会回来 → 容器永久躺尸泄漏。我们把收尾拆成两种意图,并借此把 `RuntimeProvider` 契约扁平化。

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
 import { RemoteRuntime } from "./remote/remote-runtime";
-import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
+import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import type { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import { RuntimeService } from "./runtime.service";
@@ -17,12 +17,11 @@ const mockEnvConfig = {
   detectedAt: "2026-07-06T00:00:00.000Z",
 };
 
-function makeRow(overrides: Partial<RuntimeRow> = {}): RuntimeRow {
+function makeRow(overrides: Partial<RuntimeHostRow> = {}): RuntimeHostRow {
   return {
     id: "rt-1",
     name: "mac-studio",
     source: "registered",
-    runtimeType: null,
     ownerId: "u-1",
     status: "offline",
     lastHeartbeatAt: null,
@@ -48,7 +47,7 @@ describe("RuntimeService", () => {
     revokeByOwner: ReturnType<typeof vi.fn>;
     findVisibleToOwner: ReturnType<typeof vi.fn>;
     findById: ReturnType<typeof vi.fn>;
-    upsertManaged: ReturnType<typeof vi.fn>;
+    upsertBuiltin: ReturnType<typeof vi.fn>;
     updateEnvConfig: ReturnType<typeof vi.fn>;
     updateEnvConfigOverride: ReturnType<typeof vi.fn>;
   };
@@ -115,7 +114,7 @@ describe("RuntimeService", () => {
       revokeByOwner: vi.fn().mockResolvedValue(true),
       findVisibleToOwner: vi.fn().mockResolvedValue(makeRow()),
       findById: vi.fn().mockResolvedValue(makeRow()),
-      upsertManaged: vi.fn().mockResolvedValue(makeRow({ source: "managed" })),
+      upsertBuiltin: vi.fn().mockResolvedValue(makeRow({ source: "managed" })),
       updateEnvConfig: vi.fn().mockResolvedValue(true),
       updateEnvConfigOverride: vi.fn().mockResolvedValue(true),
     };
@@ -136,12 +135,9 @@ describe("RuntimeService", () => {
     );
   });
 
-  it("runtimeFor(managed-native) resolves LocalRuntime; managed-docker/opensandbox resolve RemoteRuntime", () => {
-    expect(service.runtimeFor("managed-native")).toBe(localRuntime);
-    expect(service.runtimeFor("managed-docker")).toBeInstanceOf(RemoteRuntime);
-    expect(service.runtimeFor("managed-opensandbox")).toBeInstanceOf(
-      RemoteRuntime
-    );
+  it("runtimeFor(builtin) resolves LocalRuntime; registered ids resolve RemoteRuntime", () => {
+    expect(service.runtimeFor("builtin")).toBe(localRuntime);
+    expect(service.runtimeFor("rt-1")).toBeInstanceOf(RemoteRuntime);
   });
 
   it("runtimeFor(registered id) resolves a RemoteRuntime bound to that id", () => {
@@ -150,13 +146,13 @@ describe("RuntimeService", () => {
   });
 
   it("isManaged distinguishes managed ids from registered ids", () => {
-    expect(service.isManaged("managed-native")).toBe(true);
-    expect(service.isManaged("managed-docker")).toBe(true);
+    expect(service.isManaged("builtin")).toBe(true);
+    expect(service.isManaged("builtin")).toBe(true);
     expect(service.isManaged("rt-1")).toBe(false);
   });
 
   it("getManagedRuntimeId returns the fixed id for a runtimeType", () => {
-    expect(service.getManagedRuntimeId("docker")).toBe("managed-docker");
+    expect(service.getManagedRuntimeId("docker")).toBe("builtin");
   });
 
   it("resolveRuntimeSpec delegates to the pure resolver", () => {
@@ -176,94 +172,39 @@ describe("RuntimeService", () => {
     expect(service.getRuntimePolicy()).toEqual({
       runtimeType: "native",
       allowedRuntimeTypes: ["native", "docker", "opensandbox"],
-      isolationScope: "user",
+      scope: "user",
       allowedIsolationScopes: ["user", "workspace"],
       idleTimeoutSeconds: 600,
     });
   });
 
-  it("onApplicationBootstrap: native upsert + local detectEnv; docker/opensandbox upsert with tokenHash + supervisor fork", async () => {
+  it("onApplicationBootstrap: native upsert + local detectEnv", async () => {
     await service.onApplicationBootstrap();
-    // 3 upsert calls: native (tokenHash=null), docker (tokenHash set), opensandbox (tokenHash set)
-    expect(repository.upsertManaged).toHaveBeenCalledTimes(3);
-    expect(repository.upsertManaged).toHaveBeenCalledWith(
+    // 合并后只有一行 builtin,native 走进程内 detectEnv
+    expect(repository.upsertBuiltin).toHaveBeenCalledTimes(3);
+    expect(repository.upsertBuiltin).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: "managed-native",
-        runtimeType: "native",
+        name: "builtin",
         capabilities: { isolationScopes: ["workspace"] },
         tokenHash: null,
       })
     );
-    expect(repository.upsertManaged).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "managed-docker",
-        runtimeType: "docker",
-        capabilities: { isolationScopes: ["user", "workspace"] },
-        tokenHash: expect.any(String),
-      })
-    );
-    expect(repository.upsertManaged).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: "managed-opensandbox",
-        runtimeType: "opensandbox",
-        tokenHash: expect.any(String),
-      })
-    );
-    // only native gets local detectEnv (docker/opensandbox get envConfig from register)
     expect(repository.updateEnvConfig).toHaveBeenCalledTimes(1);
     expect(repository.updateEnvConfig).toHaveBeenCalledWith(
-      "managed-native",
+      "builtin",
       expect.objectContaining({ claude: expect.any(Object) })
-    );
-    // supervisor forks docker + opensandbox (not native)
-    expect(supervisor.startManagedRuntime).toHaveBeenCalledTimes(2);
-    expect(supervisor.startManagedRuntime).toHaveBeenCalledWith(
-      "docker",
-      expect.any(String)
-    );
-    expect(supervisor.startManagedRuntime).toHaveBeenCalledWith(
-      "opensandbox",
-      expect.any(String)
     );
   });
 
   it("detectEnv for managed native runtime uses local detection (no tunnel)", async () => {
-    const result = await service.detectEnv("managed-native");
+    const result = await service.detectEnv("builtin");
     expect(result.envConfig).not.toBeNull();
     expect(repository.updateEnvConfig).toHaveBeenCalledWith(
-      "managed-native",
+      "builtin",
       expect.objectContaining({ claude: expect.any(Object) })
     );
     // 不应该走隧道
     expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
-  });
-
-  it("detectEnv for managed docker runtime uses tunnel when connected", async () => {
-    tunnelHandler.isConnected.mockReturnValue(true);
-    const mockEnvConfig = {
-      claude: {
-        executablePath: "/bin/claude",
-        version: "2.0",
-        authAvailable: true,
-      },
-      codex: { executablePath: null, version: null, authAvailable: false },
-      detectedAt: "2026-07-06T01:00:00.000Z",
-    };
-    tunnelHandler.sendRequest.mockResolvedValue({ envConfig: mockEnvConfig });
-
-    const result = await service.detectEnv("managed-docker");
-    expect(result.envConfig).toEqual(mockEnvConfig);
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "managed-docker",
-      expect.objectContaining({ method: "runtime.detect-env" }),
-      expect.any(Number)
-    );
-  });
-
-  it("detectEnv for disconnected managed docker runtime returns null", async () => {
-    tunnelHandler.isConnected.mockReturnValue(false);
-    const result = await service.detectEnv("managed-docker");
-    expect(result.envConfig).toBeNull();
   });
 
   it("detectEnv for registered runtime uses tunnel when connected", async () => {
@@ -366,7 +307,7 @@ describe("RuntimeService", () => {
   it("listDirectory for managed runtime delegates to LocalRuntime and maps entries to list", async () => {
     const result = await service.listDirectory(
       "u-1",
-      "managed-native",
+      "builtin",
       "/home/agework"
     );
     expect(localRuntime.listDirectory).toHaveBeenCalledWith("/home/agework");
@@ -395,14 +336,14 @@ describe("RuntimeService", () => {
       localRuntime.listDirectory as ReturnType<typeof vi.fn>
     ).mockRejectedValueOnce(new Error("目录不存在或不可访问"));
     await expect(
-      service.listDirectory("u-1", "managed-native", "/no/such/dir")
+      service.listDirectory("u-1", "builtin", "/no/such/dir")
     ).rejects.toThrow("目录不存在或不可访问");
   });
 
   it("createDirectory for managed runtime delegates to LocalRuntime", async () => {
     const result = await service.createDirectory(
       "u-1",
-      "managed-native",
+      "builtin",
       "/home/agework/new"
     );
     expect(localRuntime.createDirectory).toHaveBeenCalledWith(
@@ -426,7 +367,7 @@ describe("RuntimeService", () => {
   // ── 文件预览(managed native 直读, registered/docker 隧道 RPC) ─────
 
   it("listFiles for managed native delegates to LocalRuntime", async () => {
-    const result = await service.listFiles("managed-native", "/tmp/ws", "src");
+    const result = await service.listFiles("builtin", "/tmp/ws", "src");
     expect(localRuntime.listFiles).toHaveBeenCalledWith("/tmp/ws", "src");
     expect(result).toEqual({
       path: "src",
@@ -459,12 +400,12 @@ describe("RuntimeService", () => {
       new Error("路径越界")
     );
     await expect(
-      service.listFiles("managed-native", "/tmp/ws", "..")
+      service.listFiles("builtin", "/tmp/ws", "..")
     ).rejects.toThrow("路径越界");
   });
 
   it("readFile for managed native delegates to LocalRuntime", async () => {
-    const result = await service.readFile("managed-native", "/tmp/ws", "a.ts");
+    const result = await service.readFile("builtin", "/tmp/ws", "a.ts");
     expect(localRuntime.readFile).toHaveBeenCalledWith("/tmp/ws", "a.ts");
     expect(result).toEqual({
       path: "a.ts",
@@ -503,14 +444,14 @@ describe("RuntimeService", () => {
       new Error("二进制文件不支持预览")
     );
     await expect(
-      service.readFile("managed-native", "/tmp/ws", "bin.dat")
+      service.readFile("builtin", "/tmp/ws", "bin.dat")
     ).rejects.toThrow("二进制文件不支持预览");
   });
 
   // ── 变更查看(git diff) ────────────────────────────────────────
 
   it("listChangedFiles for managed native delegates to LocalRuntime", async () => {
-    const result = await service.listChangedFiles("managed-native", "/tmp/ws");
+    const result = await service.listChangedFiles("builtin", "/tmp/ws");
     expect(localRuntime.listChangedFiles).toHaveBeenCalledWith("/tmp/ws");
     expect(result).toEqual({
       list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
@@ -536,7 +477,7 @@ describe("RuntimeService", () => {
 
   it("readFileDiff for managed native delegates to LocalRuntime", async () => {
     const result = await service.readFileDiff(
-      "managed-native",
+      "builtin",
       "/tmp/ws",
       "a.ts"
     );

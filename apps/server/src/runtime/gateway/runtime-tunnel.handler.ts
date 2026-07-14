@@ -27,7 +27,7 @@ import {
 import { getApiContext, ConfigService } from "../../config/config.service";
 import { resolveApiBasePath } from "../../common/api-path";
 import { RuntimeRepository } from "../runtime.repository";
-import { isManagedRuntimeId } from "../runtime.types";
+import { isBuiltinHostId } from "../runtime.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
@@ -223,7 +223,7 @@ export class RuntimeTunnelHandler
       // managed 容器 runtime(docker/opensandbox)断连不立刻判死——supervisor 会重启
       // 进程,重启后重新连 server。断连期间心跳超时由 RuntimeLivenessWatchdog 兜底。
       // registered 断连 = 机器可能失联,立即标 offline(design.md §4.3)。
-      if (!isManagedRuntimeId(runtimeId)) {
+      if (!isBuiltinHostId(runtimeId)) {
         void this.repository.markOffline(runtimeId).catch((err: unknown) => {
           this.logger.warn(
             `mark runtime ${runtimeId} offline failed: ${err instanceof Error ? err.message : String(err)}`
@@ -283,7 +283,6 @@ export class RuntimeTunnelHandler
       case "register": {
         const found = await this.repository.markRegistered(
           runtimeId,
-          message.runtimeType,
           message.capabilities,
           message.envConfig
         );

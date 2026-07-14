@@ -36,15 +36,11 @@ import { ConfigService, type RuntimeType } from "../config/config.service";
 import { LocalRuntime } from "./local/local-runtime";
 import { toRuntimeConfig } from "./local/runtime-config";
 import { RemoteRuntime } from "./remote/remote-runtime";
-import { RuntimeRepository, type RuntimeRow } from "./runtime.repository";
+import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
 import { ManagedRuntimeSupervisor } from "./managed/supervisor";
 import type { Runtime } from "./runtime.types";
-import {
-  managedRuntimeId,
-  isManagedRuntimeId,
-  isManagedNativeRuntimeId,
-} from "./runtime.types";
+import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime.types";
 
 /**
  * Runtime 领域门面:解析目标 `Runtime` 实现 + placement 计算 + 运行时策略
@@ -71,16 +67,16 @@ export class RuntimeService implements OnApplicationBootstrap {
   async onApplicationBootstrap(): Promise<void> {
     for (const runtimeType of this.configService.getAllowedRuntimeTypes()) {
       if (runtimeType === "native") {
-        await this.upsertManaged(runtimeType, {
+        await this.upsertBuiltin(runtimeType, {
           isolationScopes: managedIsolationScopes(runtimeType),
         });
-        const id = managedRuntimeId(runtimeType);
+        const id = BUILTIN_HOST_ID;
         const envConfig = await this.localRuntime.detectEnv();
         await this.repository.updateEnvConfig(id, envConfig);
       } else {
         const token = randomBytes(32).toString("hex");
         const tokenHash = createHash("sha256").update(token).digest("hex");
-        await this.upsertManaged(
+        await this.upsertBuiltin(
           runtimeType,
           { isolationScopes: managedIsolationScopes(runtimeType) },
           tokenHash
@@ -101,7 +97,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 构造零开销。
    */
   runtimeFor(runtimeId: string): Runtime {
-    if (isManagedNativeRuntimeId(runtimeId)) {
+    if (isBuiltinHostId(runtimeId)) {
       return this.localRuntime;
     }
     return new RemoteRuntime(
@@ -113,12 +109,12 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 是否是 managed(本机 in-process)Runtime id。供上层判断 Managed/Registered。 */
   isManaged(runtimeId: string): boolean {
-    return isManagedRuntimeId(runtimeId);
+    return isBuiltinHostId(runtimeId);
   }
 
   /** managed Runtime 的固定 id(不查库,纯计算)。供 workspace 创建时解析目标 runtimeId。 */
   getManagedRuntimeId(runtimeType: RuntimeType): string {
-    return managedRuntimeId(runtimeType);
+    return BUILTIN_HOST_ID;
   }
 
   /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
@@ -126,12 +122,12 @@ export class RuntimeService implements OnApplicationBootstrap {
     return resolveRuntimeSpec(input);
   }
 
-  /** 返回当前运行时策略配置(默认/可选 runtimeType、isolationScope、空闲超时秒数),供前端展示与校验用。 */
+  /** 返回当前运行时策略配置(默认/可选 runtimeType、scope、空闲超时秒数),供前端展示与校验用。 */
   getRuntimePolicy() {
     return {
       runtimeType: this.configService.getDefaultRuntimeType(),
       allowedRuntimeTypes: this.configService.getAllowedRuntimeTypes(),
-      isolationScope: this.configService.getDefaultIsolationScope(),
+      scope: this.configService.getDefaultIsolationScope(),
       allowedIsolationScopes: this.configService.getAllowedIsolationScopes(),
       idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
     };
@@ -139,15 +135,13 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /** 服务启动时 upsert 一个 managed Runtime 行(id 固定,幂等)。
    *  tokenHash:native 传 null(进程内);docker/opensandbox 传 sha256(managed token)。 */
-  private upsertManaged(
+  private upsertBuiltin(
     runtimeType: RuntimeType,
     capabilities: { isolationScopes: string[] },
     tokenHash: string | null = null
   ) {
-    return this.repository.upsertManaged({
-      id: managedRuntimeId(runtimeType),
-      name: managedRuntimeId(runtimeType),
-      runtimeType,
+    return this.repository.upsertBuiltin({
+      name: BUILTIN_HOST_ID,
       capabilities,
       tokenHash,
     });
@@ -185,7 +179,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    * 返回 null 表示不存在/不可见/已注销。供上层入口(如创建 workspace 时校验目标 runtime)
    * 做归属校验,由调用方决定如何处理 null。
    */
-  getOwned(ownerId: string, id: string): Promise<RuntimeRow | null> {
+  getOwned(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
     return this.repository.findVisibleToOwner(ownerId, id);
   }
 
@@ -240,7 +234,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    if (row.runtimeType !== "native") {
+    if (row.source !== "builtin") {
       throw new BadRequestException(
         `runtime ${id} is not a native runtime, cannot install CLI`
       );
@@ -257,7 +251,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    *   runtime 未连接时返回 null。
    */
   async detectEnv(id: string): Promise<DetectEnvResponse> {
-    if (!this.tunnelHandler.isConnected(id) && !isManagedNativeRuntimeId(id)) {
+    if (!this.tunnelHandler.isConnected(id) && !isBuiltinHostId(id)) {
       return { envConfig: null };
     }
     try {
@@ -411,7 +405,7 @@ export class RuntimeService implements OnApplicationBootstrap {
     if (!owned) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    if (!isManagedNativeRuntimeId(id) && !this.tunnelHandler.isConnected(id)) {
+    if (!isBuiltinHostId(id) && !this.tunnelHandler.isConnected(id)) {
       throw new BadRequestException(`runtime ${id} is not connected`);
     }
   }
@@ -421,7 +415,7 @@ export class RuntimeService implements OnApplicationBootstrap {
    * Phase 2 expand：RuntimeHostAdapter.detectEnv 需要读取 runtimeType/capabilities/envConfig
    * 来构造 HostCapabilityStatus。
    */
-  getRuntimeRow(id: string): Promise<RuntimeRow | null> {
+  getRuntimeHostRow(id: string): Promise<RuntimeHostRow | null> {
     return this.repository.findById(id);
   }
 
@@ -505,7 +499,7 @@ export class RuntimeService implements OnApplicationBootstrap {
   }
 }
 
-function toRuntimeResponse(row: RuntimeRow): RuntimeResponse {
+function toRuntimeResponse(row: RuntimeHostRow): RuntimeResponse {
   const envConfig = row.envConfig as RuntimeEnvConfig | null;
   const override = row.envConfigOverride as RuntimeEnvConfigOverride | null;
   return {
@@ -513,7 +507,7 @@ function toRuntimeResponse(row: RuntimeRow): RuntimeResponse {
     name: row.name,
     source: row.source,
     ownerId: row.ownerId,
-    runtimeType: row.runtimeType,
+    runtimeType: null,
     status: row.status === "online" ? "online" : "offline",
     capabilities:
       (row.capabilities as RuntimeResponse["capabilities"] | null) ?? null,

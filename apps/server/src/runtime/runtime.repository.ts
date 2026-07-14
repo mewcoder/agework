@@ -7,11 +7,10 @@ import type {
 } from "@agework/shared/api";
 import { PrismaService } from "../prisma/prisma.service";
 
-export type RuntimeRow = {
+export type RuntimeHostRow = {
   id: string;
   name: string;
   source: string;
-  runtimeType: string | null;
   ownerId: string | null;
   status: string;
   lastHeartbeatAt: Date | null;
@@ -22,7 +21,7 @@ export type RuntimeRow = {
   removedAt: Date | null;
 };
 
-/** Runtime 表(managed + Registered 部署实例)的数据访问唯一入口。tokenHash 只进不出:
+/** RuntimeHost 表(builtin + registered 部署实例)的数据访问唯一入口。tokenHash 只进不出:
  *  按 hash 反查用于隧道鉴权,select 默认挡住该列。 */
 @Injectable()
 export class RuntimeRepository {
@@ -32,7 +31,6 @@ export class RuntimeRepository {
     id: true,
     name: true,
     source: true,
-    runtimeType: true,
     ownerId: true,
     status: true,
     lastHeartbeatAt: true,
@@ -47,8 +45,8 @@ export class RuntimeRepository {
     ownerId: string;
     name: string;
     tokenHash: string;
-  }): Promise<RuntimeRow> {
-    return this.prisma.runtime.create({
+  }): Promise<RuntimeHostRow> {
+    return this.prisma.runtimeHost.create({
       data: {
         id: generateId(),
         name: input.name,
@@ -59,28 +57,25 @@ export class RuntimeRepository {
     });
   }
 
-  /** managed 行启动时 upsert:id 固定,by-id 幂等落 runtimeType/capabilities/online。
+  /** builtin 行启动时 upsert:id 固定 "builtin",by-id 幂等落 capabilities/online。
    *  tokenHash:native 传 null(留进程内,不经隧道);docker/opensandbox 传 sha256(managed token)
    *  供隧道鉴权。每次 server 启动重新生成 token 并覆盖 tokenHash(旧进程已死,旧 token 自然失效)。 */
-  upsertManaged(input: {
-    id: string;
+  upsertBuiltin(input: {
     name: string;
-    runtimeType: string;
     capabilities: RuntimeCapabilities;
     tokenHash: string | null;
-  }): Promise<RuntimeRow> {
+  }): Promise<RuntimeHostRow> {
     const shared = {
-      runtimeType: input.runtimeType,
       capabilities: input.capabilities,
       status: "online",
       tokenHash: input.tokenHash,
     };
-    return this.prisma.runtime.upsert({
-      where: { id: input.id },
+    return this.prisma.runtimeHost.upsert({
+      where: { id: "builtin" },
       create: {
-        id: input.id,
+        id: "builtin",
         name: input.name,
-        source: "managed",
+        source: "builtin",
         ownerId: null,
         ...shared,
       },
@@ -89,74 +84,72 @@ export class RuntimeRepository {
     });
   }
 
-  /** 我的（含未注销）+ 全局 managed 行，供"我的运行环境"列表展示。 */
-  listVisibleToOwner(ownerId: string): Promise<RuntimeRow[]> {
-    return this.prisma.runtime.findMany({
+  /** 我的（含未注销）+ 全局 builtin 行，供"我的运行环境"列表展示。 */
+  listVisibleToOwner(ownerId: string): Promise<RuntimeHostRow[]> {
+    return this.prisma.runtimeHost.findMany({
       where: { OR: [{ ownerId }, { ownerId: null }] },
       orderBy: { createdAt: "desc" },
       select: this.rowSelect,
     });
   }
 
-  /** admin: 列出全部 Runtime 行（managed + 所有用户的 registered），不含已注销。 */
-  listAll(): Promise<RuntimeRow[]> {
-    return this.prisma.runtime.findMany({
+  /** admin: 列出全部 RuntimeHost 行（builtin + 所有用户的 registered），不含已注销。 */
+  listAll(): Promise<RuntimeHostRow[]> {
+    return this.prisma.runtimeHost.findMany({
       where: { removedAt: null },
       orderBy: [{ source: "asc" }, { createdAt: "desc" }],
       select: this.rowSelect,
     });
   }
 
-  findByTokenHash(tokenHash: string): Promise<RuntimeRow | null> {
-    return this.prisma.runtime.findUnique({
+  findByTokenHash(tokenHash: string): Promise<RuntimeHostRow | null> {
+    return this.prisma.runtimeHost.findUnique({
       where: { tokenHash },
       select: this.rowSelect,
     });
   }
 
   /** 按 id 查单条（不过滤 owner，admin 场景用）。 */
-  findById(id: string): Promise<RuntimeRow | null> {
-    return this.prisma.runtime.findUnique({
+  findById(id: string): Promise<RuntimeHostRow | null> {
+    return this.prisma.runtimeHost.findUnique({
       where: { id },
       select: this.rowSelect,
     });
   }
 
   /**
-   * 按可见性查询单条：属于该 owner，或是全局 managed 行；不存在/不可见/已注销时返回 null
-   * (供上层收敛为 404)。供 workspace 创建时校验目标 Runtime。
+   * 按可见性查询单条：属于该 owner，或是全局 builtin 行；不存在/不可见/已注销时返回 null
+   * (供上层收敛为 404)。供 workspace 创建时校验目标 RuntimeHost。
    */
-  findVisibleToOwner(ownerId: string, id: string): Promise<RuntimeRow | null> {
-    return this.prisma.runtime.findFirst({
+  findVisibleToOwner(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
+    return this.prisma.runtimeHost.findFirst({
       where: { id, OR: [{ ownerId }, { ownerId: null }], removedAt: null },
       select: this.rowSelect,
     });
   }
 
   /**
-   * 注销（软删除）：只能注销属于该 owner 的行（managed 行 ownerId=null，天然不会匹配
+   * 注销（软删除）：只能注销属于该 owner 的行（builtin 行 ownerId=null，天然不会匹配
    * 任何真实 userId，无需额外判断）。name 打散腾出原名，行本身永久保留。
    * 返回是否真的注销了(false = 不存在/不属于该 owner/已经注销过)。
    */
   async revokeByOwner(ownerId: string, id: string): Promise<boolean> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id, ownerId, removedAt: null },
       data: { removedAt: new Date(), name: `${id}-removed` },
     });
     return count > 0;
   }
 
-  /** 注册成功:落 runtimeType/能力矩阵/envConfig,置 online 并刷心跳。 */
+  /** 注册成功:落能力矩阵/envConfig,置 online 并刷心跳。 */
   async markRegistered(
     id: string,
-    runtimeType: string,
     capabilities: RuntimeCapabilities,
     envConfig?: RuntimeEnvConfig
   ): Promise<boolean> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id },
       data: {
-        runtimeType,
         capabilities,
         ...(envConfig ? { envConfig } : {}),
         status: "online",
@@ -171,19 +164,19 @@ export class RuntimeRepository {
     id: string,
     override: RuntimeEnvConfigOverride
   ): Promise<boolean> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id },
       data: { envConfigOverride: override },
     });
     return count > 0;
   }
 
-  /** admin 触发重检后，更新 runtime 上报的 envConfig。 */
+  /** admin 触发重检后，更新 runtimeHost 上报的 envConfig。 */
   async updateEnvConfig(
     id: string,
     envConfig: RuntimeEnvConfig
   ): Promise<boolean> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id },
       data: { envConfig },
     });
@@ -192,7 +185,7 @@ export class RuntimeRepository {
 
   /** 心跳:刷 lastHeartbeatAt。返回 false = 行已被删(撤 token),调用方应断连。 */
   async touchHeartbeat(id: string): Promise<boolean> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { id },
       data: { status: "online", lastHeartbeatAt: new Date() },
     });
@@ -200,7 +193,7 @@ export class RuntimeRepository {
   }
 
   async markOffline(id: string): Promise<void> {
-    await this.prisma.runtime.updateMany({
+    await this.prisma.runtimeHost.updateMany({
       where: { id },
       data: { status: "offline" },
     });
@@ -208,7 +201,7 @@ export class RuntimeRepository {
 
   /** 判死:online 但心跳早于 cutoff 的行标记 offline,返回条数。 */
   async markStaleOnlineAsOffline(cutoff: Date): Promise<number> {
-    const { count } = await this.prisma.runtime.updateMany({
+    const { count } = await this.prisma.runtimeHost.updateMany({
       where: { status: "online", lastHeartbeatAt: { lt: cutoff } },
       data: { status: "offline" },
     });

@@ -43,7 +43,7 @@ describe("WorkspaceRepository", () => {
       name: "Local workspace",
       userId: "admin-1",
       isolationScope: "workspace",
-      runtimeId: "managed-native",
+      runtimeHostId: "managed-native",
       runtime: { runtimeType: "native" },
       directory: { source: "managed" },
     });
@@ -63,10 +63,10 @@ describe("WorkspaceRepository", () => {
       description: null,
       userId: "admin-1",
       isolationScope: "workspace",
-      isolation: "native",
+      runtimeType: "native",
       rootPath: "/tmp/ws-1",
       directorySource: "managed",
-      runtimeId: "managed-native",
+      runtimeHostId: "managed-native",
     });
 
     expect(workspaceCreate.mock.calls[0]?.[0].data).toMatchObject({
@@ -74,8 +74,8 @@ describe("WorkspaceRepository", () => {
       name: "Local workspace",
       userId: "admin-1",
       isolationScope: "workspace",
-      isolation: "native",
-      runtimeId: "managed-native",
+      runtimeType: "native",
+      runtimeHostId: "managed-native",
     });
     expect(directoryCreate).toHaveBeenCalledWith({
       data: {

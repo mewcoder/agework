@@ -28,7 +28,7 @@ function makeRuntimeService() {
     sendTunnelNotification: vi.fn(),
     listConnectedRuntimeIds: vi.fn().mockReturnValue([]),
     setTunnelUpstreamHandler: vi.fn(),
-    getRuntimeRow: vi.fn().mockResolvedValue(null),
+    getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -61,8 +61,8 @@ function makePlacement(
 ): RunPlacement {
   return {
     owner: "workspace:ws-1",
-    scope: "workspace",
-    isolation: "native",
+    isolationScope: "workspace",
+    runtimeType: "native",
     runtimeHostId,
     workspaceId: "ws-1",
     userId: "user-1",
@@ -116,31 +116,27 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("submitRun", () => {
-    it("routes managed-native to the in-process host", async () => {
-      await adapter.submitRun(makeSubmitInput("managed-native"));
+    it("routes builtin to the in-process host", async () => {
+      await adapter.submitRun(makeSubmitInput("builtin"));
 
       expect(managedHost.submitRun).toHaveBeenCalledTimes(1);
       expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
     });
 
-    it("routes everything else (managed 容器型 + registered) through the tunnel", async () => {
-      await adapter.submitRun(makeSubmitInput("managed-docker"));
-      await adapter.submitRun({
-        ...makeSubmitInput("rt-registered-1"),
-        runId: "run-2",
-      });
+    it("routes everything else (registered) through the tunnel", async () => {
+      await adapter.submitRun(makeSubmitInput("rt-registered-1"));
 
       expect(managedHost.submitRun).not.toHaveBeenCalled();
-      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(2);
+      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
       const [runtimeId, request] = runtimeService.sendTunnelRequest.mock
         .calls[0] as [string, { method: string }];
-      expect(runtimeId).toBe("managed-docker");
+      expect(runtimeId).toBe("rt-registered-1");
       expect(request.method).toBe("host.submitRun");
     });
 
     it("is idempotent for the same runId", async () => {
-      await adapter.submitRun(makeSubmitInput("managed-native"));
-      await adapter.submitRun(makeSubmitInput("managed-native"));
+      await adapter.submitRun(makeSubmitInput("builtin"));
+      await adapter.submitRun(makeSubmitInput("builtin"));
 
       expect(managedHost.submitRun).toHaveBeenCalledTimes(1);
     });
@@ -149,12 +145,12 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       managedHost.submitRun.mockRejectedValue(new Error("bad spec"));
 
       await expect(
-        adapter.submitRun(makeSubmitInput("managed-native"))
+        adapter.submitRun(makeSubmitInput("builtin"))
       ).rejects.toThrow("bad spec");
 
       // state 已清:重试同 runId 会再次提交而不是被幂等吸收
       managedHost.submitRun.mockResolvedValue(undefined);
-      await adapter.submitRun(makeSubmitInput("managed-native"));
+      await adapter.submitRun(makeSubmitInput("builtin"));
       expect(managedHost.submitRun).toHaveBeenCalledTimes(2);
     });
 
@@ -175,8 +171,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   describe("command", () => {
     const cancel = { type: "cancel", commandId: "cmd-1", runId: "run-1" };
 
-    it("routes managed-native commands to the in-process host", async () => {
-      await adapter.submitRun(makeSubmitInput("managed-native"));
+    it("routes builtin commands to the in-process host", async () => {
+      await adapter.submitRun(makeSubmitInput("builtin"));
       await adapter.command("run-1", cancel as never);
 
       expect(managedHost.command).toHaveBeenCalledWith("run-1", cancel);
@@ -207,8 +203,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("releaseRun", () => {
-    it("releases managed-native runs on the in-process host", async () => {
-      await adapter.submitRun(makeSubmitInput("managed-native"));
+    it("releases builtin runs on the in-process host", async () => {
+      await adapter.submitRun(makeSubmitInput("builtin"));
       adapter.releaseRun("run-1");
 
       expect(managedHost.releaseRun).toHaveBeenCalledWith("run-1");
@@ -286,7 +282,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     it("listWorkers merges the in-process host with all tunnel hosts", async () => {
       managedHost.listWorkers.mockResolvedValue([{ id: "w-local" }]);
       runtimeService.listConnectedRuntimeIds.mockReturnValue([
-        "managed-docker",
+        "builtin",
         "rt-registered-1",
       ]);
       runtimeService.sendTunnelRequest.mockResolvedValue({
@@ -312,7 +308,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
     it("stopWorker hits the in-process host and broadcasts to tunnel hosts", async () => {
       runtimeService.listConnectedRuntimeIds.mockReturnValue([
-        "managed-docker",
+        "builtin",
       ]);
 
       await adapter.stopWorker("workspace:ws-1#native");
@@ -324,7 +320,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         ([, request]) =>
           (request as { method: string }).method === "host.stopWorker"
       );
-      expect(call?.[0]).toBe("managed-docker");
+      expect(call?.[0]).toBe("builtin");
     });
 
     it("releaseOwner hits the in-process host and broadcasts to tunnel hosts", async () => {
@@ -364,21 +360,21 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
   describe("detectEnv", () => {
     it("builds a single-entry capability status from the Runtime row", async () => {
-      runtimeService.getRuntimeRow.mockResolvedValue({
-        runtimeType: "docker",
-        capabilities: { isolationScopes: ["user", "workspace"] },
+runtimeService.getRuntimeHostRow.mockResolvedValue({
+source: "registered",
+capabilities: { isolationScopes: ["user", "workspace"] },
         envConfig: null,
       });
 
-      const status = await adapter.detectEnv("managed-docker");
+      const status = await adapter.detectEnv("builtin");
 
       expect(status).toEqual({
-        docker: { available: true, scopes: ["user", "workspace"] },
+        native: { available: true, scopes: ["user", "workspace"] },
       });
     });
 
     it("throws when the runtime host row is missing", async () => {
-      runtimeService.getRuntimeRow.mockResolvedValue(null);
+      runtimeService.getRuntimeHostRow.mockResolvedValue(null);
 
       await expect(adapter.detectEnv("missing")).rejects.toThrow(/not found/);
     });

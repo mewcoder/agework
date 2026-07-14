@@ -20,8 +20,6 @@ import { ModelProviderController } from "../model-provider/model-provider.contro
 import { AdminRunController } from "../run/admin/admin-run.controller";
 import { AdminWorkerController } from "../worker-manager/admin/admin-worker.controller";
 import { AdminUserController } from "../user/admin/admin-user.controller";
-import { WorkerCommandController } from "../worker-manager/command.controller";
-import { WorkerRunController } from "../worker-manager/worker-run.controller";
 import { AdminWorkspaceController } from "../workspace/admin/admin-workspace.controller";
 import { WorkspaceController } from "../workspace/workspace.controller";
 
@@ -48,8 +46,6 @@ const CONTROLLERS = [
   AdminRunController,
   AdminWorkerController,
   AdminUserController,
-  WorkerCommandController,
-  WorkerRunController,
   AdminWorkspaceController,
   WorkspaceController,
 ] as const satisfies readonly ControllerClass[];
@@ -63,7 +59,7 @@ const PUBLIC_ROUTE_ALLOWLIST = new Set([
   "GET auth/config",
 ]);
 
-const RAW_RESPONSE_ALLOWLIST = ["worker/*", "worker/runs/*"];
+const RAW_RESPONSE_ALLOWLIST: string[] = [];
 
 const RAW_RES_ROUTE_ALLOWLIST = ["POST agent/run", "GET agent/resume"];
 
@@ -266,7 +262,7 @@ describe("external API route convention", () => {
     expectRoute(AdminWorkerController, "listResources", "get", "resources");
     expectRoute(
       AdminWorkerController,
-      "stopResource",
+      "stopWorker",
       "post",
       "resources/stop"
     );
@@ -298,31 +294,9 @@ describe("external API route convention", () => {
     ).toEqual([]);
   });
 
-  it("keeps worker callbacks public", () => {
-    const workerControllers = CONTROLLERS.filter((controller) => {
-      const p = controllerPath(controller);
-      return p === "worker" || p.startsWith("worker/");
-    });
-
-    expect(workerControllers.map(controllerPath)).toEqual([
-      "worker",
-      "worker/runs",
-    ]);
+  it("does not mark any controller public at class level", () => {
     expect(
-      workerControllers
-        .filter((controller) => !isPublic(controller))
-        .map(controllerPath)
-    ).toEqual([]);
-  });
-
-  it("does not mark non-worker controllers public at class level", () => {
-    expect(
-      CONTROLLERS.filter((controller) => {
-        const p = controllerPath(controller);
-        return (
-          p !== "worker" && !p.startsWith("worker/") && isPublic(controller)
-        );
-      }).map(controllerPath)
+      CONTROLLERS.filter((controller) => isPublic(controller)).map(controllerPath)
     ).toEqual([]);
   });
 
@@ -339,7 +313,7 @@ describe("external API route convention", () => {
     expect(publicRoutes).toEqual([...PUBLIC_ROUTE_ALLOWLIST]);
   });
 
-  it("allows @RawResponse only on worker internal controllers", () => {
+  it("allows @RawResponse only on allowlisted routes", () => {
     const rawResponseTargets = CONTROLLERS.flatMap((controller) => [
       ...(isRawResponse(controller) ? [`${controllerPath(controller)}/*`] : []),
       ...routeMethods(controller)

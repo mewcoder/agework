@@ -4,66 +4,29 @@ import { RuntimeModule } from "../runtime/runtime.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
 import { managedRuntimeHostProvider } from "./contract/managed-runtime-host";
+import { WorkspaceHostListener } from "./contract/workspace-host.listener";
 import { RUNTIME_HOST_CONTRACT } from "./worker-manager.types";
-import { WorkerConfigStore } from "./connection/worker-config.store";
-import { WorkerCommandQueue } from "./connection/command-queue";
-import { WorkerCommandDispatcher } from "./connection/command-dispatcher";
-import { WorkerCommandController } from "./command.controller";
-import { WorkerRunController } from "./worker-run.controller";
-import { WorkerEndpointHandler } from "./connection/worker-endpoint.handler";
-import { WorkerManagerService } from "./worker-manager.service";
-import { WorkerRegistryRepository } from "./registry/worker-registry.repository";
-import { WorkerProvisioner } from "./instance/worker.provisioner";
-import { WorkerLifecycleHandler } from "./instance/lifecycle.handler";
-import { WorkerLifecycleListener } from "./instance/lifecycle.listener";
 import { AdminWorkerController } from "./admin/admin-worker.controller";
-import { WorkerHandshakeStore } from "./connection/worker-handshake.store";
-import { WorkerTokenGuard } from "./connection/worker-token.guard";
-import { WorkerLivenessStore } from "./connection/worker-liveness.store";
-import { WorkerLivenessSweeper } from "./connection/worker-liveness.sweeper";
-import { OwnerRunStore } from "./instance/owner-run.store";
 
 /**
- * worker-manager:API ↔ worker 进程之间的通信边界(配置下发、命令下发、上行事件),
- * WorkerRegistry 数据归属,以及 sandbox 实例编排(owner 复用/idle 决策)、runtime
- * 资源级联清理、admin 查询——这些原来分散在 `runtime` 模块里的编排逻辑,这次连同
- * WorkerRegistry 数据一起收拢到这里(设计文档 1.1 节)。物理 sandbox/local 操作
- * 经 `RuntimeService` 转发给 `runtime` 模块——这是 `worker-manager → runtime` 唯一
- * 合法方向,`runtime` 从不反过来依赖 `worker-manager`。
+ * Phase 3 清尾后：worker-manager 模块只剩 contract 实现 + admin 观测面。
  *
- * 公开面暴露 WorkerManagerService 与 RUNTIME_HOST_CONTRACT token（后者绑定
- * RuntimeHostContract 接口的 Phase 1 委托实现,run 模块只经它消费执行面,
- * 见 docs/design/server-runtime-worker-target-architecture.md §7 Phase 1）。
+ * 旧 worker-manager 执行栈（connection/instance/registry）、旧 /worker/* 端点、
+ * WorkerManagerService 已全部删除。worker 数据面由 builtin Host 自管的
+ * WorkerHttpServer 承接（registered Host 各自的 WorkerHttpServer）。
  *
- * commands/runConfig/events 三个端点靠 WorkerTokenGuard 校验 startToken;
- * register 端点不接这个 guard,走 WorkerHandshakeStore 那套 token-in-body 机制。
+ * 公开面只暴露 RUNTIME_HOST_CONTRACT token（run 模块经它消费执行面）。
+ * admin 观测面走 AdminWorkerController（contract 现场查询）。
  */
 @Module({
   imports: [RuntimeModule, RunEventModule],
-  controllers: [
-    WorkerCommandController,
-    WorkerRunController,
-    AdminWorkerController,
-  ],
+  controllers: [AdminWorkerController],
   providers: [
-    WorkerConfigStore,
-    WorkerCommandQueue,
-    WorkerCommandDispatcher,
-    WorkerEndpointHandler,
-    WorkerRegistryRepository,
-    WorkerHandshakeStore,
-    WorkerTokenGuard,
-    WorkerProvisioner,
-    WorkerLifecycleHandler,
-    WorkerLifecycleListener,
-    WorkerLivenessStore,
-    WorkerLivenessSweeper,
-    OwnerRunStore,
-    WorkerManagerService,
     managedRuntimeHostProvider,
     RuntimeHostAdapter,
+    WorkspaceHostListener,
     { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
   ],
-  exports: [WorkerManagerService, RUNTIME_HOST_CONTRACT],
+  exports: [RUNTIME_HOST_CONTRACT],
 })
 export class WorkerManagerModule {}

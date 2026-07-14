@@ -36,7 +36,7 @@ model User {
   workspaces         Workspace[]
   modelProviders     ModelProvider[]
   sessions           Session[]
-  runtimes           Runtime[]
+  runtimeHosts       RuntimeHost[]
 }
 
 /// 服务端登录会话：承载 refresh token 生命周期。只存 refresh token 的 hash，
@@ -76,22 +76,18 @@ model Workspace {
   // 创建时选定的 git 分支（clone 时 checkout）；非 git / 未选时为 null。创建后只读。
   gitBranch      String?
   description    String?
-  // 创建时的一次性选择，不可改（要换 = 删了重建）。不能从 Runtime 派生——一个 Runtime
-  // 的 capabilities 可以同时支持 user/workspace 两种，派生不出唯一值；也不能从 Worker
-  // 派生——Worker 是瞬态行，没有活跃 Worker 时无处可派生。runtimeType 不单独存，
-  // 用 runtime.runtimeType 派生。
+  // 创建时的一次性选择，不可改（要换 = 删了重建）。worker 复用粒度：
+  // user（同用户项目共享）或 workspace（项目独享环境）。
   isolationScope String
-  // Phase 2 expand：隔离实现（native / docker / opensandbox），创建时从 Host 能力
-  // 列表选定。按旧 runtimeType 快照回填。Phase 3 删旧 runtimeType 派生链后此列成为
-  // 唯一真相。nullable 容忍回填窗口——旧 workspace 在 expand 时回填，新 workspace
-  // 创建时即写入。
-  isolation      String?
-  // 绑定的 Runtime（managed 或 registered）；创建时写入，不可改（要换 = 删了重建）。
-  // 必填——managed Runtime 保证每个 Workspace 创建时都能落到一个真实存在的 Runtime 行。
-  // registered Runtime 被注销（removedAt 有值）后行仍在，runtimeId 不变，但 Workspace
-  // 进入"Runtime 已注销"状态，不能跑 run 直到重新绑定到别的 Runtime。
-  runtimeId      String
-  runtime        Runtime                 @relation(fields: [runtimeId], references: [id], onDelete: Restrict)
+  // 隔离实现（native / docker / opensandbox），创建时从 RuntimeHost 能力
+  // 列表选定。Phase 2 expand 列，旧 Runtime.runtimeType 派生链已删除。
+  runtimeType    String?
+  // 绑定的 RuntimeHost（builtin 或 registered）；创建时写入，不可改（要换 = 删了重建）。
+  // 必填——builtin RuntimeHost 保证每个 Workspace 创建时都能落到一个真实存在的行。
+  // registered RuntimeHost 被注销（removedAt 有值）后行仍在，runtimeHostId 不变，
+  // 但 Workspace 进入"RuntimeHost 已注销"状态，不能跑 run 直到重新绑定。
+  runtimeHostId  String
+  runtimeHost    RuntimeHost             @relation(fields: [runtimeHostId], references: [id], onDelete: Restrict)
   userId         String
   user           User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
   createdAt      DateTime                @default(now())
@@ -99,11 +95,10 @@ model Workspace {
   deletedAt      DateTime?
   directory      WorkspaceDirectory?
   conversations  Conversation[]
-  workerBinding  WorkerWorkspaceBinding?
 
   @@index([userId])
   @@index([userId, deletedAt, createdAt])
-  @@index([runtimeId])
+  @@index([runtimeHostId])
 }
 
 model Conversation {
@@ -223,103 +218,37 @@ model RunEvent {
   @@index([type, createdAt])
 }
 
-/// worker 载体的存活台账。所有 runtimeType（native/docker/opensandbox）都写活跃行。
-/// 表里只有活跃行（starting/running）：停止/报错立刻物理删除该行，不标记终态再等下次
-/// 启动时 sweep——sweep 按 (runtimeType, isolationScope, ownerId) 三元组做，删不掉"同
-/// owner 换过 runtimeType"的旧终态行。立刻物理删就没有这个残留窗口。代价：Admin 面板
-/// 看不到"刚停了什么"，历史状态查 RunEvent（设计上接受的取舍，非遗漏）。
-model Worker {
-  id             String    @id
-  runtimeType    String
-  isolationScope String
-  /// 并发防重键：user 隔离 → userId，workspace 隔离 → workspaceId。复合唯一约束
-  /// (ownerId, runtimeId, isolationScope) 允许同一 owner 跨 workspace/跨机器并行
-  /// 多个 worker（推翻 wm-0003 的裸 ownerId @unique）。协议层身份改 workerId 在 03。
-  ownerId        String
-  /// 宿主实例标识（容器 ID / sandbox ID / pid:token）。
-  instanceId     String
-  transport      String    @default("http")
-  /// 注册握手共享密钥，绑定"这次运行载体存活周期"（容器/进程），不绑定单次调用；
-  /// resume 场景下容器内 worker 进程沿用创建时注入的 token，故 token 需要在 owner
-  /// 的存活周期内保持不变（见 SandboxOwnerState.startToken）。
-  startToken     String?
-  status         String    @default("starting")
-  /// 载体所在的 Runtime，必填。Worker 是瞬态行（停了就删），存在期间它绑定的 Runtime
-  /// 必然还在（Runtime 不物理删除，见 runtime 模块 ADR-0001），不会出现需要置空的
-  /// 中间状态，供 stop/destroy 时正确路由到 LocalRuntime/RemoteRuntime。
-  runtimeId      String
-  runtime        Runtime   @relation(fields: [runtimeId], references: [id], onDelete: Restrict)
-  expiresAt      DateTime?
-  metadata       Json
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  bindings       WorkerWorkspaceBinding[]
-
-  @@unique([ownerId, runtimeId, isolationScope])
-  @@unique([runtimeType, instanceId])
-  @@index([runtimeType, isolationScope, status])
-  @@index([runtimeId])
-}
-
-/// Worker ↔ Workspace 绑定关系表（一对多：user 隔离下多个 workspace 共用一个 Worker）。
-/// 同样只有 sandbox 写入；local 无持久容器，不建绑定。
-///
-/// 为什么需要独立成表（而非合并进 Worker 或 Workspace）：
-///   1. findActiveByWorkspace —— 复用入口：按 workspaceId 反查"当前绑着的 running Worker"，
-///      workspaceId @unique 保证一个 workspace 同时只绑一个活跃 Worker（复用语义基石）。
-///   2. isRuntimeInstanceBoundToWorkspace —— 安全校验：worker 上报心跳/事件时验证载体确实
-///      属于该 workspace，防伪造/串扰。
-///   3. 反向查询 —— admin 面板要展示"一个 Worker 绑了哪些 workspace"（bindings 关联 +
-///      @@index([workerId])）；合并进 Workspace 会丢失此反向查询能力，只能全表扫。
-/// 一对多关系规范化，不宜塞 JSON 数组进 Worker（丢失查询能力与唯一约束）。Worker 停了就删，
-/// Binding 随 Worker 级联删除。
-model WorkerWorkspaceBinding {
-  id          String    @id
-  workerId    String
-  worker      Worker    @relation(fields: [workerId], references: [id], onDelete: Cascade)
-  workspaceId String    @unique
-  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-
-  @@index([workerId])
-}
-
-/// Runtime：一台能跑 worker 载体的机器——远程注册（registered）或本机内置（managed）。
-/// 不是 carrier：与 Worker（carrier↔worker 1:1）分开（worker-manager ADR-0001）。
-/// managed 行固定 id（managed-native/managed-docker/managed-opensandbox），启动时 upsert，
-/// 承接原先 "runtimeId=null 即 Managed" 的语义——见 runtime 模块 ADR-0001。
-model Runtime {
+/// RuntimeHost：一台执行机器的注册行。一机一行（builtin 合并）。
+/// builtin 行固定 id "builtin"，source="builtin"，能力矩阵在 capabilities 里列出
+/// 所有支持的 isolation。registered 行由远程机器注册时创建。
+model RuntimeHost {
   id              String    @id
   name            String
-  source          String    @default("registered") // "registered"=远程机器注册, "managed"=本机内置
-  // 注册时由 manager 上报（--runtime 定死一种），创建配对时未知故可空；managed 行创建时即定。
-  runtimeType     String?
-  /// null = 全局（managed，所有人可用），有值 = 用户私有（registered）。与
-  /// ModelProvider.userId 的模式一致，但 Runtime 没有单独的 scope 列——source 已经
+  source          String    @default("registered") // "registered"=远程机器注册, "builtin"=本机内置
+  /// null = 全局（builtin，所有人可用），有值 = 用户私有（registered）。与
+  /// ModelProvider.userId 的模式一致，但 RuntimeHost 没有单独的 scope 列——source 已经
   /// 承担了这个区分，owner 相关查询按 source 走，不是按 ownerId 是否为 null 猜测。
   ownerId         String?
   owner           User?     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   status          String    @default("offline") // 心跳存活状态，跟 removedAt 的注销语义无关
   lastHeartbeatAt DateTime?
-  // 配对 token 的 SHA-256（token 高熵随机，明文只在创建响应里出现一次）。managed 行为 null。
+  // 配对 token 的 SHA-256（token 高熵随机，明文只在创建响应里出现一次）。builtin 行为 null。
   tokenHash       String?   @unique
-  // 能力矩阵：{ isolationScopes: string[] }，注册时上报；managed 行创建时按 runtimeType 写死。
+  // 能力矩阵：{ isolationScopes: string[] }，注册时上报；builtin 行创建时写死。
   capabilities    Json?
-  /// Runtime manager 上报的 agent CLI 环境检测结果（路径/版本/认证状态）。
+  /// RuntimeHost 上报的 agent CLI 环境检测结果（路径/版本/认证状态）。
   /// 注册时检测上报，admin 可通过隧道 RPC 触发重检刷新。server 只存不测（见 ADR-0003）。
   envConfig       Json?
   /// 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。
-  /// per-runtime per-agent 粒度：{ claude?: { executablePath }, codex?: { executablePath } }。
+  /// per-host per-agent 粒度：{ claude?: { executablePath }, codex?: { executablePath } }。
   envConfigOverride Json?
-  /// 用户注销该 Runtime 的时间；有值 = 已注销，不可再被新 Workspace 绑定，但行不物理
-  /// 删除（Workspace/Worker.runtimeId 是必填 FK，指向的行必须一直存在）。注销时 name 会
-  /// 打散（追加 id 后缀），腾出原名给用户重新注册同名机器。managed 行恒为 null，不可注销。
+  /// 用户注销该 RuntimeHost 的时间；有值 = 已注销，不可再被新 Workspace 绑定，但行不物理
+  /// 删除（Workspace.runtimeHostId 是必填 FK，指向的行必须一直存在）。注销时 name 会
+  /// 打散（追加 id 后缀），腾出原名给用户重新注册同名机器。builtin 行恒为 null，不可注销。
   removedAt       DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   workspaces      Workspace[]
-  workers         Worker[]
 
   @@unique([ownerId, name])
   @@index([ownerId])

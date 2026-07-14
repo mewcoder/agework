@@ -11,7 +11,7 @@ const GOOD_TOKEN = "good-token";
 const GOOD_HASH = createHash("sha256").update(GOOD_TOKEN).digest("hex");
 const MANAGED_TOKEN = "managed-token";
 const MANAGED_HASH = createHash("sha256").update(MANAGED_TOKEN).digest("hex");
-const MANAGED_RUNTIME_ID = "managed-docker";
+const MANAGED_RUNTIME_ID = "builtin";
 
 function makeRepository() {
   return {
@@ -102,7 +102,6 @@ describe("RuntimeTunnelHandler", () => {
     });
     expect(repository.markRegistered).toHaveBeenCalledWith(
       "rt-1",
-      "docker",
       { isolationScopes: ["user", "workspace"] },
       undefined
     );

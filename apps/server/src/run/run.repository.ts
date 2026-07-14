@@ -112,7 +112,7 @@ export class RunRepository {
       include: {
         conversation: {
           select: {
-            workspace: { select: { runtimeId: true } },
+            workspace: { select: { runtimeHostId: true } },
           },
         },
       },

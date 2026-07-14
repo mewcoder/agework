@@ -1,3 +1,5 @@
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
+
 # 工作空间文件命令(list_files/read_file)走独立通道,不进 command.result / RunEvent
 
 工作空间文件预览需要 worker 执行 `list_files` / `read_file` 并把结果带回 server。直觉上应该复用现有的

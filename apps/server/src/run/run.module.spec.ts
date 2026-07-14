@@ -4,6 +4,7 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
+import { MANAGED_RUNTIME_HOST } from "../worker-manager/contract/managed-runtime-host";
 import { ConversationService } from "../conversation/conversation.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -100,10 +101,30 @@ async function createRunsTestingModule(
         deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
         findMany: vi.fn().mockResolvedValue([]),
       },
-      runtime: {
+      runtimeHost: {
         upsert: vi.fn().mockResolvedValue({}),
         updateMany: vi.fn().mockResolvedValue({ count: 0 }),
       },
+    })
+    .overrideProvider(MANAGED_RUNTIME_HOST)
+    .useValue({
+      submitRun: vi.fn().mockResolvedValue(undefined),
+      command: vi.fn().mockResolvedValue(undefined),
+      releaseOwner: vi.fn().mockResolvedValue(undefined),
+      releaseRun: vi.fn().mockResolvedValue(undefined),
+      listWorkers: vi.fn().mockResolvedValue([]),
+      stopWorker: vi.fn().mockResolvedValue(undefined),
+      detectEnv: vi.fn().mockResolvedValue({}),
+      installCli: vi.fn().mockResolvedValue({}),
+      setUpstream: vi.fn(),
+      drain: vi.fn(),
+      listDirectory: vi.fn().mockResolvedValue({ path: "", entries: [] }),
+      createDirectory: vi.fn().mockResolvedValue({ path: "" }),
+      listFiles: vi.fn().mockResolvedValue({ path: "", list: [], truncated: false }),
+      readFile: vi.fn().mockResolvedValue({ path: "", encoding: "utf8", content: "", size: 0, truncated: false }),
+      searchFiles: vi.fn().mockResolvedValue({ list: [] }),
+      listChangedFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
+      readFileDiff: vi.fn().mockResolvedValue({ path: "", status: "", before: "", after: "" }),
     })
     .overrideProvider(ModelProviderService)
     .useValue({})
@@ -127,6 +148,7 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getDefaultRuntimeType: () => "native",
     getRuntimeLogDir: () => "/tmp/agework-logs/runtime",
     getAgentEventTraceConfig: () => ({ enabled: false, maxFileMb: 5 }),
+    getBuiltinWorkerHttpPort: () => 7101,
     getOpenSandboxConfig: () => ({
       domain: "localhost",
       protocol: "http",

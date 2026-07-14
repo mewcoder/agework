@@ -2,16 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { AdminWorkerController } from "./admin-worker.controller";
 
 function makeController(
-  workerManager: Record<string, unknown> = {},
+  runtimeService: Record<string, unknown> = {},
   hostContract: Record<string, unknown> = {}
 ) {
   return new AdminWorkerController(
     {
-      getRuntimePolicy: vi.fn(),
-      getWorkerStats: vi.fn(),
-      listResources: vi.fn(),
-      stopWorkerInstance: vi.fn(),
-      ...workerManager,
+      getRuntimePolicy: vi.fn().mockReturnValue({ runtimeType: "native" }),
+      ...runtimeService,
     } as never,
     {
       listWorkers: vi.fn().mockResolvedValue([]),
@@ -22,59 +19,40 @@ function makeController(
 }
 
 describe("AdminWorkerController", () => {
-  it("delegates resource listing to WorkerManagerService", async () => {
-    const listResources = vi
-      .fn()
-      .mockResolvedValue({ list: [], total: 0, pageNo: 1, pageSize: 10 });
-    const controller = makeController({ listResources });
-
-    const query = { status: "running", pageNo: 1, pageSize: 10 };
-    await controller.listResources(query as never);
-
-    expect(listResources).toHaveBeenCalledWith(query);
-  });
-
-  it("delegates stop to WorkerManagerService by id", async () => {
-    const stopWorkerInstance = vi.fn().mockResolvedValue({ ok: true });
-    const controller = makeController({ stopWorkerInstance });
-
-    await expect(controller.stopResource({ id: "rr-1" })).resolves.toEqual({
-      ok: true,
-    });
-    expect(stopWorkerInstance).toHaveBeenCalledWith("rr-1");
-  });
-
-  it("delegates policy and stats to WorkerManagerService", async () => {
+  it("delegates policy to RuntimeService", () => {
     const getRuntimePolicy = vi.fn().mockReturnValue({ runtimeType: "native" });
-    const getWorkerStats = vi.fn().mockResolvedValue({ activeWorkers: 0 });
-    const controller = makeController({ getRuntimePolicy, getWorkerStats });
+    const controller = makeController({ getRuntimePolicy });
 
     controller.getRuntimePolicy();
-    await controller.getWorkerStats();
 
     expect(getRuntimePolicy).toHaveBeenCalled();
-    expect(getWorkerStats).toHaveBeenCalled();
   });
 
-  it("listLiveWorkers delegates to hostContract.listWorkers", async () => {
+  it("getWorkerStats counts running workers from listWorkers", async () => {
+    const listWorkers = vi.fn().mockResolvedValue([
+      { status: "running" },
+      { status: "running" },
+      { status: "stopped" },
+    ]);
+    const controller = makeController({}, { listWorkers });
+
+    const result = await controller.getWorkerStats();
+
+    expect(listWorkers).toHaveBeenCalled();
+    expect(result).toEqual({ activeWorkers: 2 });
+  });
+
+  it("listResources delegates to hostContract.listWorkers", async () => {
     const listWorkers = vi.fn().mockResolvedValue([
       {
         id: "w-1",
         workerKey: "workspace:ws-1#native",
-        runtimeType: "native",
-        isolationScope: "workspace",
-        ownerId: "ws-1",
-        runtimeInstanceId: "ri-1",
         status: "running",
-        expiresAt: null,
-        createdAt: "2025-01-01T00:00:00.000Z",
-        updatedAt: "2025-01-01T00:00:00.000Z",
-        workspaceBindings: [],
       },
     ]);
     const controller = makeController({}, { listWorkers });
 
-    const result = await controller.listLiveWorkers();
+    const result = await controller.listResources();
 
     expect(listWorkers).toHaveBeenCalled();
     expect(result).toEqual({
@@ -88,19 +66,11 @@ describe("AdminWorkerController", () => {
     });
   });
 
-  it("listLiveWorkers returns empty list when no workers", async () => {
-    const controller = makeController();
-
-    const result = await controller.listLiveWorkers();
-
-    expect(result).toEqual({ list: [] });
-  });
-
-  it("stopLiveWorker delegates to hostContract.stopWorker with workerKey", async () => {
+  it("stopWorker delegates to hostContract.stopWorker with workerKey", async () => {
     const stopWorker = vi.fn().mockResolvedValue(undefined);
     const controller = makeController({}, { stopWorker });
 
-    const result = await controller.stopLiveWorker({
+    const result = await controller.stopWorker({
       workerKey: "workspace:ws-1#native",
     });
 

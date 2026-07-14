@@ -34,7 +34,7 @@ import type {
 } from "@agework/shared/api";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeService } from "../../runtime/runtime.service";
-import { isManagedNativeRuntimeId } from "../../runtime/runtime.types";
+import { isBuiltinHostId } from "../../runtime/runtime.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { MANAGED_RUNTIME_HOST } from "./managed-runtime-host";
@@ -85,7 +85,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (this.states.has(runId)) return; // 幂等：同 runId 重复提交是空操作
 
     this.states.set(runId, { runtimeHostId: placement.runtimeHostId });
-    if (isManagedNativeRuntimeId(placement.runtimeHostId)) {
+    if (isBuiltinHostId(placement.runtimeHostId)) {
       // spec/config 组装失败在受理前同步抛出(配置/入参问题),由调用方按启动失败处理
       try {
         await this.managedHost.submitRun(input);
@@ -108,7 +108,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       });
       return;
     }
-    if (isManagedNativeRuntimeId(state.runtimeHostId)) {
+    if (isBuiltinHostId(state.runtimeHostId)) {
       // 就绪前 cancel 吸收、命令下发审计(onCommandDispatched)都在 Host 内
       await this.managedHost.command(runId, payload);
       return;
@@ -119,7 +119,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   releaseRun(runId: string): void {
     const state = this.states.get(runId);
     this.states.delete(runId);
-    if (!state || isManagedNativeRuntimeId(state.runtimeHostId)) {
+    if (!state || isBuiltinHostId(state.runtimeHostId)) {
       this.managedHost.releaseRun(runId);
       return;
     }
@@ -274,11 +274,11 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
-    const row = await this.runtimeService.getRuntimeRow(runtimeHostId);
+    const row = await this.runtimeService.getRuntimeHostRow(runtimeHostId);
     if (!row) {
       throw new Error(`runtime host not found: ${runtimeHostId}`);
     }
-    const runtimeType = row.runtimeType ?? "native";
+    const runtimeType = "native";
     const caps = row.capabilities as { isolationScopes?: string[] } | null;
     const scopes = (caps?.isolationScopes ?? ["workspace"]).filter(
       (s): s is WorkerScope => s === "workspace" || s === "user"

@@ -28,7 +28,7 @@ function makeActiveRun(input: {
     runtimeType: input.runtimeType ?? "native",
     runtimeInstanceId: input.runtimeInstanceId ?? null,
     conversation: {
-      workspace: { runtimeId: input.runtimeHostId ?? "managed-native" },
+      workspace: { runtimeHostId: input.runtimeHostId ?? "builtin" },
     },
   };
 }
@@ -42,7 +42,7 @@ function makeDeps(activeRuns: unknown[]) {
     setConversationRunState: vi.fn().mockResolvedValue(undefined),
   };
   const runtimeService: Partial<RuntimeService> = {
-    getRuntimeRow: vi.fn().mockResolvedValue(null),
+    getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
   // check 间隔 60s;判死窗口 300s → 兜底 grace 600s(2×),
   // 保证「sweep 触发时刚断线的 run」还在 grace 内不被误杀。
@@ -80,7 +80,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       makeActiveRun({
         runtimeType: "sandbox",
         runtimeInstanceId: "container-abc",
-        runtimeHostId: "managed-docker",
+        runtimeHostId: "builtin",
       }),
     ]);
     const runtimeHost = makeRuntimeHost();
@@ -121,7 +121,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       makeActiveRun({
         runtimeType: "sandbox",
         runtimeInstanceId: "container-xyz",
-        runtimeHostId: "managed-docker",
+        runtimeHostId: "builtin",
       }),
     ]);
     const runtimeHost = makeRuntimeHost({
@@ -179,7 +179,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeRow = vi.fn().mockResolvedValue({
+    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "offline",
       lastHeartbeatAt: new Date(Date.now() - 20 * 60_000),
     });
@@ -198,7 +198,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeRow = vi.fn().mockResolvedValue({
+    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "online",
       lastHeartbeatAt: new Date(),
     });
@@ -212,7 +212,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeRow = vi.fn().mockResolvedValue({
+    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "offline",
       lastHeartbeatAt: new Date(), // 刚断线,心跳还新鲜
     });
@@ -223,11 +223,11 @@ describe("RunRecoveryService abandoned-host sweep", () => {
   });
 
   it("never sweeps managed runs (they are handled at boot)", async () => {
-    const deps = makeDeps([makeActiveRun({ runtimeHostId: "managed-native" })]);
+    const deps = makeDeps([makeActiveRun({ runtimeHostId: "builtin" })]);
 
     await runOneSweep(deps, makeRuntimeHost());
 
-    expect(deps.runtimeService.getRuntimeRow).not.toHaveBeenCalled();
+    expect(deps.runtimeService.getRuntimeHostRow).not.toHaveBeenCalled();
     expect(deps.runRepository.markError).not.toHaveBeenCalled();
   });
 });

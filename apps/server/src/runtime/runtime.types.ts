@@ -10,37 +10,20 @@ import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
 } from "@agework/shared/api";
-import type { RuntimeType } from "../config/config.service";
 
-const MANAGED_RUNTIME_ID_PREFIX = "managed-";
+/** builtin（本机 in-process）RuntimeHost 的固定 id。所有 runtimeType 都走这一个 Host，
+ *  不再有 managed-native/managed-docker/managed-opensandbox 三行假行。 */
+export const BUILTIN_HOST_ID = "builtin";
 
-/** managed native（本机 in-process）Runtime 的固定 id。native 留 server 进程内，
- *  不起独立 runtime 进程，不经隧道 RPC。 */
-const MANAGED_NATIVE_RUNTIME_ID = `${MANAGED_RUNTIME_ID_PREFIX}native`;
-
-/** managed（本机）Runtime 的固定 id：`managed-${runtimeType}`。
- *  这些行在服务启动时 upsert，id 恒定，不用查库反查 source 就能判断。 */
-export function managedRuntimeId(runtimeType: RuntimeType): string {
-  return `${MANAGED_RUNTIME_ID_PREFIX}${runtimeType}`;
-}
-
-/** 是否是 managed Runtime id——固定前缀匹配，不用查库；替代原先 `runtimeId === null`
- *  判断 Managed 的方式（见 runtime 模块 ADR-0001）。 */
-export function isManagedRuntimeId(runtimeId: string): boolean {
-  return runtimeId.startsWith(MANAGED_RUNTIME_ID_PREFIX);
-}
-
-/** 是否是 managed native Runtime id——只有 `managed-native` 留 server 进程内（直读），
- *  managed docker/opensandbox 起独立 runtime 进程经隧道 RPC，与 registered 同走 RemoteRuntime。
- *  供 runtimeFor / detectEnv / assertRuntimeReachable 等判断「是否走进程内 LocalRuntime」。 */
-export function isManagedNativeRuntimeId(runtimeId: string): boolean {
-  return runtimeId === MANAGED_NATIVE_RUNTIME_ID;
+/** 是否是 builtin RuntimeHost id——固定值匹配，不用查库。 */
+export function isBuiltinHostId(runtimeHostId: string): boolean {
+  return runtimeHostId === BUILTIN_HOST_ID;
 }
 
 /**
  * server 与执行侧的唯一控制面边界:起/停/毁 worker 载体 + CLI 环境检测。
- * 两个实现:`LocalRuntime`(Managed,in-process)/ `RemoteRuntime`(Registered,隧道 RPC)。
- * worker 的 event/command 不走此接口——worker 出站直连 server 事件端点(worker-manager 数据面)。
+ * 两个实现:`LocalRuntime`(builtin,in-process)/ `RemoteRuntime`(Registered,隧道 RPC)。
+ * worker 的 event/command 不走此接口——worker 出站连 Host 的 WorkerHttpServer。
  */
 export interface Runtime {
   /** 建环境 + 起 worker,返回运行时实例 id。onExit 是本地专属的进程退出钩子——

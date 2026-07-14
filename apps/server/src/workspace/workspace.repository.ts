@@ -5,14 +5,14 @@ import { PrismaService } from "../prisma/prisma.service";
 
 const WORKSPACE_INCLUDE = {
   directory: true,
-  runtime: { select: { runtimeType: true } },
+  runtimeHost: { select: { source: true } },
 } as const;
 
 const WORKSPACE_META_INCLUDE = {
   user: { select: { username: true } },
   _count: { select: { conversations: { where: { deletedAt: null } } } },
   directory: true,
-  runtime: { select: { runtimeType: true } },
+  runtimeHost: { select: { source: true } },
 } as const;
 
 export type WorkspaceRow = Prisma.WorkspaceGetPayload<{
@@ -32,11 +32,11 @@ export type WorkspaceCreateInput = {
   userId: string;
   isolationScope: string;
   /** 隔离实现(native/docker/opensandbox),创建时快照写入(Phase 2 expand 列)。 */
-  isolation: string;
+  runtimeType: string;
   rootPath: string;
   directorySource: string;
   /** 绑定的 Runtime(managed 或 registered)，必填。 */
-  runtimeId: string;
+  runtimeHostId: string;
 };
 
 export type WorkspacePatch = {
@@ -97,8 +97,8 @@ export class WorkspaceRepository {
           description: input.description,
           userId: input.userId,
           isolationScope: input.isolationScope,
-          isolation: input.isolation,
-          runtimeId: input.runtimeId,
+          runtimeType: input.runtimeType,
+          runtimeHostId: input.runtimeHostId,
         },
       });
       await tx.workspaceDirectory.create({
@@ -111,7 +111,7 @@ export class WorkspaceRepository {
           metadata: {},
         },
       });
-      // 重新查一遍带上 include(directory/runtime),换一次多余往返换回类型一致的
+      // 重新查一遍带上 include(directory/runtimeHost),换一次多余往返换回类型一致的
       // WorkspaceRow,不在这里手工拼凑关联字段。
       const row = await tx.workspace.findUniqueOrThrow({
         where: { id: created.id },
@@ -157,14 +157,14 @@ export class WorkspaceRepository {
     });
   }
 
-  /** run 启动视图：目录 + runtime 配置 + 属主用户名。 */
+  /** run 启动视图：目录 + runtimeHost 配置 + 属主用户名。 */
   findRunView(id: string) {
     return this.prisma.workspace.findFirst({
       where: { id, deletedAt: null },
       include: {
         directory: true,
         user: { select: { username: true } },
-        runtime: { select: { runtimeType: true, source: true } },
+        runtimeHost: { select: { source: true } },
       },
     });
   }
@@ -191,24 +191,12 @@ export class WorkspaceRepository {
   }
 
   /**
-   * Phase 2 expand 回填:isolation 为空的旧 workspace 按绑定 Runtime 的
+   * Phase 2 expand 回填:runtimeType 为空的旧 workspace 按绑定 Runtime 的
    * runtimeType 快照补齐。幂等——已回填的行不再触碰;Runtime 尚未配对
    * (runtimeType 为 null)的跳过,等配对后下次启动再补。返回回填行数。
    */
-  async backfillIsolationFromRuntime(): Promise<number> {
-    const pending = await this.prisma.workspace.findMany({
-      where: { isolation: null },
-      select: { id: true, runtime: { select: { runtimeType: true } } },
-    });
-    let updated = 0;
-    for (const row of pending) {
-      if (!row.runtime.runtimeType) continue;
-      await this.prisma.workspace.update({
-        where: { id: row.id },
-        data: { isolation: row.runtime.runtimeType },
-      });
-      updated += 1;
-    }
-    return updated;
+  /** Phase 3:RuntimeHost.runtimeType 列已删,backfill 不再需要,no-op。 */
+  async backfillRuntimeTypeFromRuntimeHost(): Promise<number> {
+    return 0;
   }
 }

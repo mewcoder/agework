@@ -1,38 +1,54 @@
+import { Logger } from "@nestjs/common";
 import type { FactoryProvider } from "@nestjs/common";
-import { RuntimeHost } from "@agework/runtime/host";
+import { RuntimeHost, WorkerHttpServer } from "@agework/runtime/host";
 import { ConfigService } from "../../config/config.service";
 import { RuntimeService } from "../../runtime/runtime.service";
 import { RunEventService } from "../../run-event/run-event.service";
+import { resolveApiBasePath } from "../../common/api-path";
+import { EnvKey } from "../../config/registry/env-key";
 
 /**
  * 进程内 RuntimeHost(managed-native)的注入 token。
  *
- * Phase 2 执行面搬家:managed-native 的 worker 池/信箱/握手/fence 由
- * `@agework/runtime/host` 的 RuntimeHost 库承接(与 registered daemon 同一实现、
- * 两种宿主)。managed docker/opensandbox 是 supervisor fork 的独立 runtime 进程,
- * 本身就是跑 registered 代码的 Host,经隧道走 host.* 链路,不经此实例。
+ * Phase 3 清尾:builtin Host 自管 worker HTTP 服务器(WorkerHttpServer),
+ * worker 数据面对端从 server 旧 /worker/* 端点切到 Host——与 registered
+ * daemon 同构。managed docker/opensandbox 是 supervisor fork 的独立 runtime
+ * 进程,本身就是跑 registered 代码的 Host,经隧道走 host.* 链路,不经此实例。
  *
  * worker-manager 内部 provider:不 export、不进其他 module。
  */
 export const MANAGED_RUNTIME_HOST = Symbol("MANAGED_RUNTIME_HOST");
 
+const logger = new Logger("ManagedRuntimeHost");
+
 export const managedRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
   provide: MANAGED_RUNTIME_HOST,
   inject: [ConfigService, RuntimeService, RunEventService],
-  useFactory: (
+  useFactory: async (
     configService: ConfigService,
     runtimeService: RuntimeService,
     runEvents: RunEventService
-  ) =>
-    new RuntimeHost({
+  ): Promise<RuntimeHost> => {
+    const workerPort = configService.getBuiltinWorkerHttpPort();
+    const apiBasePath = resolveApiBasePath(
+      process.env[EnvKey.CONTEXT]
+    );
+    const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
+
+    const providerConfig = runtimeService.getProviderRuntimeConfig();
+    // provider（native/sandbox）用 RuntimeConfig.serverBaseUrl 覆盖 worker 的
+    // AGEWORK_WORKER_API_BASE env——因此 providerConfig.serverBaseUrl 也必须
+    // 指向 Host 的 worker HTTP 端点,而非 server 的主端口。
+    providerConfig.serverBaseUrl = workerApiBaseUrl;
+
+    const host = new RuntimeHost({
       runtimeLogDir: configService.getRuntimeLogDir(),
       getUserWorkspace: (username) => configService.getUserWorkspace(username),
       launchTimeoutMs: configService.getLaunchTimeoutSeconds() * 1000,
       heartbeatTimeoutMs: configService.getHeartbeatTimeoutSeconds() * 1000,
       agentEventTrace: configService.getAgentEventTraceConfig(),
-      providerConfig: runtimeService.getProviderRuntimeConfig(),
-      // workerApiBaseUrl 不设:builtin worker 数据面仍连 server /worker/* 旧端点,
-      // controller 委托回本实例(pollCommands/postEvent/register/getRunConfig)。
+      providerConfig,
+      workerApiBaseUrl,
       resolveCliPaths: async () => {
         const resolved = await runtimeService.getResolvedCliPaths(
           runtimeService.getManagedRuntimeId("native")
@@ -49,5 +65,21 @@ export const managedRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
           .append(runEvents.commandSent({ runId, commandId, commandType }))
           .catch(() => {});
       },
-    }),
+    });
+
+    // builtin Host 自管 worker HTTP 服务器——worker 数据面对端不再连 server
+    const httpServer = new WorkerHttpServer(host, workerPort, apiBasePath);
+    await httpServer.start();
+    logger.log(
+      `builtin Host worker HTTP server listening on port ${workerPort}`
+    );
+
+    // 进程退出时清理(不阻塞)
+    process.on("beforeExit", () => {
+      host.drain();
+      void httpServer.stop();
+    });
+
+    return host;
+  },
 };
