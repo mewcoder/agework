@@ -1,5 +1,5 @@
 import { runWorker } from "@agework/worker";
-import { runRegisteredRuntime } from "./registered/tunnel.js";
+import { runRegisteredRuntime } from "./registered/main.js";
 
 /**
  * agework-runtime 总入口,按 AGEWORK_WORKER_ROLE 二分派:

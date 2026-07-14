@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { once } from "node:events";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import { RUNTIME_TUNNEL_CLOSE_GONE } from "@agework/shared/protocol";
-import { TunnelClient } from "./tunnel.js";
-import type { RegisteredRuntimeConfig } from "../config.js";
+import { TunnelClient } from "./tunnel-client.js";
+import type { RegisteredRuntimeConfig } from "./config.js";
 
 // 真实的 detectEnvConfig() 会探测本机装的 claude/codex CLI,导致 register 消息里的
 // envConfig 因开发机环境而异——固定为一个确定值,测试才不受本机 CLI 安装状态影响。
