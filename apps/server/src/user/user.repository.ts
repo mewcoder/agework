@@ -139,6 +139,16 @@ export class UserRepository {
     });
   }
 
+  /** 给定 id 集合中仍存活(active 且未软删)的 user id。 */
+  async listActiveIds(ids: string[]): Promise<string[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.user.findMany({
+      where: { id: { in: ids }, status: "active", deletedAt: null },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
   findCredentialByIdActive(id: string): Promise<CredentialUserRecord | null> {
     return this.prisma.user.findFirst({
       where: { id, status: "active", deletedAt: null },

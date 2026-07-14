@@ -79,6 +79,14 @@ export class UserService {
   }
 
   /**
+   * 给定 id 集合中仍存活(active 且未软删)的 user id。
+   * 供执行面重连对账用:不在结果里的用户已禁用/删除,其 user-scope worker 应被释放。
+   */
+  listActiveIds(ids: string[]): Promise<string[]> {
+    return this.users.listActiveIds(ids);
+  }
+
+  /**
    * 创建用户并生成临时密码；普通管理员只能创建 user 角色，不能创建 super_admin 或其他管理员角色。
    */
   async create(operator: UserSession, username: string, role = "user") {

@@ -3,9 +3,10 @@ import { Module } from "@nestjs/common";
 import { RuntimeModule } from "../runtime/runtime.module";
 import { RunEventModule } from "../run-event/run-event.module";
 import { WorkspaceModule } from "../workspace/workspace.module";
+import { UserModule } from "../user/user.module";
 import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
 import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
-import { WorkspaceHostListener } from "./contract/workspace-host.listener";
+import { OwnerHostListener } from "./contract/owner-host.listener";
 import { RUNTIME_HOST_CONTRACT } from "./runtime-host.types";
 import { AdminWorkerController } from "./admin/admin-worker.controller";
 
@@ -17,12 +18,12 @@ import { AdminWorkerController } from "./admin/admin-worker.controller";
  * 不感知 builtin/registered 的路由细节。
  */
 @Module({
-  imports: [RuntimeModule, RunEventModule, WorkspaceModule],
+  imports: [RuntimeModule, RunEventModule, WorkspaceModule, UserModule],
   controllers: [AdminWorkerController],
   providers: [
     builtinRuntimeHostProvider,
     RuntimeHostAdapter,
-    WorkspaceHostListener,
+    OwnerHostListener,
     { provide: RUNTIME_HOST_CONTRACT, useExisting: RuntimeHostAdapter },
   ],
   exports: [RUNTIME_HOST_CONTRACT],
