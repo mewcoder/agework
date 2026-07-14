@@ -22,7 +22,7 @@ worker 池的唯一键：`${OwnerKey}#${runtimeType}`。同一 (owner, runtimeTy
 _Avoid_: WorkerInstance（旧词）、ownerId 裸用（多 runtimeType 下撞车）
 
 **OwnerKey**:
-worker 复用的 owner 键：`workspace:${workspaceId}`（workspace 隔离）或 `user:${userId}`（user 隔离）。releaseOwner 据此清理 worker。
+worker 复用的 owner 键：`workspace:${workspaceId}`（workspace scope）或 `user:${userId}`（user scope）。releaseOwner 据此清理 worker。
 _Avoid_: Tenant、account
 
 **Builtin Host**:

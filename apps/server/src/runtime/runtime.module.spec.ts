@@ -60,7 +60,7 @@ async function createRuntimeTestingModule(
 function createConfigServiceMock(): Partial<ConfigService> {
   return {
     getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
-    getDefaultIsolationScope: vi.fn().mockReturnValue("workspace"),
+    getDefaultWorkerScope: vi.fn().mockReturnValue("workspace"),
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     getOpenSandboxConfig: vi.fn().mockReturnValue({

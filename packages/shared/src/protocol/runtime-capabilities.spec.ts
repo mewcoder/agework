@@ -12,8 +12,6 @@ describe("runtime capabilities", () => {
   });
 
   it("rejects the removed single-runtime capability shape", () => {
-    expect(
-      normalizeRuntimeCapabilities({ isolationScopes: ["workspace"] })
-    ).toEqual({});
+    expect(normalizeRuntimeCapabilities({ scopes: ["workspace"] })).toEqual({});
   });
 });

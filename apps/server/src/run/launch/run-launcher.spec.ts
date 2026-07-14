@@ -17,7 +17,7 @@ function makeWorkspaceView(
     workspaceId: "ws-1",
     workspaceRootPath: "/tmp/ws",
     runtimeType: "native",
-    isolationScope: "workspace",
+    scope: "workspace",
     username: "admin-1",
     runtimeHostId: "builtin",
     runtimeSource: "builtin",
@@ -101,10 +101,10 @@ describe("RunLauncher", () => {
     vi.spyOn(mockRunEvents, "forgetRun").mockImplementation(() => undefined);
     mockConfigService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
-      getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
+      getDefaultWorkerScope: vi.fn().mockReturnValue("user"),
       isRuntimeTypeAllowed: (t: string): t is "native" | "docker" =>
         t === "native" || t === "docker",
-      isIsolationScopeAllowed: (s: string): s is "user" | "workspace" =>
+      isWorkerScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
     };
     launcher = new RunLauncher(
@@ -136,7 +136,6 @@ describe("RunLauncher", () => {
       conversationId: "conversation-1",
       placement: {
         owner: "workspace:ws-1",
-        isolationScope: "workspace",
         runtimeType: "native",
         runtimeHostId: "builtin",
         workspaceId: "ws-1",
@@ -172,12 +171,12 @@ describe("RunLauncher", () => {
     expect(typeof registered.onAgentSessionId).toBe("function");
   });
 
-  it("derives a user-scope owner key for user-isolated sandbox workspaces", async () => {
+  it("derives a user owner key for user-scope sandbox workspaces", async () => {
     await launch(
       makeStartInput({
         workspace: makeWorkspaceView({
           runtimeType: "docker",
-          isolationScope: "user",
+          scope: "user",
         }),
       })
     );
@@ -186,7 +185,6 @@ describe("RunLauncher", () => {
       expect.objectContaining({
         placement: expect.objectContaining({
           owner: "user:user-1",
-          isolationScope: "user",
           runtimeType: "docker",
         }),
       })
@@ -235,7 +233,7 @@ describe("RunLauncher", () => {
           runtimeHostId: "host-remote-1",
           runtimeSource: "registered",
           runtimeType: "docker",
-          isolationScope: "workspace",
+          scope: "workspace",
         }),
       })
     );

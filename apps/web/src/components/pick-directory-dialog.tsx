@@ -147,7 +147,7 @@ export function PickDirectoryDialog({
         name,
         rootPath,
         runtimeType,
-        isolationScope: runtimeType !== "native" ? "workspace" : undefined,
+        scope: runtimeType !== "native" ? "workspace" : undefined,
       },
       {
         onSuccess: (workspace) => {

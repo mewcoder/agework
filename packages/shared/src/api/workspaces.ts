@@ -1,7 +1,8 @@
 import type { ListResponse, PaginatedListResponse } from "../common";
+import type { WorkerScope } from "../protocol/channel";
 
 export type WorkspaceRuntimeType = "native" | "docker" | "opensandbox";
-export type WorkspaceIsolationScope = "user" | "workspace";
+export type WorkspaceScope = WorkerScope;
 export type WorkspaceDirectorySource = "managed" | "external" | "remote";
 
 export type WorkspaceResponse = {
@@ -11,7 +12,7 @@ export type WorkspaceResponse = {
   directoryStatus: string;
   directorySource: WorkspaceDirectorySource;
   runtimeType: WorkspaceRuntimeType;
-  isolationScope?: WorkspaceIsolationScope | null;
+  scope: WorkspaceScope;
   gitUrl?: string | null;
   /** 创建时选定的 git 分支;非 git / 未选时为 null。创建后只读。 */
   gitBranch?: string | null;
@@ -39,7 +40,7 @@ export type CreateWorkspaceRequest = {
   gitBranch?: string;
   rootPath?: string;
   runtimeType?: WorkspaceRuntimeType;
-  isolationScope?: WorkspaceIsolationScope;
+  scope?: WorkspaceScope;
   /** 绑定到某个已配对的 Registered Runtime Host；runtimeType 选择其一种能力。 */
   runtimeHostId?: string;
 };
@@ -61,10 +62,10 @@ export type WorkspaceGitBranchListResponse = ListResponse<string>;
 
 export type WorkspaceCapabilitiesResponse = {
   canSelectLocalDirectory: boolean;
-  runtimeType: WorkspaceRuntimeType;
+  defaultRuntimeType: WorkspaceRuntimeType;
   allowedRuntimeTypes: WorkspaceRuntimeType[];
-  isolationScope: WorkspaceIsolationScope;
-  allowedIsolationScopes: WorkspaceIsolationScope[];
+  defaultScope: WorkspaceScope;
+  allowedScopes: WorkspaceScope[];
 };
 
 // ── 变更查看(diff,只读,只支持本地 runtime) ──

@@ -340,7 +340,7 @@ export async function runRegisteredRuntime(): Promise<void> {
       },
     },
     workerApiBaseUrl,
-    // native 隔离的 CLI 路径:Host 就是执行机器本机,按本机检测结果解析
+    // native runtimeType 的 CLI 路径:Host 就是执行机器本机,按本机检测结果解析
     resolveCliPaths: async () => {
       const envConfig = detectEnvConfig();
       return {

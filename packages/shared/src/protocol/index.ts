@@ -1,6 +1,5 @@
 import type { RunChannelMessage } from "./run-channel-message";
-import type { CommandPayload } from "./channel";
-import type { WorkerScope } from "./runtime-host";
+import type { CommandPayload, WorkerScope } from "./channel";
 import type { RuntimeCapabilities } from "./runtime-capabilities";
 
 export type { RunChannelMessage } from "./run-channel-message";
@@ -72,14 +71,13 @@ export type {
   RuntimeChannel,
   RunExecutionHandle,
   WorkerRegisterRequest,
-  IsolationScope,
+  WorkerScope,
   RuntimeSpec,
   NativeRuntimeSpec,
   SandboxRuntimeSpec,
   SandboxPlacementInfo,
 } from "./channel";
 export type {
-  WorkerScope,
   RuntimeType,
   OwnerKey,
   WorkerKey,

@@ -9,11 +9,9 @@ import { execFileSync, spawn } from "child_process";
 import { mkdirSync, realpathSync, rmSync, statSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve } from "path";
-import {
-  ConfigService,
-  type IsolationScope,
-  type RuntimeType,
-} from "../../config/config.service";
+import type { RuntimeType } from "@agework/providers";
+import type { WorkerScope } from "@agework/shared/protocol";
+import { ConfigService } from "../../config/config.service";
 import { WorkspaceRepository } from "../workspace.repository";
 import { WorkspaceRuntimePolicy } from "../placement/workspace-runtime.policy";
 
@@ -113,7 +111,7 @@ export class WorkspaceDirectoryHandler {
     gitBranch?: string;
     requestedRootPath?: string;
     runtimeType: RuntimeType;
-    isolationScope: IsolationScope | null;
+    scope: WorkerScope;
     /** registered Host id；非空时整个方法走远程分支，不碰本机文件系统。 */
     registeredRuntimeHostId?: string | null;
   }): Promise<WorkspaceDirectoryCreatePlan> {
@@ -181,13 +179,13 @@ export class WorkspaceDirectoryHandler {
     gitUrl?: string;
     requestedRootPath?: string;
     runtimeType: RuntimeType;
-    isolationScope: IsolationScope | null;
+    scope: WorkerScope;
   }): Promise<WorkspaceDirectoryCreatePlan> {
     const username = await this.resolveUsername(input.userId);
     const trimmedRootPath = input.requestedRootPath?.trim();
     if (!trimmedRootPath) {
       const rootPath =
-        input.isolationScope === "workspace"
+        input.scope === "workspace"
           ? join(this.config.getWorkspace(), `${username}_${input.workspaceId}`)
           : join(this.config.getUserWorkspace(username), input.workspaceId);
       return {
@@ -201,8 +199,8 @@ export class WorkspaceDirectoryHandler {
     }
 
     const rootPath = this.normalizeExistingDirectory(trimmedRootPath);
-    this.assertCustomRootPathSupported(input.runtimeType, input.isolationScope);
-    if (input.isolationScope === "workspace") {
+    this.assertCustomRootPathSupported(input.runtimeType, input.scope);
+    if (input.scope === "workspace") {
       this.assertPathOutsideUserRoot(username, rootPath);
     }
 
@@ -244,16 +242,14 @@ export class WorkspaceDirectoryHandler {
 
   private assertCustomRootPathSupported(
     runtimeType: RuntimeType,
-    isolationScope: IsolationScope | null
+    scope: WorkerScope
   ) {
-    if (
-      this.runtimePolicy.supportsCustomRootPath(runtimeType, isolationScope)
-    ) {
+    if (this.runtimePolicy.supportsCustomRootPath(runtimeType, scope)) {
       return;
     }
 
     throw new BadRequestException(
-      "沙箱工作空间指定本地目录时必须使用工作空间级隔离"
+      "沙箱工作空间指定本地目录时必须使用工作空间范围"
     );
   }
 
@@ -262,7 +258,7 @@ export class WorkspaceDirectoryHandler {
     const rel = relative(userRoot, rootPath);
     if (rel === "" || (!rel.startsWith("..") && !isAbsolute(rel))) {
       throw new BadRequestException(
-        "工作空间隔离的自定义目录不能在用户工作空间目录内"
+        "工作空间范围的自定义目录不能在用户工作空间目录内"
       );
     }
   }

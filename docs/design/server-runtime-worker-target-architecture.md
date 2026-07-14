@@ -7,7 +7,7 @@
 ## 1. 一句话
 
 Server 把 Runtime Host 当成一个黑盒执行服务：**提交 run 进去，事件流出来**。
-Worker、容器、隔离级别、池化复用、握手、心跳判死——这些全部是 Runtime Host 的内部实现，
+Worker、容器、复用范围、池化、握手、心跳判死——这些全部是 Runtime Host 的内部实现，
 server 的代码和数据库里不再出现。
 
 ## 2. 现状为什么乱（诊断摘要）
@@ -17,20 +17,20 @@ server 的代码和数据库里不再出现。
 
 1. **server 亲自管执行面状态机**。握手（`worker-manager/connection/worker-handshake.store.ts`）、
    心跳判死（`worker-liveness.sweeper.ts`）、命令信箱（`command-queue.ts`）、
-   载体去重（`worker.provisioner.ts` 的 `(ownerId, runtimeId, isolationScope)` 键）、
+   载体去重（`worker.provisioner.ts` 的 `(ownerId, runtimeId, scope)` 键）、
    Worker 表落库（`registry/`）——runtimeType × 载体形态 × 复用范围的组合矩阵全摊在业务代码旁边。
 2. **网络拓扑是拧的**。控制面走 server → runtime 进程（隧道 RPC 起停载体），
    数据面却是 worker 绕过它直连 server HTTP 长轮询（`command.controller.ts`）。
    执行节点只管"生孩子"，孩子生下来归 server 养。
 3. **实现细节被抬成了领域概念**。worker 和"runtime 载体"被当成两个并列概念，再用
    `WorkerInstance` 表把它们"1:1 融合"，再发明 stop（留壳）/destroy（删壳）区分收尾——
-   全是在为"两个概念指向一个实体"打补丁。local 没有容器，还要在表里塞
-   `isolationScope` 占位值。
+   全是在为"两个概念指向一个实体"打补丁。native 没有容器，还要在表里塞
+   `scope` 占位值。
 4. **一词三义**。"runtime" 同时指机器注册行、载体外壳、worker/runner 进程；
    两份 CONTEXT.md 对 runtime/worker 的主从关系定义相反
    （`runtime/CONTEXT.md:3` vs `worker-manager/CONTEXT.md:3`）。
    注册模型还在用"一类型一行"为同一台机器造三行假行
-   （`builtin-local` / `builtin-docker` / `builtin-opensandbox` 是同一台机器）。
+   （同一台 builtin Host 被拆成了多行）。
 
 ## 3. 理想概念模型
 
@@ -80,8 +80,8 @@ Runtime Host，不再指代机器、载体和 worker 等多个概念。
 | ----------------------------------------------- | --------------------------------------------------------------------------------------- |
 | 容器 / 载体 / carrier / environment（领域语境） | provider 实现内部词汇。领域层只说 worker。                                              |
 | stop / destroy 两种收尾语义                     | 降级为 provider 缓存策略（"要不要留容器以便下次快启动"）。领域层只有 worker 存活/消失。 |
-| `isolationScope` + `ownerId` 双字段双语义       | 合并为 owner 键（`scope:id`）。Workspace 上的字段叫 scope。                             |
-| local 的占位隔离值                              | 删除。改为能力矩阵约束。                                                                |
+| placement 中并列的 `scope` + `ownerId`          | 合并为 owner 键（`scope:id`）。Workspace 上只保留有业务意义的 `scope`。                 |
+| native 的占位 scope                             | 删除占位语义；`workspace` 是能力矩阵约束下的真实复用范围。                              |
 | `runtimeType`                                   | 保留，表示运行方式，从 Host 能力列表中选。                                              |
 | 裸词 "runtime" 的其余各义                       | 只保留 Runtime Host 一个名字。                                                          |
 
@@ -381,7 +381,7 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露�
 1. 删 Worker / WorkerWorkspaceBinding 表与 `registry/`；删除 Phase 2 双栈期的
    旧端点与旧链路残留。
 2. schema **contract** 收尾（expand 部分已在 Phase 2 落）：保留 `runtimeType`，
-   `isolationScope` 改名 `scope`、`runtimeId` 改名 `runtimeHostId`，builtin 假行清并。
+   Workspace 复用范围字段统一为 `scope`、`runtimeId` 改名 `runtimeHostId`，builtin 假行清并。
 3. 全量统一 `runtimeType` 命名，清除 `Isolation` / `WorkerInstance` 等旧词。
 4. 合并文件双通道，删除被取代的 owner-command 文件命令；补 `releaseWorkspace` 收尾链路
    （删 workspace 流程见 §3.5 场景 4）。

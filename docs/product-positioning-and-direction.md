@@ -68,7 +68,7 @@ AgeWork 当前更应该支持 2-3 个真正能干活的 Agent，并把体验做�
 - 中断、恢复、失败处理可靠。
 - session/thread 能续接。
 - 文件变更、命令执行、reasoning、审批等事件能被产品化。
-- Docker/local runtime 行为一致。
+- Docker/native runtimeType 行为一致。
 
 这比“Agent 列表很长”更符合 Workbench 产品定位。
 
@@ -134,14 +134,14 @@ IDE 聚合路线的核心是“把 Agent 接进编辑器”。AgeWork 的核心�
 
 两者的差异：
 
-| 方向 | IDE 聚合 | AgeWork |
-| --- | --- | --- |
-| 核心入口 | 编辑器 | Web/API/私有化工作台 |
-| 核心价值 | 本地编码体验 | 私有化、治理、运行管理、协作 |
-| Agent 数量 | 可多接 | 少数深度支持 |
-| Runtime | 通常贴近本机 IDE | local / Docker / K8s / remote worker |
-| 组织能力 | 依赖 IDE/平台 | 内建审计、权限、密钥、历史、恢复 |
-| 扩展方式 | 插件 / ACP | AgentBackend / RuntimeProvider / API |
+| 方向       | IDE 聚合         | AgeWork                              |
+| ---------- | ---------------- | ------------------------------------ |
+| 核心入口   | 编辑器           | Web/API/私有化工作台                 |
+| 核心价值   | 本地编码体验     | 私有化、治理、运行管理、协作         |
+| Agent 数量 | 可多接           | 少数深度支持                         |
+| Runtime    | 通常贴近本机 IDE | local / Docker / K8s / remote worker |
+| 组织能力   | 依赖 IDE/平台    | 内建审计、权限、密钥、历史、恢复     |
+| 扩展方式   | 插件 / ACP       | AgentBackend / RuntimeProvider / API |
 
 AgeWork 不需要和 IDE 厂商争夺“谁的 Agent 面板更像编辑器原生”。更好的方向是成为团队可以部署、治理和扩展的 Agent 工作底座。
 
@@ -171,7 +171,7 @@ AgeWork 不需要和 IDE 厂商争夺“谁的 Agent 面板更像编辑器原生
 
 ## 结论
 
-当前定位没有问题：AgeWork 应该继续走 SDK-first 的应用产品路线，通过 Adapter 将 Agent 能力转换为统一的 AG-UI 事件，并在 Docker/local runtime 中保持一致。
+当前定位没有问题：AgeWork 应该继续走 SDK-first 的应用产品路线，通过 Adapter 将 Agent 能力转换为统一的 AG-UI 事件，并在 Docker/native runtimeType 中保持一致。
 
 不要为了“更原生”过早切到 CLI，也不要把“聚合很多本地 Agent”当成主叙事。
 

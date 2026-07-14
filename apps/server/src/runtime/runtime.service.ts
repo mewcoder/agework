@@ -36,8 +36,8 @@ import type {
 } from "@agework/shared/api";
 import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
-import type { RuntimeConfig } from "@agework/providers";
-import { ConfigService, type RuntimeType } from "../config/config.service";
+import type { RuntimeConfig, RuntimeType } from "@agework/providers";
+import { ConfigService } from "../config/config.service";
 import { toRuntimeConfig } from "./local/runtime-config";
 import { RuntimeRepository, type RuntimeHostRow } from "./runtime.repository";
 import { RuntimeTunnelHandler } from "./gateway/runtime-tunnel.handler";
@@ -116,10 +116,10 @@ export class RuntimeService implements OnApplicationBootstrap {
   /** 返回当前运行时策略配置(默认/可选 runtimeType、scope、空闲超时秒数),供前端展示与校验用。 */
   getRuntimePolicy() {
     return {
-      runtimeType: this.configService.getDefaultRuntimeType(),
+      defaultRuntimeType: this.configService.getDefaultRuntimeType(),
       allowedRuntimeTypes: this.configService.getAllowedRuntimeTypes(),
-      scope: this.configService.getDefaultIsolationScope(),
-      allowedIsolationScopes: this.configService.getAllowedIsolationScopes(),
+      defaultScope: this.configService.getDefaultWorkerScope(),
+      allowedScopes: this.configService.getAllowedScopes(),
       idleTimeoutSeconds: this.configService.getIdleTimeoutSeconds(),
     };
   }
@@ -561,7 +561,7 @@ export class RuntimeService implements OnApplicationBootstrap {
 
   /**
    * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
-   * 供 RunLauncher 对 local 类型提取 CLI 路径写入 RunConfig。
+   * 供 RunLauncher 对 native 类型提取 CLI 路径写入 RunConfig。
    */
   async getResolvedCliPaths(id: string): Promise<{
     claude: string | null;
@@ -646,8 +646,8 @@ function mergeAgent(
   };
 }
 
-/** native 没有容器,没有隔离概念,只有 workspace 独占子进程;docker/opensandbox 都有容器
- *  边界兜底,user 级共享安全,两种隔离都支持。 */
+/** native 没有容器,只允许 workspace 范围的独占子进程;docker/opensandbox 有容器
+ *  边界兜底,支持 user/workspace 两种复用范围。 */
 function runtimeTypeScopes(runtimeType: RuntimeType): WorkerScope[] {
   return runtimeType === "native" ? ["workspace"] : ["user", "workspace"];
 }

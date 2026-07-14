@@ -1,7 +1,7 @@
 import { homedir } from "os";
 import { join } from "path";
 import type { RuntimeType } from "@agework/providers";
-import type { IsolationScope } from "@agework/shared/protocol";
+import type { WorkerScope } from "@agework/shared/protocol";
 import { EnvKey } from "./env-key";
 
 /**
@@ -19,9 +19,9 @@ export const DEV_JWT_SECRET = "agework-dev-secret";
 export const DEFAULT_ALLOWED_RUNTIME_TYPES = [
   "native",
 ] as const satisfies readonly RuntimeType[];
-export const DEFAULT_ALLOWED_ISOLATION_SCOPES = [
+export const DEFAULT_ALLOWED_SCOPES = [
   "user",
-] as const satisfies readonly IsolationScope[];
+] as const satisfies readonly WorkerScope[];
 /** builtin Host 的 docker/opensandbox 载体镜像：统一为 agework-runtime 产物镜像
  *  (worker 内置其中,以 AGEWORK_WORKER_ROLE=worker 角色启动),与 Registered
  *  远程 manager 用的是同一个产物/镜像。:latest 的版本正确性靠 register 握手兜底。 */

@@ -1,9 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  runsApi,
-  type AdminRunDetail,
-} from "@/api/runs";
+import { runsApi, type AdminRunDetail } from "@/api/runs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,7 +21,11 @@ import {
   statusLabel,
   statusVariant,
 } from "./run-status";
-import { formatDurationMs, formatInteger, formatRunDuration } from "./run-format";
+import {
+  formatDurationMs,
+  formatInteger,
+  formatRunDuration,
+} from "./run-format";
 import { RunEventTimeline } from "./run-event-timeline";
 import { ToolCallProcessView } from "./run-tool-call";
 import { RunRawEventsView } from "./run-raw-events-view";
@@ -115,7 +116,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                       </Badge>
                     </div>
                     {run.conversationTitle && (
-                      <span className="break-all font-mono text-xs text-muted-foreground">
+                      <span className="font-mono text-xs break-all text-muted-foreground">
                         {run.conversationId}
                       </span>
                     )}
@@ -125,10 +126,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
               <DetailItem
                 label="工作空间"
                 value={
-                  <EntityRef
-                    name={run.workspaceName}
-                    id={run.workspaceId}
-                  />
+                  <EntityRef name={run.workspaceName} id={run.workspaceId} />
                 }
               />
               <DetailItem
@@ -159,7 +157,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                   </Button>
                 </div>
                 {showRunError && (
-                  <p className="mt-2 whitespace-pre-wrap break-words text-sm text-destructive">
+                  <p className="mt-2 text-sm break-words whitespace-pre-wrap text-destructive">
                     {run.error}
                   </p>
                 )}
@@ -203,12 +201,12 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     mono
                   />
                   <DetailItem
-                    label="隔离粒度"
+                    label="复用范围"
                     value={
                       <Badge variant="outline">
                         {run.workerInstance.runtimeType === "native"
                           ? "host"
-                          : run.workerInstance.isolationScope}
+                          : run.workerInstance.scope}
                       </Badge>
                     }
                   />
@@ -217,7 +215,9 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                     value={
                       <Badge
                         variant={statusVariant(run.workerInstance.status)}
-                        className={runStatusBadgeClassName(run.workerInstance.status)}
+                        className={runStatusBadgeClassName(
+                          run.workerInstance.status
+                        )}
                       >
                         {run.workerInstance.status}
                       </Badge>
@@ -264,7 +264,10 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                   label="推理输出"
                   value={formatInteger(run.usage.reasoningOutputTokens)}
                 />
-                <DetailItem label="轮次" value={formatInteger(run.usage.numTurns)} />
+                <DetailItem
+                  label="轮次"
+                  value={formatInteger(run.usage.numTurns)}
+                />
               </DetailGrid>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -349,25 +352,21 @@ function DetailGrid({
 }
 
 /** 关联实体：名称为主，ID 作为 mono 小字辅助显示。 */
-function EntityRef({
-  name,
-  id,
-}: {
-  name?: string | null;
-  id: string;
-}) {
+function EntityRef({ name, id }: { name?: string | null; id: string }) {
   const hasName = name && name !== id;
   return (
     <span className="flex min-w-0 flex-col">
       {hasName ? (
         <>
           <span className="break-words text-foreground">{name}</span>
-          <span className="break-all font-mono text-xs text-muted-foreground">
+          <span className="font-mono text-xs break-all text-muted-foreground">
             {id}
           </span>
         </>
       ) : (
-        <span className="break-all font-mono text-xs text-foreground">{id}</span>
+        <span className="font-mono text-xs break-all text-foreground">
+          {id}
+        </span>
       )}
     </span>
   );

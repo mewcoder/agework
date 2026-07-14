@@ -36,7 +36,7 @@ export class AdminRuntimeController {
     return { ok: true };
   }
 
-  /** 管理员一键安装 runtime 的独立 CLI（仅 local 类型）。 */
+  /** 管理员一键安装 runtime 的独立 CLI（仅 native runtimeType）。 */
   @Post("install-cli")
   async installCli(@Body() body: InstallCliDto) {
     return this.runtimeService.installCli(body.id, body.agentType);

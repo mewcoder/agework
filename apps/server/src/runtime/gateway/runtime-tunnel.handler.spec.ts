@@ -111,7 +111,7 @@ describe("RuntimeTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         runtimeType: "docker",
-        capabilities: { isolationScopes: ["user", "workspace"] },
+        capabilities: { scopes: ["user", "workspace"] },
       })
     );
 

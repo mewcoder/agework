@@ -35,18 +35,18 @@ describe("CreateWorkspaceDto", () => {
     const result = await transformBody(CreateWorkspaceDto, {
       name: "My Workspace",
       runtimeType: "docker",
-      isolationScope: "workspace",
+      scope: "workspace",
     });
     expect(result.runtimeType).toBe("docker");
-    expect(result.isolationScope).toBe("workspace");
+    expect(result.scope).toBe("workspace");
   });
 
-  it("rejects invalid runtime runtimeType scope in create payloads", async () => {
+  it("rejects an invalid worker scope in create payloads", async () => {
     await expect(
       transformBody(CreateWorkspaceDto, {
         name: "My Workspace",
         runtimeType: "docker",
-        isolationScope: "project",
+        scope: "project",
       })
     ).rejects.toThrow(BadRequestException);
   });

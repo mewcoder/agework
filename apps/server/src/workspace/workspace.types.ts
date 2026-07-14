@@ -8,7 +8,7 @@ export type WorkspaceRunContext = {
   workspaceRootPath: string;
   /** 派生自 workspace.runtimeHost,恒有值(RuntimeHost 行必然存在)。 */
   runtimeType: string;
-  isolationScope: string;
+  scope: string;
   username: string;
   /** 绑定的 RuntimeHost(builtin 或 registered)id,恒有值。 */
   runtimeHostId: string;

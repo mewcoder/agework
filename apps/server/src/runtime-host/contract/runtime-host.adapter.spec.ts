@@ -60,7 +60,6 @@ function makePlacement(
 ): RunPlacement {
   return {
     owner: "workspace:ws-1",
-    isolationScope: "workspace",
     runtimeType: "native",
     runtimeHostId,
     workspaceId: "ws-1",

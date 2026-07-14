@@ -84,11 +84,11 @@ describe("RuntimeService", () => {
   beforeEach(() => {
     configService = {
       getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
-      getDefaultIsolationScope: vi.fn().mockReturnValue("user"),
+      getDefaultWorkerScope: vi.fn().mockReturnValue("user"),
       getAllowedRuntimeTypes: vi
         .fn()
         .mockReturnValue(["native", "docker", "opensandbox"]),
-      getAllowedIsolationScopes: vi.fn().mockReturnValue(["user", "workspace"]),
+      getAllowedScopes: vi.fn().mockReturnValue(["user", "workspace"]),
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
       getLaunchTimeoutSeconds: vi.fn().mockReturnValue(20),
     };
@@ -167,10 +167,10 @@ describe("RuntimeService", () => {
 
   it("getRuntimePolicy reads from ConfigService", () => {
     expect(service.getRuntimePolicy()).toEqual({
-      runtimeType: "native",
+      defaultRuntimeType: "native",
       allowedRuntimeTypes: ["native", "docker", "opensandbox"],
-      scope: "user",
-      allowedIsolationScopes: ["user", "workspace"],
+      defaultScope: "user",
+      allowedScopes: ["user", "workspace"],
       idleTimeoutSeconds: 600,
     });
   });

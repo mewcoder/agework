@@ -1,19 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { runtimesApi } from '@/api/runtimes';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { runtimesApi } from "@/api/runtimes";
 import type {
   CreateRuntimeDirectoryRequest,
   CreateRuntimeRequest,
   InstallCliRequest,
   UpdateEnvConfigOverrideRequest,
-} from '@agework/shared/api';
-export type { Runtime, CreateRuntimeResponse } from '@/api/runtimes';
+} from "@agework/shared/api";
+export type { Runtime, CreateRuntimeResponse } from "@/api/runtimes";
 
 /** runtime 相关 react-query 键的唯一 factory:define 与 invalidate 共用。 */
 const runtimeKeys = {
-  all: ['runtimes'] as const,
-  adminAll: ['admin-runtimes'] as const,
-  directory: (runtimeHostId: string | undefined, path: string | undefined) =>
-    ['runtime-directory', runtimeHostId, path ?? null],
+  all: ["runtimes"] as const,
+  adminAll: ["admin-runtimes"] as const,
+  directory: (runtimeHostId: string | undefined, path: string | undefined) => [
+    "runtime-directory",
+    runtimeHostId,
+    path ?? null,
+  ],
 };
 
 export function useRuntimes() {
@@ -69,7 +72,7 @@ export function useDetectEnv() {
   });
 }
 
-/** admin: 一键安装 runtime 独立 CLI（仅支持 local runtime）。 */
+/** admin: 一键安装 runtime 独立 CLI（仅支持 native runtimeType）。 */
 export function useInstallCli() {
   const qc = useQueryClient();
   return useMutation({
@@ -87,7 +90,8 @@ export function useRuntimeDirectory(
 ) {
   return useQuery({
     queryKey: runtimeKeys.directory(runtimeHostId, path),
-    queryFn: () => runtimesApi.listDirectory({ runtimeHostId: runtimeHostId!, path }),
+    queryFn: () =>
+      runtimesApi.listDirectory({ runtimeHostId: runtimeHostId!, path }),
     enabled: enabled && !!runtimeHostId,
     // 导航时保留上一个目录的数据，避免闪烁
     placeholderData: (prev) => prev,

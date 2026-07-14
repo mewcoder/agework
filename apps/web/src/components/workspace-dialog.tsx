@@ -31,10 +31,7 @@ import {
 import { GitBranch, Loader2 } from "lucide-react";
 import { workspacesApi } from "@/api/workspaces";
 import type { UpdateWorkspaceInput } from "@/api/workspaces";
-import type {
-  WorkspaceIsolationScope,
-  WorkspaceRuntimeType,
-} from "@agework/shared/api";
+import type { WorkspaceScope, WorkspaceRuntimeType } from "@agework/shared/api";
 import { errorMessage } from "@/utils/error";
 import { normalizeFilesystemPath } from "@/utils/path";
 import { useRuntimes } from "@/hooks/use-runtime";
@@ -51,7 +48,7 @@ interface WorkspaceDialogProps {
 const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
 const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
-const ISOLATION_SCOPES = ["user", "workspace"] as const;
+const SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["builtin", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
@@ -61,12 +58,12 @@ function supportedRuntimeTypes(runtime: Runtime): WorkspaceRuntimeType[] {
   );
 }
 
-function supportedIsolationScopes(
+function supportedWorkerScopes(
   runtime: Runtime | undefined,
   runtimeType: WorkspaceRuntimeType
-): WorkspaceIsolationScope[] {
+): WorkspaceScope[] {
   return (runtime?.capabilities?.[runtimeType]?.scopes ?? []).filter(
-    isIsolationScope
+    isWorkerScope
   );
 }
 
@@ -108,7 +105,7 @@ const workspaceDialogFormSchema = z
     useGit: z.boolean(),
     placementMode: z.enum(PLACEMENT_MODES),
     runtimeType: z.enum(RUNTIME_TYPES),
-    isolationScope: z.enum(ISOLATION_SCOPES),
+    scope: z.enum(SCOPES),
     gitUrl: z.string().optional(),
     gitBranch: z.string().optional(),
     rootPath: z.string().optional(),
@@ -213,7 +210,7 @@ function WorkspaceDialogForm({
       useGit: false,
       placementMode: "builtin",
       runtimeType: "native",
-      isolationScope: "user",
+      scope: "user",
       gitUrl: "",
       gitBranch: "",
       rootPath: "",
@@ -226,15 +223,15 @@ function WorkspaceDialogForm({
     const current = form.getValues("runtimeType");
     const next = capabilities.allowedRuntimeTypes.includes(current)
       ? current
-      : capabilities.runtimeType;
+      : capabilities.defaultRuntimeType;
     if (next !== current) form.setValue("runtimeType", next);
-    const allowedScopes = capabilities.allowedIsolationScopes;
-    const currentScope = form.getValues("isolationScope");
+    const allowedScopes = capabilities.allowedScopes;
+    const currentScope = form.getValues("scope");
     const nextScope = allowedScopes.includes(currentScope)
       ? currentScope
-      : capabilities.isolationScope;
+      : capabilities.defaultScope;
     if (nextScope !== currentScope) {
-      form.setValue("isolationScope", nextScope);
+      form.setValue("scope", nextScope);
     }
   }, [capabilities, form, isEdit]);
 
@@ -280,8 +277,7 @@ function WorkspaceDialogForm({
           rootPath: normalizeFilesystemPath(values.rootPath ?? ""),
           runtimeHostId: values.runtimeHostId,
           runtimeType: values.runtimeType,
-          isolationScope:
-            values.runtimeType !== "native" ? values.isolationScope : undefined,
+          scope: values.runtimeType !== "native" ? values.scope : undefined,
         },
         {
           onSuccess: (created) => {
@@ -299,8 +295,7 @@ function WorkspaceDialogForm({
     const gitBranch =
       gitUrl && values.gitBranch?.trim() ? values.gitBranch.trim() : undefined;
     const runtimeType = values.runtimeType;
-    const isolationScope =
-      runtimeType !== "native" ? values.isolationScope : undefined;
+    const scope = runtimeType !== "native" ? values.scope : undefined;
     createWorkspace.mutate(
       {
         name,
@@ -308,7 +303,7 @@ function WorkspaceDialogForm({
         gitUrl,
         gitBranch,
         runtimeType,
-        isolationScope,
+        scope,
       },
       {
         onSuccess: (created) => {
@@ -355,25 +350,26 @@ function WorkspaceDialogForm({
   const useGit = form.watch("useGit");
   const placementMode = form.watch("placementMode");
   const runtimeType = form.watch("runtimeType");
-  const isolationScope = form.watch("isolationScope");
+  const scope = form.watch("scope");
   const rootPathValue = form.watch("rootPath") ?? "";
   const runtimeHostId = form.watch("runtimeHostId");
   const showPlacementToggle = !isEdit && registeredRuntimes.length > 0;
-  const selectedRuntime = registeredRuntimes.find((r) => r.id === runtimeHostId);
+  const selectedRuntime = registeredRuntimes.find(
+    (r) => r.id === runtimeHostId
+  );
   const selectedRuntimeTypes = useMemo(
     () => (selectedRuntime ? supportedRuntimeTypes(selectedRuntime) : []),
     [selectedRuntime]
   );
-  const selectedRuntimeIsolationScopes = useMemo(
-    () => supportedIsolationScopes(selectedRuntime, runtimeType),
+  const selectedRuntimeWorkerScopes = useMemo(
+    () => supportedWorkerScopes(selectedRuntime, runtimeType),
     [selectedRuntime, runtimeType]
   );
   const canSubmitRegistered =
     !!runtimeHostId &&
     !!rootPathValue.trim() &&
     selectedRuntimeTypes.includes(runtimeType) &&
-    (runtimeType === "native" ||
-      selectedRuntimeIsolationScopes.includes(isolationScope));
+    (runtimeType === "native" || selectedRuntimeWorkerScopes.includes(scope));
   const browserDisabled =
     placementMode === "registered" && selectedRuntime?.status !== "online";
 
@@ -388,36 +384,36 @@ function WorkspaceDialogForm({
     }
     if (
       runtimeType !== "native" &&
-      !selectedRuntimeIsolationScopes.includes(isolationScope)
+      !selectedRuntimeWorkerScopes.includes(scope)
     ) {
-      const fallback = selectedRuntimeIsolationScopes[0];
-      if (fallback) form.setValue("isolationScope", fallback as never);
+      const fallback = selectedRuntimeWorkerScopes[0];
+      if (fallback) form.setValue("scope", fallback as never);
     }
   }, [
     isEdit,
     form,
     selectedRuntime,
     selectedRuntimeTypes,
-    selectedRuntimeIsolationScopes,
+    selectedRuntimeWorkerScopes,
     runtimeType,
-    isolationScope,
+    scope,
   ]);
 
   const allowedRuntimeTypes = capabilities?.allowedRuntimeTypes ?? [
-    capabilities?.runtimeType ?? "native",
+    capabilities?.defaultRuntimeType ?? "native",
   ];
-  const allowedIsolationScopes = capabilities?.allowedIsolationScopes ?? [
-    capabilities?.isolationScope ?? "user",
+  const allowedScopes = capabilities?.allowedScopes ?? [
+    capabilities?.defaultScope ?? "user",
   ];
   const canSelectRuntimeType = allowedRuntimeTypes.length > 1;
-  const canSelectIsolationScope =
-    runtimeType !== "native" && allowedIsolationScopes.length > 1;
+  const canSelectWorkerScope =
+    runtimeType !== "native" && allowedScopes.length > 1;
   const canSubmitRuntimeType =
     isEdit || (capabilities && allowedRuntimeTypes.includes(runtimeType));
-  const canSubmitIsolationScope =
+  const canSubmitWorkerScope =
     isEdit ||
     runtimeType === "native" ||
-    (capabilities && allowedIsolationScopes.includes(isolationScope));
+    (capabilities && allowedScopes.includes(scope));
 
   // 通过 formId 关联 FormDialog 的 submit 按钮；
   // disabled 条件通过在 form 外面设置 FormDialog 的 submitDisabled prop 传递。
@@ -596,23 +592,23 @@ function WorkspaceDialogForm({
 
               {selectedRuntime && runtimeType !== "native" && (
                 <Controller
-                  name="isolationScope"
+                  name="scope"
                   control={form.control}
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel>沙箱隔离级别</FieldLabel>
+                      <FieldLabel>沙箱运行范围</FieldLabel>
                       <ToggleGroup
                         variant="segment"
                         spacing={0}
                         value={field.value ? [field.value] : []}
                         onValueChange={(value) => {
                           const v = value[0];
-                          if (!v || !isIsolationScope(v)) return;
+                          if (!v || !isWorkerScope(v)) return;
                           field.onChange(v);
                         }}
                         className="grid w-full grid-cols-2"
                       >
-                        {selectedRuntimeIsolationScopes.map((scope) => (
+                        {selectedRuntimeWorkerScopes.map((scope) => (
                           <ToggleGroupItem
                             key={scope}
                             value={scope}
@@ -684,17 +680,14 @@ function WorkspaceDialogForm({
                         value={field.value}
                         onValueChange={(v) => {
                           if (!v || !isWorkspaceRuntimeType(v)) return;
-                          const nextScope = resolveIsolationScopeForRuntimeType(
-                            {
-                              runtimeType: v,
-                              currentScope: form.getValues("isolationScope"),
-                              allowedScopes: allowedIsolationScopes,
-                              defaultScope:
-                                capabilities?.isolationScope ?? "user",
-                            }
-                          );
+                          const nextScope = resolveWorkerScopeForRuntimeType({
+                            runtimeType: v,
+                            currentScope: form.getValues("scope"),
+                            allowedScopes: allowedScopes,
+                            defaultScope: capabilities?.defaultScope ?? "user",
+                          });
                           field.onChange(v);
-                          form.setValue("isolationScope", nextScope);
+                          form.setValue("scope", nextScope);
                         }}
                       >
                         <SelectTrigger className="w-full">
@@ -716,25 +709,25 @@ function WorkspaceDialogForm({
                 />
               )}
 
-              {canSelectIsolationScope && (
+              {canSelectWorkerScope && (
                 <Controller
-                  name="isolationScope"
+                  name="scope"
                   control={form.control}
                   render={({ field, fieldState }) => (
                     <Field data-invalid={fieldState.invalid}>
-                      <FieldLabel>沙箱隔离级别</FieldLabel>
+                      <FieldLabel>沙箱运行范围</FieldLabel>
                       <ToggleGroup
                         variant="segment"
                         spacing={0}
                         value={field.value ? [field.value] : []}
                         onValueChange={(value) => {
                           const v = value[0];
-                          if (!v || !isIsolationScope(v)) return;
+                          if (!v || !isWorkerScope(v)) return;
                           field.onChange(v);
                         }}
                         className="grid w-full grid-cols-2"
                       >
-                        {allowedIsolationScopes.map((scope) => (
+                        {allowedScopes.map((scope) => (
                           <ToggleGroupItem
                             key={scope}
                             value={scope}
@@ -745,7 +738,7 @@ function WorkspaceDialogForm({
                         ))}
                       </ToggleGroup>
                       <FieldDescription>
-                        {getIsolationScopeDescription(field.value)}
+                        {getWorkerScopeDescription(field.value)}
                       </FieldDescription>
                       {fieldState.invalid && (
                         <FieldError errors={[fieldState.error]} />
@@ -894,7 +887,7 @@ function WorkspaceDialogForm({
             isPending ||
             (placementMode === "registered"
               ? !canSubmitRegistered
-              : !canSubmitRuntimeType || !canSubmitIsolationScope)
+              : !canSubmitRuntimeType || !canSubmitWorkerScope)
           }
         >
           {isPending
@@ -927,28 +920,28 @@ function runtimeTypeLabel(type: WorkspaceRuntimeType) {
   }
 }
 
-function isIsolationScope(value: string): value is WorkspaceIsolationScope {
+function isWorkerScope(value: string): value is WorkspaceScope {
   return value === "user" || value === "workspace";
 }
 
-function getIsolationScopeDescription(scope: WorkspaceIsolationScope) {
+function getWorkerScopeDescription(scope: WorkspaceScope) {
   return scope === "user"
-    ? "用户级沙箱会复用当前用户的隔离环境，适合共享依赖和缓存。"
-    : "工作空间级沙箱会为该工作空间单独隔离环境，适合需要独立状态的项目。";
+    ? "用户级沙箱会复用当前用户的运行环境，适合共享依赖和缓存。"
+    : "工作空间级沙箱会为该工作空间使用独立运行环境，适合需要独立状态的项目。";
 }
 
-function resolveIsolationScopeForRuntimeType({
+function resolveWorkerScopeForRuntimeType({
   runtimeType,
   currentScope,
   allowedScopes,
   defaultScope,
 }: {
   runtimeType: WorkspaceRuntimeType;
-  currentScope: WorkspaceIsolationScope;
-  allowedScopes: WorkspaceIsolationScope[];
-  defaultScope: WorkspaceIsolationScope;
-}): WorkspaceIsolationScope {
-  if (runtimeType === "native") return "user";
+  currentScope: WorkspaceScope;
+  allowedScopes: WorkspaceScope[];
+  defaultScope: WorkspaceScope;
+}): WorkspaceScope {
+  if (runtimeType === "native") return "workspace";
 
   const fallbackScope = allowedScopes.includes(defaultScope)
     ? defaultScope

@@ -78,8 +78,8 @@ model Workspace {
   description    String?
   // 创建时的一次性选择，不可改（要换 = 删了重建）。worker 复用粒度：
   // user（同用户项目共享）或 workspace（项目独享环境）。
-  isolationScope String
-  // 隔离实现（native / docker / opensandbox），创建时从 RuntimeHost 能力
+  scope String
+  // 执行方式（native / docker / opensandbox），创建时从 RuntimeHost 能力
   // 列表选定。Phase 2 expand 列，旧 Runtime.runtimeType 派生链已删除。
   runtimeType    String?
   // 绑定的 RuntimeHost（builtin 或 registered）；创建时写入，不可改（要换 = 删了重建）。
@@ -219,7 +219,7 @@ model RunEvent {
 
 /// RuntimeHost：一台执行机器的注册行。一机一行（builtin 合并）。
 /// builtin 行固定 id "builtin"，source="builtin"，能力矩阵在 capabilities 里列出
-/// 所有支持的 isolation。registered 行由远程机器注册时创建。
+/// 所有支持的 runtimeType。registered 行由远程机器注册时创建。
 model RuntimeHost {
   id              String    @id
   name            String

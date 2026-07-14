@@ -78,8 +78,7 @@ describe("getJwtSecret", () => {
 
 describe("runtime capability config", () => {
   const originalAllowedTypes = process.env.AGEWORK_RUNTIME_ALLOWED_TYPES;
-  const originalAllowedIsolationScopes =
-    process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES;
+  const originalAllowedScopes = process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
 
   afterEach(() => {
     if (originalAllowedTypes === undefined) {
@@ -87,11 +86,10 @@ describe("runtime capability config", () => {
     } else {
       process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = originalAllowedTypes;
     }
-    if (originalAllowedIsolationScopes === undefined) {
-      delete process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES;
+    if (originalAllowedScopes === undefined) {
+      delete process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
     } else {
-      process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES =
-        originalAllowedIsolationScopes;
+      process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES = originalAllowedScopes;
     }
   });
 
@@ -132,29 +130,29 @@ describe("runtime capability config", () => {
     );
   });
 
-  it("defaults to user runtimeType when AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES is unset", async () => {
-    delete process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES;
+  it("defaults to user scope when AGEWORK_RUNTIME_ALLOWED_SCOPES is unset", async () => {
+    delete process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
     const { service } = createService([]);
 
-    expect(service.getAllowedIsolationScopes()).toEqual(["user"]);
-    expect(service.getDefaultIsolationScope()).toBe("user");
+    expect(service.getAllowedScopes()).toEqual(["user"]);
+    expect(service.getDefaultWorkerScope()).toBe("user");
   });
 
-  it("parses allowed runtimeType scopes and uses the first as the create default", async () => {
-    process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = "workspace,user";
+  it("parses allowed worker scopes and uses the first as the create default", async () => {
+    process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES = "workspace,user";
     const { service } = createService([]);
 
-    expect(service.getAllowedIsolationScopes()).toEqual(["workspace", "user"]);
-    expect(service.getDefaultIsolationScope()).toBe("workspace");
-    expect(service.isIsolationScopeAllowed("user")).toBe(true);
+    expect(service.getAllowedScopes()).toEqual(["workspace", "user"]);
+    expect(service.getDefaultWorkerScope()).toBe("workspace");
+    expect(service.isWorkerScopeAllowed("user")).toBe(true);
   });
 
   it("fails fast on invalid runtimeType capability values", async () => {
-    process.env.AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES = "user,bogus";
+    process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES = "user,bogus";
     const { service } = createService([]);
 
-    expect(() => service.getAllowedIsolationScopes()).toThrow(
-      'AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES expects comma-separated values from "user", "workspace"'
+    expect(() => service.getAllowedScopes()).toThrow(
+      'AGEWORK_RUNTIME_ALLOWED_SCOPES expects comma-separated values from "user", "workspace"'
     );
   });
 });

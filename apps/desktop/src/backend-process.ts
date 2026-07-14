@@ -36,16 +36,20 @@ export function startBackend(
     AGEWORK_DEV_AUTH_DISABLED: "true",
     AGEWORK_SERVE_FRONTEND: "true",
     AGEWORK_RUNTIME_ALLOWED_TYPES: "native",
-    AGEWORK_RUNTIME_ALLOWED_ISOLATION_SCOPES: "user",
+    AGEWORK_RUNTIME_ALLOWED_SCOPES: "user",
   });
   if (!resources.backendExecPath) env.ELECTRON_RUN_AS_NODE = "1";
-  if (resources.claudeCliPath) env.AGEWORK_CLAUDE_CLI_PATH = resources.claudeCliPath;
-  if (resources.codexCliPath) env.AGEWORK_CODEX_CLI_PATH = resources.codexCliPath;
+  if (resources.claudeCliPath)
+    env.AGEWORK_CLAUDE_CLI_PATH = resources.claudeCliPath;
+  if (resources.codexCliPath)
+    env.AGEWORK_CODEX_CLI_PATH = resources.codexCliPath;
 
   const forkOptions = {
     cwd: resources.serverCwd,
     env,
-    ...(resources.backendExecPath ? { execPath: resources.backendExecPath } : {}),
+    ...(resources.backendExecPath
+      ? { execPath: resources.backendExecPath }
+      : {}),
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     windowsHide: true,
   } as Parameters<typeof fork>[2] & { windowsHide: boolean };
@@ -89,7 +93,9 @@ export async function waitForBackendReady(
   const { port, process: child } = handle;
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
-  let exitInfo: { code: number | null; signal: NodeJS.Signals | null } | undefined;
+  let exitInfo:
+    | { code: number | null; signal: NodeJS.Signals | null }
+    | undefined;
 
   const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
     exitInfo = { code, signal };

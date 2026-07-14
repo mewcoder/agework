@@ -81,14 +81,12 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
 
   const columns: DataTableColumnDef<WorkerSnapshot>[] = [
     {
-      id: "isolationScope",
-      header: "隔离级别",
+      id: "scope",
+      header: "运行范围",
       meta: { headerClassName: "pl-4", cellClassName: "pl-4" },
       cell: ({ row }) => (
         <DataTableBadge variant="outline">
-          {row.original.runtimeType === "native"
-            ? "host"
-            : row.original.isolationScope}
+          {row.original.runtimeType === "native" ? "host" : row.original.scope}
         </DataTableBadge>
       ),
     },
@@ -96,10 +94,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       id: "owner",
       header: "所有者",
       cell: ({ row }) => (
-        <DataTableText
-          className="max-w-[200px]"
-          title={row.original.ownerId}
-        >
+        <DataTableText className="max-w-[200px]" title={row.original.ownerId}>
           {row.original.ownerId}
         </DataTableText>
       ),
@@ -108,14 +103,18 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       id: "runtimeType",
       header: "类型",
       cell: ({ row }) => (
-        <DataTableBadge variant="outline">{row.original.runtimeType}</DataTableBadge>
+        <DataTableBadge variant="outline">
+          {row.original.runtimeType}
+        </DataTableBadge>
       ),
     },
     {
       id: "workspaceCount",
       header: "关联工作空间",
       cell: ({ row }) => (
-        <DataTableText>{row.original.workspaceBindings?.length ?? 0}</DataTableText>
+        <DataTableText>
+          {row.original.workspaceBindings?.length ?? 0}
+        </DataTableText>
       ),
     },
     {
@@ -130,17 +129,24 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
     {
       id: "createdAt",
       header: "创建时间",
-      cell: ({ row }) => <DataTableText>{formatDateTime(row.original.createdAt)}</DataTableText>,
+      cell: ({ row }) => (
+        <DataTableText>{formatDateTime(row.original.createdAt)}</DataTableText>
+      ),
     },
     {
       id: "updatedAt",
       header: "更新时间",
-      cell: ({ row }) => <DataTableText>{formatDateTime(row.original.updatedAt)}</DataTableText>,
+      cell: ({ row }) => (
+        <DataTableText>{formatDateTime(row.original.updatedAt)}</DataTableText>
+      ),
     },
     {
       id: "actions",
       header: "操作",
-      meta: { headerClassName: "pr-4 text-right", cellClassName: "pr-4 text-right" },
+      meta: {
+        headerClassName: "pr-4 text-right",
+        cellClassName: "pr-4 text-right",
+      },
       cell: ({ row }) => (
         <DataTableActions>
           {row.original.status === "running" && (
@@ -161,7 +167,9 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       {showHeader && (
         <div>
           <h2 className="text-lg font-semibold">Worker 管理</h2>
-          <p className="text-sm text-muted-foreground mt-0.5">查看和管理各用户 / 工作空间下常驻的 Worker</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            查看和管理各用户 / 工作空间下常驻的 Worker
+          </p>
         </div>
       )}
 

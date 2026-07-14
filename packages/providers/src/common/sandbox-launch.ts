@@ -55,7 +55,7 @@ export function buildSandboxStartInput(
   const runtimeLogDir = placement.runtimeLogDir;
   const serverBaseUrl = toContainerReachableUrl(cfg.serverBaseUrl);
   const sandboxPlacement: SandboxPlacement = {
-    isolationScope: placement.sandbox.isolationScope,
+    scope: placement.sandbox.scope,
     ownerId: ctx.ownerId,
     workspaceId: ctx.workspaceId,
     workspaceHostPath: placement.hostPath,
@@ -74,7 +74,7 @@ export function buildSandboxStartInput(
     },
     metadata: {
       "agework.io/runtime-owner-id": ctx.ownerId,
-      "agework.io/isolation-scope": placement.sandbox.isolationScope,
+      "agework.io/scope": placement.sandbox.scope,
     },
     runtimeLogHostPath: cfg.runtimeLogHostPath,
     runtimeLogMountPath: runtimeLogDir,

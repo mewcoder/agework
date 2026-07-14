@@ -1,7 +1,7 @@
 import type { WorkerKey } from "@agework/shared/protocol";
 
 /**
- * 一个 worker 在池中的条目。worker 是 Host 上的一个隔离执行代理：
+ * 一个 worker 在池中的条目。worker 是 Host 上的常驻执行代理：
  * 一个常驻进程，接命令、fork runner、回事件。
  */
 export type WorkerEntry = {

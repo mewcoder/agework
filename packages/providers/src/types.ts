@@ -1,4 +1,4 @@
-import type { IsolationScope, RuntimeSpec } from "@agework/shared/protocol";
+import type { WorkerScope, RuntimeSpec } from "@agework/shared/protocol";
 
 // ── runtime 类型:这个扩展点实现了哪些 runtime 的权威事实 ──────────────────
 
@@ -48,7 +48,7 @@ export type RuntimeConfig = {
 // 之间的内部契约,不导出) ──
 
 export type SandboxPlacement = {
-  isolationScope: IsolationScope;
+  scope: WorkerScope;
   ownerId: string;
   workspaceId: string;
   workspaceHostPath: string;
@@ -80,7 +80,7 @@ export type RuntimeSpecInput = {
   | { runtimeType: "native" }
   | {
       runtimeType: "docker" | "opensandbox";
-      isolationScope: IsolationScope;
+      scope: WorkerScope;
     }
 );
 
@@ -111,16 +111,16 @@ export type RuntimeInstanceRef = {
   ownerId: string;
   workerId: string;
   runtimeInstanceId: string;
-  isolationScope: string;
+  scope: WorkerScope;
 };
 
 /**
  * 某一 runtimeType 的运行形态:自声明类型 + 三段生命周期。
- * - start:建环境 + 起 worker（容器 create/start 合一，local 是 fork）。onExit 是
- *   调用方本地专属的子进程退出钩子,只有 local provider 真正接线(容器形态没有
+ * - start:建环境 + 起 worker（容器 create/start 合一，native 是 fork）。onExit 是
+ *   调用方本地专属的子进程退出钩子,只有 native provider 真正接线(容器形态没有
  *   本地子进程可监听);registered Host 不传、providers 也不转发它。
- * - stop:owner 仍在,停 worker 但保留载体（容器 stop/pause，local 杀进程）。
- * - destroy:owner 永久消失,删除载体（容器 rm/delete，local 杀进程）。
+ * - stop:owner 仍在,停 worker 但保留载体（容器 stop/pause，native 杀进程）。
+ * - destroy:owner 永久消失,删除载体（容器 rm/delete，native 杀进程）。
  */
 export interface RuntimeProvider {
   readonly type: RuntimeType;

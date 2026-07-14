@@ -52,7 +52,6 @@ function makeSubmitInput(runId: string): SubmitRunInput {
     conversationId: "conversation-1",
     placement: {
       owner: "workspace:ws-1",
-      isolationScope: "workspace",
       runtimeType: "native",
       runtimeHostId: "builtin",
       workspaceId: "ws-1",

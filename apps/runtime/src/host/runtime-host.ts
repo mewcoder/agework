@@ -311,7 +311,7 @@ export class RuntimeHost implements RuntimeHostContract {
       id: w.workerId,
       workerKey: w.key,
       runtimeType: w.key.split("#")[1] ?? "unknown",
-      isolationScope: parseOwnerKey(w.key.split("#")[0] as OwnerKey).scope,
+      scope: parseOwnerKey(w.key.split("#")[0] as OwnerKey).scope,
       ownerId: parseOwnerKey(w.key.split("#")[0] as OwnerKey).id,
       runIds: [...w.activeRuns],
       runtimeInstanceId: w.runtimeInstanceId,
@@ -337,7 +337,7 @@ export class RuntimeHost implements RuntimeHostContract {
       ownerId: parseOwnerKey(key.split("#")[0] as OwnerKey).id,
       workerId: entry.workerId,
       runtimeInstanceId: entry.runtimeInstanceId,
-      isolationScope: parseOwnerKey(key.split("#")[0] as OwnerKey).scope,
+      scope: parseOwnerKey(key.split("#")[0] as OwnerKey).scope,
     };
     try {
       await this.resolveProvider(runtimeType).stop(ref);
@@ -588,7 +588,7 @@ export class RuntimeHost implements RuntimeHostContract {
     return resolveRuntimeSpec({
       ...base,
       runtimeType,
-      isolationScope: placement.isolationScope,
+      scope: parseOwnerKey(placement.owner).scope,
     });
   }
 
@@ -688,7 +688,7 @@ export class RuntimeHost implements RuntimeHostContract {
       AGEWORK_WORKER_ID: workerId,
       AGEWORK_WORKER_START_TOKEN: startToken,
       AGEWORK_WORKER_RUNTIME_TYPE: runtimeType,
-      AGEWORK_WORKER_ISOLATION_SCOPE: placement.isolationScope,
+      AGEWORK_WORKER_SCOPE: parseOwnerKey(placement.owner).scope,
       AGEWORK_WORKER_WORKSPACE_PATH: runtimeTarget.runtimePath,
     };
     if (runConfig.workerLogFilePath) {
@@ -763,8 +763,7 @@ export class RuntimeHost implements RuntimeHostContract {
           ownerId: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).id,
           workerId: worker.workerId,
           runtimeInstanceId: worker.runtimeInstanceId,
-          isolationScope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey)
-            .scope,
+          scope: parseOwnerKey(worker.key.split("#")[0] as OwnerKey).scope,
         };
         Promise.resolve(this.resolveProvider(runtimeType).stop(ref)).catch(
           () => {}

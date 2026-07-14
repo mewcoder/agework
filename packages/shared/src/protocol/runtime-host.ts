@@ -1,4 +1,8 @@
-import type { AgentProviderConfig, CommandPayload } from "./channel";
+import type {
+  AgentProviderConfig,
+  CommandPayload,
+  WorkerScope,
+} from "./channel";
 import type { RunChannelMessage } from "./run-channel-message";
 import type { AgentType } from "../common";
 import type { RuntimeEnvConfig } from "../api/runtimes";
@@ -16,9 +20,6 @@ import type {
 //
 // 设计定案见 docs/design/server-runtime-worker-target-architecture.md §4.2。
 // run、环境、文件和观测能力统一经此契约进入目标 Host。
-
-/** worker 的服务范围：对用户是独享/共享承诺，对 Host 是复用粒度。 */
-export type WorkerScope = "workspace" | "user";
 
 /** native / docker / opensandbox，providers 扩展点决定取值。 */
 export type RuntimeType = string;
@@ -43,7 +44,6 @@ export type WorkerKey = `${OwnerKey}#${string}`;
  */
 export type RunPlacement = {
   owner: OwnerKey;
-  isolationScope: WorkerScope;
   runtimeType: RuntimeType;
   runtimeHostId: string;
   workspaceId: string;
@@ -85,7 +85,7 @@ export type WorkerSnapshot = {
   /** 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
   workerKey: WorkerKey;
   runtimeType: string;
-  isolationScope: string;
+  scope: string;
   ownerId: string;
   /** 仅供 admin 现场诊断关联 run，不持久化到 server。 */
   runIds: string[];

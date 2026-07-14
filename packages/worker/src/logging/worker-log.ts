@@ -120,7 +120,10 @@ function safeJsonLine(record: Record<string, unknown>): string {
   try {
     return JSON.stringify(record);
   } catch {
-    return JSON.stringify({ ...record, error: "failed to serialize log record" });
+    return JSON.stringify({
+      ...record,
+      error: "failed to serialize log record",
+    });
   }
 }
 
@@ -147,7 +150,9 @@ function writeTruncatedMarker(filePath: string): void {
   appendFileSync(filePath, `${line}\n`);
 }
 
-function resolveLogFiles(details: Record<string, unknown> | undefined): string[] {
+function resolveLogFiles(
+  details: Record<string, unknown> | undefined
+): string[] {
   const files = new Set<string>();
   const defaultFile =
     workerLogFilePath ??
@@ -192,7 +197,7 @@ function initialWorkerLogContext(): Record<string, unknown> {
   return compactObject({
     workerRole: process.env.AGEWORK_WORKER_ROLE,
     runtimeType: process.env.AGEWORK_WORKER_RUNTIME_TYPE,
-    isolationScope: process.env.AGEWORK_WORKER_ISOLATION_SCOPE,
+    scope: process.env.AGEWORK_WORKER_SCOPE,
     runtimeOwnerId: process.env.AGEWORK_WORKER_OWNER_ID,
     runtimeResourceName: process.env.AGEWORK_WORKER_RUNTIME_RESOURCE_NAME,
     containerHostname: hostname(),
@@ -201,7 +206,9 @@ function initialWorkerLogContext(): Record<string, unknown> {
   });
 }
 
-function compactObject(value: Record<string, unknown>): Record<string, unknown> {
+function compactObject(
+  value: Record<string, unknown>
+): Record<string, unknown> {
   return Object.fromEntries(
     Object.entries(value).filter(([, childValue]) => childValue !== undefined)
   );
@@ -220,7 +227,8 @@ function redactValue(
   if (value instanceof Error) return errorDetails(value);
   if (value instanceof Date) return value.toISOString();
   if (typeof value === "bigint") return value.toString();
-  if (typeof value === "function") return `[function ${value.name || "anonymous"}]`;
+  if (typeof value === "function")
+    return `[function ${value.name || "anonymous"}]`;
   if (!value || typeof value !== "object") return value;
   if (seen.has(value)) return "[circular]";
   seen.add(value);
