@@ -17,7 +17,6 @@ export type AdminRunResponse = {
   userId: string;
   agentType: string;
   runtimeType: string;
-  runtimeInstanceId: string | null;
   status: RunStatus;
   phase: string | null;
   error: string | null;

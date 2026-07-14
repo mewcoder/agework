@@ -48,14 +48,12 @@ export type RunnerManagerClient = {
 type RunnerProcess = {
   child: ChildProcess;
   runId: string;
-  conversationId: string;
   terminalSeen: boolean;
   cleaned: boolean;
 };
 
 export class RunnerManager {
   private readonly runners = new Map<string, RunnerProcess>();
-  private readonly conversationIdToRun = new Map<string, string>();
   private readonly commandSeqs = new Map<string, number>();
 
   constructor(
@@ -86,10 +84,14 @@ export class RunnerManager {
 
   async shutdown(signal: NodeJS.Signals): Promise<void> {
     const active = [...this.runners.values()];
-    workerLog("worker received shutdown signal", {
-      signal,
-      activeRuns: active.map((runner) => ({ runId: runner.runId })),
-    }, active.length > 0 ? "warn" : "info");
+    workerLog(
+      "worker received shutdown signal",
+      {
+        signal,
+        activeRuns: active.map((runner) => ({ runId: runner.runId })),
+      },
+      active.length > 0 ? "warn" : "info"
+    );
 
     await Promise.allSettled(
       active.map(async (runner) => {
@@ -115,10 +117,14 @@ export class RunnerManager {
     try {
       config = await this.client.fetchRunConfig(command.runId);
     } catch (err) {
-      workerLog("failed to fetch run config", {
-        runId: command.runId,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "failed to fetch run config",
+        {
+          runId: command.runId,
+          ...errorDetails(err),
+        },
+        "error"
+      );
       this.commandReceipts.failed(command.runId, command, String(err));
       await this.emitRunStatusSafely(command.runId, {
         status: "error",
@@ -128,11 +134,7 @@ export class RunnerManager {
     }
 
     if (this.runners.has(command.runId)) {
-      this.commandReceipts.failed(
-        command.runId,
-        command,
-        "run already active"
-      );
+      this.commandReceipts.failed(command.runId, command, "run already active");
       return;
     }
 
@@ -147,11 +149,15 @@ export class RunnerManager {
       runner = this.startRunner(config);
     } catch (err) {
       unregisterWorkerRunLog(config.runId);
-      workerLog("failed to start runner process", {
-        runId: command.runId,
-        commandId: command.commandId,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "failed to start runner process",
+        {
+          runId: command.runId,
+          commandId: command.commandId,
+          ...errorDetails(err),
+        },
+        "error"
+      );
       this.commandReceipts.failed(command.runId, command, String(err));
       await this.emitRunStatusSafely(command.runId, {
         status: "error",
@@ -162,7 +168,6 @@ export class RunnerManager {
     }
 
     this.runners.set(command.runId, runner);
-    this.conversationIdToRun.set(config.conversationId, command.runId);
 
     workerLog("started runner process", {
       runId: command.runId,
@@ -176,12 +181,20 @@ export class RunnerManager {
     const runner = this.runners.get(command.runId);
     if (!runner) {
       this.commandReceipts.received(command.runId, command);
-      this.commandReceipts.failed(command.runId, command, "no active run matched");
-      workerLog("command did not match an active runner", {
-        runId: command.runId,
-        commandId: command.commandId,
-        commandType: command.type,
-      }, "warn");
+      this.commandReceipts.failed(
+        command.runId,
+        command,
+        "no active run matched"
+      );
+      workerLog(
+        "command did not match an active runner",
+        {
+          runId: command.runId,
+          commandId: command.commandId,
+          commandType: command.type,
+        },
+        "warn"
+      );
       return;
     }
     this.sendCommandToRunner(runner, command);
@@ -189,36 +202,25 @@ export class RunnerManager {
 
   private forwardInterrupt(command: InterruptCommand): void {
     const runId = command.runId;
-    if (!runId) {
-      workerLog("interrupt command missing runId", {
-        commandId: command.commandId,
-      }, "warn");
-      return;
-    }
-
     const runner = this.runners.get(runId);
     if (!runner) {
       this.commandReceipts.received(runId, command);
       this.commandReceipts.failed(runId, command, "no active run matched");
-      workerLog("interrupt command did not match an active runner", {
-        runId,
-        commandId: command.commandId,
-      }, "warn");
+      workerLog(
+        "interrupt command did not match an active runner",
+        {
+          runId,
+          commandId: command.commandId,
+        },
+        "warn"
+      );
       return;
     }
     this.sendCommandToRunner(runner, command);
   }
 
   private forwardApprovalResolved(command: ApprovalResolvedCommand): void {
-    const runId = this.conversationIdToRun.get(command.conversationId);
-    if (!runId) {
-      workerLog("approval_resolved command had no runner mapping", {
-        conversationId: command.conversationId,
-        commandId: command.commandId,
-      }, "warn");
-      return;
-    }
-
+    const { runId } = command;
     const runner = this.runners.get(runId);
     if (!runner) {
       this.commandReceipts.received(runId, command);
@@ -231,7 +233,9 @@ export class RunnerManager {
   private startRunner(config: RunConfig): RunnerProcess {
     const workerEntryPath = process.argv[1];
     if (!workerEntryPath) {
-      throw new Error("Cannot start runner: current worker entry path is unknown");
+      throw new Error(
+        "Cannot start runner: current worker entry path is unknown"
+      );
     }
 
     const child = fork(resolveRunnerEntryPath(workerEntryPath), [], {
@@ -243,7 +247,6 @@ export class RunnerManager {
     const runner: RunnerProcess = {
       child,
       runId: config.runId,
-      conversationId: config.conversationId,
       terminalSeen: false,
       cleaned: false,
     };
@@ -255,18 +258,26 @@ export class RunnerManager {
       this.handleRunnerExit(runner, code, signal);
     });
     child.stdout?.on("data", (data: Buffer) => {
-      workerLog("runner stdout", {
-        runId: runner.runId,
-        pid: child.pid,
-        output: data.toString().trimEnd(),
-      }, "debug");
+      workerLog(
+        "runner stdout",
+        {
+          runId: runner.runId,
+          pid: child.pid,
+          output: data.toString().trimEnd(),
+        },
+        "debug"
+      );
     });
     child.stderr?.on("data", (data: Buffer) => {
-      workerLog("runner stderr", {
-        runId: runner.runId,
-        pid: child.pid,
-        output: data.toString().trimEnd(),
-      }, "debug");
+      workerLog(
+        "runner stderr",
+        {
+          runId: runner.runId,
+          pid: child.pid,
+          output: data.toString().trimEnd(),
+        },
+        "debug"
+      );
     });
 
     return runner;
@@ -289,11 +300,15 @@ export class RunnerManager {
         this.commandReceipts.handled(command.runId, command);
         return;
       }
-      workerLog("send run config to runner failed", {
-        runId: runner.runId,
-        pid: runner.child.pid,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "send run config to runner failed",
+        {
+          runId: runner.runId,
+          pid: runner.child.pid,
+          ...errorDetails(err),
+        },
+        "error"
+      );
       this.commandReceipts.failed(
         command.runId,
         command,
@@ -323,24 +338,32 @@ export class RunnerManager {
       if (!err) return;
       this.commandReceipts.received(runner.runId, command);
       this.commandReceipts.failed(runner.runId, command, String(err));
-      workerLog("send command to runner failed", {
-        runId: runner.runId,
-        commandId: command.commandId,
-        commandType: command.type,
-        pid: runner.child.pid,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "send command to runner failed",
+        {
+          runId: runner.runId,
+          commandId: command.commandId,
+          commandType: command.type,
+          pid: runner.child.pid,
+          ...errorDetails(err),
+        },
+        "error"
+      );
     });
   }
 
   private handleRunnerMessage(runner: RunnerProcess, msg: unknown): void {
     const upstream = upstreamMessageFromRunner(msg, runner.runId);
     if (!upstream) {
-      workerLog("runner ipc message ignored", {
-        runId: runner.runId,
-        pid: runner.child.pid,
-        reason: "invalid_message",
-      }, "warn");
+      workerLog(
+        "runner ipc message ignored",
+        {
+          runId: runner.runId,
+          pid: runner.child.pid,
+          reason: "invalid_message",
+        },
+        "warn"
+      );
       return;
     }
 
@@ -349,10 +372,14 @@ export class RunnerManager {
       void this.client
         .emit(runner.runId, upstream)
         .catch((err) => {
-          workerLog("forward runner terminal status failed", {
-            runId: runner.runId,
-            ...errorDetails(err),
-          }, "error");
+          workerLog(
+            "forward runner terminal status failed",
+            {
+              runId: runner.runId,
+              ...errorDetails(err),
+            },
+            "error"
+          );
         })
         .finally(() => {
           this.cleanupRunner(runner.runId);
@@ -361,11 +388,15 @@ export class RunnerManager {
     }
 
     void this.client.emit(runner.runId, upstream).catch((err) => {
-      workerLog("forward runner event failed", {
-        runId: runner.runId,
-        type: upstream.type,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "forward runner event failed",
+        {
+          runId: runner.runId,
+          type: upstream.type,
+          ...errorDetails(err),
+        },
+        "error"
+      );
     });
   }
 
@@ -396,22 +427,30 @@ export class RunnerManager {
   }
 
   private terminateRunner(runner: RunnerProcess, reason: string): void {
-    workerLog("terminating runner process", {
-      runId: runner.runId,
-      pid: runner.child.pid,
-      reason,
-    }, "warn");
+    workerLog(
+      "terminating runner process",
+      {
+        runId: runner.runId,
+        pid: runner.child.pid,
+        reason,
+      },
+      "warn"
+    );
     try {
       if (!runner.child.killed) {
         runner.child.kill("SIGTERM");
         this.scheduleForceKill(runner);
       }
     } catch (err) {
-      workerLog("terminate runner process failed", {
-        runId: runner.runId,
-        pid: runner.child.pid,
-        ...errorDetails(err),
-      }, "warn");
+      workerLog(
+        "terminate runner process failed",
+        {
+          runId: runner.runId,
+          pid: runner.child.pid,
+          ...errorDetails(err),
+        },
+        "warn"
+      );
     }
   }
 
@@ -421,18 +460,26 @@ export class RunnerManager {
       if (runner.child.exitCode !== null || runner.child.signalCode !== null) {
         return; // 已退出,无需强杀
       }
-      workerLog("runner did not exit after SIGTERM, sending SIGKILL", {
-        runId: runner.runId,
-        pid: runner.child.pid,
-      }, "warn");
+      workerLog(
+        "runner did not exit after SIGTERM, sending SIGKILL",
+        {
+          runId: runner.runId,
+          pid: runner.child.pid,
+        },
+        "warn"
+      );
       try {
         runner.child.kill("SIGKILL");
       } catch (err) {
-        workerLog("force kill runner failed", {
-          runId: runner.runId,
-          pid: runner.child.pid,
-          ...errorDetails(err),
-        }, "warn");
+        workerLog(
+          "force kill runner failed",
+          {
+            runId: runner.runId,
+            pid: runner.child.pid,
+            ...errorDetails(err),
+          },
+          "warn"
+        );
       }
     }, RUNNER_SIGKILL_GRACE_MS);
     // 强杀兜底不该拖住进程正常退出
@@ -445,7 +492,6 @@ export class RunnerManager {
 
     runner.cleaned = true;
     this.runners.delete(runId);
-    this.conversationIdToRun.delete(runner.conversationId);
     this.commandSeqs.delete(runId);
     unregisterWorkerRunLog(runId);
     this.client.cleanup(runId);
@@ -465,11 +511,15 @@ export class RunnerManager {
     try {
       await this.emitRunStatus(runId, payload);
     } catch (err) {
-      workerLog("emit run status failed", {
-        runId,
-        status: payload.status,
-        ...errorDetails(err),
-      }, "error");
+      workerLog(
+        "emit run status failed",
+        {
+          runId,
+          status: payload.status,
+          ...errorDetails(err),
+        },
+        "error"
+      );
     }
   }
 }

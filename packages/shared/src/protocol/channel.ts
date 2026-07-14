@@ -118,10 +118,12 @@ export type AgentProviderConfig =
 /** 控制面 → worker 的下行命令消息。 */
 export type CommandPayload =
   | { type: "cancel"; commandId: string; runId: string; conversationId: string }
-  | { type: "interrupt"; commandId: string; runId?: string }
+  | { type: "interrupt"; commandId: string; runId: string }
   | {
       type: "approval_resolved";
       commandId: string;
+      /** 全链路唯一命令路由键。Worker 不按 conversationId 维护业务索引。 */
+      runId: string;
       conversationId: string;
       /**
        * Provider-agnostic opaque payload（【决策2】 generalized resume contract）.
@@ -256,33 +258,15 @@ export type SandboxRuntimeSpec = {
 
 export type RuntimeSpec = NativeRuntimeSpec | SandboxRuntimeSpec;
 
-// ── WorkerExecutionHandle / RuntimeSpec ───────────────────────────
-// worker↔api 主路径上传递的 run/资源句柄。Runtime resource preparation and
-// worker execution are split at the service boundary:
-// RuntimeService.resolveRuntimeSpec() returns RuntimeSpec, while
-// startWorkerExecution() starts/attaches a per-run worker session.
-//
-// 注：API 进程内的 provider 抽象（RuntimeProvider）与事件回调端口（RunEventReceiver）
-// 不是跨进程线缆协议，定义在 apps/server/src/runtime 下，不在此处。
+// ── RunExecutionHandle ────────────────────────────────────────────
 
-/** 一次 run 的 worker/session 执行句柄。 */
-export interface WorkerExecutionHandle {
+/** Server 侧一次 run 的最小执行路由句柄，不暴露 worker/容器实例细节。 */
+export interface RunExecutionHandle {
   runId: string;
+  runtimeHostId: string;
   runtimeType: string;
-  runtimeInstanceId: string;
   conversationId: string;
 }
-
-/**
- * runtime 为一次 run 取得（创建/复用/attach）持久容器实例的结果。
- * runtime 退成纯资源层，把就绪/失败两类事实一次性回传 run 层执行编排：
- *   - ready：容器就绪，附带 runtimeInstanceId（run 据此自行 openSession）
- *   - error：容器创建/启动失败
- * 取消请求早于容器就绪到达时，run 层在 ready 分支通过自身 state.cancelled 自处理。
- */
-export type AcquireInstanceResult =
-  | { outcome: "ready"; workerId: string; runtimeInstanceId: string }
-  | { outcome: "error"; error: string };
 
 /**
  * worker 进程启动后向 `POST /worker/:workerId/register` 发起的注册握手请求体。

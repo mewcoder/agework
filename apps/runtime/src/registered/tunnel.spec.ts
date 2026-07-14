@@ -73,6 +73,7 @@ describe("TunnelClient", () => {
       workerImage: "agework/runtime:latest",
     };
     const hostContract = {
+      releaseRun: vi.fn(),
       listFiles: vi.fn().mockResolvedValue({
         path: "src",
         list: [{ name: "a.ts", type: "file", size: 10 }],
@@ -191,6 +192,26 @@ describe("TunnelClient", () => {
         runtimeHostId: "rt-1",
         rootPath: "/workspace",
         path: "src",
+      });
+    });
+
+    it("forwards a run-scoped release notification without local routing state", async () => {
+      const { hostContract } = makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          method: "host.releaseRun",
+          params: { runtimeHostId: "rt-1", runId: "run-1" },
+        })
+      );
+
+      await vi.waitFor(() => {
+        expect(hostContract.releaseRun).toHaveBeenCalledWith({
+          runtimeHostId: "rt-1",
+          runId: "run-1",
+        });
       });
     });
   });

@@ -74,8 +74,9 @@ describe("worker JSON-RPC protocol helpers", () => {
       payload: {
         type: "approval_resolved",
         commandId: "cmd-1",
+        runId: "run-1",
         conversationId: "conv-1",
-        payload: { answers: { allowed: "yes" }, },
+        payload: { answers: { allowed: "yes" } },
       },
       ts: "2026-06-27T00:00:00.000Z",
     });
@@ -218,6 +219,29 @@ describe("worker JSON-RPC protocol helpers", () => {
         params: {},
       })
     ).toBe(false);
+
+    expect(
+      isWorkerCommandRpcRequest({
+        jsonrpc: "2.0",
+        id: "cmd-4",
+        method: "control.resolve",
+        params: {
+          conversationId: "conv-1",
+          payload: { decision: "accept" },
+        },
+      })
+    ).toBe(false);
+  });
+
+  it("accepts a valid run-scoped command without optional RPC metadata", () => {
+    expect(
+      isWorkerCommandRpcRequest({
+        jsonrpc: "2.0",
+        id: "cmd-1",
+        method: "run.interrupt",
+        params: { runId: "run-1" },
+      })
+    ).toBe(true);
   });
 
   it("rejects worker event notifications with invalid params", () => {

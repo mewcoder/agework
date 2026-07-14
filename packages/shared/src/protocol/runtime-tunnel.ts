@@ -1,10 +1,10 @@
 import type { RpcRequest, RpcResponse, RpcNotification } from "./rpc";
-import type { CommandPayload } from "./channel";
 import type { RunChannelMessage } from "./run-channel-message";
 import type {
   SubmitRunInput,
   OwnerKey,
-  ExecutionRef,
+  RuntimeHostCommandInput,
+  RuntimeHostRunRef,
   WorkerKey,
   WorkerSnapshot,
   HostCapabilityStatus,
@@ -32,7 +32,7 @@ import type {
 /**
  * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。
  * 出站 WS 连接,runtime 配对 token 鉴权(HTTP upgrade 时经 Authorization header 携带);
- * 与 worker↔server 的数据面(worker-http,startToken 鉴权)完全独立。
+ * 与 Host↔worker 的数据面(worker-http,startToken 鉴权)完全独立。
  */
 
 export type { RuntimeCapabilities } from "./runtime-capabilities";
@@ -69,7 +69,7 @@ export interface RuntimeTunnelRegisteredMessage {
 
 export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
 
-// ── Phase 2: 执行面隧道协议扩展 ──────────────────────────────────────
+// ── 执行面隧道协议 ──────────────────────────────────────────────────
 //
 // server → Host:submitRun / command / releaseOwner(有去有回,ACK 语义)。
 // Host → server:host.upstream(单向通知,承载事件流与终态事实)。
@@ -79,10 +79,7 @@ export type RuntimeTunnelServerMessage = RuntimeTunnelRegisteredMessage;
 export type HostSubmitRunRpcParams = SubmitRunInput;
 
 /** server → Host:下发 run 级命令。 */
-export type HostCommandRpcParams = {
-  runId: string;
-  payload: CommandPayload;
-};
+export type HostCommandRpcParams = RuntimeHostCommandInput;
 
 /** server → Host:owner 级释放。 */
 export type HostReleaseOwnerRpcParams = {
@@ -94,8 +91,7 @@ export type HostUpstreamNotification =
   | { kind: "emit"; runId: string; message: RunChannelMessage }
   | { kind: "runFailed"; runId: string; error: string }
   | { kind: "runCancelled"; runId: string }
-  | { kind: "workerLost"; runId: string; reason: string }
-  | { kind: "executionRef"; runId: string; ref: ExecutionRef };
+  | { kind: "workerLost"; runId: string; reason: string };
 
 /**
  * host.upstream 的传输信封:Host 进程内单调递增 seq + 会话 epoch。
@@ -115,7 +111,7 @@ export type HostUpstreamEnvelope = {
 export type HostUpstreamAckParams = { seq: number };
 
 /** server → Host:run 已终结,Host 清理该 run 的状态(单向,best-effort)。 */
-export type HostReleaseRunParams = { runId: string };
+export type HostReleaseRunParams = RuntimeHostRunRef;
 
 export type RuntimeTunnelHostRpcRequest =
   | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>

@@ -136,12 +136,11 @@ export class RunEventService {
     };
   }
 
-  /** 构建 runtime.status_changed 事件：记录 runtime 实例的状态与隔离/引擎信息。 */
+  /** 构建 runtime.status_changed 事件：记录 runtimeType 的状态与 scope 信息。 */
   runtimeStatusChanged(
     input: RunEventBase & {
       status: string;
       runtimeType?: string;
-      runtimeInstanceId?: string;
       isolationScope?: string;
       error?: string;
     }
@@ -159,7 +158,6 @@ export class RunEventService {
       data: compactData({
         status: input.status,
         runtimeType: input.runtimeType,
-        runtimeInstanceId: input.runtimeInstanceId,
         isolationScope: input.isolationScope,
         error: input.error,
         ...input.data,

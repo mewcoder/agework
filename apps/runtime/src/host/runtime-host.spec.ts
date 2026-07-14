@@ -15,7 +15,6 @@ function makeUpstream() {
     notifyRunFailed: vi.fn().mockResolvedValue(undefined),
     notifyRunCancelled: vi.fn().mockResolvedValue(undefined),
     notifyWorkerLost: vi.fn().mockResolvedValue(undefined),
-    notifyExecutionRef: vi.fn(),
   } satisfies RuntimeHostUpstream;
 }
 
@@ -127,13 +126,12 @@ describe("RuntimeHost", () => {
 
     const workerId = await submitAndHandshake(host, "run-1");
 
-    expect(upstream.notifyExecutionRef).toHaveBeenCalledWith("run-1", {
-      runtimeType: "native",
-      runtimeInstanceId: "inst-1",
-    });
     const { commands } = await host.pollCommands(workerId, { afterSeq: 0 });
     expect(commands.map((c) => c.payload.type)).toEqual(["user_message"]);
     expect(host.getRunConfig("run-1")).toMatchObject({ runId: "run-1" });
+    expect(await host.listWorkers()).toEqual([
+      expect.objectContaining({ id: workerId, runIds: ["run-1"] }),
+    ]);
   });
 
   it("builds a RunConfig for a run that reuses an existing worker(复用路径)", async () => {
@@ -166,11 +164,15 @@ describe("RuntimeHost", () => {
     );
 
     await host.submitRun(makeSubmitInput("run-1"));
-    await host.command("run-1", {
-      type: "cancel",
-      commandId: "cmd-1",
-      runId: "run-1",
-    } as never);
+    await host.command({
+      runtimeHostId: "builtin",
+      payload: {
+        type: "cancel",
+        commandId: "cmd-1",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      },
+    });
 
     // worker 就绪:cancel 转 cancelled 终态,不开会话
     resolveStart({ runtimeInstanceId: "inst-1" });
@@ -301,7 +303,7 @@ describe("RuntimeHost", () => {
     );
     await submitAndHandshake(host, "run-1");
 
-    host.releaseRun("run-1");
+    host.releaseRun({ runtimeHostId: "builtin", runId: "run-1" });
 
     expect(host.getRunConfig("run-1")).toBeUndefined();
     // releaseRun 后同 runId 重新提交不再被幂等吸收

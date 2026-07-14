@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { join, posix } from "node:path";
 import type {
-  AcquireInstanceResult,
   AgentProviderConfig,
   CommandPayload,
   CreateDirectoryInput,
   DirectoryListing,
-  ExecutionRef,
   HostCapabilityStatus,
   InstallCliInput,
   InstallCliResult,
@@ -19,6 +17,8 @@ import type {
   RunConfig,
   RunPlacement,
   RuntimeHostContract,
+  RuntimeHostCommandInput,
+  RuntimeHostRunRef,
   RuntimeHostUpstream,
   RuntimeSpec,
   SearchFilesInput,
@@ -94,8 +94,7 @@ export interface RuntimeHostConfig {
   providerConfig: RuntimeConfig;
   /**
    * worker 回连 Host 的 HTTP 基地址（如 `http://0.0.0.0:7101/api/v1`）。
-   * worker 的 AGEWORK_WORKER_API_BASE 设为此值，使 worker 数据面对端从 server 切到 Host。
-   * builtin 场景（进程内）可省略——worker 仍连 server 旧端点。
+   * worker 的 AGEWORK_WORKER_API_BASE 设为此值；builtin 与 registered 都由各自 Host 承接数据面。
    */
   workerApiBaseUrl?: string;
   /**
@@ -188,18 +187,20 @@ export class RuntimeHost implements RuntimeHostContract {
 
     if (existing?.status === "ready") {
       // 复用已有 worker
-      this.onWorkerReady(runId, existing, input);
+      this.onWorkerReady(runId, existing);
       return;
     }
 
     // 异步取得 worker——受理即返回
     this.acquireWorker(input, wKey, runtimeTarget, runConfig).then(
-      (entry) => this.onAcquired(runId, input, wKey, entry),
+      (entry) => this.onAcquired(runId, wKey, entry),
       (err) => this.onAcquireFailed(runId, err)
     );
   }
 
-  async command(runId: string, payload: CommandPayload): Promise<void> {
+  async command(input: RuntimeHostCommandInput): Promise<void> {
+    const { payload } = input;
+    const { runId } = payload;
     const state = this.states.get(runId);
     if (!state) return;
 
@@ -312,6 +313,7 @@ export class RuntimeHost implements RuntimeHostContract {
       runtimeType: w.key.split("#")[1] ?? "unknown",
       isolationScope: parseOwnerKey(w.key.split("#")[0] as OwnerKey).scope,
       ownerId: parseOwnerKey(w.key.split("#")[0] as OwnerKey).id,
+      runIds: [...w.activeRuns],
       runtimeInstanceId: w.runtimeInstanceId,
       status: w.status,
       expiresAt: null,
@@ -349,29 +351,11 @@ export class RuntimeHost implements RuntimeHostContract {
     }
   }
 
-  // ── 过渡成员 ────────────────────────────────────────────────────────
-
-  releaseRun(runId: string): void {
+  releaseRun(input: RuntimeHostRunRef): void {
+    const { runId } = input;
     this.pool.dissociateRun(runId);
     this.runConfigs.delete(runId);
     this.states.delete(runId);
-  }
-
-  async sendRecoveryCancel(input: {
-    runId: string;
-    conversationId: string;
-    ref: ExecutionRef;
-  }): Promise<void> {
-    // builtin Host 与 server 同生共死，重启后无存活 worker，空操作
-  }
-
-  async getWorkerSnapshotForAdmin(
-    ref: ExecutionRef
-  ): Promise<WorkerSnapshot | null> {
-    const workers = await this.listWorkers();
-    return (
-      workers.find((w) => w.runtimeInstanceId === ref.runtimeInstanceId) ?? null
-    );
   }
 
   // ── worker 生命周期 ─────────────────────────────────────────────────
@@ -451,12 +435,7 @@ export class RuntimeHost implements RuntimeHostContract {
     return this.pool.get(wKey)!;
   }
 
-  private onAcquired(
-    runId: string,
-    input: SubmitRunInput,
-    wKey: WorkerKey,
-    entry: WorkerEntry
-  ): void {
+  private onAcquired(runId: string, wKey: WorkerKey, entry: WorkerEntry): void {
     const state = this.states.get(runId);
     if (!state) return;
 
@@ -474,12 +453,6 @@ export class RuntimeHost implements RuntimeHostContract {
     state.status = "ready";
     this.pool.associateRun(wKey, runId);
 
-    // 通知 ExecutionRef（过渡）
-    this.upstream.notifyExecutionRef(runId, {
-      runtimeType: input.placement.runtimeType,
-      runtimeInstanceId: entry.runtimeInstanceId,
-    });
-
     // 下发首条 user_message(runConfig 已在 submitRun 存入,worker 经 getRunConfig 拉取)
     this.dispatch(entry.workerId, runId, {
       type: "user_message",
@@ -495,16 +468,8 @@ export class RuntimeHost implements RuntimeHostContract {
       .catch(() => {});
   }
 
-  private onWorkerReady(
-    runId: string,
-    entry: WorkerEntry,
-    input: SubmitRunInput
-  ): void {
+  private onWorkerReady(runId: string, entry: WorkerEntry): void {
     this.pool.associateRun(entry.key, runId);
-    this.upstream.notifyExecutionRef(runId, {
-      runtimeType: input.placement.runtimeType,
-      runtimeInstanceId: entry.runtimeInstanceId,
-    });
     this.dispatch(entry.workerId, runId, {
       type: "user_message",
       commandId: generateId(),
@@ -729,9 +694,8 @@ export class RuntimeHost implements RuntimeHostContract {
     if (runConfig.workerLogFilePath) {
       env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
     }
-    // Phase 2: worker 数据面对端从 server 切到 Host。
-    // provider（native / sandbox）会用 RuntimeConfig.serverBaseUrl 覆盖此值——
-    // 因此 providerConfig.serverBaseUrl 也必须设为 Host 的 worker HTTP 端点。
+    // provider（native / sandbox）会用 RuntimeConfig.serverBaseUrl 覆盖此值，
+    // 因此 providerConfig.serverBaseUrl 必须指向本 Host 的 worker HTTP 端点。
     if (this.config.workerApiBaseUrl) {
       env.AGEWORK_WORKER_API_BASE = this.config.workerApiBaseUrl;
     }

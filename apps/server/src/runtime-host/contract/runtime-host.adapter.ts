@@ -1,11 +1,9 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { generateId } from "@agework/shared";
+import { generateId, isTerminalRunStatus } from "@agework/shared";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
-  CommandPayload,
   CreateDirectoryInput,
   DirectoryListing,
-  ExecutionRef,
   HostCapabilityStatus,
   HostUpstreamNotification,
   HostListWorkersRpcResult,
@@ -16,7 +14,10 @@ import type {
   OwnerKey,
   ReadFileDiffInput,
   ReadFileInput,
+  RunStatusPayload,
   RuntimeHostContract,
+  RuntimeHostCommandInput,
+  RuntimeHostRunRef,
   RuntimeHostUpstream,
   SearchFilesInput,
   SubmitRunInput,
@@ -39,11 +40,6 @@ import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
 
-/** 一次已提交 run 的路由状态:command/releaseRun 需要知道该 run 落在哪台 Host。 */
-type SubmittedRunState = {
-  runtimeHostId: string;
-};
-
 /**
  * `RuntimeHostContract` 的 server 侧路由实现(目标架构设计文档 §7 Phase 2):
  * run 模块只经契约动词消费执行面,本类按 placement.runtimeHostId 分两路——
@@ -58,7 +54,6 @@ type SubmittedRunState = {
 @Injectable()
 export class RuntimeHostAdapter implements RuntimeHostContract {
   private readonly logger = new Logger(RuntimeHostAdapter.name);
-  private readonly states = new Map<string, SubmittedRunState>();
   private upstream!: RuntimeHostUpstream;
 
   constructor(
@@ -80,53 +75,34 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async submitRun(input: SubmitRunInput): Promise<void> {
-    const { runId, placement } = input;
-    if (this.states.has(runId)) return; // 幂等：同 runId 重复提交是空操作
-
-    this.states.set(runId, { runtimeHostId: placement.runtimeHostId });
+    const { placement } = input;
     if (isBuiltinHostId(placement.runtimeHostId)) {
       // spec/config 组装失败在受理前同步抛出(配置/入参问题),由调用方按启动失败处理
-      try {
-        await this.builtinHost.submitRun(input);
-      } catch (err) {
-        this.states.delete(runId);
-        throw err;
-      }
+      await this.builtinHost.submitRun(input);
       return;
     }
     await this.submitRunViaTunnel(input);
   }
 
-  async command(runId: string, payload: CommandPayload): Promise<void> {
-    const state = this.states.get(runId);
-    if (!state) {
-      this.logger.warn("command dropped", {
-        runId,
-        commandType: payload.type,
-        reason: "no_active_state",
-      });
-      return;
-    }
-    if (isBuiltinHostId(state.runtimeHostId)) {
+  async command(input: RuntimeHostCommandInput): Promise<void> {
+    if (isBuiltinHostId(input.runtimeHostId)) {
       // 就绪前 cancel 吸收、命令下发审计(onCommandDispatched)都在 Host 内
-      await this.builtinHost.command(runId, payload);
+      await this.builtinHost.command(input);
       return;
     }
-    await this.commandViaTunnel(state.runtimeHostId, runId, payload);
+    await this.commandViaTunnel(input);
   }
 
-  releaseRun(runId: string): void {
-    const state = this.states.get(runId);
-    this.states.delete(runId);
-    if (!state || isBuiltinHostId(state.runtimeHostId)) {
-      this.builtinHost.releaseRun(runId);
+  releaseRun(input: RuntimeHostRunRef): void {
+    if (isBuiltinHostId(input.runtimeHostId)) {
+      this.builtinHost.releaseRun(input);
       return;
     }
     // 隧道 Host 的状态清理:单向通知,best-effort(Host 掉线就等它的 fence 自清)
-    this.runtimeService.sendTunnelNotification(state.runtimeHostId, {
+    this.runtimeService.sendTunnelNotification(input.runtimeHostId, {
       jsonrpc: "2.0",
       method: "host.releaseRun",
-      params: { runId },
+      params: input,
     });
   }
 
@@ -148,7 +124,6 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
         timeoutMs
       );
     } catch (err) {
-      this.states.delete(runId);
       this.upstream
         .notifyRunFailed(runId, `tunnel submitRun failed: ${String(err)}`)
         .catch(() => {});
@@ -157,10 +132,10 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
 
   /** 通过隧道向 Host 发 command。 */
   private async commandViaTunnel(
-    runtimeHostId: string,
-    runId: string,
-    payload: CommandPayload
+    input: RuntimeHostCommandInput
   ): Promise<void> {
+    const { runtimeHostId, payload } = input;
+    const { runId } = payload;
     // 「命令已下发」记账(进程内 Host 由 onCommandDispatched 钩子记,这里补隧道路径)
     this.runEvents
       .append(
@@ -179,7 +154,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
           jsonrpc: "2.0",
           id: `${runId}:${payload.commandId}`,
           method: "host.command",
-          params: { runId, payload },
+          params: input,
         },
         timeoutMs
       );
@@ -197,12 +172,6 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     notification: HostUpstreamNotification,
     upstream: RuntimeHostUpstream
   ): Promise<void> {
-    // server 重启后 states 丢失:Host 按 ACK 水位补发事件流,从续传的第一条
-    // 通知重建路由状态(后续 cancel/resume 命令需要 runtimeHostId)。
-    // 已终结 run 的迟到通知也会建条目,靠 run 侧 releaseRun 或下次重启清掉。
-    if (!this.states.has(notification.runId)) {
-      this.states.set(notification.runId, { runtimeHostId });
-    }
     switch (notification.kind) {
       case "emit":
         await upstream.emit(notification.runId, notification.message);
@@ -219,28 +188,10 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
           notification.reason
         );
         break;
-      case "executionRef":
-        upstream.notifyExecutionRef(notification.runId, notification.ref);
-        break;
     }
-  }
-
-  async sendRecoveryCancel(_input: {
-    runId: string;
-    conversationId: string;
-    ref: ExecutionRef;
-  }): Promise<void> {
-    // builtin Host 随 server 同生共死；server 重启后进程内 worker 池已清空，
-    // 旧容器里的 worker 回连时 token 校验 410,自行退出(孤儿自清)。无需补发 cancel。
-  }
-
-  async getWorkerSnapshotForAdmin(
-    ref: ExecutionRef
-  ): Promise<WorkerSnapshot | null> {
-    const workers = await this.listWorkers();
-    return (
-      workers.find((w) => w.runtimeInstanceId === ref.runtimeInstanceId) ?? null
-    );
+    if (isTerminalHostNotification(notification)) {
+      this.releaseRun({ runtimeHostId, runId: notification.runId });
+    }
   }
 
   // ── 环境 / 文件 / 观测 契约方法 ─────────────────────────────────────
@@ -470,4 +421,13 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       }
     }
   }
+}
+
+function isTerminalHostNotification(
+  notification: HostUpstreamNotification
+): boolean {
+  if (notification.kind !== "emit") return true;
+  if (notification.message.type !== "run.status") return false;
+  const payload = notification.message.payload as RunStatusPayload;
+  return isTerminalRunStatus(payload.status);
 }

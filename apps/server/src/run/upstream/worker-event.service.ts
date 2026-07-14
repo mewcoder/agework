@@ -4,10 +4,9 @@ import type {
   RunStatusPayload,
   CommandResultPayload,
   CommandTracePayload,
-  ExecutionRef,
+  RunExecutionHandle,
   RuntimeHostContract,
   RuntimeHostUpstream,
-  WorkerExecutionHandle,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
 import { RUNTIME_HOST_CONTRACT } from "../../runtime-host/runtime-host.types";
@@ -87,7 +86,7 @@ export class WorkerEventService
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
       if (isTerminalRunStatus(status) && handle) {
-        this.runtimeHost.releaseRun(handle.runtimeHandle.runId);
+        this.runtimeHost.releaseRun(handle.runtimeHandle);
       }
     }
   }
@@ -109,31 +108,6 @@ export class WorkerEventService
   async notifyRunCancelled(runId: string): Promise<void> {
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceCancelledStatus(runId);
-  }
-
-  /**
-   * 执行载体就绪:落库 run 行的执行标识(admin 详情/重启恢复用)、记 ready 事件、
-   * 同步 live handle 的 runtimeInstanceId。eventKey 保证重复通知幂等。
-   */
-  notifyExecutionRef(runId: string, ref: ExecutionRef): void {
-    const handle = this.liveRuns.get(runId);
-    if (handle) {
-      handle.runtimeHandle.runtimeInstanceId = ref.runtimeInstanceId;
-    }
-    void this.runRepository
-      .updateRuntimeHandle(runId, ref.runtimeType, ref.runtimeInstanceId)
-      .catch(swallow(this.logger, `persist runtime handle for run ${runId}`));
-    this.recordRunEvent(
-      this.runEvents.runtimeStatusChanged({
-        runId,
-        eventKey: `runtime:${ref.runtimeInstanceId}:ready`,
-        status: "ready",
-        targetId: ref.runtimeInstanceId,
-        runtimeType: ref.runtimeType,
-        runtimeInstanceId: ref.runtimeInstanceId,
-      }),
-      `record runtime ready for run ${runId}`
-    );
   }
 
   async publish(message: RunChannelMessage<unknown>): Promise<void> {
@@ -225,7 +199,7 @@ export class WorkerEventService
 
   async markRunTimedOut(
     runId: string,
-    runtimeHandle: WorkerExecutionHandle
+    runtimeHandle: RunExecutionHandle
   ): Promise<void> {
     try {
       await this.forceErrorStatus(runId, "run timeout");
@@ -234,7 +208,7 @@ export class WorkerEventService
         runId: runtimeHandle.runId,
         reason: "run timeout",
       });
-      this.runtimeHost.releaseRun(runtimeHandle.runId);
+      this.runtimeHost.releaseRun(runtimeHandle);
     }
   }
 

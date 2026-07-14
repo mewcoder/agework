@@ -79,7 +79,6 @@ describe("RunLauncher", () => {
       markCancelling: vi.fn().mockResolvedValue(undefined),
       markFinished: vi.fn().mockResolvedValue(undefined),
       markCancelled: vi.fn().mockResolvedValue(undefined),
-      updateRuntimeHandle: vi.fn().mockResolvedValue(undefined),
     };
     mockLiveRunRegistry = {
       register: vi.fn(),
@@ -160,8 +159,8 @@ describe("RunLauncher", () => {
         agentType: "claude",
         runtimeHandle: expect.objectContaining({
           runId: "run-1",
+          runtimeHostId: "builtin",
           runtimeType: "native",
-          runtimeInstanceId: "",
         }),
         stream: expect.objectContaining({}),
       })

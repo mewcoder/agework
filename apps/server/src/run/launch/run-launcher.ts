@@ -13,7 +13,7 @@ import {
   type RecordRunEventInput,
   type RunPlacement,
   type RuntimeHostContract,
-  type WorkerExecutionHandle,
+  type RunExecutionHandle,
   type WorkerScope,
 } from "@agework/shared/protocol";
 import { isRuntimeType } from "@agework/providers";
@@ -392,7 +392,7 @@ export class RunLauncher {
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
     stream: RunStream;
-  }): Promise<WorkerExecutionHandle | null> {
+  }): Promise<RunExecutionHandle | null> {
     const {
       runId,
       conversationId,
@@ -421,11 +421,10 @@ export class RunLauncher {
         agentProviderConfig,
         input: runInput,
       });
-      // 执行载体标识在就绪后经 upstream.notifyExecutionRef 回流落库,这里先注册空句柄。
       return {
         runId,
+        runtimeHostId: placement.runtimeHostId,
         runtimeType,
-        runtimeInstanceId: "",
         conversationId,
       };
     } catch (err) {
@@ -479,7 +478,7 @@ export class RunLauncher {
     runId: string;
     conversationId: string;
     workspaceId: string;
-    runtimeHandle: WorkerExecutionHandle;
+    runtimeHandle: RunExecutionHandle;
     stream: RunStream;
     aggregator: AssistantMessageAggregator;
     agentType: string;
@@ -524,8 +523,8 @@ export class RunLauncher {
     this.logger.log("run registered", {
       runId,
       conversationId,
+      runtimeHostId: runtimeHandle.runtimeHostId,
       runtimeType: runtimeHandle.runtimeType,
-      runtimeInstanceId: runtimeHandle.runtimeInstanceId,
     });
   }
 }

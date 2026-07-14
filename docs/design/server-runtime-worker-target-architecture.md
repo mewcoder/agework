@@ -1,6 +1,6 @@
 # Server · Runtime Host · Worker 目标架构（理想态定案）
 
-> 状态：设计定案（2026-07-12，同日修订：执行节点定名 Runtime Host、注册模型改一机一行、补 workspace 删除流程），未开始实施。
+> 状态：实施中（2026-07-14）：Phase 1/2 主链路已切换，Phase 3 正在删除 server 侧执行实例状态与旧词汇；registered Host 多 runtimeType 能力仍待收口。
 > 本文是三层关系的重新设计：**server 只管业务事实，Runtime Host 独占执行面，worker 是唯一的执行代理概念**。
 > 它有意推翻若干既有定案（见 §6 翻案清单），实施按 §7 三期迁移推进。
 

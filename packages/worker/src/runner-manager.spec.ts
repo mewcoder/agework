@@ -96,7 +96,10 @@ describe("RunnerManager", () => {
     expect(runnerEntryPath).not.toBe(workerEntryPath);
     expect(dirname(runnerEntryPath)).toBe(dirname(workerEntryPath as string));
     expect(runnerEntryPath).toBe(
-      join(dirname(workerEntryPath as string), `runner${extname(workerEntryPath as string)}`)
+      join(
+        dirname(workerEntryPath as string),
+        `runner${extname(workerEntryPath as string)}`
+      )
     );
   });
 
@@ -152,8 +155,12 @@ describe("RunnerManager", () => {
       unknown,
       { env: NodeJS.ProcessEnv },
     ];
-    expect(options.env.AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS).toBe("15000");
-    expect(options.env.AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS).toBe("3000");
+    expect(options.env.AGEWORK_CODEX_APP_SERVER_REQUEST_TIMEOUT_MS).toBe(
+      "15000"
+    );
+    expect(options.env.AGEWORK_CODEX_APP_SERVER_SHUTDOWN_TIMEOUT_MS).toBe(
+      "3000"
+    );
   });
 
   it("starts one runner process for a user_message command", async () => {
@@ -225,6 +232,45 @@ describe("RunnerManager", () => {
           runId: "run-1",
           conversationId: "conversation-1",
         },
+      }),
+      expect.any(Function)
+    );
+  });
+
+  it("routes approval commands only by runId when one worker owns multiple runs", async () => {
+    const client = makeClient();
+    client.fetchRunConfig.mockImplementation(async (runId: string) => ({
+      ...makeRunConfig(),
+      runId,
+      conversationId: `conversation-${runId}`,
+    }));
+    const manager = makeManager(client);
+
+    await manager.handle(userMessage);
+    await manager.handle({
+      type: "user_message",
+      commandId: "cmd-start-2",
+      runId: "run-2",
+    });
+    const first = forkMock.mock.results[0]?.value as MockChildProcess;
+    const second = forkMock.mock.results[1]?.value as MockChildProcess;
+    first.send.mockClear();
+    second.send.mockClear();
+
+    await manager.handle({
+      type: "approval_resolved",
+      commandId: "cmd-resolve",
+      runId: "run-2",
+      conversationId: "conversation-run-2",
+      payload: { decision: "accept" },
+    });
+
+    expect(first.send).not.toHaveBeenCalled();
+    expect(second.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "cmd-resolve",
+        method: "control.resolve",
+        params: expect.objectContaining({ runId: "run-2" }),
       }),
       expect.any(Function)
     );

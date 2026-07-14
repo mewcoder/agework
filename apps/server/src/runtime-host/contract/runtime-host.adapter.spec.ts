@@ -51,7 +51,6 @@ function makeUpstream() {
     notifyRunFailed: vi.fn().mockResolvedValue(undefined),
     notifyRunCancelled: vi.fn().mockResolvedValue(undefined),
     notifyWorkerLost: vi.fn().mockResolvedValue(undefined),
-    notifyExecutionRef: vi.fn(),
   };
 }
 
@@ -134,11 +133,11 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       expect(request.method).toBe("host.submitRun");
     });
 
-    it("is idempotent for the same runId", async () => {
+    it("delegates runId idempotency to the target Host", async () => {
       await adapter.submitRun(makeSubmitInput("builtin"));
       await adapter.submitRun(makeSubmitInput("builtin"));
 
-      expect(builtinHost.submitRun).toHaveBeenCalledTimes(1);
+      expect(builtinHost.submitRun).toHaveBeenCalledTimes(2);
     });
 
     it("propagates in-process submit failures and clears the state", async () => {
@@ -169,18 +168,27 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("command", () => {
-    const cancel = { type: "cancel", commandId: "cmd-1", runId: "run-1" };
+    const cancel = {
+      type: "cancel",
+      commandId: "cmd-1",
+      runId: "run-1",
+      conversationId: "conversation-1",
+    } as const;
 
     it("routes builtin commands to the in-process host", async () => {
-      await adapter.submitRun(makeSubmitInput("builtin"));
-      await adapter.command("run-1", cancel as never);
+      await adapter.command({ runtimeHostId: "builtin", payload: cancel });
 
-      expect(builtinHost.command).toHaveBeenCalledWith("run-1", cancel);
+      expect(builtinHost.command).toHaveBeenCalledWith({
+        runtimeHostId: "builtin",
+        payload: cancel,
+      });
     });
 
     it("routes tunnel commands via host.command and records the audit event", async () => {
-      await adapter.submitRun(makeSubmitInput("rt-registered-1"));
-      await adapter.command("run-1", cancel as never);
+      await adapter.command({
+        runtimeHostId: "rt-registered-1",
+        payload: cancel,
+      });
 
       const call = runtimeService.sendTunnelRequest.mock.calls.find(
         ([, request]) =>
@@ -194,32 +202,42 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       });
     });
 
-    it("drops commands for unknown runs", async () => {
-      await adapter.command("run-x", cancel as never);
+    it("routes commands without requiring submit state in the server process", async () => {
+      await adapter.command({
+        runtimeHostId: "rt-registered-1",
+        payload: { ...cancel, runId: "run-x" },
+      });
 
-      expect(builtinHost.command).not.toHaveBeenCalled();
-      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledWith(
+        "rt-registered-1",
+        expect.objectContaining({ method: "host.command" }),
+        expect.any(Number)
+      );
     });
   });
 
   describe("releaseRun", () => {
     it("releases builtin runs on the in-process host", async () => {
-      await adapter.submitRun(makeSubmitInput("builtin"));
-      adapter.releaseRun("run-1");
+      adapter.releaseRun({ runtimeHostId: "builtin", runId: "run-1" });
 
-      expect(builtinHost.releaseRun).toHaveBeenCalledWith("run-1");
+      expect(builtinHost.releaseRun).toHaveBeenCalledWith({
+        runtimeHostId: "builtin",
+        runId: "run-1",
+      });
       expect(runtimeService.sendTunnelNotification).not.toHaveBeenCalled();
     });
 
     it("notifies the tunnel host to clean up its run state", async () => {
-      await adapter.submitRun(makeSubmitInput("rt-registered-1"));
-      adapter.releaseRun("run-1");
+      adapter.releaseRun({
+        runtimeHostId: "rt-registered-1",
+        runId: "run-1",
+      });
 
       expect(runtimeService.sendTunnelNotification).toHaveBeenCalledWith(
         "rt-registered-1",
         expect.objectContaining({
           method: "host.releaseRun",
-          params: { runId: "run-1" },
+          params: { runtimeHostId: "rt-registered-1", runId: "run-1" },
         })
       );
     });
@@ -248,9 +266,19 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
       expect(upstream.emit).toHaveBeenCalledTimes(1);
       expect(upstream.notifyRunFailed).toHaveBeenCalledWith("run-9", "boom");
+      expect(runtimeService.sendTunnelNotification).toHaveBeenCalledWith(
+        "rt-registered-1",
+        expect.objectContaining({
+          method: "host.releaseRun",
+          params: {
+            runtimeHostId: "rt-registered-1",
+            runId: "run-9",
+          },
+        })
+      );
     });
 
-    it("rebuilds routing state from resumed events so post-restart commands still route", async () => {
+    it("routes post-restart commands from their explicit runtimeHostId", async () => {
       const handler = tunnelUpstreamHandler();
       await handler("rt-registered-1", {
         kind: "emit",
@@ -264,11 +292,15 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         },
       });
 
-      await adapter.command("run-9", {
-        type: "cancel",
-        commandId: "cmd-9",
-        runId: "run-9",
-      } as never);
+      await adapter.command({
+        runtimeHostId: "rt-registered-1",
+        payload: {
+          type: "cancel",
+          commandId: "cmd-9",
+          runId: "run-9",
+          conversationId: "conversation-1",
+        },
+      });
 
       const call = runtimeService.sendTunnelRequest.mock.calls.find(
         ([, request]) =>
@@ -334,25 +366,6 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
           (request as { method: string }).method === "host.releaseOwner"
       );
       expect(call?.[0]).toBe("rt-registered-1");
-    });
-
-    it("getWorkerSnapshotForAdmin finds the worker by runtimeInstanceId across hosts", async () => {
-      builtinHost.listWorkers.mockResolvedValue([
-        { id: "w-1", runtimeInstanceId: "inst-1" },
-      ]);
-
-      const snapshot = await adapter.getWorkerSnapshotForAdmin({
-        runtimeType: "native",
-        runtimeInstanceId: "inst-1",
-      });
-
-      expect(snapshot).toMatchObject({ id: "w-1" });
-      await expect(
-        adapter.getWorkerSnapshotForAdmin({
-          runtimeType: "native",
-          runtimeInstanceId: "missing",
-        })
-      ).resolves.toBeNull();
     });
   });
 

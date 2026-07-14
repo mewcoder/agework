@@ -10,23 +10,15 @@ function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
 ): Partial<RuntimeHostContract> {
   return {
-    sendRecoveryCancel: vi.fn().mockResolvedValue(undefined),
     releaseRun: vi.fn(),
     ...overrides,
   };
 }
 
-function makeActiveRun(input: {
-  id?: string;
-  runtimeType?: string;
-  runtimeInstanceId?: string | null;
-  runtimeHostId?: string;
-}) {
+function makeActiveRun(input: { id?: string; runtimeHostId?: string }) {
   return {
     id: input.id ?? "run-1",
     conversationId: "conversation-1",
-    runtimeType: input.runtimeType ?? "native",
-    runtimeInstanceId: input.runtimeInstanceId ?? null,
     conversation: {
       workspace: { runtimeHostId: input.runtimeHostId ?? "builtin" },
     },
@@ -75,24 +67,13 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     vi.useRealTimers();
   });
 
-  it("sends a recovery cancel through the contract instead of tearing the instance down", async () => {
-    const deps = makeDeps([
-      makeActiveRun({
-        runtimeType: "sandbox",
-        runtimeInstanceId: "container-abc",
-        runtimeHostId: "builtin",
-      }),
-    ]);
+  it("fails builtin runs without retaining execution-instance recovery state", async () => {
+    const deps = makeDeps([makeActiveRun({ runtimeHostId: "builtin" })]);
     const runtimeHost = makeRuntimeHost();
     service = makeService(deps, runtimeHost);
 
     await service.failInterruptedRuns();
 
-    expect(runtimeHost.sendRecoveryCancel).toHaveBeenCalledWith({
-      runId: "run-1",
-      conversationId: "conversation-1",
-      ref: { runtimeType: "sandbox", runtimeInstanceId: "container-abc" },
-    });
     expect(deps.runRepository.markError).toHaveBeenCalledWith(
       "run-1",
       "服务重启导致运行中断"
@@ -102,46 +83,9 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 
-  it("skips the recovery cancel when a run has no persisted runtimeInstanceId", async () => {
-    const deps = makeDeps([makeActiveRun({ runtimeInstanceId: null })]);
-    const runtimeHost = makeRuntimeHost();
-    service = makeService(deps, runtimeHost);
-
-    await service.failInterruptedRuns();
-
-    expect(runtimeHost.sendRecoveryCancel).not.toHaveBeenCalled();
-    expect(deps.runRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "服务重启导致运行中断"
-    );
-  });
-
-  it("still marks the run as error when the recovery cancel rejects", async () => {
-    const deps = makeDeps([
-      makeActiveRun({
-        runtimeType: "sandbox",
-        runtimeInstanceId: "container-xyz",
-        runtimeHostId: "builtin",
-      }),
-    ]);
-    const runtimeHost = makeRuntimeHost({
-      sendRecoveryCancel: vi.fn().mockRejectedValue(new Error("boom")),
-    });
-    service = makeService(deps, runtimeHost);
-
-    await service.failInterruptedRuns();
-
-    expect(deps.runRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "服务重启导致运行中断"
-    );
-  });
-
   it("does not fail runs bound to a registered host (they resume via ACK 续传)", async () => {
     const deps = makeDeps([
       makeActiveRun({
-        runtimeType: "docker",
-        runtimeInstanceId: "container-remote",
         runtimeHostId: "rt-registered-1",
       }),
     ]);
@@ -151,7 +95,6 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     await service.failInterruptedRuns();
 
     expect(deps.runRepository.markError).not.toHaveBeenCalled();
-    expect(runtimeHost.sendRecoveryCancel).not.toHaveBeenCalled();
   });
 });
 
@@ -191,7 +134,10 @@ describe("RunRecoveryService abandoned-host sweep", () => {
       "run-1",
       "Runtime Host 离线超时,运行中断"
     );
-    expect(runtimeHost.releaseRun).toHaveBeenCalledWith("run-1");
+    expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      runId: "run-1",
+    });
   });
 
   it("leaves runs alone while their registered host is online", async () => {

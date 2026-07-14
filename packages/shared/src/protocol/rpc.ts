@@ -21,10 +21,7 @@ export type RpcMeta = {
   ts?: string;
 };
 
-export type RpcRequest<
-  Method extends string = string,
-  Params = unknown,
-> = {
+export type RpcRequest<Method extends string = string, Params = unknown> = {
   jsonrpc: typeof JSON_RPC_VERSION;
   id: RpcId;
   method: Method;
@@ -66,10 +63,7 @@ export type RpcResponse<Result = unknown> =
   | RpcSuccessResponse<Result>
   | RpcErrorResponse;
 
-export type RpcMessage =
-  | RpcRequest
-  | RpcNotification
-  | RpcResponse;
+export type RpcMessage = RpcRequest | RpcNotification | RpcResponse;
 
 export type RpcBatch = RpcMessage[];
 
@@ -93,7 +87,7 @@ export type RunInterruptParams = {
 };
 
 export type ControlResolveParams = {
-  runId?: string;
+  runId: string;
   conversationId: string;
   /** Provider-agnostic opaque payload（【决策2】）. */
   payload: unknown;
@@ -208,7 +202,7 @@ export function commandMessageToRpcRequest(
         jsonrpc: JSON_RPC_VERSION,
         id: command.commandId,
         method: "run.interrupt",
-        params: { runId: command.runId ?? message.runId },
+        params: { runId: command.runId },
         meta,
       };
     case "approval_resolved":
@@ -217,7 +211,7 @@ export function commandMessageToRpcRequest(
         id: command.commandId,
         method: "control.resolve",
         params: {
-          runId: message.runId || undefined,
+          runId: command.runId,
           conversationId: command.conversationId,
           payload: command.payload,
           ...(command.resumeRunId ? { resumeRunId: command.resumeRunId } : {}),
@@ -262,12 +256,13 @@ export function rpcRequestToCommandPayload(
       return {
         type: "interrupt",
         commandId,
-        ...(request.params.runId ? { runId: request.params.runId } : {}),
+        runId: request.params.runId,
       };
     case "control.resolve":
       return {
         type: "approval_resolved",
         commandId,
+        runId: request.params.runId,
         conversationId: request.params.conversationId,
         payload: request.params.payload,
         ...(request.params.resumeRunId
@@ -383,7 +378,10 @@ export function upstreamMessageToRpcNotification(
       return {
         jsonrpc: JSON_RPC_VERSION,
         method: "run.status",
-        params: { runId: message.runId, status: message.payload as RunStatusPayload },
+        params: {
+          runId: message.runId,
+          status: message.payload as RunStatusPayload,
+        },
         meta,
       };
     case "agui.event":
@@ -629,12 +627,10 @@ function isRunInterruptParams(value: unknown): value is RunInterruptParams {
   return isRecord(value) && isNonEmptyString(value.runId);
 }
 
-function isControlResolveParams(
-  value: unknown
-): value is ControlResolveParams {
+function isControlResolveParams(value: unknown): value is ControlResolveParams {
   return (
     isRecord(value) &&
-    optionalString(value.runId) &&
+    isNonEmptyString(value.runId) &&
     isNonEmptyString(value.conversationId) &&
     value.payload !== undefined &&
     optionalString(value.resumeRunId)
@@ -659,9 +655,7 @@ function isRunStatusParams(value: unknown): value is RunStatusRpcParams {
 
 function isRunAguiEventParams(value: unknown): value is RunAguiEventRpcParams {
   return (
-    isRecord(value) &&
-    isNonEmptyString(value.runId) &&
-    isAguiEvent(value.event)
+    isRecord(value) && isNonEmptyString(value.runId) && isAguiEvent(value.event)
   );
 }
 
@@ -793,7 +787,6 @@ function isCommandTracePayload(value: unknown): value is CommandTracePayload {
   );
 }
 
-
 function isStringRecord(value: unknown): value is Record<string, string> {
   return (
     isRecord(value) &&
@@ -810,7 +803,9 @@ function optionalString(value: unknown): boolean {
 }
 
 function optionalNumber(value: unknown): boolean {
-  return value === undefined || (typeof value === "number" && Number.isFinite(value));
+  return (
+    value === undefined || (typeof value === "number" && Number.isFinite(value))
+  );
 }
 
 function commandResultFromRpcResponse(
@@ -842,10 +837,7 @@ function isCommandType(value: unknown): value is CommandPayload["type"] {
 }
 
 function commandRunId(request: WorkerCommandRpcRequest): string {
-  if ("runId" in request.params && typeof request.params.runId === "string") {
-    return request.params.runId;
-  }
-  return request.meta?.runId ?? "";
+  return request.params.runId;
 }
 
 function messageMeta(message: RunChannelMessage<unknown>): RpcMeta {

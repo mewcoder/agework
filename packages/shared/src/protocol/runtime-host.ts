@@ -67,23 +67,28 @@ export type SubmitRunInput = {
   input: unknown;
 };
 
-/**
- * 执行载体标识（过渡）：Phase 1/2 仍持久化到 run 行供 admin 详情与重启恢复用，
- * Phase 3 admin 改走 listWorkers 现场查询后随之收窄。
- */
-export type ExecutionRef = {
-  runtimeType: string;
-  runtimeInstanceId: string;
+/** Server → Runtime Host 的 run 级命令。runtimeHostId 只用于 server 路由。 */
+export type RuntimeHostCommandInput = {
+  runtimeHostId: string;
+  payload: CommandPayload;
+};
+
+/** run 终态后的 Host 内部状态清理路由。 */
+export type RuntimeHostRunRef = {
+  runtimeHostId: string;
+  runId: string;
 };
 
 /** admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。 */
 export type WorkerSnapshot = {
   id: string;
-  /** Phase 2: 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
+  /** 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
   workerKey: WorkerKey;
   runtimeType: string;
   isolationScope: string;
   ownerId: string;
+  /** 仅供 admin 现场诊断关联 run，不持久化到 server。 */
+  runIds: string[];
   runtimeInstanceId: string;
   status: string;
   expiresAt: string | null;
@@ -97,7 +102,7 @@ export type WorkerSnapshot = {
   }>;
 };
 
-// ── Phase 2 expand: 环境 / 文件 / 观测 全量动词 ─────────────────────
+// ── 环境 / 文件 / 观测动词 ─────────────────────────────────────────
 //
 // RuntimeHostAdapter 使用 runtimeHostId 选择 builtin 或 registered Host；
 // Host 的具体执行能力由 runtimeType 显式表达。
@@ -201,7 +206,7 @@ export interface RuntimeHostContract {
    * run 级命令（cancel / approval_resolved 等）。worker 就绪前到达的 cancel
    * 由 Host 内部吸收（就绪那刻转 cancelled 回流），调用方不需要感知时序。
    */
-  command(runId: string, payload: CommandPayload): Promise<void>;
+  command(input: RuntimeHostCommandInput): Promise<void>;
 
   // —— 业务级收尾 ——
 
@@ -255,23 +260,10 @@ export interface RuntimeHostContract {
   // —— 生命周期与上行端口 ——
 
   /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
-  releaseRun(runId: string): void;
+  releaseRun(input: RuntimeHostRunRef): void;
 
   /** 接线上行端口（启动期一次）。 */
   setUpstream(upstream: RuntimeHostUpstream): void;
-
-  /**
-   * 过渡（server 重启恢复）：按持久化的执行载体标识向仍存活的 worker 发 cancel。
-   * Phase 2 后 server 重启不再打断 registered 上的 run，此动词收窄或删除。
-   */
-  sendRecoveryCancel(input: {
-    runId: string;
-    conversationId: string;
-    ref: ExecutionRef;
-  }): Promise<void>;
-
-  /** 过渡（admin run 详情）：按执行载体标识取 worker 快照。Phase 2 起并入 listWorkers。 */
-  getWorkerSnapshotForAdmin(ref: ExecutionRef): Promise<WorkerSnapshot | null>;
 }
 
 /**
@@ -291,7 +283,4 @@ export interface RuntimeHostUpstream {
 
   /** worker 心跳超时被 fence 判死：记录事实并终结其名下 run。 */
   notifyWorkerLost(runId: string, reason: string): Promise<void>;
-
-  /** 执行载体就绪（过渡）：供 run 行持久化 ExecutionRef 给 admin/恢复流程用。 */
-  notifyExecutionRef(runId: string, ref: ExecutionRef): void;
 }

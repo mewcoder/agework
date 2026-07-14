@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
-import type { WorkerExecutionHandle } from "@agework/shared/protocol";
+import type { RunExecutionHandle } from "@agework/shared/protocol";
 import type {
   IncompleteMessageReason,
   AssistantMessageAggregator,
@@ -11,12 +11,12 @@ import type { RunStream } from "../streaming/run-stream";
 export interface RunTimeoutErrorPort {
   markRunTimedOut(
     runId: string,
-    runtimeHandle: WorkerExecutionHandle
+    runtimeHandle: RunExecutionHandle
   ): Promise<void>;
 }
 
 export type LiveRunHandle = {
-  runtimeHandle: WorkerExecutionHandle;
+  runtimeHandle: RunExecutionHandle;
   stream: RunStream;
   aggregator: AssistantMessageAggregator;
   conversationId: string;

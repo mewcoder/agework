@@ -30,7 +30,7 @@ describe("RunService", () => {
     };
     mockRuntimeHost = {
       command: vi.fn().mockResolvedValue(undefined),
-      getWorkerSnapshotForAdmin: vi.fn().mockResolvedValue(null),
+      listWorkers: vi.fn().mockResolvedValue([]),
     };
     mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -112,8 +112,8 @@ describe("RunService", () => {
         runId: "run-1",
         runtimeHandle: {
           runId: "run-1",
+          runtimeHostId: "builtin",
           runtimeType: "native",
-          runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
         stream: {
@@ -183,12 +183,15 @@ describe("RunService", () => {
 
       expect(handle.stream.replace).toHaveBeenCalledWith(res, "events");
       expect(mockRuntimeHost.command).toHaveBeenCalledWith(
-        "run-1",
         expect.objectContaining({
-          type: "approval_resolved",
-          conversationId: "conversation-1",
-          payload: { answers: { decision: "yes" } },
-          resumeRunId: "run-2",
+          runtimeHostId: "builtin",
+          payload: expect.objectContaining({
+            type: "approval_resolved",
+            runId: "run-1",
+            conversationId: "conversation-1",
+            payload: { answers: { decision: "yes" } },
+            resumeRunId: "run-2",
+          }),
         })
       );
       // 附接先于命令下发,续接段的 RUN_STARTED 不会漏
@@ -226,10 +229,13 @@ describe("RunService", () => {
       });
 
       expect(mockRuntimeHost.command).toHaveBeenCalledWith(
-        "run-1",
         expect.objectContaining({
-          type: "approval_resolved",
-          payload: { decision: "accept" },
+          runtimeHostId: "builtin",
+          payload: expect.objectContaining({
+            type: "approval_resolved",
+            runId: "run-1",
+            payload: { decision: "accept" },
+          }),
         })
       );
     });
@@ -254,10 +260,13 @@ describe("RunService", () => {
       });
 
       expect(mockRuntimeHost.command).toHaveBeenCalledWith(
-        "run-1",
         expect.objectContaining({
-          type: "approval_resolved",
-          payload: { status: "cancelled" },
+          runtimeHostId: "builtin",
+          payload: expect.objectContaining({
+            type: "approval_resolved",
+            runId: "run-1",
+            payload: { status: "cancelled" },
+          }),
         })
       );
     });
@@ -284,10 +293,13 @@ describe("RunService", () => {
       });
 
       expect(mockRuntimeHost.command).toHaveBeenCalledWith(
-        "run-1",
         expect.objectContaining({
-          type: "approval_resolved",
-          payload: permPayload,
+          runtimeHostId: "builtin",
+          payload: expect.objectContaining({
+            type: "approval_resolved",
+            runId: "run-1",
+            payload: permPayload,
+          }),
         })
       );
     });
@@ -356,8 +368,8 @@ describe("RunService", () => {
       const handle = {
         runtimeHandle: {
           runId: "run-1",
+          runtimeHostId: "builtin",
           runtimeType: "native",
-          runtimeInstanceId: "1:token",
           conversationId: "conversation-1",
         },
         stopRequested: false,
@@ -371,11 +383,13 @@ describe("RunService", () => {
         undefined
       );
       expect(mockRuntimeHost.command).toHaveBeenCalledWith(
-        "run-1",
         expect.objectContaining({
-          type: "cancel",
-          runId: "run-1",
-          conversationId: "conversation-1",
+          runtimeHostId: "builtin",
+          payload: expect.objectContaining({
+            type: "cancel",
+            runId: "run-1",
+            conversationId: "conversation-1",
+          }),
         })
       );
       expect(hadHandle).toBe(true);

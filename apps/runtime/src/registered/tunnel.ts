@@ -6,6 +6,7 @@ import {
   type RuntimeTunnelRegisterMessage,
   type RuntimeTunnelServerMessage,
   type RuntimeTunnelAllRpcRequest,
+  type RuntimeTunnelHostNotification,
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
   type WorkerScope,
@@ -148,12 +149,12 @@ export class TunnelClient {
 
     // Phase 2: server 的单向通知——ACK 水位清缓冲 / run 终结清状态
     if (isRpcNotification(parsed)) {
-      if (parsed.method === "host.upstreamAck") {
-        const { seq } = parsed.params as { seq: number };
+      const notification = parsed as RuntimeTunnelHostNotification;
+      if (notification.method === "host.upstreamAck") {
+        const { seq } = notification.params;
         this.options.tunnelUpstream?.onAck(seq);
-      } else if (parsed.method === "host.releaseRun") {
-        const { runId } = parsed.params as { runId: string };
-        this.options.hostContract?.releaseRun(runId);
+      } else if (notification.method === "host.releaseRun") {
+        this.options.hostContract.releaseRun(notification.params);
       }
       return;
     }
@@ -212,10 +213,7 @@ export class TunnelClient {
         await hostContract.submitRun(request.params);
         return;
       case "host.command":
-        await hostContract.command(
-          request.params.runId,
-          request.params.payload
-        );
+        await hostContract.command(request.params);
         return;
       case "host.releaseOwner":
         await hostContract.releaseOwner(request.params.owner);
