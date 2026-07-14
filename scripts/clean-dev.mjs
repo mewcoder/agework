@@ -9,8 +9,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const isWin = process.platform === "win32";
 const self = process.pid;
 
-// 固定/默认端口:server=3000,web(vite)=5173
-const PORTS = [3000, 5173];
+// 端口以 env 为准:server 读 PORT(默认 3000);web(vite)是框架默认 5173
+const PORTS = [Number(process.env.PORT ?? 3000), 5173];
 
 // 仓库内 watch/常驻进程特征(不占端口也要清,否则会像僵尸一样堆积)
 const PATTERNS = [
