@@ -64,7 +64,13 @@ export class WorkerHttpTransport {
   private readonly emitStates = new Map<string, EmitState>();
 
   constructor() {
-    this.apiBase = process.env.AGEWORK_WORKER_API_BASE ?? "http://localhost:3000";
+    // 数据面对端是 Host 的 worker HTTP(由 provider 注入),server 上没有
+    // 兜底端点——缺配置直接 fail fast,不做指向错误对象的默认值。
+    const apiBase = process.env.AGEWORK_WORKER_API_BASE;
+    if (!apiBase) {
+      throw new Error("AGEWORK_WORKER_API_BASE is required for resident worker");
+    }
+    this.apiBase = apiBase;
     this.workerId = process.env.AGEWORK_WORKER_ID ?? "";
     this.token = process.env.AGEWORK_WORKER_START_TOKEN ?? "";
 

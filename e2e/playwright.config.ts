@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const API_PORT = 3000;
+// 与 dev 约定一致:server 读 PORT(默认 3000),vite 固定 5173
+const API_PORT = Number(process.env.PORT ?? 3000);
 const WEB_PORT = 5173;
 
 export default defineConfig({
@@ -27,7 +28,7 @@ export default defineConfig({
     {
       command: "cross-env AGEWORK_RUNTIME_ALLOWED_TYPES=native pnpm dev:server",
       cwd: "..",
-      url: "http://localhost:3000/api/v1/auth/config",
+      url: `http://localhost:${API_PORT}/api/v1/auth/config`,
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
