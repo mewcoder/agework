@@ -36,13 +36,14 @@ import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
 import type { RuntimeType } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
 import { RuntimeHostRepository } from "./runtime-host.repository";
-import type { RuntimeHostRow } from "./runtime-host.types";
-import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
+  RUNTIME_HOST_CONNECTIVITY,
   RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_WORKSPACE_DATA,
+  type RuntimeHostConnectivity,
+  type RuntimeHostRow,
 } from "./runtime-host.types";
 import { resolveRuntimeHostCliPaths } from "./environment/runtime-host-environment";
 
@@ -57,7 +58,8 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   constructor(
     private readonly configService: ConfigService,
     private readonly repository: RuntimeHostRepository,
-    private readonly tunnelHandler: HostTunnelHandler,
+    @Inject(RUNTIME_HOST_CONNECTIVITY)
+    private readonly connectivity: RuntimeHostConnectivity,
     @Inject(RUNTIME_HOST_ENVIRONMENT)
     private readonly environment: RuntimeHostEnvironment,
     @Inject(RUNTIME_HOST_WORKSPACE_DATA)
@@ -205,10 +207,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (
-      !isBuiltinHostId(runtimeHostId) &&
-      !this.tunnelHandler.isConnected(runtimeHostId)
-    ) {
+    if (!this.connectivity.isConnected(runtimeHostId)) {
       throw new BadRequestException(
         `runtime host ${runtimeHostId} is not connected`
       );
@@ -237,10 +236,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
     // registered 未连接:不是错误,只是此刻无法检测(前端按离线展示)
-    if (
-      !this.tunnelHandler.isConnected(runtimeHostId) &&
-      !isBuiltinHostId(runtimeHostId)
-    ) {
+    if (!this.connectivity.isConnected(runtimeHostId)) {
       return { envConfig: null };
     }
     let envConfig: RuntimeEnvConfig | undefined;
@@ -407,10 +403,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     if (!owned) {
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (
-      !isBuiltinHostId(runtimeHostId) &&
-      !this.tunnelHandler.isConnected(runtimeHostId)
-    ) {
+    if (!this.connectivity.isConnected(runtimeHostId)) {
       throw new BadRequestException(
         `runtime host ${runtimeHostId} is not connected`
       );

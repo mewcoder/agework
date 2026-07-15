@@ -35,6 +35,7 @@ import type { RuntimeHost } from "@agework/runtime/host";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
+  type RuntimeHostConnectivity,
   type RuntimeHostOwnerReconciliation,
   type RuntimeHostOwnerRef,
 } from "../runtime-host.types";
@@ -59,7 +60,10 @@ const INSTALL_CLI_TIMEOUT_MS = 150_000;
  */
 @Injectable()
 export class RuntimeHostAdapter
-  implements RuntimeHostContract, RuntimeHostOwnerReconciliation
+  implements
+    RuntimeHostContract,
+    RuntimeHostOwnerReconciliation,
+    RuntimeHostConnectivity
 {
   private readonly logger = new Logger(RuntimeHostAdapter.name);
   private upstream!: RuntimeHostUpstream;
@@ -81,6 +85,13 @@ export class RuntimeHostAdapter
       onHostUpstream: (runtimeHostId, notification) =>
         this.onTunnelUpstream(runtimeHostId, notification, upstream),
     });
+  }
+
+  isConnected(runtimeHostId: string): boolean {
+    return (
+      isBuiltinHostId(runtimeHostId) ||
+      this.tunnelHandler.isConnected(runtimeHostId)
+    );
   }
 
   async submitRun(input: SubmitRunInput): Promise<void> {

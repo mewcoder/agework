@@ -40,6 +40,7 @@ function makeTunnelHandler() {
     sendRequest: vi.fn().mockResolvedValue(null),
     sendNotification: vi.fn(),
     listConnected: vi.fn().mockReturnValue([]),
+    isConnected: vi.fn().mockReturnValue(false),
     setHostUpstreamPort: vi.fn(),
   };
 }
@@ -130,6 +131,15 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   it("setUpstream wires the in-process host and the host upstream port", () => {
     expect(builtinHost.setUpstream).toHaveBeenCalledWith(upstream);
     expect(tunnelHandler.setHostUpstreamPort).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports builtin as connected and delegates registered connectivity", () => {
+    expect(adapter.isConnected("builtin")).toBe(true);
+    expect(tunnelHandler.isConnected).not.toHaveBeenCalled();
+
+    tunnelHandler.isConnected.mockReturnValue(true);
+    expect(adapter.isConnected("rt-registered-1")).toBe(true);
+    expect(tunnelHandler.isConnected).toHaveBeenCalledWith("rt-registered-1");
   });
 
   describe("submitRun", () => {

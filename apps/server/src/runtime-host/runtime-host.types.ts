@@ -47,6 +47,11 @@ export interface RuntimeHostOwnerReconciliation extends RuntimeHostOwnerLifecycl
   listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]>;
 }
 
+/** Server 侧查询 Host 控制面是否可达；builtin 永远可达，registered 取决于隧道。 */
+export interface RuntimeHostConnectivity {
+  isConnected(runtimeHostId: string): boolean;
+}
+
 /** builtin（本机 in-process）RuntimeHost 的固定 id。所有 runtimeType 都走这一个 Host。 */
 export const BUILTIN_HOST_ID = "builtin";
 
@@ -60,6 +65,7 @@ export const RUNTIME_HOST_EXECUTION = Symbol("RuntimeHostExecution");
 export const RUNTIME_HOST_UPSTREAM_BINDING = Symbol(
   "RuntimeHostUpstreamBinding"
 );
+export const RUNTIME_HOST_CONNECTIVITY = Symbol("RuntimeHostConnectivity");
 export const RUNTIME_HOST_ENVIRONMENT = Symbol("RuntimeHostEnvironment");
 export const RUNTIME_HOST_WORKSPACE_DATA = Symbol("RuntimeHostWorkspaceData");
 export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");

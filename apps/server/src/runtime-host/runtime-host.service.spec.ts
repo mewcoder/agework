@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ConfigService } from "../config/config.service";
 import { RuntimeHostRepository } from "./runtime-host.repository";
-import type { RuntimeHostRow } from "./runtime-host.types";
-import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
+import type {
+  RuntimeHostConnectivity,
+  RuntimeHostRow,
+} from "./runtime-host.types";
 import { RuntimeHostService } from "./runtime-host.service";
 import type {
   RuntimeHostEnvironment,
@@ -50,8 +52,7 @@ describe("RuntimeHostService", () => {
     updateEnvConfig: ReturnType<typeof vi.fn>;
     updateEnvConfigOverride: ReturnType<typeof vi.fn>;
   };
-  let tunnelHandler: {
-    closeConnection: ReturnType<typeof vi.fn>;
+  let connectivity: {
     isConnected: ReturnType<typeof vi.fn>;
   };
   let environment: Record<
@@ -86,9 +87,10 @@ describe("RuntimeHostService", () => {
       updateEnvConfig: vi.fn().mockResolvedValue(true),
       updateEnvConfigOverride: vi.fn().mockResolvedValue(true),
     };
-    tunnelHandler = {
-      closeConnection: vi.fn(),
-      isConnected: vi.fn().mockReturnValue(false),
+    connectivity = {
+      isConnected: vi.fn().mockImplementation((runtimeHostId: string) => {
+        return runtimeHostId === "builtin";
+      }),
     };
     environment = {
       detectEnv: vi.fn().mockResolvedValue({
@@ -135,7 +137,7 @@ describe("RuntimeHostService", () => {
     service = new RuntimeHostService(
       configService as ConfigService,
       repository as unknown as RuntimeHostRepository,
-      tunnelHandler as unknown as HostTunnelHandler,
+      connectivity as unknown as RuntimeHostConnectivity,
       environment as unknown as RuntimeHostEnvironment,
       workspaceData as unknown as RuntimeHostWorkspaceData
     );
@@ -197,7 +199,7 @@ describe("RuntimeHostService", () => {
   });
 
   it("detectEnv for a registered Runtime Host uses the tunnel when connected", async () => {
-    tunnelHandler.isConnected.mockReturnValue(true);
+    connectivity.isConnected.mockReturnValue(true);
     const mockEnvConfig = {
       claude: {
         executablePath: "/bin/claude",
@@ -225,7 +227,7 @@ describe("RuntimeHostService", () => {
   });
 
   it("detectEnv for a disconnected registered Runtime Host returns null", async () => {
-    tunnelHandler.isConnected.mockReturnValue(false);
+    connectivity.isConnected.mockReturnValue(false);
     const result = await service.detectEnv("rt-1");
     expect(result.envConfig).toBeNull();
     expect(environment.detectEnv).not.toHaveBeenCalled();
@@ -319,10 +321,10 @@ describe("RuntimeHostService", () => {
     expect(list[0].id).toBe("rt-1");
   });
 
-  it("delete revokes the row but does not touch the live tunnel connection", async () => {
+  it("delete revokes the row without consulting Host connectivity", async () => {
     await service.delete("u-1", "rt-1");
     expect(repository.revokeByOwner).toHaveBeenCalledWith("u-1", "rt-1");
-    expect(tunnelHandler.closeConnection).not.toHaveBeenCalled();
+    expect(connectivity.isConnected).not.toHaveBeenCalled();
   });
 
   it("delete throws NotFound when the row is missing or owned by someone else", async () => {
@@ -368,7 +370,7 @@ describe("RuntimeHostService", () => {
   });
 
   it("listDirectory for a disconnected registered Runtime Host throws BadRequestException", async () => {
-    tunnelHandler.isConnected.mockReturnValue(false);
+    connectivity.isConnected.mockReturnValue(false);
     await expect(
       service.listDirectory("u-1", "rt-1", undefined)
     ).rejects.toThrow("is not connected");
@@ -397,7 +399,7 @@ describe("RuntimeHostService", () => {
   });
 
   it("createDirectory delegates registered Host access to RuntimeHostWorkspaceData", async () => {
-    tunnelHandler.isConnected.mockReturnValue(true);
+    connectivity.isConnected.mockReturnValue(true);
     const result = await service.createDirectory("u-1", "rt-1", "/data/new");
     expect(workspaceData.createDirectory).toHaveBeenCalledWith({
       runtimeHostId: "rt-1",
