@@ -426,6 +426,21 @@ export function upstreamMessageToRpcNotification(
   }
 }
 
+/**
+ * 把出站 UpstreamMessage 编码为线格式:command.result 走 JSON-RPC response,
+ * 其余走 JSON-RPC notification。worker 的 HTTP 上行与 runner 的 IPC 上行共用同一份编码。
+ */
+export function encodeUpstreamMessageToWire(
+  message: UpstreamMessage
+): WorkerEventRpcNotification | RpcResponse<WorkerCommandResult> {
+  if (message.type === "command.result") {
+    return commandResultMessageToRpcResponse(
+      message as RunChannelMessage<CommandResultPayload>
+    );
+  }
+  return upstreamMessageToRpcNotification(message);
+}
+
 export function rpcNotificationToUpstreamMessage(
   notification: WorkerEventRpcNotification
 ): UpstreamMessage {

@@ -69,7 +69,10 @@ export class WorkerCommands {
         const command = message.payload;
         if (this.processedCommands.has(command.commandId)) continue;
         this.processedCommands.add(command.commandId);
-        await handle(command);
+        // 不 await:派发由 handler 自行按 runId 串行,命令泵立即继续下一条,避免某个 run
+        // 的慢处理(如 fetchRunConfig)阻塞其它 run 的 cancel/interrupt。handler 负责自身
+        // 错误上报,这里兜底吞掉 rejection,别让单条命令掀翻整个泵。
+        void Promise.resolve(handle(command)).catch(() => {});
       }
 
       if (commands.length === 0) {

@@ -311,6 +311,38 @@ describe("RunnerManager", () => {
     );
   });
 
+  it("does not let a run stuck on fetchRunConfig block another run's command", async () => {
+    const client = makeClient();
+    // run-1 的 config 拉取永久挂起,run-2 的立即返回。
+    client.fetchRunConfig.mockImplementation(
+      (runId: string) =>
+        runId === "run-1"
+          ? new Promise<RunConfig>(() => {})
+          : Promise.resolve({
+              ...makeRunConfig(),
+              runId,
+              conversationId: `conversation-${runId}`,
+            })
+    );
+    const manager = makeManager(client);
+
+    // run-1 卡住(不 await),run-2 必须仍能起 runner。
+    void manager.handle(userMessage);
+    await manager.handle({
+      type: "user_message",
+      commandId: "cmd-start-2",
+      runId: "run-2",
+    });
+
+    expect(forkMock).toHaveBeenCalledTimes(1);
+    const [, , options] = forkMock.mock.calls[0] as [
+      string,
+      unknown,
+      { env: NodeJS.ProcessEnv },
+    ];
+    expect(options.env.AGEWORK_WORKER_RUN_ID).toBe("run-2");
+  });
+
   it("forwards runner terminal status and cleans the run slot", async () => {
     const client = makeClient();
     const manager = makeManager(client);

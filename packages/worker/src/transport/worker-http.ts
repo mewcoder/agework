@@ -1,7 +1,6 @@
 import type {
   RunConfig,
   CommandPayload,
-  CommandResultPayload,
   RunChannelMessage,
   UpstreamMessage,
   UpstreamMessageInput,
@@ -13,10 +12,9 @@ import {
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
 import {
-  commandResultMessageToRpcResponse,
+  encodeUpstreamMessageToWire,
   isWorkerCommandRpcRequest,
   rpcRequestToCommandMessage,
-  upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
 import { AGEWORK_VERSION } from "@agework/shared";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
@@ -123,12 +121,6 @@ export class WorkerHttpTransport {
       }, res.status === 401 ? "error" : "warn");
       if (this.handleFatalResponse(res, { afterSeq: this.commandSeq })) {
         return { commands: [] };
-      }
-      if (res.status === 401) {
-        workerLog("runtime access key invalid, exiting", {
-          workerId: this.workerId,
-        }, "error");
-        process.exit(1);
       }
       return { commands: [] };
     }
@@ -266,7 +258,7 @@ export class WorkerHttpTransport {
       state = { queue: [], waiters: [] };
       this.emitStates.set(runId, state);
     }
-    state.queue.push(encodeUpstreamMessageForHttp(message));
+    state.queue.push(encodeUpstreamMessageToWire(message));
     const settled = new Promise<void>((resolve, reject) => {
       state!.waiters.push({ resolve, reject });
     });
@@ -385,19 +377,29 @@ export class WorkerHttpTransport {
   }
 
   /**
-   * 410 = 该 worker 的 token 已被 server 判定为不再有效（比如已经被新的
-   * worker 进程顶替），此时应直接退出进程，不重试、不重连。
-   * 返回是否已经处理，调用方据此决定要不要继续走原来的重试/报错逻辑。
+   * token 已被 server 判定为不再有效,直接退出进程,不重试、不重连——由容器编排层
+   * 决定是否重新拉起。commands 轮询、fetchRunConfig、事件上行三条路径共用同一判定,
+   * 避免同一种凭证失效在不同端点上恢复语义不一致。
+   * - 410 = token 已被顶替/驱逐(比如被新的 worker 进程接管)。
+   * - 401 = token 被拒(缺失/错误/过期)。静态 startToken 不存在瞬时 401,重试无意义。
+   * 返回是否已处理,调用方据此决定要不要继续走原来的重试/报错逻辑。
    */
   private handleFatalResponse(
     res: Response,
     context: Record<string, unknown>
   ): boolean {
-    if (res.status !== 410) return false;
-    workerLog("worker token evicted by server, exiting", {
-      workerId: this.workerId,
-      ...context,
-    }, "error");
+    if (res.status !== 410 && res.status !== 401) return false;
+    workerLog(
+      res.status === 401
+        ? "worker token rejected by server, exiting"
+        : "worker token evicted by server, exiting",
+      {
+        workerId: this.workerId,
+        status: res.status,
+        ...context,
+      },
+      "error"
+    );
     process.exit(1);
     return true;
   }
@@ -467,15 +469,6 @@ function normalizeCommandPollResponse(data: {
   return (data.messages ?? [])
     .filter(isWorkerCommandRpcRequest)
     .map(rpcRequestToCommandMessage);
-}
-
-function encodeUpstreamMessageForHttp(msg: UpstreamMessage) {
-  if (msg.type === "command.result") {
-    return commandResultMessageToRpcResponse(
-      msg as RunChannelMessage<CommandResultPayload>
-    );
-  }
-  return upstreamMessageToRpcNotification(msg);
 }
 
 function shouldLogEmit(msg: UpstreamMessage): boolean {

@@ -59,13 +59,48 @@ type RunnerProcess = {
 export class RunnerManager {
   private readonly runners = new Map<string, RunnerProcess>();
   private readonly commandSeqs = new Map<string, number>();
+  /** 每个 runId 的命令处理链尾,用于按 runId 串行、跨 runId 并行地派发命令。 */
+  private readonly runQueues = new Map<string, Promise<void>>();
 
   constructor(
     private readonly client: RunnerManagerClient,
     private readonly commandReceipts: CommandReceipts
   ) {}
 
-  async handle(command: CommandPayload): Promise<void> {
+  /**
+   * 按 runId 串行、跨 runId 并行地派发命令。同一个 run 的命令保持 FIFO(cancel 排在它
+   * 自己的 user_message 之后,等 runner 起来再执行,不会被丢);不同 run 之间互不阻塞——
+   * 某个 run 慢的 fetchRunConfig 不再拖住别的 run 的 cancel/interrupt。
+   *
+   * 返回的 promise 在该命令处理完成后 resolve(便于直接单测 `await handle(...)`);命令泵
+   * (WorkerCommands)不 await 它,从而获得跨 run 并发。handle 自身永不 reject。
+   */
+  handle(command: CommandPayload): Promise<void> {
+    const previous = this.runQueues.get(command.runId) ?? Promise.resolve();
+    const settled = previous
+      .then(() => this.dispatch(command))
+      .catch((err) => {
+        workerLog(
+          "command dispatch failed",
+          {
+            runId: command.runId,
+            commandId: command.commandId,
+            commandType: command.type,
+            ...errorDetails(err),
+          },
+          "error"
+        );
+      });
+    this.runQueues.set(command.runId, settled);
+    void settled.finally(() => {
+      if (this.runQueues.get(command.runId) === settled) {
+        this.runQueues.delete(command.runId);
+      }
+    });
+    return settled;
+  }
+
+  private async dispatch(command: CommandPayload): Promise<void> {
     switch (command.type) {
       case "user_message":
         await this.handleUserMessage(command);

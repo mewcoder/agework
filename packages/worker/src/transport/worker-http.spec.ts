@@ -526,6 +526,68 @@ describe("WorkerHttpTransport", () => {
     });
   });
 
+  describe("401 token rejected", () => {
+    it("exits the process when pollCommands gets a 401", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => "unauthorized",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      const result = await client.pollCommands();
+
+      expect(result.commands).toEqual([]);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it("exits the process when fetchRunConfig gets a 401", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => "unauthorized",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await expect(client.fetchRunConfig("run-1")).rejects.toThrow(
+        "Failed to fetch run config: 401 unauthorized"
+      );
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+
+    it("exits the process when emit gets a 401, without retrying", async () => {
+      const exitSpy = vi
+        .spyOn(process, "exit")
+        .mockImplementation(() => undefined as never);
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => "unauthorized",
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      await client.emit("run-1", {
+        runId: "run-1",
+        seq: 0,
+        type: "agui.event",
+        payload: { type: "RAW", event: {} },
+        ts: "",
+      } as unknown as UpstreamMessage);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(exitSpy).toHaveBeenCalledWith(1);
+    });
+  });
+
   describe("adaptive batching", () => {
     const mk = (n: number) =>
       ({

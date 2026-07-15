@@ -4,17 +4,15 @@ import type {
   UpstreamMessage,
   UpstreamMessageInput,
   CommandPayload,
-  CommandResultPayload,
   RunChannelMessage,
   Unsubscribe,
 } from "@agework/shared/protocol";
 import {
-  commandResultMessageToRpcResponse,
+  encodeUpstreamMessageToWire,
   isRunConfigRpcNotification,
   isWorkerCommandRpcRequest,
   rpcNotificationToRunConfigMessage,
   rpcRequestToCommandMessage,
-  upstreamMessageToRpcNotification,
 } from "@agework/shared/protocol/rpc";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
@@ -62,7 +60,7 @@ export class RunnerIpcTransport implements RunChannel {
       seq: ++this.seq,
       ts: new Date().toISOString(),
     } as UpstreamMessage;
-    const wireMessage = encodeUpstreamMessageForIpc(message);
+    const wireMessage = encodeUpstreamMessageToWire(message);
     return new Promise<void>((resolve, reject) => {
       process.send!(wireMessage, (err: Error | null) => {
         if (err) {
@@ -117,13 +115,4 @@ function commandFromIpcMessage(
     return rpcRequestToCommandMessage(msg);
   }
   return undefined;
-}
-
-function encodeUpstreamMessageForIpc(msg: UpstreamMessage) {
-  if (msg.type === "command.result") {
-    return commandResultMessageToRpcResponse(
-      msg as RunChannelMessage<CommandResultPayload>
-    );
-  }
-  return upstreamMessageToRpcNotification(msg);
 }
