@@ -30,6 +30,7 @@ export function isHostTunnelClientMessage(
   return (
     value.type === "register" &&
     isProtocolVersion(value.protocolVersion) &&
+    isNonEmptyString(value.processInstanceId) &&
     isRuntimeCapabilities(value.capabilities) &&
     optionalString(value.version) &&
     optionalRecord(value.envConfig)

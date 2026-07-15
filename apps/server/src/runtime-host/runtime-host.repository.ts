@@ -130,22 +130,40 @@ export class RuntimeHostRepository {
     return count > 0;
   }
 
-  /** 注册成功:落能力矩阵/envConfig,置 online 并刷心跳。 */
+  /**
+   * 注册成功:落能力矩阵/envConfig,写入本次进程实例标识,置 online 并刷心跳。
+   * 返回旧的 processInstanceId,供网关判定是否发生了进程更替(旧值存在且 ≠ 新值
+   * = Host 换了进程,旧 run 须判死)。行不存在时 found=false。
+   */
   async markRegistered(
     id: string,
     capabilities: RuntimeCapabilities,
+    processInstanceId: string,
     envConfig?: RuntimeEnvConfig
-  ): Promise<boolean> {
-    const { count } = await this.prisma.runtimeHost.updateMany({
-      where: { id },
-      data: {
-        capabilities,
-        ...(envConfig ? { envConfig } : {}),
-        status: "online",
-        lastHeartbeatAt: new Date(),
-      },
+  ): Promise<{ found: boolean; previousProcessInstanceId: string | null }> {
+    return this.prisma.$transaction(async (tx) => {
+      const existing = await tx.runtimeHost.findUnique({
+        where: { id },
+        select: { processInstanceId: true },
+      });
+      if (!existing) {
+        return { found: false, previousProcessInstanceId: null };
+      }
+      await tx.runtimeHost.update({
+        where: { id },
+        data: {
+          capabilities,
+          ...(envConfig ? { envConfig } : {}),
+          status: "online",
+          lastHeartbeatAt: new Date(),
+          processInstanceId,
+        },
+      });
+      return {
+        found: true,
+        previousProcessInstanceId: existing.processInstanceId,
+      };
     });
-    return count > 0;
   }
 
   /** admin 覆盖 envConfig（per-agent 合并写入）。 */

@@ -231,6 +231,9 @@ model RuntimeHost {
   owner           User?     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   status          String    @default("offline") // 心跳存活状态，跟 removedAt 的注销语义无关
   lastHeartbeatAt DateTime?
+  // registered Host 进程实例标识（注册握手上报）：同进程断线重连不变，进程重启即换新值。
+  // Server 比对新旧值区分「同进程重连」与「换了进程」，后者旧 run 无从续传须判死。builtin 恒 null。
+  processInstanceId String?
   // 配对 token 的 SHA-256（token 高熵随机，明文只在创建响应里出现一次）。builtin 行为 null。
   tokenHash       String?   @unique
   // 能力矩阵：{ [runtimeType]: { available, scopes, reason?, cli? } }。

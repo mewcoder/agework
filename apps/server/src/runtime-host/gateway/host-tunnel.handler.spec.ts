@@ -563,4 +563,17 @@ describe("HostTunnelHandler", () => {
       await expect(pending).rejects.toThrow(/connection closed/);
     });
   });
+
+  it("reaps stale runs when a host reconnects with a new process instance", async () => {
+    repository.markRegistered.mockResolvedValueOnce({
+      found: true,
+      previousProcessInstanceId: "proc-old",
+    });
+    const reap = vi.fn().mockResolvedValue(undefined);
+    handler.setHostReincarnationPort({ reapRunsForReincarnation: reap });
+    const ws = connect();
+    await once(ws, "open");
+    await register(ws);
+    expect(reap).toHaveBeenCalledWith("rt-1");
+  });
 });

@@ -1,4 +1,5 @@
 import { WebSocket, type RawData } from "ws";
+import { randomUUID } from "node:crypto";
 import {
   RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
   RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
@@ -95,6 +96,9 @@ export class TunnelClient {
   private readonly baseDelayMs: number;
   private reconnectDelayMs: number;
   private stopped = false;
+  /** Host 进程实例标识:构造(进程启动)时生成一次,断线重连沿用同值;
+   *  进程重启即新实例、新值,Server 据此判定旧 run 已无续传可能并判死。 */
+  private readonly processInstanceId = randomUUID();
 
   constructor(private readonly options: TunnelClientOptions) {
     this.baseDelayMs = options.reconnectBaseDelayMs ?? 1000;
@@ -129,6 +133,7 @@ export class TunnelClient {
       const register: HostTunnelRegisterMessage = {
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: this.processInstanceId,
         capabilities:
           this.options.capabilities ??
           buildCapabilities(this.options.config.runtimeTypes, () => ({

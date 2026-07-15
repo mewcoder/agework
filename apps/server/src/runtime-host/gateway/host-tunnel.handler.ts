@@ -33,7 +33,10 @@ import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
 } from "../runtime-host.events";
-import type { HostUpstreamPort } from "../runtime-host.types";
+import type {
+  HostUpstreamPort,
+  HostReincarnationPort,
+} from "../runtime-host.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 Runtime Host 的新连接顶掉旧连接。 */
@@ -63,6 +66,8 @@ export class HostTunnelHandler
   /** host.upstream 回流 Port(契约见 runtime-host.types.ts),由 RuntimeHostAdapter 实现接线。
    *  处理返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
   private hostUpstreamPort?: HostUpstreamPort;
+  /** 进程更替收尾 Port,由 RuntimeHostAdapter 接线、run 上层实现;register 时同步调用。 */
+  private reincarnationPort?: HostReincarnationPort;
   /** Phase 2: 每个 Runtime Host 的隧道会话状态。epoch 每次 register 递增,
    *  非当前 epoch 的上行信封丢弃(防脑裂);chain 串行化上行处理保事件顺序。 */
   private readonly hostSessions = new Map<
@@ -135,6 +140,11 @@ export class HostTunnelHandler
   /** 接线 host.upstream 回流 Port(启动期一次)。 */
   setHostUpstreamPort(port: HostUpstreamPort): void {
     this.hostUpstreamPort = port;
+  }
+
+  /** 接线进程更替收尾 Port(启动期一次)。 */
+  setHostReincarnationPort(port: HostReincarnationPort): void {
+    this.reincarnationPort = port;
   }
 
   /** 向目标 runtimeHostId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
@@ -318,14 +328,28 @@ export class HostTunnelHandler
         return;
       }
       const capabilities = normalizeRuntimeCapabilities(parsed.capabilities);
-      const found = await this.repository.markRegistered(
-        runtimeHostId,
-        capabilities,
-        parsed.envConfig
-      );
+      const { found, previousProcessInstanceId } =
+        await this.repository.markRegistered(
+          runtimeHostId,
+          capabilities,
+          parsed.processInstanceId,
+          parsed.envConfig
+        );
       if (!found) {
         ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
         return;
+      }
+      // Host 换了进程实例:旧进程的 run 会话 / 未 ACK 缓冲已随进程消失,在绑定新
+      // 连接、回 registered 之前先确定性收尾旧 run——否则新进程标 online 后,
+      // run-recovery 见 Host 在线便不判死,旧 run 永远挂在 running(僵尸 run)。
+      if (
+        previousProcessInstanceId &&
+        previousProcessInstanceId !== parsed.processInstanceId
+      ) {
+        this.logger.warn(
+          `runtime host ${runtimeHostId} reincarnated (process instance ${previousProcessInstanceId} → ${parsed.processInstanceId}); reaping stale runs`
+        );
+        await this.reincarnationPort?.reapRunsForReincarnation(runtimeHostId);
       }
       // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
       const previous = this.connections.get(runtimeHostId);

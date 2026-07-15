@@ -16,6 +16,7 @@ import {
   RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_EXECUTION,
   RUNTIME_HOST_OWNER_RECONCILIATION,
+  RUNTIME_HOST_REINCARNATION_BINDING,
   RUNTIME_HOST_UPSTREAM_BINDING,
   RUNTIME_HOST_WORKSPACE_DATA,
 } from "./runtime-host.types";
@@ -53,6 +54,10 @@ import {
       provide: RUNTIME_HOST_OWNER_RECONCILIATION,
       useExisting: RuntimeHostAdapter,
     },
+    {
+      provide: RUNTIME_HOST_REINCARNATION_BINDING,
+      useExisting: RuntimeHostAdapter,
+    },
   ],
   controllers: [
     RuntimeHostController,
@@ -67,6 +72,7 @@ import {
     RUNTIME_HOST_WORKSPACE_DATA,
     RUNTIME_HOST_DIAGNOSTICS,
     RUNTIME_HOST_OWNER_RECONCILIATION,
+    RUNTIME_HOST_REINCARNATION_BINDING,
   ],
 })
 export class RuntimeHostModule {}

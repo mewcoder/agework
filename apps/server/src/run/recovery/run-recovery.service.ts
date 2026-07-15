@@ -2,11 +2,17 @@ import {
   Inject,
   Injectable,
   Logger,
+  type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
 import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
-import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
+import {
+  RUNTIME_HOST_EXECUTION,
+  RUNTIME_HOST_REINCARNATION_BINDING,
+  type HostReincarnationBinding,
+  type HostReincarnationPort,
+} from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
@@ -25,7 +31,12 @@ import { swallow } from "../../common/swallow";
  * 判死。这同时覆盖运行期整机失联(不只是 server 重启窗口)。
  */
 @Injectable()
-export class RunRecoveryService implements OnApplicationShutdown {
+export class RunRecoveryService
+  implements
+    OnApplicationBootstrap,
+    OnApplicationShutdown,
+    HostReincarnationPort
+{
   private readonly logger = new Logger(RunRecoveryService.name);
   private sweepTimer?: NodeJS.Timeout;
 
@@ -35,8 +46,15 @@ export class RunRecoveryService implements OnApplicationShutdown {
     private readonly runtimeHostService: RuntimeHostService,
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
-    private readonly runtimeHost: RuntimeHostExecution
+    private readonly runtimeHost: RuntimeHostExecution,
+    @Inject(RUNTIME_HOST_REINCARNATION_BINDING)
+    private readonly reincarnationBinding: HostReincarnationBinding
   ) {}
+
+  /** 端口自接线:本类是进程更替收尾端口的实现者,启动期注册给隧道网关调用。 */
+  onApplicationBootstrap(): void {
+    this.reincarnationBinding.setReincarnationPort(this);
+  }
 
   onApplicationShutdown(): void {
     if (this.sweepTimer) {
@@ -114,6 +132,28 @@ export class RunRecoveryService implements OnApplicationShutdown {
         run.id,
         run.conversationId,
         "Runtime Host 离线超时,运行中断"
+      );
+      this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
+    }
+  }
+
+  /**
+   * HostReincarnationPort:Host 进程更替(processInstanceId 变化)时由隧道网关在
+   * 绑定新连接前同步调用。该 Host 上所有 active run 的旧会话/未 ACK 缓冲已随旧
+   * 进程消失,确定性判死并释放执行机侧 run 状态,避免僵尸 run 永久挂 running。
+   * 幂等:已终结的 run 不在 listActive 结果内。
+   */
+  async reapRunsForReincarnation(runtimeHostId: string): Promise<void> {
+    const activeRuns = await this.runRepository.listActive();
+    for (const run of activeRuns) {
+      if (run.conversation.workspace.runtimeHostId !== runtimeHostId) continue;
+      this.logger.warn(
+        `Run ${run.id} reaped: host ${runtimeHostId} replaced its process instance`
+      );
+      await this.failRun(
+        run.id,
+        run.conversationId,
+        "Runtime Host 重启(进程更替),运行中断"
       );
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }

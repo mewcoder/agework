@@ -41,6 +41,11 @@ export interface HostTunnelRegisterMessage {
   capabilities: RuntimeCapabilities;
   /** 控制隧道线协议版本。缺失或不匹配都拒绝注册。 */
   protocolVersion: number;
+  /** Host 进程实例标识。同一进程断线重连保持不变;进程重启生成新值。
+   *  Server 据此区分「同 Host 换了进程」与「同进程重连」——值变化意味着
+   *  旧进程的 run session / 未 ACK 缓冲已随进程消失,旧 active run 必须确定性
+   *  判死,不能等一个已不存在的会话续传(消灭快速重启的僵尸 run)。 */
+  processInstanceId: string;
   /** Host 产物版本(来自 bundled `AGEWORK_VERSION`),Server 用于握手比对告警。 */
   version?: string;
   /** Host 启动时检测本机 agent CLI 的结果（路径/版本/认证状态）。 */
