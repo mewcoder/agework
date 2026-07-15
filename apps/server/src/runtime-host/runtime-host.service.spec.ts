@@ -196,7 +196,7 @@ describe("RuntimeHostService", () => {
     expect(environment.detectEnv).toHaveBeenCalledWith("builtin");
   });
 
-  it("detectEnv for registered runtime uses tunnel when connected", async () => {
+  it("detectEnv for a registered Runtime Host uses the tunnel when connected", async () => {
     tunnelHandler.isConnected.mockReturnValue(true);
     const mockEnvConfig = {
       claude: {
@@ -224,18 +224,18 @@ describe("RuntimeHostService", () => {
     expect(environment.detectEnv).toHaveBeenCalledWith("rt-1");
   });
 
-  it("detectEnv for disconnected registered runtime returns null", async () => {
+  it("detectEnv for a disconnected registered Runtime Host returns null", async () => {
     tunnelHandler.isConnected.mockReturnValue(false);
     const result = await service.detectEnv("rt-1");
     expect(result.envConfig).toBeNull();
     expect(environment.detectEnv).not.toHaveBeenCalled();
   });
 
-  it("detectEnv rejects a missing runtime before reaching the execution plane", async () => {
+  it("detectEnv rejects a missing Runtime Host before reaching the execution plane", async () => {
     repository.findById.mockResolvedValueOnce(null);
 
     await expect(service.detectEnv("missing")).rejects.toThrow(
-      "runtime not found: missing"
+      "runtime host not found: missing"
     );
     expect(environment.detectEnv).not.toHaveBeenCalled();
   });
@@ -272,7 +272,7 @@ describe("RuntimeHostService", () => {
   it("create maps unique violation to ConflictException", async () => {
     repository.create.mockRejectedValueOnce({ code: "P2002" });
     await expect(service.create("u-1", "mac-studio")).rejects.toThrow(
-      "runtime name already exists"
+      "runtime host name already exists"
     );
   });
 
@@ -328,7 +328,7 @@ describe("RuntimeHostService", () => {
   it("delete throws NotFound when the row is missing or owned by someone else", async () => {
     repository.revokeByOwner.mockResolvedValueOnce(false);
     await expect(service.delete("u-1", "rt-x")).rejects.toThrow(
-      "runtime not found"
+      "runtime host not found"
     );
   });
 
@@ -360,14 +360,14 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("listDirectory throws NotFoundException when the runtime is not visible to the user", async () => {
+  it("listDirectory throws NotFoundException when the Runtime Host is not visible to the user", async () => {
     repository.findVisibleToOwner.mockResolvedValueOnce(null);
     await expect(
       service.listDirectory("u-1", "rt-x", undefined)
-    ).rejects.toThrow("runtime not found");
+    ).rejects.toThrow("runtime host not found");
   });
 
-  it("listDirectory for a disconnected registered runtime throws BadRequestException", async () => {
+  it("listDirectory for a disconnected registered Runtime Host throws BadRequestException", async () => {
     tunnelHandler.isConnected.mockReturnValue(false);
     await expect(
       service.listDirectory("u-1", "rt-1", undefined)

@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { detectEnvConfig, resolveInstalledBinPath } from "@agework/shared/cli";
 import {
-  resolveRegisteredRuntimeConfig,
+  resolveRegisteredRuntimeHostConfig,
   type RuntimeType,
 } from "./config.js";
 import { TunnelClient, buildCapabilities, log } from "./tunnel-client.js";
@@ -39,8 +39,8 @@ function detectRuntimeTypeAvailability(runtimeType: RuntimeType): {
 }
 
 /** registered host 常驻入口:解析配置、装配 RuntimeHost + worker HTTP + 隧道。 */
-export async function runRegisteredRuntime(): Promise<void> {
-  const config = resolveRegisteredRuntimeConfig(
+export async function runRegisteredRuntimeHost(): Promise<void> {
+  const config = resolveRegisteredRuntimeHostConfig(
     process.argv.slice(2),
     process.env
   );
@@ -125,18 +125,16 @@ export async function runRegisteredRuntime(): Promise<void> {
   const shutdown = () => {
     client.stop();
     // 停掉名下所有 worker 运行实例(目标架构不做跨重启容器复用),超时兜底强退
-    const stopAll = runtimeHost
-      .listWorkers()
-      .then((workers) =>
-        Promise.allSettled(
-          workers.map((w) =>
-            runtimeHost.stopWorker({
-              runtimeHostId: w.runtimeHostId,
-              key: w.workerKey,
-            })
-          )
+    const stopAll = runtimeHost.listWorkers().then((workers) =>
+      Promise.allSettled(
+        workers.map((w) =>
+          runtimeHost.stopWorker({
+            runtimeHostId: w.runtimeHostId,
+            key: w.workerKey,
+          })
         )
-      );
+      )
+    );
     const timeout = new Promise((resolve) => setTimeout(resolve, 10_000));
     void Promise.race([stopAll, timeout]).then(() => {
       runtimeHost.drain();
@@ -147,7 +145,7 @@ export async function runRegisteredRuntime(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
   log(
-    `registered runtime starting: server=${config.serverBaseUrl} runtimes=${config.runtimeTypes.join(",")} workerPort=${workerPort}`
+    `registered runtime host starting: server=${config.serverBaseUrl} runtimeTypes=${config.runtimeTypes.join(",")} workerPort=${workerPort}`
   );
   client.start();
   // 常驻:存活由 WS 连接/重连 timer 维持

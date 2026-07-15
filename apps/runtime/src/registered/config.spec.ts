@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { resolveRegisteredRuntimeConfig } from "./config.js";
+import { resolveRegisteredRuntimeHostConfig } from "./config.js";
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
 
-describe("resolveRegisteredRuntimeConfig", () => {
+describe("resolveRegisteredRuntimeHostConfig", () => {
   it("reads flags and strips trailing slash from server url (docker: worker-image required)", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       [
         "--server",
         "http://host:3000/api/v1/",
@@ -28,7 +28,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("falls back to env and prefers flags over env (local: runtime-entry optional)", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       ["--token", "flag-token", "--runtime-entry", "/path/flag.js"],
       {
         AGEWORK_SERVER_BASE_URL: "http://env:3000/api/v1",
@@ -47,7 +47,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("local without runtime-entry defaults to self (allowed)", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native"],
       {}
     );
@@ -60,7 +60,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("reads a custom log dir", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       [
         "--server",
         "http://h/api/v1",
@@ -80,13 +80,16 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("rejects missing server url", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(["--token", "t", "--runtime", "docker"], {})
+      resolveRegisteredRuntimeHostConfig(
+        ["--token", "t", "--runtime", "docker"],
+        {}
+      )
     ).toThrow("missing server url");
   });
 
   it("rejects missing token", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(
+      resolveRegisteredRuntimeHostConfig(
         ["--server", "http://h/api/v1", "--runtime", "docker"],
         {}
       )
@@ -95,7 +98,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("rejects unknown runtime type", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(
+      resolveRegisteredRuntimeHostConfig(
         ["--server", "http://h/api/v1", "--token", "t", "--runtime", "vm"],
         {}
       )
@@ -104,7 +107,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("rejects docker/opensandbox without a worker image", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(
+      resolveRegisteredRuntimeHostConfig(
         ["--server", "http://h/api/v1", "--token", "t", "--runtime", "docker"],
         {}
       )
@@ -112,7 +115,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("accepts local with no --runtime-entry (defaults later to process.argv[1])", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native"],
       {}
     );
@@ -120,7 +123,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("parses a comma separated multi-type list with dedupe", () => {
-    const config = resolveRegisteredRuntimeConfig(
+    const config = resolveRegisteredRuntimeHostConfig(
       [
         "--server",
         "http://h/api/v1",
@@ -137,7 +140,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
   });
 
   it("prefers AGEWORK_RUNTIME_TYPES over the singular alias", () => {
-    const config = resolveRegisteredRuntimeConfig([], {
+    const config = resolveRegisteredRuntimeHostConfig([], {
       AGEWORK_SERVER_BASE_URL: "http://h/api/v1",
       AGEWORK_RUNTIME_TOKEN: "t",
       AGEWORK_RUNTIME_TYPES: "native,docker",
@@ -149,8 +152,15 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("rejects a list containing an unknown runtime type", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(
-        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native,vm"],
+      resolveRegisteredRuntimeHostConfig(
+        [
+          "--server",
+          "http://h/api/v1",
+          "--token",
+          "t",
+          "--runtime",
+          "native,vm",
+        ],
         {}
       )
     ).toThrow("invalid runtime type");
@@ -158,8 +168,15 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("requires a worker image when any container type is listed", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(
-        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "native,docker"],
+      resolveRegisteredRuntimeHostConfig(
+        [
+          "--server",
+          "http://h/api/v1",
+          "--token",
+          "t",
+          "--runtime",
+          "native,docker",
+        ],
         {}
       )
     ).toThrow("missing worker image");
@@ -167,7 +184,7 @@ describe("resolveRegisteredRuntimeConfig", () => {
 
   it("rejects a flag without value", () => {
     expect(() =>
-      resolveRegisteredRuntimeConfig(["--server", "--token", "t"], {})
+      resolveRegisteredRuntimeHostConfig(["--server", "--token", "t"], {})
     ).toThrow("flag --server requires a value");
   });
 });

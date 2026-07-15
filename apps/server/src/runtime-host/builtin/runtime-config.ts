@@ -27,11 +27,11 @@ export function resolveRuntimeEntry(entryOverride?: string): string {
 
 /**
  * 把 server 的 ConfigService 拼成 `@agework/providers` 需要的 RuntimeConfig。
- * runtime 包不认识 ConfigService / process.env——所有值在这里备好后注入:
+ * `@agework/runtime` 包不认识 ConfigService / process.env——所有值在这里备好后注入:
  * - serverBaseUrl:worker 回连 server 的地址。默认 loopback,docker/opensandbox
  *   provider 自行把 loopback 换成 host.docker.internal;远程部署设 AGEWORK_SERVER_BASE_URL
- *   覆盖成真实可达地址,三种 runtime 都直接用。
- * - local.runtimeEntryPath:agework-runtime 产物入口(见 resolveRuntimeEntry)。
+ *   覆盖成真实可达地址,所有 runtimeType 都直接用。
+ * - native.runtimeEntryPath:agework-runtime 产物入口(见 resolveRuntimeEntry)。
  */
 export function toRuntimeConfig(configService: ConfigService): RuntimeConfig {
   const openSandbox = configService.getOpenSandboxConfig();

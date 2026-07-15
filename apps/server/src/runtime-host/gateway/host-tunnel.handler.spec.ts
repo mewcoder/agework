@@ -130,7 +130,7 @@ describe("HostTunnelHandler", () => {
     );
   });
 
-  it("rejects a register without protocolVersion before binding the runtime", async () => {
+  it("rejects a register without protocolVersion before binding the Runtime Host", async () => {
     const ws = connect();
     await once(ws, "open");
     ws.send(
@@ -148,7 +148,7 @@ describe("HostTunnelHandler", () => {
     expect(repository.markRegistered).not.toHaveBeenCalled();
   });
 
-  it("rejects an explicitly incompatible protocol before binding the runtime", async () => {
+  it("rejects an explicitly incompatible protocol before binding the Runtime Host", async () => {
     const ws = connect();
     await once(ws, "open");
     ws.send(
@@ -241,7 +241,7 @@ describe("HostTunnelHandler", () => {
     expect(repository.touchHeartbeat).not.toHaveBeenCalled();
   });
 
-  it("marks the runtime offline when the registered connection drops", async () => {
+  it("marks the Runtime Host offline when the registered connection drops", async () => {
     const ws = connect();
     await once(ws, "open");
     await register(ws);
@@ -449,7 +449,7 @@ describe("HostTunnelHandler", () => {
   });
 
   describe("sendRequest", () => {
-    it("rejects immediately when the target runtime is not connected", async () => {
+    it("rejects immediately when the target Runtime Host is not connected", async () => {
       await expect(
         handler.sendRequest(
           "rt-1",
@@ -461,7 +461,7 @@ describe("HostTunnelHandler", () => {
           },
           1000
         )
-      ).rejects.toThrow("runtime rt-1 is not connected");
+      ).rejects.toThrow("runtime host rt-1 is not connected");
     });
 
     it("sends the request over the wire and resolves with the manager's result", async () => {

@@ -15,7 +15,7 @@ function createService(overrides: Record<string, unknown> = {}) {
   const configService = {
     isSystemEnvEnabled: vi.fn().mockReturnValue(true),
   };
-  const runtimeService = {
+  const runtimeHostService = {
     getResolvedCliPaths: vi.fn().mockResolvedValue({
       claude: "/usr/bin/claude",
       codex: null,
@@ -25,11 +25,11 @@ function createService(overrides: Record<string, unknown> = {}) {
   return {
     repo,
     configService,
-    runtimeService,
+    runtimeHostService,
     service: new ModelProviderService(
       repo as never,
       configService as never,
-      runtimeService as never
+      runtimeHostService as never
     ),
   };
 }

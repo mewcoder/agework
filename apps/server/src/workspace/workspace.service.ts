@@ -53,7 +53,7 @@ type CreateWorkspaceInput = {
   rootPath?: string;
   runtimeType?: string;
   scope?: string;
-  /** 绑定到某个已配对的 Registered Runtime Host。runtimeType 选择其一种能力。 */
+  /** 绑定到某个已配对的 registered Runtime Host。runtimeType 选择其一种能力。 */
   runtimeHostId?: string;
 };
 
@@ -65,7 +65,7 @@ export class WorkspaceService {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeService: RuntimeHostService
+    private readonly runtimeHostService: RuntimeHostService
   ) {}
 
   /**
@@ -103,7 +103,7 @@ export class WorkspaceService {
   }
 
   /**
-   * run 启动所需的 workspace 运行上下文：目录 + runtime 配置 + 属主用户名。
+   * run 启动所需的 workspace 运行上下文：目录 + Runtime Host/runtimeType 配置 + 属主用户名。
    * 供 agent 层在调用 RunService.start 前解析（run 层不直接读 workspace 表）。
    * workspace 不存在抛 404，未关联目录抛 400。
    */
@@ -135,7 +135,7 @@ export class WorkspaceService {
   }
 
   /**
-   * 返回当前部署允许创建工作空间时选择的 runtime / runtimeType 能力。
+   * 返回当前部署允许创建工作空间时选择的 Runtime Host / runtimeType 能力。
    */
   getCapabilities() {
     return this.runtimePolicy.capabilities();
@@ -174,7 +174,7 @@ export class WorkspaceService {
     path: string
   ): Promise<WorkspaceFileListResponse> {
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    return this.runtimeService.listFiles(
+    return this.runtimeHostService.listFiles(
       ctx.runtimeHostId,
       ctx.workspaceRootPath,
       path ?? ""
@@ -191,7 +191,7 @@ export class WorkspaceService {
       throw new BadRequestException("path is required");
     }
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    return this.runtimeService.readFile(
+    return this.runtimeHostService.readFile(
       ctx.runtimeHostId,
       ctx.workspaceRootPath,
       path
@@ -209,7 +209,7 @@ export class WorkspaceService {
     workspaceId: string
   ): Promise<WorkspaceChangedFilesResponse> {
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    return this.runtimeService.listChangedFiles(
+    return this.runtimeHostService.listChangedFiles(
       ctx.runtimeHostId,
       ctx.workspaceRootPath
     );
@@ -225,7 +225,7 @@ export class WorkspaceService {
       throw new BadRequestException("path is required");
     }
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    return this.runtimeService.readFileDiff(
+    return this.runtimeHostService.readFileDiff(
       ctx.runtimeHostId,
       ctx.workspaceRootPath,
       path
@@ -238,7 +238,7 @@ export class WorkspaceService {
     workspaceId: string
   ): Promise<WorkspaceFileSearchResponse> {
     const ctx = await this.resolveFileContext(userId, workspaceId);
-    return this.runtimeService.searchFiles(
+    return this.runtimeHostService.searchFiles(
       ctx.runtimeHostId,
       ctx.workspaceRootPath
     );
@@ -288,7 +288,7 @@ export class WorkspaceService {
     const id = generateId();
     // directoryHandler 只接收 registered Host id；builtin Host 的目录仍走本机
     // fs 校验/创建。
-    const registeredRuntimeHostId = this.runtimeService.isBuiltinHost(
+    const registeredRuntimeHostId = this.runtimeHostService.isBuiltinHost(
       runtimeHostId
     )
       ? undefined
@@ -327,7 +327,7 @@ export class WorkspaceService {
   }
 
   /**
-   * 解析 placement:Registered(传了 runtimeHostId)分支复用 resolveRegisteredPlacement;
+   * 解析 placement:registered Host(传了 runtimeHostId)分支复用 resolveRegisteredPlacement;
    * builtin 分支按部署策略解析 runtimeType/scope，Host id 固定为 builtin。
    */
   private async resolvePlacement(input: {
@@ -357,7 +357,7 @@ export class WorkspaceService {
     return {
       runtimeType,
       scope,
-      runtimeHostId: this.runtimeService.getBuiltinHostId(),
+      runtimeHostId: this.runtimeHostService.getBuiltinHostId(),
     };
   }
 
@@ -376,22 +376,26 @@ export class WorkspaceService {
     scope: WorkerScope;
     runtimeHostId: string;
   }> {
-    const registeredRuntime = await this.runtimeService.getOwned(
+    const registeredHost = await this.runtimeHostService.getOwned(
       userId,
       runtimeHostId
     );
-    if (!registeredRuntime) {
-      throw new NotFoundException(`Runtime ${runtimeHostId} not found`);
+    if (!registeredHost) {
+      throw new NotFoundException(`Runtime Host ${runtimeHostId} not found`);
     }
-    if (!registeredRuntime.capabilities) {
-      throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
+    if (!registeredHost.capabilities) {
+      throw new BadRequestException(
+        "该 Runtime Host 还未完成配对,无法创建工作空间"
+      );
     }
     const capabilities = normalizeRuntimeCapabilities(
-      registeredRuntime.capabilities
+      registeredHost.capabilities
     );
     const supportedRuntimeTypes = availableRuntimeTypes(capabilities);
     if (supportedRuntimeTypes.length === 0) {
-      throw new BadRequestException("该运行环境还未完成配对,无法创建工作空间");
+      throw new BadRequestException(
+        "该 Runtime Host 还未完成配对,无法创建工作空间"
+      );
     }
     const selectedRuntimeType =
       requestedRuntimeType?.trim() ||
@@ -399,11 +403,13 @@ export class WorkspaceService {
         ? supportedRuntimeTypes[0]
         : undefined);
     if (!selectedRuntimeType) {
-      throw new BadRequestException("该运行环境提供多种运行方式,请选择一种");
+      throw new BadRequestException(
+        "该 Runtime Host 提供多种运行方式,请选择一种"
+      );
     }
     if (!supportedRuntimeTypes.includes(selectedRuntimeType)) {
       throw new BadRequestException(
-        `该运行环境不支持运行方式: ${selectedRuntimeType}`
+        `该 Runtime Host 不支持运行方式: ${selectedRuntimeType}`
       );
     }
     const runtimeType = selectedRuntimeType as RuntimeType;
@@ -422,12 +428,12 @@ export class WorkspaceService {
     const scope = requestedWorkerScope?.trim() || allowedScopes[0];
     if (scope !== "user" && scope !== "workspace") {
       throw new BadRequestException(
-        `该运行环境不支持运行范围: ${scope ?? "未指定"}`
+        `该 Runtime Host 不支持运行范围: ${scope ?? "未指定"}`
       );
     }
     if (!allowedScopes.includes(scope)) {
       throw new BadRequestException(
-        `该运行环境不支持运行范围: ${scope ?? "未指定"}`
+        `该 Runtime Host 不支持运行范围: ${scope ?? "未指定"}`
       );
     }
     return {
@@ -474,7 +480,7 @@ export class WorkspaceService {
 
   /**
    * 用户侧删除自己拥有的工作空间。软删后发出 workspace deleted fact event,
-   * 下游据此级联(runtime 清理绑定资源、run 停止该 workspace 的活跃任务);
+   * 下游据此级联(Runtime Host 清理绑定资源、run 停止该 workspace 的活跃任务);
    * workspace 不感知下游(方案 B:总能删,任务被停)。
    */
   async delete(userId: string, id: string) {

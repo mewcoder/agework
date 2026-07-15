@@ -6,7 +6,7 @@ import {
   RUNTIME_TUNNEL_CLOSE_GONE,
 } from "@agework/shared/protocol";
 import { TunnelClient } from "./tunnel-client.js";
-import type { RegisteredRuntimeConfig } from "./config.js";
+import type { RegisteredRuntimeHostConfig } from "./config.js";
 
 // 真实的 detectEnvConfig() 会探测本机装的 claude/codex CLI,导致 register 消息里的
 // envConfig 因开发机环境而异——固定为一个确定值,测试才不受本机 CLI 安装状态影响。
@@ -68,7 +68,7 @@ describe("TunnelClient", () => {
   });
 
   function makeClient(onGone = vi.fn(), onIncompatible = vi.fn()) {
-    const config: RegisteredRuntimeConfig = {
+    const config: RegisteredRuntimeHostConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
       runtimeTypes: ["docker"],
@@ -189,7 +189,7 @@ describe("TunnelClient", () => {
     client!.start();
     await vi.waitFor(() => expect(connections).toHaveLength(1));
 
-    connections[0].ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+    connections[0].ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
 
     await vi.waitFor(() => expect(onGone).toHaveBeenCalledOnce());
     await new Promise((resolve) => setTimeout(resolve, 100));

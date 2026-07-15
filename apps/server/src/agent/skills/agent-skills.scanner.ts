@@ -19,7 +19,7 @@ export class AgentSkillsScanner {
 
   constructor(
     private readonly workspaceService: WorkspaceService,
-    private readonly runtimeService: RuntimeHostService
+    private readonly runtimeHostService: RuntimeHostService
   ) {}
 
   async scan(
@@ -38,7 +38,7 @@ export class AgentSkillsScanner {
 
     let dirEntries: { name: string; type: string }[];
     try {
-      const result = await this.runtimeService.listFiles(
+      const result = await this.runtimeHostService.listFiles(
         ctx.runtimeHostId,
         ctx.workspaceRootPath,
         skillsDir
@@ -59,7 +59,7 @@ export class AgentSkillsScanner {
       dirNames.map(async (dirName) => {
         try {
           const filePath = join(skillsDir, dirName, "SKILL.md");
-          const result = await this.runtimeService.readFile(
+          const result = await this.runtimeHostService.readFile(
             ctx.runtimeHostId,
             ctx.workspaceRootPath,
             filePath

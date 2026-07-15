@@ -76,7 +76,7 @@ export class RuntimeHostAdapter
     this.upstream = upstream;
     // 进程内 builtin Host 直接回流；registered Host 的事件经隧道回流
     this.builtinHost.setUpstream(upstream);
-    // 实现并接线 runtime 模块定义的 host.upstream 回流 Port
+    // 实现并接线 Runtime Host 模块定义的 host.upstream 回流 Port
     this.tunnelHandler.setHostUpstreamPort({
       onHostUpstream: (runtimeHostId, notification) =>
         this.onTunnelUpstream(runtimeHostId, notification, upstream),

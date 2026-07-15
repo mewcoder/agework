@@ -11,12 +11,12 @@ import { CreateHostDirectoryDto } from "./dto/create-host-directory.dto";
  */
 @Controller("runtime-hosts")
 export class RuntimeHostController {
-  constructor(private readonly runtimeService: RuntimeHostService) {}
+  constructor(private readonly runtimeHostService: RuntimeHostService) {}
 
   /** 所有用户:列出自己可见的 Host（自己的 registered + 全局 builtin）。 */
   @Get("list")
   list(@CurrentUser() user: JwtUser) {
-    return this.runtimeService.list(user.userId);
+    return this.runtimeHostService.list(user.userId);
   }
 
   /** 所有用户:列出自己可见的某个 Host 上 path 下的子目录（不含文件）。 */
@@ -25,7 +25,7 @@ export class RuntimeHostController {
     @Query() query: ListHostDirectoryDto,
     @CurrentUser() user: JwtUser
   ) {
-    return this.runtimeService.listDirectory(
+    return this.runtimeHostService.listDirectory(
       user.userId,
       query.runtimeHostId,
       query.path
@@ -38,7 +38,7 @@ export class RuntimeHostController {
     @Body() body: CreateHostDirectoryDto,
     @CurrentUser() user: JwtUser
   ) {
-    return this.runtimeService.createDirectory(
+    return this.runtimeHostService.createDirectory(
       user.userId,
       body.runtimeHostId,
       body.path

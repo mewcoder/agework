@@ -10,7 +10,7 @@ import { toRuntimeConfig } from "../builtin/runtime-config";
 import { resolveRuntimeHostCliPaths } from "../environment/runtime-host-environment";
 
 /**
- * 进程内 builtin RuntimeHost 的注入 token。
+ * 进程内 builtin Runtime Host 的注入 token。
  *
  * Phase 3 清尾:builtin Host 自管 worker HTTP 服务器(WorkerHttpServer),
  * worker 数据面对端从 server 旧 /worker/* 端点切到 Host——与 registered

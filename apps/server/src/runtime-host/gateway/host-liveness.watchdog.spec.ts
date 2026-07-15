@@ -43,7 +43,7 @@ describe("HostLivenessWatchdog", () => {
     expect(cutoff.getTime()).toBe(now + 10_000 - 30_000);
   });
 
-  it("reaps the in-memory tunnel connection of each stale runtime", async () => {
+  it("reaps the in-memory tunnel connection of each stale Runtime Host", async () => {
     repository.markStaleOnlineAsOffline.mockResolvedValueOnce(["rt-1", "rt-2"]);
     watchdog.onApplicationBootstrap();
 

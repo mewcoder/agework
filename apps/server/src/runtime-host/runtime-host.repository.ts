@@ -198,7 +198,7 @@ export class RuntimeHostRepository {
     if (stale.length === 0) return [];
     const ids = stale.map((row) => row.id);
     await this.prisma.runtimeHost.updateMany({
-      // 仍带 stale 守卫:查询到更新之间若有心跳刷新,不误判活着的 runtime。
+      // 仍带 stale 守卫:查询到更新之间若有心跳刷新,不误判活着的 Runtime Host。
       where: {
         id: { in: ids },
         status: "online",

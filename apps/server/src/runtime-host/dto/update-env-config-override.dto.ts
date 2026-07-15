@@ -1,7 +1,7 @@
 import { IsIn, IsNotEmpty, IsString } from "class-validator";
 import { AGENT_TYPES } from "@agework/shared";
 
-/** admin 覆盖 runtime envConfig 的请求 body：per-agent。 */
+/** admin 覆盖 Runtime Host envConfig 的请求 body：per-agent。 */
 export class UpdateEnvConfigOverrideDto {
   @IsString()
   @IsNotEmpty()

@@ -107,7 +107,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     return resolveRuntimeSpec(input);
   }
 
-  /** 创建 Registered Runtime 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
+  /** 创建 registered Runtime Host 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
   async create(
     ownerId: string,
     name: string
@@ -119,7 +119,9 @@ export class RuntimeHostService implements OnApplicationBootstrap {
       return { runtimeHost: toRuntimeHostResponse(row), token };
     } catch (err) {
       if (isPrismaUniqueError(err)) {
-        throw new ConflictException(`runtime name already exists: ${name}`);
+        throw new ConflictException(
+          `runtime host name already exists: ${name}`
+        );
       }
       throw err;
     }
@@ -142,115 +144,133 @@ export class RuntimeHostService implements OnApplicationBootstrap {
    * 返回 null 表示不存在/不可见/已注销。供上层入口（如创建 workspace 时校验目标 Host）
    * 做归属校验,由调用方决定如何处理 null。
    */
-  getOwned(ownerId: string, id: string): Promise<RuntimeHostRow | null> {
-    return this.repository.findVisibleToOwner(ownerId, id);
+  getOwned(
+    ownerId: string,
+    runtimeHostId: string
+  ): Promise<RuntimeHostRow | null> {
+    return this.repository.findVisibleToOwner(ownerId, runtimeHostId);
   }
 
   /**
    * 注销 registered Host（撤 token、软删除、行永久保留）：只拦"以后不能再绑定新 workspace"，
    * 不主动踢断在线隧道连接——这台机器上可能还有活跃 Worker 在跑,断连接等于强制判死,
-   * 跟"放任其自然结束"的设计矛盾(见 runtime 模块 ADR-0001)。连接的存活/掉线继续按
+   * 跟"放任其自然结束"的设计矛盾(见 runtime-host 模块 ADR-0001)。连接的存活/掉线继续按
    * 心跳机制走，不因注销而改变。builtin 行 ownerId=null，不会匹配任何真实 userId，
    * 天然不可被此方法注销。
    */
-  async delete(ownerId: string, id: string): Promise<void> {
-    const revoked = await this.repository.revokeByOwner(ownerId, id);
+  async delete(ownerId: string, runtimeHostId: string): Promise<void> {
+    const revoked = await this.repository.revokeByOwner(ownerId, runtimeHostId);
     if (!revoked) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
   }
 
   /**
-   * 管理员覆盖 runtime 的 envConfig（per-agent）。空字符串 = 清除该 agent 的覆盖。
-   * 不查 runtime 是否存在——admin 接口，不存在时 updateMany count=0 自然报 404。
+   * 管理员覆盖 Runtime Host 的 envConfig（per-agent）。空字符串 = 清除该 agent 的覆盖。
+   * 不查 Host 是否存在——admin 接口，不存在时 updateMany count=0 自然报 404。
    */
   async updateEnvConfigOverride(
-    id: string,
+    runtimeHostId: string,
     agentType: AgentType,
     executablePath: string
   ): Promise<void> {
-    const current = await this.repository.findById(id);
+    const current = await this.repository.findById(runtimeHostId);
     if (!current) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
     const override = mergeOverride(
       current.envConfigOverride as RuntimeHostEnvConfigOverride | null,
       agentType,
       executablePath
     );
-    const updated = await this.repository.updateEnvConfigOverride(id, override);
+    const updated = await this.repository.updateEnvConfigOverride(
+      runtimeHostId,
+      override
+    );
     if (!updated) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
   }
 
   /**
-   * 管理员一键安装 runtime 的独立 CLI(仅支持 native 类型;docker/opensandbox
+   * 管理员一键安装 Runtime Host 的独立 CLI(仅支持 native 类型;docker/opensandbox
    * 走镜像固定路径,装不装不影响实际执行,不支持此操作)。
    * 安装成功后自动写入 override 并重新检测刷新展示状态。
    */
   async installCli(
-    id: string,
+    runtimeHostId: string,
     agentType: AgentType
   ): Promise<DetectEnvResponse> {
-    const row = await this.repository.findById(id);
+    const row = await this.repository.findById(runtimeHostId);
     if (!row) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (!isBuiltinHostId(id) && !this.tunnelHandler.isConnected(id)) {
-      throw new BadRequestException(`runtime ${id} is not connected`);
+    if (
+      !isBuiltinHostId(runtimeHostId) &&
+      !this.tunnelHandler.isConnected(runtimeHostId)
+    ) {
+      throw new BadRequestException(
+        `runtime host ${runtimeHostId} is not connected`
+      );
     }
     const { executablePath } = await this.environment.installCli({
-      runtimeHostId: id,
+      runtimeHostId,
       agentType,
     });
-    await this.updateEnvConfigOverride(id, agentType, executablePath);
-    return this.detectEnv(id);
+    await this.updateEnvConfigOverride(
+      runtimeHostId,
+      agentType,
+      executablePath
+    );
+    return this.detectEnv(runtimeHostId);
   }
 
   /**
-   * 管理员触发 runtime 重新检测 CLI 环境。
+   * 管理员触发 Runtime Host 重新检测 CLI 环境。
    * - builtin Host:进程内检测。
    * - registered Host:通过 host.detectEnv RPC 重检能力矩阵。
-   *   runtime 未连接时返回 null。
+   *   Host 未连接时返回 null。
    */
-  async detectEnv(id: string): Promise<DetectEnvResponse> {
-    const row = await this.repository.findById(id);
+  async detectEnv(runtimeHostId: string): Promise<DetectEnvResponse> {
+    const row = await this.repository.findById(runtimeHostId);
     if (!row) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
     // registered 未连接:不是错误,只是此刻无法检测(前端按离线展示)
-    if (!this.tunnelHandler.isConnected(id) && !isBuiltinHostId(id)) {
+    if (
+      !this.tunnelHandler.isConnected(runtimeHostId) &&
+      !isBuiltinHostId(runtimeHostId)
+    ) {
       return { envConfig: null };
     }
     let envConfig: RuntimeEnvConfig | undefined;
     try {
-      envConfig = (await this.environment.detectEnv(id)).native?.cli;
+      envConfig = (await this.environment.detectEnv(runtimeHostId)).native?.cli;
     } catch (err) {
       // 检测/RPC 失败与「未检出 CLI」是两回事,失败要让调用方看见
       throw new BadRequestException(
-        `detect-env for runtime ${id} failed: ${err instanceof Error ? err.message : String(err)}`
+        `detect-env for runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
     if (!envConfig) return { envConfig: null };
-    await this.repository.updateEnvConfig(id, envConfig);
+    await this.repository.updateEnvConfig(runtimeHostId, envConfig);
     return { envConfig };
   }
 
   /**
-   * 列出该用户可见的 runtime 上 path 下的子目录(不含文件)。
-   * runtime 不可见/不存在抛 NotFoundException;registered runtime 未连接抛
+   * 列出该用户可见的 Runtime Host 上 path 下的子目录(不含文件)。
+   * Host 不可见/不存在抛 NotFoundException;registered Host 未连接抛
    * BadRequestException(前端应已用 status 提前禁用入口,这里是兜底)。
    */
   async listDirectory(
     ownerId: string,
-    id: string,
+    runtimeHostId: string,
     path?: string
   ): Promise<HostDirectoryResponse> {
-    await this.assertRuntimeReachable(ownerId, id);
+    await this.assertRuntimeHostReachable(ownerId, runtimeHostId);
     try {
       const result = await this.workspaceData.listDirectory({
-        runtimeHostId: id,
+        runtimeHostId,
         path,
       });
       return { path: result.path, list: result.entries };
@@ -261,15 +281,15 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     }
   }
 
-  /** 在该用户可见的 runtime 上新建目录,返回新建目录的绝对路径。规则同 listDirectory。 */
+  /** 在该用户可见的 Runtime Host 上新建目录,返回新建目录的绝对路径。规则同 listDirectory。 */
   async createDirectory(
     ownerId: string,
-    id: string,
+    runtimeHostId: string,
     path: string
   ): Promise<CreateHostDirectoryResponse> {
-    await this.assertRuntimeReachable(ownerId, id);
+    await this.assertRuntimeHostReachable(ownerId, runtimeHostId);
     try {
-      await this.workspaceData.createDirectory({ runtimeHostId: id, path });
+      await this.workspaceData.createDirectory({ runtimeHostId, path });
       return { path };
     } catch (err) {
       throw new BadRequestException(
@@ -378,35 +398,40 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     );
   }
 
-  /** 校验 runtime 对该用户可见,且(registered 时)隧道在线,否则抛异常。 */
-  private async assertRuntimeReachable(
+  /** 校验 Runtime Host 对该用户可见,且(registered 时)隧道在线,否则抛异常。 */
+  private async assertRuntimeHostReachable(
     ownerId: string,
-    id: string
+    runtimeHostId: string
   ): Promise<void> {
-    const owned = await this.getOwned(ownerId, id);
+    const owned = await this.getOwned(ownerId, runtimeHostId);
     if (!owned) {
-      throw new NotFoundException(`runtime not found: ${id}`);
+      throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (!isBuiltinHostId(id) && !this.tunnelHandler.isConnected(id)) {
-      throw new BadRequestException(`runtime ${id} is not connected`);
+    if (
+      !isBuiltinHostId(runtimeHostId) &&
+      !this.tunnelHandler.isConnected(runtimeHostId)
+    ) {
+      throw new BadRequestException(
+        `runtime host ${runtimeHostId} is not connected`
+      );
     }
   }
 
   /** 按 id 查 RuntimeHost 行（无 owner 校验，供 server 内部恢复流程使用）。 */
-  getRuntimeHostRow(id: string): Promise<RuntimeHostRow | null> {
-    return this.repository.findById(id);
+  getRuntimeHostRow(runtimeHostId: string): Promise<RuntimeHostRow | null> {
+    return this.repository.findById(runtimeHostId);
   }
 
   /**
-   * 获取 runtime 的 resolved CLI 路径（override > detected > null）。
+   * 获取 Runtime Host 的 resolved CLI 路径（override > detected > null）。
    * 供 RunLauncher 对 native 类型提取 CLI 路径写入 RunConfig。
    */
-  async getResolvedCliPaths(id: string): Promise<{
+  async getResolvedCliPaths(runtimeHostId: string): Promise<{
     claude: string | null;
     codex: string | null;
     opencode: string | null;
   } | null> {
-    const row = await this.repository.findById(id);
+    const row = await this.repository.findById(runtimeHostId);
     if (!row) return null;
     return resolveRuntimeHostCliPaths(row);
   }

@@ -23,7 +23,7 @@ import {
 @Injectable()
 class DownstreamRuntimeConsumer {
   constructor(
-    readonly runtimeService: RuntimeHostService,
+    readonly runtimeHostService: RuntimeHostService,
     @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
     readonly ownerReconciliation: RuntimeHostOwnerReconciliation,
     @Inject(RUNTIME_HOST_ENVIRONMENT)
@@ -48,7 +48,7 @@ describe("RuntimeHostModule wiring", () => {
     vi.restoreAllMocks();
   });
 
-  it("assembles the runtime module and resolves RuntimeHostService", async () => {
+  it("assembles the Runtime Host module and resolves RuntimeHostService", async () => {
     testingModule = await createRuntimeTestingModule([RuntimeHostModule]);
 
     expect(testingModule.get(RuntimeHostService)).toBeInstanceOf(
@@ -62,7 +62,9 @@ describe("RuntimeHostModule wiring", () => {
     ]);
 
     const consumer = testingModule.get(DownstreamRuntimeConsumer);
-    expect(consumer.runtimeService).toBe(testingModule.get(RuntimeHostService));
+    expect(consumer.runtimeHostService).toBe(
+      testingModule.get(RuntimeHostService)
+    );
     expect(consumer.ownerReconciliation).toBeDefined();
     expect(consumer.environment).toBeDefined();
     expect(consumer.workspaceData).toBeDefined();

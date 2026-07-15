@@ -11,10 +11,10 @@ export type { RuntimeType };
 
 const DEFAULT_LOG_DIR = "/home/agework/.agework/logs/runtime";
 
-export interface RegisteredRuntimeConfig {
+export interface RegisteredRuntimeHostConfig {
   /** server 基地址(含 API base path,如 http://host:3000/api/v1),与 worker 的 AGEWORK_SERVER_BASE_URL 同语义。 */
   serverBaseUrl: string;
-  /** 配对 token(server 创建 Runtime 时下发,明文只出现一次)。 */
+  /** 配对 token(server 创建 Runtime Host 时下发,明文只出现一次)。 */
   token: string;
   /** 这台 Host 支持的运行方式(≥1;一台机器可以同时提供 native + docker)。 */
   runtimeTypes: RuntimeType[];
@@ -23,49 +23,57 @@ export interface RegisteredRuntimeConfig {
   /** docker/opensandbox 起 worker 运行实例用的镜像 tag;native 不用。 */
   workerImage?: string;
   /** native 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
- *  不传则默认 fork Registered Runtime 自身(process.argv[1])——它与 worker 是同一
- *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
- *  的 NativeProviderConfig。Registered+native 场景下镜像里只有一份 bundle,默认即正确。 */
+   *  不传则默认 fork registered Runtime Host 自身(process.argv[1])——它与 worker 是同一
+   *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动,见 packages/providers
+   *  的 NativeProviderConfig。registered Host + native 场景下镜像里只有一份 bundle,默认即正确。 */
   runtimeEntryPath?: string;
   /** Phase 2: worker HTTP 服务器监听端口(worker 回连 Host 的端口)。
- *  默认 7101。worker 的 AGEWORK_WORKER_API_BASE 会被设为 `http://127.0.0.1:<port>/api/v1`。 */
+   *  默认 7101。worker 的 AGEWORK_WORKER_API_BASE 会被设为 `http://127.0.0.1:<port>/api/v1`。 */
   workerPort?: number;
   /** 用户工作空间根目录(user-scope 挂载根)。builtin 场景由 server
- *  supervisor 注入自己的配置值;registered 默认 /home/agework/workspaces。 */
+   *  supervisor 注入自己的配置值;registered 默认 /home/agework/workspaces。 */
   userWorkspaceRoot?: string;
 }
 
 /**
- * Registered Runtime 启动配置:CLI 参数优先,env 兜底。
+ * registered Runtime Host 启动配置:CLI 参数优先,env 兜底。
  * `agework-runtime --server <url> --token <配对码> --runtime <type[,type...]>
  *   [--worker-image <tag>] [--log-dir <path>] [--runtime-entry <path>]`
  * 运行方式支持逗号分隔多值(如 `--runtime native,docker`);
  * env 读 AGEWORK_RUNTIME_TYPES,单数 AGEWORK_RUNTIME_TYPE 作兼容别名。
  */
-export function resolveRegisteredRuntimeConfig(
+export function resolveRegisteredRuntimeHostConfig(
   argv: string[],
   env: NodeJS.ProcessEnv
-): RegisteredRuntimeConfig {
+): RegisteredRuntimeHostConfig {
   const args = parseFlags(argv);
   const serverBaseUrl = args.get("server") ?? env.AGEWORK_SERVER_BASE_URL;
   const token = args.get("token") ?? env.AGEWORK_RUNTIME_TOKEN;
   const runtimeTypesRaw =
-    args.get("runtime") ?? env.AGEWORK_RUNTIME_TYPES ?? env.AGEWORK_RUNTIME_TYPE;
+    args.get("runtime") ??
+    env.AGEWORK_RUNTIME_TYPES ??
+    env.AGEWORK_RUNTIME_TYPE;
   const runtimeLogHostPath =
     args.get("log-dir") ?? env.AGEWORK_RUNTIME_LOG_DIR ?? DEFAULT_LOG_DIR;
-  const workerImage = args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
+  const workerImage =
+    args.get("worker-image") ?? env.AGEWORK_RUNTIME_WORKER_IMAGE;
   const runtimeEntryPath =
     args.get("runtime-entry") ?? env.AGEWORK_RUNTIME_ENTRY;
-  const workerPortStr = args.get("worker-port") ?? env.AGEWORK_RUNTIME_WORKER_PORT;
+  const workerPortStr =
+    args.get("worker-port") ?? env.AGEWORK_RUNTIME_WORKER_PORT;
   const workerPort = workerPortStr ? parseInt(workerPortStr, 10) : undefined;
   const userWorkspaceRoot =
     args.get("user-workspace-root") ?? env.AGEWORK_RUNTIME_USER_WORKSPACE_ROOT;
 
   if (!serverBaseUrl) {
-    throw new Error("missing server url: pass --server or AGEWORK_SERVER_BASE_URL");
+    throw new Error(
+      "missing server url: pass --server or AGEWORK_SERVER_BASE_URL"
+    );
   }
   if (!token) {
-    throw new Error("missing pairing token: pass --token or AGEWORK_RUNTIME_TOKEN");
+    throw new Error(
+      "missing pairing token: pass --token or AGEWORK_RUNTIME_TOKEN"
+    );
   }
   const runtimeTypes = [
     ...new Set(

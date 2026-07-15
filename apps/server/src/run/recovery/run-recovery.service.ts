@@ -32,7 +32,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
   constructor(
     private readonly runRepository: RunRepository,
     private readonly conversationService: ConversationService,
-    private readonly runtimeService: RuntimeHostService,
+    private readonly runtimeHostService: RuntimeHostService,
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution
@@ -123,7 +123,7 @@ export class RunRecoveryService implements OnApplicationShutdown {
     runtimeHostId: string,
     cutoffMs: number
   ): Promise<boolean> {
-    const row = await this.runtimeService.getRuntimeHostRow(runtimeHostId);
+    const row = await this.runtimeHostService.getRuntimeHostRow(runtimeHostId);
     if (!row) return true; // Runtime 行不存在:无从续传,判死
     if (row.status === "online") return false;
     const heartbeatAt = row.lastHeartbeatAt?.getTime() ?? 0;

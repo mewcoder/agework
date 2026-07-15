@@ -33,7 +33,7 @@ function makeDeps(activeRuns: unknown[]) {
   const conversationService: Partial<ConversationService> = {
     setConversationRunState: vi.fn().mockResolvedValue(undefined),
   };
-  const runtimeService: Partial<RuntimeHostService> = {
+  const runtimeHostService: Partial<RuntimeHostService> = {
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
   // check 间隔 60s;判死窗口 300s → 兜底 grace 600s(2×),
@@ -42,7 +42,12 @@ function makeDeps(activeRuns: unknown[]) {
     getHeartbeatCheckIntervalSeconds: vi.fn().mockReturnValue(60),
     getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(300),
   };
-  return { runRepository, conversationService, runtimeService, configService };
+  return {
+    runRepository,
+    conversationService,
+    runtimeHostService,
+    configService,
+  };
 }
 
 function makeService(
@@ -52,7 +57,7 @@ function makeService(
   return new RunRecoveryService(
     deps.runRepository as RunRepository,
     deps.conversationService as unknown as ConversationService,
-    deps.runtimeService as RuntimeHostService,
+    deps.runtimeHostService as RuntimeHostService,
     deps.configService as ConfigService,
     runtimeHost as RuntimeHostContract
   );
@@ -122,7 +127,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
+    deps.runtimeHostService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "offline",
       lastHeartbeatAt: new Date(Date.now() - 20 * 60_000),
     });
@@ -144,7 +149,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
+    deps.runtimeHostService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "online",
       lastHeartbeatAt: new Date(),
     });
@@ -158,7 +163,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
-    deps.runtimeService.getRuntimeHostRow = vi.fn().mockResolvedValue({
+    deps.runtimeHostService.getRuntimeHostRow = vi.fn().mockResolvedValue({
       status: "offline",
       lastHeartbeatAt: new Date(), // 刚断线,心跳还新鲜
     });
@@ -173,7 +178,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
 
     await runOneSweep(deps, makeRuntimeHost());
 
-    expect(deps.runtimeService.getRuntimeHostRow).not.toHaveBeenCalled();
+    expect(deps.runtimeHostService.getRuntimeHostRow).not.toHaveBeenCalled();
     expect(deps.runRepository.markError).not.toHaveBeenCalled();
   });
 });

@@ -1,27 +1,20 @@
-# Runtime 只软删除（`removedAt`），Workspace/Worker 的 runtimeId 必填
+# Runtime Host 只软删除，`Workspace.runtimeHostId` 必填
 
-最初设计里 `Runtime` 被删除时用 `onDelete: SetNull` 把 `Workspace.runtimeId` / `Worker.runtimeId`
-置空表达"已解绑"。但 `runtimeId = null` 已经被现状代码用来表示另一件事——"Managed（本机
-in-process），不查 Runtime 表"，这次改造又要给本机引入 `builtin-*` 固定行、让它也占一个
-非空 `runtimeId`。同一个 null 值改造前后代表相反的语义（正常状态 vs 已失效状态），会让现状
-里所有靠 `runtimeId === null` 判断 Managed 的分支在迁移后被误判。
+最初设计用 `Runtime` 表示执行节点，并允许 `Workspace.runtimeId = null` 表示 builtin 执行。这样同一个
+`null` 同时可能表示「使用本机」和「原节点已删除」，无法区分正常 placement 与失效引用。
 
-决定：`Runtime` 不物理删除，注销只打 `removedAt` 时间戳，行永久保留；`Workspace.runtimeId` /
-`Worker.runtimeId` 因此可以设计成必填（`onDelete: Restrict`），不存在"引用的 Runtime 行没了"
-的情况。注销时把 `name` 打散（追加 id 后缀），腾出原名给用户重新注册同名机器，避免
-`@@unique([ownerId, name])` 因为旧行还占着名字而拒绝重建。
+决定：执行节点统一建模为 `RuntimeHost`。builtin Host 也有固定 id `"builtin"`，因此
+`Workspace.runtimeHostId` 必填，并通过 `onDelete: Restrict` 保持引用完整性。注销 registered Host 时
+不物理删除，只写 `removedAt`；行永久保留，已有 workspace 的 placement 仍可解释。注销时把 `name`
+追加 id 后缀，释放原名供用户重新配对同名机器。
 
-注销一台还有活跃 Worker 的 Runtime 时，不主动停止/清理这些 Worker（放任其自然结束或被
-fence 判死），因此注销也不能像现状 `RuntimeService.delete()` 那样顺手踢断隧道连接——连接
-一断在线 Worker 就没法上报心跳，等同强制判死。
+注销一台仍有活跃 Worker 的 Runtime Host 时，不主动停止 Worker，也不踢断在线隧道。断开隧道会让
+仍在运行的 Worker 无法回流事件，等同于强制判死；注销只阻止后续绑定和重新连接，现场资源由正常
+生命周期或 fence 收尾。
 
 ## Consequences
 
-- 现状代码里 `runtimeId === null` / `Boolean(runtimeId)` 用作"是否 Managed"判断依据的地方
-  （`runtime.service.ts` 的 `runtimeFor()`、`worker-manager/instance/lifecycle.handler.ts`、
-  `worker-manager/instance/worker.provisioner.ts`、`workspace.service.ts`、
-  `run/launch/run-launcher.ts` 等）迁移后要全部改成判断 `runtime.source === "builtin"`。
-- 历史 `Workspace.runtimeId = null`（Managed）的行要先回填成对应的 `builtin-*` id，才能把列
-  改成必填并删掉 `runtimeType`/`isolationScope` 快照列。
-- `Runtime.list` / `getOwned` / `delete` 等 owner-scoped 查询方法要跟着改成同时覆盖
-  `ownerId = 我` 和 `ownerId = null`（全局）两类行。
+- 判断 builtin / registered 只能看 `RuntimeHost.source` 或固定 Host id，不能用 nullable 外键推断。
+- Workspace 始终持有可解释的 `runtimeHostId`；`runtimeType` 另存为该 Host 上的执行环境形态快照。
+- owner-scoped 查询同时覆盖当前用户的 registered Host 与 `ownerId = null` 的全局 builtin Host。
+- Worker 是 Host 内部现场，不再通过 server 数据库外键表达其所在节点。

@@ -41,7 +41,7 @@ export type CreateWorkspaceRequest = {
   rootPath?: string;
   runtimeType?: WorkspaceRuntimeType;
   scope?: WorkspaceScope;
-  /** 绑定到某个已配对的 Registered Runtime Host；runtimeType 选择其一种能力。 */
+  /** 绑定到某个已配对的 registered Runtime Host；runtimeType 选择其一种能力。 */
   runtimeHostId?: string;
 };
 

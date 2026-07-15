@@ -20,7 +20,7 @@ import {
 } from "@agework/shared/protocol/wire";
 import { AGEWORK_VERSION } from "@agework/shared";
 import type { RuntimeEnvConfig } from "@agework/shared/api";
-import type { RegisteredRuntimeConfig, RuntimeType } from "./config.js";
+import type { RegisteredRuntimeHostConfig, RuntimeType } from "./config.js";
 import { detectEnvConfig } from "@agework/shared/cli";
 import type {
   DirectoryListing,
@@ -68,7 +68,7 @@ export function log(message: string, level: "info" | "error" = "info"): void {
 }
 
 export interface TunnelClientOptions {
-  config: RegisteredRuntimeConfig;
+  config: RegisteredRuntimeHostConfig;
   /** register 上报的能力矩阵(每种 runtimeType 的可用性 + scope);
    *  未提供时按 config.runtimeTypes 全部可用构建(测试便利)。 */
   capabilities?: RuntimeCapabilities;
@@ -76,7 +76,7 @@ export interface TunnelClientOptions {
   hostContract: RuntimeHostContract;
   /** Phase 2: Host 上行通知的隧道实现,连接建立/断开时由 TunnelClient 接线。 */
   tunnelUpstream?: TunnelUpstream;
-  /** runtime 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
+  /** Runtime Host 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
   onGone: () => void;
   /** 协议明确不兼容(收到/触发 4411):调用方应退出并升级,不再重连。 */
   onIncompatible?: (reason: string) => void;
@@ -108,7 +108,7 @@ export class TunnelClient {
   stop(): void {
     this.stopped = true;
     this.clearTimers();
-    this.ws?.close(1000, "registered runtime shutting down");
+    this.ws?.close(1000, "registered runtime host shutting down");
   }
 
   private tunnelUrl(): string {
@@ -196,7 +196,7 @@ export class TunnelClient {
         return;
       }
       log(
-        `registered as runtime ${parsed.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
+        `registered as runtime host ${parsed.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
       // Phase 2: 注册完成才接线上行通道(绑定会话 epoch),并补发未 ACK 通知
@@ -299,13 +299,13 @@ export class TunnelClient {
     this.options.tunnelUpstream?.clearSocket();
     if (this.stopped) return;
     if (code === RUNTIME_TUNNEL_CLOSE_GONE) {
-      log("runtime deleted on server (4410), exiting", "error");
+      log("runtime host deleted on server (4410), exiting", "error");
       this.stopped = true;
       this.options.onGone();
       return;
     }
     if (code === RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE) {
-      const reason = `tunnel protocol incompatible (code ${RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE}); upgrade server and runtime together`;
+      const reason = `tunnel protocol incompatible (code ${RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE}); upgrade server and runtime host together`;
       log(reason, "error");
       this.stopped = true;
       this.options.onIncompatible?.(reason);

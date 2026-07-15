@@ -74,7 +74,7 @@ export class ModelProviderService {
   constructor(
     private repo: ModelProviderRepository,
     private configService: ConfigService,
-    private runtimeService: RuntimeHostService
+    private runtimeHostService: RuntimeHostService
   ) {}
 
   private validateBaseUrl(baseUrl: string) {
@@ -138,7 +138,7 @@ export class ModelProviderService {
     if (!runtimeHostId) return true;
 
     const cliPaths =
-      await this.runtimeService.getResolvedCliPaths(runtimeHostId);
+      await this.runtimeHostService.getResolvedCliPaths(runtimeHostId);
     if (!cliPaths) return false;
     const resolvedPath = cliPaths[agentType];
     return !!resolvedPath;

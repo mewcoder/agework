@@ -1,19 +1,17 @@
-# CliResolver 放 apps/runtime，server 不做 CLI 检测
+# CLI 检测属于 Runtime Host 执行面，server 领域层不直接探测 OS
 
-CliResolver（已知位置搜索 + 版本检测 + 认证状态检查）有三个潜在消费者：apps/runtime（manager
-注册时检测）、apps/server（builtin local bootstrap 时检测）、packages/worker（run 执行时 fallback）。
+CLI 检测需要访问执行机的文件系统、用户目录并运行 `--version`。这些都是 Runtime Host 能力，不能放进
+server 的领域编排，也不应进入只承载跨包协议与纯工具的 `@agework/shared`。
 
-但 server 刻意不依赖 @agework/worker（见 `runtime/local/runtime-config.ts` 注释），只消费
-agework-runtime 外部产物。把 CliResolver 放 packages/worker 会导致 server 无法 import。
-放 @agework/shared 则把 OS 级检测逻辑（spawnSync、existsSync、homedir）混入纯类型/工具包。
+决定：检测实现放在 `apps/runtime`，由 `RuntimeHostEnvironment.detectEnv` 统一暴露。builtin Host 通过
+进程内 `RuntimeHost` 实例执行；registered Host 通过控制隧道执行。`RuntimeHostService` 只调用环境端口、
+持久化检测结果并向 API 返回状态，不直接 `spawn` 或读取执行机路径。
 
-决定：CliResolver 放 `apps/runtime/src/`。server 不做任何本机 CLI 检测——builtin local runtime
-的 envConfig 也由 runtime manager 注册时上报，server 只存展示。"系统环境"可用性判断由
-前端读 runtime envConfig 完成，不靠 server 进程 spawnSync。
+Worker 启动时仍可按运行时环境解析最终 CLI 路径，但这属于 run 执行兜底，不替代 Host 的能力检测与
+admin 展示数据。
 
 ## Consequences
 
-- server 零 CLI 检测代码，`agent-cli-status.ts` 彻底删除。
-- builtin local runtime 的 envConfig 在 server 启动后异步到达（manager 连上隧道后），此前为 null。
-  前端展示"检测中"或"未连接"，不做 server 侧即时检测填补时序空洞。
-- packages/worker 的 `resolveCliPaths` 保持现状（env → which/where），不引入已知位置搜索。
+- builtin 与 registered Host 共享同一个环境契约，没有 server 本机检测特例。
+- `envConfig` 的生产者始终是目标 Host；server 只保存和合并 admin override。
+- OS 级检测依赖不会泄漏到 server 领域层或 shared 协议包。

@@ -28,8 +28,8 @@ import type { RuntimeCapabilities } from "./runtime-capabilities";
 import type { RuntimeEnvConfig } from "../common";
 
 /**
- * Registered Runtime 控制隧道协议(Runtime Host ⇄ Server runtime gateway)。
- * 出站 WS 连接,runtime 配对 token 鉴权(HTTP upgrade 时经 Authorization header 携带);
+ * registered Runtime Host 控制隧道协议(Runtime Host ⇄ Server gateway)。
+ * 出站 WS 连接,Runtime Host 配对 token 鉴权(HTTP upgrade 时经 Authorization header 携带);
  * 与 Host↔worker 的数据面(worker-http,startToken 鉴权)完全独立。
  */
 

@@ -3,13 +3,13 @@ import type { AgentType, RuntimeEnvConfig } from "../common";
 
 export type RuntimeHostStatus = "online" | "offline";
 
-// ── EnvConfig 类型（见 runtime 模块 ADR-0002 两层分离）──────────────────
+// ── EnvConfig 类型（见 runtime-host 模块 ADR-0002 两层分离）─────────────
 //
 // 上报层类型定义在 common（生产者是 cli/cli-resolver），此处 re-export 供 REST 消费方使用。
 
 export type { AgentDetectedEnv, RuntimeEnvConfig } from "../common";
 
-/** 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。per-runtime per-agent 粒度。 */
+/** 管理员手动覆盖的 CLI 路径，与 envConfig 独立存储（见 ADR-0002）。per-Host per-agent 粒度。 */
 export type RuntimeHostEnvConfigOverride = {
   claude?: { executablePath: string };
   codex?: { executablePath: string };
@@ -25,13 +25,13 @@ export type AgentEnvStatus = {
   resolvedPath: string | null;
   /** 路径来源：override 有值 → "custom"，否则 → "system"。resolvedPath 为 null 时仍为 "system"。 */
   source: EnvConfigSource;
-  /** runtime 上报的原始检测路径。 */
+  /** Runtime Host 上报的原始检测路径。 */
   detectedPath: string | null;
   /** CLI --version 输出。 */
   version: string | null;
 };
 
-/** Runtime 展示层 env 状态（claude + codex 各一条派生结果）。 */
+/** Runtime Host 展示层 env 状态（每个 agent 各一条派生结果）。 */
 export type RuntimeHostEnvStatus = {
   claude: AgentEnvStatus;
   codex: AgentEnvStatus;
@@ -50,7 +50,7 @@ export type RuntimeHostResponse = {
   ownerId: string | null;
   status: RuntimeHostStatus;
   capabilities: RuntimeCapabilities | null;
-  /** runtime manager 上报的环境检测原始值；未上报为 null。 */
+  /** Runtime Host 上报的环境检测原始值；未上报为 null。 */
   envConfig: RuntimeEnvConfig | null;
   /** 管理员覆盖；未覆盖为 null。 */
   envConfigOverride: RuntimeHostEnvConfigOverride | null;

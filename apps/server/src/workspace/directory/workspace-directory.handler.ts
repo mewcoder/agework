@@ -18,7 +18,7 @@ import { WorkspaceRuntimePolicy } from "../placement/workspace-runtime.policy";
 const GIT_CLONE_TIMEOUT_MS = 5 * 60_000;
 export const MANAGED_DIRECTORY_SOURCE = "managed";
 export const EXTERNAL_DIRECTORY_SOURCE = "external";
-/** Registered Runtime 上的目录:路径在远程机器,server 摸不到——不校验存在性、
+/** registered Runtime Host 上的目录:路径在远程机器,server 摸不到——不校验存在性、
  *  不 mkdir、不 git clone,原样信任写入;删除时也不 rmSync(见 §5 RuntimeFileOps 暂不实现)。 */
 export const REMOTE_DIRECTORY_SOURCE = "remote";
 
@@ -150,7 +150,7 @@ export class WorkspaceDirectoryHandler {
     rmSync(plan.rootPath, { recursive: true, force: true });
   }
 
-  /** Registered Runtime 分支:路径在远程机器,原样信任,不做任何本机文件系统操作。 */
+  /** registered Runtime Host 分支:路径在远程机器,原样信任,不做任何本机文件系统操作。 */
   private resolveRemotePlan(input: {
     gitUrl?: string;
     requestedRootPath?: string;

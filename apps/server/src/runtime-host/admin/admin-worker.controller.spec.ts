@@ -55,7 +55,7 @@ describe("AdminWorkerController", () => {
   it("stop maps contract failures to 502 (目标 Host 不可达)", async () => {
     const stopWorker = vi
       .fn()
-      .mockRejectedValue(new Error("runtime rt-1 is not connected"));
+      .mockRejectedValue(new Error("runtime host rt-1 is not connected"));
     const controller = makeController({ stopWorker });
 
     await expect(

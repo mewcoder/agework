@@ -9,8 +9,8 @@ import { RuntimeHostRepository } from "../runtime-host.repository";
 import { HostTunnelHandler } from "./host-tunnel.handler";
 
 /**
- * Runtime 级判死:定时把 online 但心跳超时的 Runtime 行标记 offline。
- * 与 worker 级判死(WorkerLivenessSweeper,fence owner)分层——Runtime 掉线
+ * Runtime Host 级判死:定时把 online 但心跳超时的 RuntimeHost 行标记 offline。
+ * 与 worker 级判死(RuntimeHost 内部 fence)分层——Runtime Host 掉线
  * 影响的是"这台机器还能不能接 launch";其上 worker 的判死仍走 worker 心跳。
  * 超时即判死,不做"确认死亡"。
  */
@@ -54,11 +54,13 @@ export class HostLivenessWatchdog
         for (const id of staleIds) {
           this.tunnelHandler.reapConnection(id);
         }
-        this.logger.warn(`marked ${staleIds.length} stale runtime(s) offline`);
+        this.logger.warn(
+          `marked ${staleIds.length} stale runtime host(s) offline`
+        );
       }
     } catch (err) {
       this.logger.warn(
-        `runtime liveness sweep failed: ${err instanceof Error ? err.message : String(err)}`
+        `runtime host liveness sweep failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }

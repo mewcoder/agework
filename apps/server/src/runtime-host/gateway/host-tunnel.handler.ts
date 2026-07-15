@@ -36,7 +36,7 @@ import {
 import type { HostUpstreamPort } from "../runtime-host.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
-/** 隧道 WS 关闭码:同名 runtime 的新连接顶掉旧连接。 */
+/** 隧道 WS 关闭码:同名 Runtime Host 的新连接顶掉旧连接。 */
 const CLOSE_REPLACED = 4409;
 
 type PendingRequest = {
@@ -47,8 +47,8 @@ type PendingRequest = {
 };
 
 /**
- * Registered Runtime 控制隧道的 server 端:接受 agework-runtime/manager 的出站 WS,
- * 配对 token(sha256 比对)鉴权;register 握手校验通过后才把连接绑定为该 runtime 的
+ * registered Runtime Host 控制隧道的 server 端:接受 agework-runtime daemon 的出站 WS,
+ * 配对 token(sha256 比对)鉴权;register 握手校验通过后才把连接绑定为该 Host 的
  * 路由身份(在线、可收 RPC),断连即标 offline;同一条连接上还承载 host.* JSON-RPC
  * 请求/响应。server 永不反连 Host——这里只被动收连接、主动发的只有已建连上的 RPC 请求。
  */
@@ -60,10 +60,10 @@ export class HostTunnelHandler
   private readonly tunnelPath: string;
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
-  /** host.upstream 回流 Port(契约见 runtime.types.ts),由 RuntimeHostAdapter 实现接线。
+  /** host.upstream 回流 Port(契约见 runtime-host.types.ts),由 RuntimeHostAdapter 实现接线。
    *  处理返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
   private hostUpstreamPort?: HostUpstreamPort;
-  /** Phase 2: 每个 runtime 的隧道会话状态。epoch 每次 register 递增,
+  /** Phase 2: 每个 Runtime Host 的隧道会话状态。epoch 每次 register 递增,
    *  非当前 epoch 的上行信封丢弃(防脑裂);chain 串行化上行处理保事件顺序。 */
   private readonly hostSessions = new Map<
     string,
@@ -103,12 +103,12 @@ export class HostTunnelHandler
     this.wss?.close();
   }
 
-  /** 删除 runtime 后踢掉在线连接(manager 收 4410 应退出,不再重连)。 */
+  /** 删除 Runtime Host 后踢掉在线连接(daemon 收 4410 应退出,不再重连)。 */
   closeConnection(runtimeHostId: string): void {
     const socket = this.connections.get(runtimeHostId);
     if (!socket) return;
     this.connections.delete(runtimeHostId);
-    socket.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+    socket.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
   }
 
   /**
@@ -122,12 +122,12 @@ export class HostTunnelHandler
     this.connections.get(runtimeHostId)?.terminate();
   }
 
-  /** runtime 是否在线（隧道连接存在）。 */
+  /** Runtime Host 是否在线（隧道连接存在）。 */
   isConnected(runtimeHostId: string): boolean {
     return this.connections.has(runtimeHostId);
   }
 
-  /** Phase 2: 列出所有在线（隧道连接存在）的 runtime id。 */
+  /** Phase 2: 列出所有在线（隧道连接存在）的 Runtime Host id。 */
   listConnected(): string[] {
     return [...this.connections.keys()];
   }
@@ -157,7 +157,7 @@ export class HostTunnelHandler
     const socket = this.connections.get(runtimeHostId);
     if (!socket) {
       return Promise.reject(
-        new Error(`runtime ${runtimeHostId} is not connected`)
+        new Error(`runtime host ${runtimeHostId} is not connected`)
       );
     }
     return new Promise<Result>((resolve, reject) => {
@@ -165,7 +165,7 @@ export class HostTunnelHandler
         this.pending.delete(request.id);
         reject(
           new Error(
-            `runtime ${runtimeHostId} did not respond to ${request.method} within ${timeoutMs}ms`
+            `runtime host ${runtimeHostId} did not respond to ${request.method} within ${timeoutMs}ms`
           )
         );
       }, timeoutMs);
@@ -215,8 +215,8 @@ export class HostTunnelHandler
     const token = header.slice("Bearer ".length).trim();
     if (!token) return null;
     const tokenHash = createHash("sha256").update(token).digest("hex");
-    const runtime = await this.repository.findByTokenHash(tokenHash);
-    return runtime?.id ?? null;
+    const runtimeHost = await this.repository.findByTokenHash(tokenHash);
+    return runtimeHost?.id ?? null;
   }
 
   private attach(runtimeHostId: string, ws: WebSocket): void {
@@ -232,7 +232,7 @@ export class HostTunnelHandler
     ws.on("message", (data: RawData) => {
       void this.onMessage(runtimeHostId, ws, data).catch((err: unknown) => {
         this.logger.warn(
-          `tunnel message from runtime ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
+          `tunnel message from runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
         );
       });
     });
@@ -245,19 +245,19 @@ export class HostTunnelHandler
       // registered Host，断连即标记离线。
       void this.repository.markOffline(runtimeHostId).catch((err: unknown) => {
         this.logger.warn(
-          `mark runtime ${runtimeHostId} offline failed: ${err instanceof Error ? err.message : String(err)}`
+          `mark runtime host ${runtimeHostId} offline failed: ${err instanceof Error ? err.message : String(err)}`
         );
       });
     });
   }
 
-  /** 连接断开时,这台 runtime 上还没等到回应的 RPC 永远等不到了,主动拒绝掉。 */
+  /** 连接断开时,这台 Runtime Host 上还没等到回应的 RPC 永远等不到了,主动拒绝掉。 */
   private rejectPendingFor(runtimeHostId: string, reason: string): void {
     for (const [id, entry] of this.pending) {
       if (entry.runtimeHostId !== runtimeHostId) continue;
       clearTimeout(entry.timer);
       this.pending.delete(id);
-      entry.reject(new Error(`runtime ${runtimeHostId} ${reason}`));
+      entry.reject(new Error(`runtime host ${runtimeHostId} ${reason}`));
     }
   }
 
@@ -276,7 +276,7 @@ export class HostTunnelHandler
       parsed = JSON.parse(text);
     } catch {
       this.logger.warn(
-        `runtime ${runtimeHostId} sent malformed tunnel message`
+        `runtime host ${runtimeHostId} sent malformed tunnel message`
       );
       ws.close(1008, "malformed tunnel message");
       return;
@@ -285,7 +285,7 @@ export class HostTunnelHandler
     if (isHostTunnelHostRpcResponse(parsed)) {
       if (this.connections.get(runtimeHostId) !== ws) {
         this.logger.warn(
-          `dropped RPC response from an unregistered connection of runtime ${runtimeHostId}`
+          `dropped RPC response from an unregistered connection of runtime host ${runtimeHostId}`
         );
         return;
       }
@@ -302,7 +302,7 @@ export class HostTunnelHandler
     if (isWireMessageType(parsed, "register")) {
       if (parsed.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
         this.logger.warn(
-          `runtime ${runtimeHostId} tunnel protocol mismatch: host=${String(parsed.protocolVersion)} server=${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`
+          `runtime host ${runtimeHostId} tunnel protocol mismatch: host=${String(parsed.protocolVersion)} server=${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`
         );
         ws.close(
           RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
@@ -312,7 +312,7 @@ export class HostTunnelHandler
       }
       if (!isHostTunnelClientMessage(parsed)) {
         this.logger.warn(
-          `runtime ${runtimeHostId} sent an invalid register handshake`
+          `runtime host ${runtimeHostId} sent an invalid register handshake`
         );
         ws.close(1008, "invalid register handshake");
         return;
@@ -324,7 +324,7 @@ export class HostTunnelHandler
         parsed.envConfig
       );
       if (!found) {
-        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
         return;
       }
       // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
@@ -335,7 +335,7 @@ export class HostTunnelHandler
       this.connections.set(runtimeHostId, ws);
       if (parsed.version && parsed.version !== AGEWORK_VERSION) {
         this.logger.warn(
-          `runtime ${runtimeHostId} version mismatch: manager=${parsed.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
+          `runtime host ${runtimeHostId} version mismatch: daemon=${parsed.version} server=${AGEWORK_VERSION} (允许接入,registered daemon 单独构建后可能与 server 漂移)`
         );
       }
       const reply: HostTunnelRegisteredMessage = {
@@ -359,22 +359,24 @@ export class HostTunnelHandler
     if (isHostTunnelClientMessage(parsed) && parsed.type === "heartbeat") {
       if (this.connections.get(runtimeHostId) !== ws) {
         this.logger.warn(
-          `dropped heartbeat from an unregistered connection of runtime ${runtimeHostId}`
+          `dropped heartbeat from an unregistered connection of runtime host ${runtimeHostId}`
         );
         return;
       }
       const found = await this.repository.touchHeartbeat(runtimeHostId);
       if (!found) {
-        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
       }
       return;
     }
 
-    this.logger.warn(`runtime ${runtimeHostId} sent invalid tunnel message`);
+    this.logger.warn(
+      `runtime host ${runtimeHostId} sent invalid tunnel message`
+    );
     ws.close(1008, "invalid tunnel message");
   }
 
-  /** register 时递增该 runtime 的隧道会话 epoch 并返回。 */
+  /** register 时递增该 Runtime Host 的隧道会话 epoch 并返回。 */
   private nextEpoch(runtimeHostId: string): number {
     const session = this.hostSessions.get(runtimeHostId);
     const epoch = (session?.epoch ?? 0) + 1;
@@ -388,7 +390,7 @@ export class HostTunnelHandler
   /**
    * host.upstream 信封处理:
    * 1. 只认当前连接 + 当前 epoch(被顶掉的旧连接残留一律丢弃);
-   * 2. 按 runtime 串行 await 处理(保事件顺序,处理失败记日志不中断——
+   * 2. 按 Runtime Host 串行 await 处理(保事件顺序,处理失败记日志不中断——
    *    与 Event 纪律一致,ACK 只保证传输不丢,处理仍是 best-effort);
    * 3. 处理完成回累计 ACK 水位,Host 收到后清缓冲。
    */
@@ -400,7 +402,7 @@ export class HostTunnelHandler
     const session = this.hostSessions.get(runtimeHostId);
     if (this.connections.get(runtimeHostId) !== ws) {
       this.logger.warn(
-        `dropped upstream from a replaced connection of runtime ${runtimeHostId}`
+        `dropped upstream from a replaced connection of runtime host ${runtimeHostId}`
       );
       return;
     }
@@ -408,13 +410,13 @@ export class HostTunnelHandler
     // 不合形状的消息直接丢弃。
     if (envelope.notification === undefined) {
       this.logger.warn(
-        `dropped malformed upstream envelope from runtime ${runtimeHostId}`
+        `dropped malformed upstream envelope from runtime host ${runtimeHostId}`
       );
       return;
     }
     if (envelope.epoch !== undefined && envelope.epoch !== session?.epoch) {
       this.logger.warn(
-        `dropped stale-epoch upstream from runtime ${runtimeHostId}: epoch=${envelope.epoch} current=${session?.epoch ?? "none"}`
+        `dropped stale-epoch upstream from runtime host ${runtimeHostId}: epoch=${envelope.epoch} current=${session?.epoch ?? "none"}`
       );
       return;
     }
@@ -428,7 +430,7 @@ export class HostTunnelHandler
           );
         } catch (err) {
           this.logger.warn(
-            `upstream handler failed for runtime ${runtimeHostId} seq=${envelope.seq}: ${err instanceof Error ? err.message : String(err)}`
+            `upstream handler failed for runtime host ${runtimeHostId} seq=${envelope.seq}: ${err instanceof Error ? err.message : String(err)}`
           );
         }
         this.sendUpstreamAck(runtimeHostId, ws, envelope.seq);
@@ -455,21 +457,21 @@ export class HostTunnelHandler
   private onRpcResponse(runtimeHostId: string, response: RpcResponse): void {
     if (response.id === null) {
       this.logger.warn(
-        `runtime ${runtimeHostId} sent an RPC response with id=null`
+        `runtime host ${runtimeHostId} sent an RPC response with id=null`
       );
       return;
     }
     const entry = this.pending.get(response.id);
     if (!entry) {
       this.logger.warn(
-        `runtime ${runtimeHostId} sent an RPC response for unknown request ${String(response.id)}`
+        `runtime host ${runtimeHostId} sent an RPC response for unknown request ${String(response.id)}`
       );
       return;
     }
     if (entry.runtimeHostId !== runtimeHostId) {
       // 防御:响应必须来自当初收到请求的那条连接,不能拿别人的 id 解掉本请求
       this.logger.warn(
-        `runtime ${runtimeHostId} sent an RPC response for a request owned by ${entry.runtimeHostId}`
+        `runtime host ${runtimeHostId} sent an RPC response for a request owned by ${entry.runtimeHostId}`
       );
       return;
     }
