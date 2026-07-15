@@ -14,7 +14,7 @@
     "build": "pnpm build:worker && pnpm build:host",
     "prepare:codex-types": "node ../../packages/adapters/scripts/generate-codex-types.mjs",
     "build:worker": "pnpm prepare:codex-types && esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\" && node scripts/install-sdk-deps.mjs",
-    "build:host": "esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/providers --external:@agework/shared --outfile=dist/host.cjs",
+    "build:host": "esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/providers --outfile=dist/host.cjs",
     "typecheck": "pnpm prepare:codex-types && tsc --noEmit",
     "test": "pnpm prepare:codex-types && pnpm --filter @agework/providers build && vitest run"
   },
