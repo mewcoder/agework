@@ -288,8 +288,8 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("listAll maps rows to response shape", async () => {
-    const { list } = await service.listAll();
+  it("listForAdmin maps rows to response shape", async () => {
+    const { list } = await service.listForAdmin();
     expect(list).toHaveLength(1);
     expect(list[0].id).toBe("rt-1");
   });

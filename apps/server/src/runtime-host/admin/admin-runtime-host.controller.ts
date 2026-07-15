@@ -20,8 +20,8 @@ export class AdminRuntimeHostController {
 
   /** 列出全部 Runtime（builtin + 所有用户的 registered），不含已注销。 */
   @Get("list")
-  listAll() {
-    return this.runtimeService.listAll();
+  listForAdmin() {
+    return this.runtimeService.listForAdmin();
   }
 
   /** 创建 registered Host 并生成配对 token（归属当前管理员）。 */

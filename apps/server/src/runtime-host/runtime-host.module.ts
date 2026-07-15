@@ -21,9 +21,10 @@ import {
  * (contract 路由、builtin 装配、admin worker 观测)。
  *
  * - `HostTunnelHandler`(隧道 WS 端点)、`HostLivenessWatchdog`(Host 级判死)、
- *   `RuntimeHostAdapter`、builtin Host 实例都是 internal provider,不 export。
- * - 同一个 adapter 按 execution / operations / diagnostics 三个角色 token 暴露;
- *   run 模块只消费执行面契约,不感知 builtin/registered 的路由细节。
+ *   builtin Host 实例都是 internal provider,不 export。
+ * - `RuntimeHostAdapter` 类本身不直接 export,而是按 execution / operations /
+ *   diagnostics 三个角色 token 对外暴露契约;run 模块只消费执行面契约,不感知
+ *   builtin/registered 的路由细节。
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
  * - owner 生命周期清理不在本模块:workspace / user 模块各自监听事件后

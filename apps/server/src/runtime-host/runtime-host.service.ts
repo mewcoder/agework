@@ -145,7 +145,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   }
 
   /** admin: 列出全部 Host（builtin + 所有用户的 registered），不含已注销。 */
-  async listAll(): Promise<{ list: RuntimeHostResponse[] }> {
+  async listForAdmin(): Promise<{ list: RuntimeHostResponse[] }> {
     const rows = await this.repository.listAll();
     return { list: rows.map(toRuntimeHostResponse) };
   }
