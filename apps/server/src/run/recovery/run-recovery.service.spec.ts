@@ -59,7 +59,8 @@ function makeService(
     deps.conversationService as unknown as ConversationService,
     deps.runtimeHostService as RuntimeHostService,
     deps.configService as ConfigService,
-    runtimeHost as RuntimeHostContract
+    runtimeHost as RuntimeHostContract,
+    { setRunReapPort: vi.fn() }
   );
 }
 

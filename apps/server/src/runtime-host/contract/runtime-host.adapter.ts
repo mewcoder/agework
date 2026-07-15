@@ -35,8 +35,8 @@ import type { RuntimeHost } from "@agework/runtime/host";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
-  type HostReincarnationBinding,
-  type HostReincarnationPort,
+  type HostRunReapBinding,
+  type HostRunReapPort,
   type RuntimeHostConnectivity,
   type RuntimeHostOwnerReconciliation,
   type RuntimeHostOwnerRef,
@@ -66,7 +66,7 @@ export class RuntimeHostAdapter
     RuntimeHostContract,
     RuntimeHostOwnerReconciliation,
     RuntimeHostConnectivity,
-    HostReincarnationBinding
+    HostRunReapBinding
 {
   private readonly logger = new Logger(RuntimeHostAdapter.name);
   private upstream!: RuntimeHostUpstream;
@@ -97,9 +97,10 @@ export class RuntimeHostAdapter
     );
   }
 
-  /** 接线 run 上层的进程更替收尾端口(启动期一次),转交隧道网关在 register 时同步调用。 */
-  setReincarnationPort(port: HostReincarnationPort): void {
-    this.tunnelHandler.setHostReincarnationPort(port);
+  /** 接线 run 上层的 Host 终态收尾端口(启动期一次),转交隧道网关在进程更替 /
+   *  优雅关停时同步调用。 */
+  setRunReapPort(port: HostRunReapPort): void {
+    this.tunnelHandler.setHostRunReapPort(port);
   }
 
   async submitRun(input: SubmitRunInput): Promise<void> {

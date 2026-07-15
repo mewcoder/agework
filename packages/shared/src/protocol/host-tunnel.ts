@@ -57,9 +57,18 @@ export interface HostTunnelHeartbeatMessage {
   type: "heartbeat";
 }
 
+/** Host → Server:优雅关停通告。daemon 收到关机信号(SIGTERM/SIGINT)、关闭隧道
+ *  前发送。Server 据此确定该 Host 是主动永久离开(worker 池随进程消失,run 无从
+ *  续传),立即确定性收尾其上 active run,不必等 Host 离线兜底 sweep 的宽限窗口。
+ *  best-effort、单向:连接已断则消息发不出,退回 sweep 兜底。 */
+export interface HostTunnelShutdownMessage {
+  type: "shutdown";
+}
+
 export type HostTunnelClientMessage =
   | HostTunnelRegisterMessage
-  | HostTunnelHeartbeatMessage;
+  | HostTunnelHeartbeatMessage
+  | HostTunnelShutdownMessage;
 
 /** Server → Host:注册成功回执,带心跳节奏。 */
 export interface HostTunnelRegisteredMessage {

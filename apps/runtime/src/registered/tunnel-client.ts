@@ -112,6 +112,11 @@ export class TunnelClient {
   stop(): void {
     this.stopped = true;
     this.clearTimers();
+    // 关连接前先告别:让 server 立即收尾本 Host 上的 run,不必等离线兜底 sweep。
+    // best-effort——只在连接就绪时发得出;发不出就退回 server 侧超时判死。
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: "shutdown" }));
+    }
     this.ws?.close(1000, "registered runtime host shutting down");
   }
 

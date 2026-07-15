@@ -103,6 +103,7 @@ describe("TunnelClient", () => {
     await expect(connections[0].nextMessage()).resolves.toEqual({
       type: "register",
       protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+      processInstanceId: expect.any(String),
       capabilities: {
         docker: {
           available: true,
@@ -216,6 +217,18 @@ describe("TunnelClient", () => {
     client!.stop();
     await new Promise((resolve) => setTimeout(resolve, 100));
     expect(connections).toHaveLength(1);
+  });
+
+  it("announces shutdown before closing on stop", async () => {
+    makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    await connections[0].nextMessage(); // drain the register message
+
+    client!.stop();
+    await expect(connections[0].nextMessage()).resolves.toEqual({
+      type: "shutdown",
+    });
   });
 
   describe("host RPC", () => {

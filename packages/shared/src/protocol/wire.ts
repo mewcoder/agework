@@ -27,6 +27,7 @@ export function isHostTunnelClientMessage(
 ): value is HostTunnelClientMessage {
   if (!isRecord(value)) return false;
   if (value.type === "heartbeat") return true;
+  if (value.type === "shutdown") return true;
   return (
     value.type === "register" &&
     isProtocolVersion(value.protocolVersion) &&

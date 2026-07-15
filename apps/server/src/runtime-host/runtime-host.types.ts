@@ -17,21 +17,27 @@ export interface HostUpstreamPort {
   ): Promise<void> | void;
 }
 
+/** run 判死回流的触发场景:
+ *  - reincarnation:registered Host 换了进程实例(processInstanceId 变化);
+ *  - shutdown:registered Host daemon 收到关机信号,优雅关停通告到达。
+ *  两者都意味着旧进程的 run 会话/未 ACK 缓冲已随进程消失,active run 无从续传。 */
+export type HostReapReason = "reincarnation" | "shutdown";
+
 /**
- * Host 进程更替回流 Port(架构 §4 决策链 5:infra 运行时回流):registered Host
- * 换了进程实例(processInstanceId 变化)时,旧进程上的 active run 已无续传可能
+ * Host 终态回流 Port(架构 §4 决策链 5:infra 运行时回流):registered Host 发生
+ * 终态生命周期事件(进程更替 / 优雅关停)时,旧进程上的 active run 已无续传可能
  * (会话/未 ACK 缓冲随旧进程消失),由上层 run 模块确定性收尾——判死 + 释放执行机
- * 侧 run 状态。隧道网关在绑定新连接、回 registered **之前**同步 await 本端口,
- * 保证放行前旧 run 已收尾。builtin 无隧道、与 server 同生死,不经此路径。
+ * 侧 run 状态。隧道网关在放行新连接 / 处理关停通告时同步 await 本端口。builtin
+ * 无隧道、与 server 同生死,不经此路径。
  */
-export interface HostReincarnationPort {
-  reapRunsForReincarnation(runtimeHostId: string): Promise<void>;
+export interface HostRunReapPort {
+  reapActiveRuns(runtimeHostId: string, reason: HostReapReason): Promise<void>;
 }
 
-/** run 模块启动期把 HostReincarnationPort 实现接线给 Host 隧道网关的通道
+/** run 模块启动期把 HostRunReapPort 实现接线给 Host 隧道网关的通道
  *  (与 RuntimeHostUpstreamBinding 同构:下层定义、上层实现、启动期自接线)。 */
-export interface HostReincarnationBinding {
-  setReincarnationPort(port: HostReincarnationPort): void;
+export interface HostRunReapBinding {
+  setRunReapPort(port: HostRunReapPort): void;
 }
 
 /**
@@ -89,6 +95,6 @@ export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");
 export const RUNTIME_HOST_OWNER_RECONCILIATION = Symbol(
   "RuntimeHostOwnerReconciliation"
 );
-export const RUNTIME_HOST_REINCARNATION_BINDING = Symbol(
-  "RuntimeHostReincarnationBinding"
+export const RUNTIME_HOST_RUN_REAP_BINDING = Symbol(
+  "RuntimeHostRunReapBinding"
 );

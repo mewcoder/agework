@@ -21,7 +21,9 @@ function makeRepository() {
       .mockImplementation((hash: string) =>
         Promise.resolve(hash === GOOD_HASH ? { id: "rt-1" } : null)
       ),
-    markRegistered: vi.fn().mockResolvedValue(true),
+    markRegistered: vi
+      .fn()
+      .mockResolvedValue({ found: true, previousProcessInstanceId: null }),
     touchHeartbeat: vi.fn().mockResolvedValue(true),
     markOffline: vi.fn().mockResolvedValue(undefined),
   };
@@ -90,6 +92,7 @@ describe("HostTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -106,6 +109,7 @@ describe("HostTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -126,6 +130,7 @@ describe("HostTunnelHandler", () => {
           scopes: ["user", "workspace"],
         },
       },
+      "proc-1",
       undefined
     );
   });
@@ -174,6 +179,7 @@ describe("HostTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: "proc-1",
         runtimeType: "docker",
         capabilities: { scopes: ["user", "workspace"] },
       })
@@ -191,6 +197,7 @@ describe("HostTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -205,6 +212,7 @@ describe("HostTunnelHandler", () => {
       JSON.stringify({
         type: "register",
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -570,10 +578,35 @@ describe("HostTunnelHandler", () => {
       previousProcessInstanceId: "proc-old",
     });
     const reap = vi.fn().mockResolvedValue(undefined);
-    handler.setHostReincarnationPort({ reapRunsForReincarnation: reap });
+    handler.setHostRunReapPort({ reapActiveRuns: reap });
     const ws = connect();
     await once(ws, "open");
     await register(ws);
-    expect(reap).toHaveBeenCalledWith("rt-1");
+    expect(reap).toHaveBeenCalledWith("rt-1", "reincarnation");
+  });
+
+  it("reaps active runs when a registered host announces graceful shutdown", async () => {
+    const reap = vi.fn().mockResolvedValue(undefined);
+    handler.setHostRunReapPort({ reapActiveRuns: reap });
+    const ws = connect();
+    await once(ws, "open");
+    await register(ws);
+    ws.send(JSON.stringify({ type: "shutdown" }));
+    await vi.waitFor(() => {
+      expect(reap).toHaveBeenCalledWith("rt-1", "shutdown");
+    });
+  });
+
+  it("ignores a shutdown notice from an unregistered connection", async () => {
+    const reap = vi.fn().mockResolvedValue(undefined);
+    handler.setHostRunReapPort({ reapActiveRuns: reap });
+    const ws = connect();
+    await once(ws, "open");
+    ws.send(JSON.stringify({ type: "shutdown" }));
+    // 用第二条注册连接的 registered 回执作同步屏障
+    const other = connect();
+    await once(other, "open");
+    await register(other);
+    expect(reap).not.toHaveBeenCalled();
   });
 });

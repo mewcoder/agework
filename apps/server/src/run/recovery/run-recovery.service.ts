@@ -9,15 +9,31 @@ import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_REINCARNATION_BINDING,
-  type HostReincarnationBinding,
-  type HostReincarnationPort,
+  RUNTIME_HOST_RUN_REAP_BINDING,
+  type HostReapReason,
+  type HostRunReapBinding,
+  type HostRunReapPort,
 } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
+
+/** Host 终态收尾的日志措辞 + 写给用户的 run 失败原因,按触发场景取。 */
+const REAP_MESSAGES: Record<
+  HostReapReason,
+  { logDetail: string; runReason: string }
+> = {
+  reincarnation: {
+    logDetail: "replaced its process instance",
+    runReason: "Runtime Host 重启(进程更替),运行中断",
+  },
+  shutdown: {
+    logDetail: "announced graceful shutdown",
+    runReason: "Runtime Host 已关停,运行中断",
+  },
+};
 
 /**
  * 服务重启后恢复中断 run,按 Host 归属分流(Phase 2):
@@ -32,10 +48,7 @@ import { swallow } from "../../common/swallow";
  */
 @Injectable()
 export class RunRecoveryService
-  implements
-    OnApplicationBootstrap,
-    OnApplicationShutdown,
-    HostReincarnationPort
+  implements OnApplicationBootstrap, OnApplicationShutdown, HostRunReapPort
 {
   private readonly logger = new Logger(RunRecoveryService.name);
   private sweepTimer?: NodeJS.Timeout;
@@ -47,13 +60,13 @@ export class RunRecoveryService
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
-    @Inject(RUNTIME_HOST_REINCARNATION_BINDING)
-    private readonly reincarnationBinding: HostReincarnationBinding
+    @Inject(RUNTIME_HOST_RUN_REAP_BINDING)
+    private readonly runReapBinding: HostRunReapBinding
   ) {}
 
-  /** 端口自接线:本类是进程更替收尾端口的实现者,启动期注册给隧道网关调用。 */
+  /** 端口自接线:本类是 Host 终态收尾端口的实现者,启动期注册给隧道网关调用。 */
   onApplicationBootstrap(): void {
-    this.reincarnationBinding.setReincarnationPort(this);
+    this.runReapBinding.setRunReapPort(this);
   }
 
   onApplicationShutdown(): void {
@@ -138,23 +151,23 @@ export class RunRecoveryService
   }
 
   /**
-   * HostReincarnationPort:Host 进程更替(processInstanceId 变化)时由隧道网关在
-   * 绑定新连接前同步调用。该 Host 上所有 active run 的旧会话/未 ACK 缓冲已随旧
-   * 进程消失,确定性判死并释放执行机侧 run 状态,避免僵尸 run 永久挂 running。
+   * HostRunReapPort:registered Host 发生终态生命周期事件(进程更替 / 优雅关停)时
+   * 由隧道网关同步调用。该 Host 上所有 active run 的旧会话/未 ACK 缓冲已随旧进程
+   * 消失,确定性判死并释放执行机侧 run 状态,避免僵尸 run 永久挂 running。
    * 幂等:已终结的 run 不在 listActive 结果内。
    */
-  async reapRunsForReincarnation(runtimeHostId: string): Promise<void> {
+  async reapActiveRuns(
+    runtimeHostId: string,
+    reason: HostReapReason
+  ): Promise<void> {
+    const { logDetail, runReason } = REAP_MESSAGES[reason];
     const activeRuns = await this.runRepository.listActive();
     for (const run of activeRuns) {
       if (run.conversation.workspace.runtimeHostId !== runtimeHostId) continue;
       this.logger.warn(
-        `Run ${run.id} reaped: host ${runtimeHostId} replaced its process instance`
+        `Run ${run.id} reaped: host ${runtimeHostId} ${logDetail}`
       );
-      await this.failRun(
-        run.id,
-        run.conversationId,
-        "Runtime Host 重启(进程更替),运行中断"
-      );
+      await this.failRun(run.id, run.conversationId, runReason);
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }
   }

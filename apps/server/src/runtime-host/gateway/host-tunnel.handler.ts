@@ -33,10 +33,7 @@ import {
   RUNTIME_HOST_CONNECTED_EVENT,
   RuntimeHostConnectedEvent,
 } from "../runtime-host.events";
-import type {
-  HostUpstreamPort,
-  HostReincarnationPort,
-} from "../runtime-host.types";
+import type { HostUpstreamPort, HostRunReapPort } from "../runtime-host.types";
 import { AGEWORK_VERSION } from "@agework/shared";
 
 /** 隧道 WS 关闭码:同名 Runtime Host 的新连接顶掉旧连接。 */
@@ -66,8 +63,9 @@ export class HostTunnelHandler
   /** host.upstream 回流 Port(契约见 runtime-host.types.ts),由 RuntimeHostAdapter 实现接线。
    *  处理返回 Promise 时按连接串行 await(保事件顺序),处理完成后回 ACK。 */
   private hostUpstreamPort?: HostUpstreamPort;
-  /** 进程更替收尾 Port,由 RuntimeHostAdapter 接线、run 上层实现;register 时同步调用。 */
-  private reincarnationPort?: HostReincarnationPort;
+  /** Host 终态收尾 Port,由 RuntimeHostAdapter 接线、run 上层实现;进程更替 /
+   *  优雅关停时同步调用。 */
+  private runReapPort?: HostRunReapPort;
   /** Phase 2: 每个 Runtime Host 的隧道会话状态。epoch 每次 register 递增,
    *  非当前 epoch 的上行信封丢弃(防脑裂);chain 串行化上行处理保事件顺序。 */
   private readonly hostSessions = new Map<
@@ -142,9 +140,9 @@ export class HostTunnelHandler
     this.hostUpstreamPort = port;
   }
 
-  /** 接线进程更替收尾 Port(启动期一次)。 */
-  setHostReincarnationPort(port: HostReincarnationPort): void {
-    this.reincarnationPort = port;
+  /** 接线 Host 终态收尾 Port(启动期一次)。 */
+  setHostRunReapPort(port: HostRunReapPort): void {
+    this.runReapPort = port;
   }
 
   /** 向目标 runtimeHostId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
@@ -349,7 +347,7 @@ export class HostTunnelHandler
         this.logger.warn(
           `runtime host ${runtimeHostId} reincarnated (process instance ${previousProcessInstanceId} → ${parsed.processInstanceId}); reaping stale runs`
         );
-        await this.reincarnationPort?.reapRunsForReincarnation(runtimeHostId);
+        await this.runReapPort?.reapActiveRuns(runtimeHostId, "reincarnation");
       }
       // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
       const previous = this.connections.get(runtimeHostId);
@@ -391,6 +389,23 @@ export class HostTunnelHandler
       if (!found) {
         ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime host deleted");
       }
+      return;
+    }
+
+    if (isHostTunnelClientMessage(parsed) && parsed.type === "shutdown") {
+      // Host 主动关停通告:daemon 正优雅退出,worker 池随进程消失,其上 active run
+      // 无从续传。确定性收尾,不必等 Host 离线兜底 sweep 的宽限窗口(几分钟)。
+      // 只认当前注册连接,防被顶掉的旧连接误触收尾。
+      if (this.connections.get(runtimeHostId) !== ws) {
+        this.logger.warn(
+          `dropped shutdown notice from an unregistered connection of runtime host ${runtimeHostId}`
+        );
+        return;
+      }
+      this.logger.log(
+        `runtime host ${runtimeHostId} announced graceful shutdown; reaping its active runs`
+      );
+      await this.runReapPort?.reapActiveRuns(runtimeHostId, "shutdown");
       return;
     }
 
