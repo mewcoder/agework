@@ -6,10 +6,14 @@ import type {
   CommandTracePayload,
   RunExecutionHandle,
   RuntimeHostExecution,
+  RuntimeHostUpstreamBinding,
   RuntimeHostUpstream,
   RecordRunEventInput,
 } from "@agework/shared/protocol";
-import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";
+import {
+  RUNTIME_HOST_EXECUTION,
+  RUNTIME_HOST_UPSTREAM_BINDING,
+} from "../../runtime-host/runtime-host.types";
 import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
@@ -54,12 +58,14 @@ export class HostUpstreamHandler
     private readonly seqGate: UpstreamSeqStore,
     private readonly runRepository: RunRepository,
     @Inject(RUNTIME_HOST_EXECUTION)
-    private readonly runtimeHost: RuntimeHostExecution
+    private readonly runtimeHost: RuntimeHostExecution,
+    @Inject(RUNTIME_HOST_UPSTREAM_BINDING)
+    private readonly upstreamBinding: RuntimeHostUpstreamBinding
   ) {}
 
   /** 端口自接线:本类是契约上行与超时端口的实现者,启动期注册给下层调用方。 */
   onModuleInit(): void {
-    this.runtimeHost.setUpstream(this);
+    this.upstreamBinding.setUpstream(this);
     this.liveRuns.setTimeoutErrorPort(this);
   }
 

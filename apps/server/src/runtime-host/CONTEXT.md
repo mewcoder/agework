@@ -46,7 +46,7 @@ _Avoid_: CLI availability、system status
 server 进程内的 RuntimeHost 实例（`@agework/runtime/host`,与 registered daemon 同构）。固定 id `"builtin"`，`source: "builtin"`。自管 WorkerHttpServer，worker 数据面不再连 server 旧端点。所有 runtimeType（native/docker/opensandbox）共用一行，能力矩阵在 `capabilities` JSON 里。
 
 **RuntimeHostContract**:
-server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseOwner` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。寻址单位是 run / owner / host,没有 workerId——worker 是 Host 内部现场。按 execution / owner-lifecycle / environment / workspace-data / diagnostics 角色 token 注入,消费者不能越面调用。
+server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseOwner` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。寻址单位是 run / owner / host,没有 workerId——worker 是 Host 内部现场。按 execution / upstream-binding / owner-lifecycle / environment / workspace-data / diagnostics 角色 token 注入；`setUpstream` 只属于启动期 binding，消费者不能越面调用。
 _Avoid_: WorkerManagerService（已删）、Runtime 接口（旧名）
 
 **RuntimeHostAdapter**:

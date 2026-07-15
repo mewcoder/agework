@@ -9,7 +9,11 @@ import { RunStatusService } from "../status/run-status.service";
 import { RunFinalizationStore } from "../status/run-finalization.store";
 import { UpstreamSeqStore } from "./upstream-seq.store";
 import type { ConfigService } from "../../config/config.service";
-import type { RuntimeHostContract } from "@agework/shared/protocol";
+import type {
+  RuntimeHostContract,
+  RuntimeHostExecution,
+  RuntimeHostUpstreamBinding,
+} from "@agework/shared/protocol";
 import { RunStream } from "../streaming/run.stream";
 import { HostAgUiEventHandler } from "./host-agui-event.handler";
 
@@ -92,7 +96,8 @@ describe("HostUpstreamHandler", () => {
       aguiEvents,
       seqGate,
       mockRunRepository as RunRepository,
-      mockRuntimeHost as RuntimeHostContract
+      mockRuntimeHost as RuntimeHostExecution,
+      mockRuntimeHost as RuntimeHostUpstreamBinding
     );
   });
 

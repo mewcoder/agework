@@ -91,6 +91,7 @@ export type {
   WorkerSnapshot,
   RuntimeHostContract,
   RuntimeHostExecution,
+  RuntimeHostUpstreamBinding,
   RuntimeHostOwnerLifecycle,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,

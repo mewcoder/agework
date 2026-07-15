@@ -252,7 +252,10 @@ export interface RuntimeHostExecution {
 
   /** run 终态后的资源/索引清理。幂等，对未知 runId 是空操作。 */
   releaseRun(input: RuntimeHostRunRef): void;
+}
 
+/** 仅供组合根在启动期把 Host 上行流接回 server；业务执行消费者不得依赖。 */
+export interface RuntimeHostUpstreamBinding {
   /** 接线上行端口（启动期一次）。 */
   setUpstream(upstream: RuntimeHostUpstream): void;
 }
@@ -318,6 +321,7 @@ export interface RuntimeHostDiagnostics {
 export interface RuntimeHostContract
   extends
     RuntimeHostExecution,
+    RuntimeHostUpstreamBinding,
     RuntimeHostOwnerLifecycle,
     RuntimeHostEnvironment,
     RuntimeHostWorkspaceData,
