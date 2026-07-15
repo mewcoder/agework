@@ -151,7 +151,9 @@ export class HostTunnelHandler
     notification: HostTunnelHostNotification
   ): void {
     const socket = this.connections.get(runtimeHostId);
-    if (!socket) return;
+    // 关停/断连窗口内 socket 尚未从 connections 摘除,但 send 会打到 CLOSING/CLOSED
+    // 连接上抛错——best-effort 通知只在 OPEN 时发(尤其 shutdown 收尾恰在此窗口)。
+    if (!socket || socket.readyState !== socket.OPEN) return;
     socket.send(JSON.stringify(notification));
   }
 
@@ -163,7 +165,9 @@ export class HostTunnelHandler
     timeoutMs: number
   ): Promise<Result> {
     const socket = this.connections.get(runtimeHostId);
-    if (!socket) {
+    // 关停/断连窗口内 socket 尚未从 connections 摘除;在此 send 会抛错并遗留
+    // timer + pending 条目,故提前判 OPEN,与未连接同样 reject。
+    if (!socket || socket.readyState !== socket.OPEN) {
       return Promise.reject(
         new Error(`runtime host ${runtimeHostId} is not connected`)
       );
