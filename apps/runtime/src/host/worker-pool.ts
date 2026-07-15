@@ -25,18 +25,41 @@ export type WorkerEntry = {
 /**
  * worker 池：内存 `Map<WorkerKey, WorkerEntry>`。
  *
- * 不变量 2：同一个 `(owner, runtimeType)` 同时至多一个活跃 worker；
+ * 不变量 2：同一个 `(owner, runtimeType)` 同时至多一个启动中或活跃 worker；
  * 该键下所有 run 都路由给它。池、观测、stopWorker、fence 全部用同一个 WorkerKey，
  * 不出现裸 ownerKey。
  */
 export class WorkerPool {
   private readonly workers = new Map<WorkerKey, WorkerEntry>();
+  /** WorkerKey 级启动去重：创建中的 worker 也占用唯一槽位。 */
+  private readonly acquisitions = new Map<WorkerKey, Promise<WorkerEntry>>();
   /** runId → WorkerKey 反查索引，供 command 路由用。 */
   private readonly runIndex = new Map<string, WorkerKey>();
 
   /** 按 WorkerKey 查活跃 worker。 */
   get(key: WorkerKey): WorkerEntry | undefined {
     return this.workers.get(key);
+  }
+
+  acquireOnce(
+    key: WorkerKey,
+    acquire: () => Promise<WorkerEntry>
+  ): Promise<WorkerEntry> {
+    const ready = this.workers.get(key);
+    if (ready?.status === "ready") return Promise.resolve(ready);
+
+    const inFlight = this.acquisitions.get(key);
+    if (inFlight) return inFlight;
+
+    const acquisition = acquire();
+    this.acquisitions.set(key, acquisition);
+    const clear = () => {
+      if (this.acquisitions.get(key) === acquisition) {
+        this.acquisitions.delete(key);
+      }
+    };
+    acquisition.then(clear, clear);
+    return acquisition;
   }
 
   /** 按 runId 查 worker（command 路由用）。 */

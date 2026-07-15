@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import type { WorkerKey } from "@agework/shared/protocol";
 import { WorkerPool, type WorkerEntry } from "./worker-pool.js";
 
@@ -19,6 +19,30 @@ function makeEntry(key: WorkerKey, workerId = "worker-1"): WorkerEntry {
 }
 
 describe("WorkerPool", () => {
+  it("deduplicates concurrent acquisitions for the same worker key", async () => {
+    const pool = new WorkerPool();
+    let resolve!: (entry: WorkerEntry) => void;
+    const pending = new Promise<WorkerEntry>((done) => {
+      resolve = done;
+    });
+    const acquire = vi.fn().mockReturnValue(pending);
+
+    const first = pool.acquireOnce(KEY, acquire);
+    const second = pool.acquireOnce(KEY, acquire);
+    expect(second).toBe(first);
+    expect(acquire).toHaveBeenCalledOnce();
+
+    const entry = makeEntry(KEY);
+    resolve(entry);
+    await first;
+
+    pool.put({ ...entry, status: "ready" });
+    await expect(
+      pool.acquireOnce(KEY, acquire)
+    ).resolves.toMatchObject({ workerId: entry.workerId });
+    expect(acquire).toHaveBeenCalledOnce();
+  });
+
   it("enforces one entry per WorkerKey (不变量 2)", () => {
     const pool = new WorkerPool();
     pool.put(makeEntry(KEY, "worker-1"));

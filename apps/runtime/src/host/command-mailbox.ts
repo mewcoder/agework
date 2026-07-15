@@ -23,6 +23,25 @@ export class CommandMailbox {
   private readonly workerWaiters = new Map<string, WorkerWaiter[]>();
   /** workerId 级"代次"标识——进程重启即归零，用于让 worker 察觉 afterSeq 已过期。 */
   private readonly workerEpochs = new Map<string, number>();
+  private readonly commandSeqs = new Map<string, number>();
+
+  enqueue(
+    workerId: string,
+    runId: string,
+    payload: CommandPayload
+  ): RunChannelMessage<CommandPayload> {
+    const seq = (this.commandSeqs.get(workerId) ?? 0) + 1;
+    this.commandSeqs.set(workerId, seq);
+    const message: RunChannelMessage<CommandPayload> = {
+      runId,
+      seq,
+      type: "command",
+      payload,
+      ts: new Date().toISOString(),
+    };
+    this.push(workerId, message);
+    return message;
+  }
 
   /** 按 workerId 推送命令。 */
   push(workerId: string, message: RunChannelMessage<CommandPayload>): void {
@@ -82,6 +101,7 @@ export class CommandMailbox {
     }
     this.workerWaiters.delete(workerId);
     this.workerEpochs.delete(workerId);
+    this.commandSeqs.delete(workerId);
   }
 
   /** 进程退出时释放所有挂起的 waiter。 */
@@ -94,6 +114,8 @@ export class CommandMailbox {
     }
     this.workerWaiters.clear();
     this.workerQueues.clear();
+    this.workerEpochs.clear();
+    this.commandSeqs.clear();
   }
 
   /**

@@ -45,20 +45,6 @@ import {
   type RuntimeType,
 } from "@agework/providers";
 import {
-  detectEnvConfig,
-  installCli as installCliOnDisk,
-} from "@agework/shared/cli";
-import {
-  listFiles as listFilesDirect,
-  readFile as readFileDirect,
-  searchFiles as searchFilesDirect,
-  createFsTimeoutSignal,
-} from "@agework/shared/filesystem";
-import {
-  listChangedFiles as listChangedFilesDirect,
-  readFileDiff as readFileDiffDirect,
-} from "@agework/shared/git";
-import {
   isWorkerCommandResultRpcResponse,
   isWorkerEventRpcNotification,
   rpcNotificationToUpstreamMessage,
@@ -69,10 +55,11 @@ import { WorkerPool, type WorkerEntry } from "./worker-pool";
 import { buildWorkerEnv, makeRunConfig, resolveSpec } from "./run-config";
 import { CommandMailbox } from "./command-mailbox";
 import { HandshakeStore } from "./handshake-store";
+import { RunSessionRegistry } from "./run-session-registry";
 import {
-  createDirectory as createDirectoryOnDisk,
-  listDirectory as listDirectoryOnDisk,
-} from "@agework/shared/filesystem/directory-browser";
+  HostEnvironmentOperations,
+  HostWorkspaceOperations,
+} from "./host-operations";
 
 /**
  * RuntimeHost 的配置：由 server 侧（builtin 场景）或 daemon 侧（registered 场景）提供。
@@ -117,15 +104,6 @@ export interface RuntimeHostConfig {
   }) => void;
 }
 
-/**
- * 一次已提交 run 的执行状态。
- */
-type SubmittedRunState = {
-  workerId: string;
-  status: "acquiring" | "ready";
-  cancelled: boolean;
-};
-
 type WorkerRemovalMode = "release" | "exited";
 
 type WorkerLaunchAttempt = {
@@ -137,8 +115,9 @@ type WorkerLaunchAttempt = {
 /**
  * RuntimeHost：部署在一台执行机器上的常驻执行节点。
  *
- * 实现 `RuntimeHostContract`，内部管理 worker 池（`Map<WorkerKey, WorkerEntry>`）、
- * 命令信箱、握手、fence。一台机器 = 一个 Host = 一行注册 = 一条隧道。
+ * 实现 `RuntimeHostContract`，作为 Host 门面协调 WorkerPool、RunSessionRegistry、
+ * CommandMailbox、HandshakeStore 和本机操作组件。一台机器 = 一个 Host =
+ * 一行注册 = 一条隧道。
  *
  * 两种宿主：
  * - **库入口**（builtin）：server 进程内直接 `new` 出本类，进程内调用。
@@ -150,14 +129,9 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly pool = new WorkerPool();
   private readonly mailbox = new CommandMailbox();
   private readonly handshakes = new HandshakeStore();
-  private readonly states = new Map<string, SubmittedRunState>();
-  private readonly runSubmissions = new Map<string, Promise<void>>();
-  private readonly workerAcquisitions = new Map<
-    WorkerKey,
-    Promise<WorkerEntry>
-  >();
-  private readonly commandSeqs = new Map<string, number>();
-  private readonly runConfigs = new Map<string, RunConfig>();
+  private readonly sessions = new RunSessionRegistry();
+  private readonly workspaceOperations = new HostWorkspaceOperations();
+  private readonly environmentOperations: HostEnvironmentOperations;
   private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
   private upstream!: RuntimeHostUpstream;
   private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
@@ -168,6 +142,10 @@ export class RuntimeHost implements RuntimeHostContract {
   constructor(config: RuntimeHostConfig) {
     this.config = config;
     this.resolveProvider = createRuntimeResolver(config.providerConfig);
+    this.environmentOperations = new HostEnvironmentOperations(
+      config.capabilities,
+      config.cliInstallDir
+    );
     // 心跳判死定时器：定期扫描 pool，超时未见心跳即判死。
     const interval = Math.max(1000, Math.floor(config.heartbeatTimeoutMs / 3));
     this.fenceTimer = setInterval(() => this.sweepFence(), interval);
@@ -182,32 +160,21 @@ export class RuntimeHost implements RuntimeHostContract {
 
   submitRun(input: SubmitRunInput): Promise<void> {
     const { runId } = input;
-    if (this.states.has(runId)) return Promise.resolve();
+    if (this.sessions.has(runId)) return Promise.resolve();
 
-    const inFlight = this.runSubmissions.get(runId);
+    const inFlight = this.sessions.getSubmission(runId);
     if (inFlight) return inFlight;
 
     // 在任何 RunConfig/CLI I/O 前占位：timeout/cancel/release 必须从提交第一刻
     // 就能命中 run，不能等异步配置完成后才建立生命周期状态。
-    this.states.set(runId, {
-      workerId: "",
-      status: "acquiring",
-      cancelled: false,
-    });
+    this.sessions.reserve(runId);
     const submission = Promise.resolve()
       .then(() => this.acceptRun(input))
       .catch((err) => {
         this.clearRunState(runId);
         throw err;
       });
-    let tracked: Promise<void>;
-    tracked = submission.finally(() => {
-      if (this.runSubmissions.get(runId) === tracked) {
-        this.runSubmissions.delete(runId);
-      }
-    });
-    this.runSubmissions.set(runId, tracked);
-    return tracked;
+    return this.sessions.trackSubmission(runId, submission);
   }
 
   private async acceptRun(input: SubmitRunInput): Promise<void> {
@@ -218,9 +185,8 @@ export class RuntimeHost implements RuntimeHostContract {
     // 同样要能被 worker 经 getRunConfig 拉到自己的配置。
     const runtimeTarget = resolveSpec(this.config, placement);
     const runConfig = await makeRunConfig(this.config, input, runtimeTarget);
-    const state = this.states.get(runId);
-    if (!state) return; // releaseRun 已先赢得竞态，不再启动执行资源
-    this.runConfigs.set(runId, runConfig);
+    if (!this.sessions.has(runId)) return; // releaseRun 已先赢得竞态，不再启动执行资源
+    this.sessions.setConfig(runId, runConfig);
 
     const wKey = workerKey(placement.owner, placement.runtimeType);
     const existing = this.pool.get(wKey);
@@ -240,19 +206,19 @@ export class RuntimeHost implements RuntimeHostContract {
   async command(input: RuntimeHostCommandInput): Promise<void> {
     const { payload } = input;
     const { runId } = payload;
-    const state = this.states.get(runId);
-    if (!state) return;
+    if (!this.sessions.has(runId)) return;
 
-    if (payload.type === "cancel" && state.status !== "ready") {
+    if (payload.type === "cancel" && !this.sessions.isReady(runId)) {
       // 就绪前 cancel：标记，就绪时转 cancelled
       const wKey = this.pool.getByRunId(runId)?.key;
       if (wKey) this.pool.markCancelled(wKey, runId);
-      state.cancelled = true;
+      this.sessions.markCancelled(runId);
       return;
     }
 
-    if (!state.workerId) return;
-    this.dispatch(state.workerId, runId, payload);
+    const workerId = this.sessions.workerId(runId);
+    if (!workerId) return;
+    this.dispatch(workerId, runId, payload);
   }
 
   // ── 业务级收尾 ──────────────────────────────────────────────────────
@@ -271,83 +237,49 @@ export class RuntimeHost implements RuntimeHostContract {
   // ── 环境 ────────────────────────────────────────────────────────────
 
   async detectEnv(_runtimeHostId: string): Promise<HostCapabilityStatus> {
-    const envConfig = detectEnvConfig();
-    return Object.fromEntries(
-      Object.entries(this.config.capabilities).map(([runtimeType, status]) => [
-        runtimeType,
-        {
-          ...status,
-          ...(runtimeType === "native" && status.available
-            ? { cli: envConfig }
-            : {}),
-        },
-      ])
-    );
+    return this.environmentOperations.detectEnv();
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
-    // 真实安装在 Host 本机执行(builtin/registered 同构);
-    // 把返回路径持久化为 envConfigOverride 是 server 的事。
-    const executablePath = await installCliOnDisk(
-      input.agentType,
-      this.config.cliInstallDir
-    );
-    return { executablePath };
+    return this.environmentOperations.installCli(input);
   }
 
   // ── 工作空间文件 ────────────────────────────────────────────────────
 
   async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
-    // builtin Host 直读本机文件系统
-    const result = listDirectoryOnDisk(input.path);
-    return { path: result.path, entries: result.entries };
+    return this.workspaceOperations.listDirectory(input);
   }
 
   async createDirectory(input: CreateDirectoryInput): Promise<void> {
-    createDirectoryOnDisk(input.path);
+    this.workspaceOperations.createDirectory(input);
   }
 
   async listFiles(
     input: WorkspaceFileQuery
   ): Promise<WorkspaceFileListResponse> {
-    const signal = createFsTimeoutSignal();
-    const result = await listFilesDirect(input.rootPath, input.path, signal);
-    return {
-      path: result.path,
-      list: result.list,
-      truncated: result.truncated,
-    };
+    return this.workspaceOperations.listFiles(input);
   }
 
   async readFile(input: ReadFileInput): Promise<WorkspaceFileReadResponse> {
-    const signal = createFsTimeoutSignal();
-    const result = await readFileDirect(input.rootPath, input.path, signal);
-    return {
-      path: result.path,
-      encoding: result.encoding,
-      content: result.content,
-      size: result.size,
-      truncated: result.truncated,
-    };
+    return this.workspaceOperations.readFile(input);
   }
 
   async readFileDiff(
     input: ReadFileDiffInput
   ): Promise<WorkspaceFileDiffResponse> {
-    return readFileDiffDirect(input.rootPath, input.path);
+    return this.workspaceOperations.readFileDiff(input);
   }
 
   async searchFiles(
     input: SearchFilesInput
   ): Promise<WorkspaceFileSearchResponse> {
-    const result = await searchFilesDirect(input.rootPath);
-    return { list: result.list, truncated: result.truncated };
+    return this.workspaceOperations.searchFiles(input);
   }
 
   async listChangedFiles(
     input: ListChangedFilesInput
   ): Promise<WorkspaceChangedFilesResponse> {
-    return listChangedFilesDirect(input.rootPath);
+    return this.workspaceOperations.listChangedFiles(input);
   }
 
   // ── 观测 ────────────────────────────────────────────────────────────
@@ -387,7 +319,6 @@ export class RuntimeHost implements RuntimeHostContract {
 
     this.handshakes.cancel(entry.workerId, reason);
     this.mailbox.cleanup(entry.workerId);
-    this.commandSeqs.delete(entry.workerId);
 
     // 先收口 Host 内的 run 状态，终态不依赖 provider 收资源成功。
     for (const runId of entry.activeRuns) {
@@ -422,26 +353,9 @@ export class RuntimeHost implements RuntimeHostContract {
     runtimeTarget: RuntimeSpec,
     runConfig: RunConfig
   ): Promise<WorkerEntry> {
-    const ready = this.pool.get(wKey);
-    if (ready?.status === "ready") return Promise.resolve(ready);
-
-    const inFlight = this.workerAcquisitions.get(wKey);
-    if (inFlight) return inFlight;
-
-    const acquisition = this.acquireWorker(
-      input,
-      wKey,
-      runtimeTarget,
-      runConfig
+    return this.pool.acquireOnce(wKey, () =>
+      this.acquireWorker(input, wKey, runtimeTarget, runConfig)
     );
-    this.workerAcquisitions.set(wKey, acquisition);
-    const clear = () => {
-      if (this.workerAcquisitions.get(wKey) === acquisition) {
-        this.workerAcquisitions.delete(wKey);
-      }
-    };
-    acquisition.then(clear, clear);
-    return acquisition;
   }
 
   private async acquireWorker(
@@ -554,7 +468,6 @@ export class RuntimeHost implements RuntimeHostContract {
       await handshake.catch(() => {});
       this.pool.remove(wKey, workerId);
       this.mailbox.cleanup(workerId);
-      this.commandSeqs.delete(workerId);
       await this.cleanupFailedLaunch(
         provider,
         parseOwnerKey(placement.owner),
@@ -566,21 +479,18 @@ export class RuntimeHost implements RuntimeHostContract {
   }
 
   private onAcquired(runId: string, wKey: WorkerKey, entry: WorkerEntry): void {
-    const state = this.states.get(runId);
-    if (!state) return;
+    if (!this.sessions.has(runId)) return;
 
     // 就绪前到达的 cancel:state.cancelled 由 command() 标记(彼时 runIndex 还没
     // 建立,pool.markCancelled 不一定落上),两处标记任一命中都转 cancelled 终态。
-    if (state.cancelled || entry.cancelledRuns.delete(runId)) {
+    if (this.sessions.isCancelled(runId) || entry.cancelledRuns.delete(runId)) {
       this.pool.dissociateRun(runId);
-      this.states.delete(runId);
-      this.runConfigs.delete(runId);
+      this.sessions.delete(runId);
       this.upstream.notifyRunCancelled(runId).catch(() => {});
       return;
     }
 
-    state.workerId = entry.workerId;
-    state.status = "ready";
+    this.sessions.bindWorker(runId, entry.workerId);
     this.pool.associateRun(wKey, runId);
 
     // 下发首条 user_message(runConfig 已在 submitRun 存入,worker 经 getRunConfig 拉取)
@@ -605,16 +515,7 @@ export class RuntimeHost implements RuntimeHostContract {
     runId: string,
     payload: CommandPayload
   ): void {
-    const seq = (this.commandSeqs.get(workerId) ?? 0) + 1;
-    this.commandSeqs.set(workerId, seq);
-    const message = {
-      runId,
-      seq,
-      type: "command" as const,
-      payload,
-      ts: new Date().toISOString(),
-    };
-    this.mailbox.push(workerId, message);
+    this.mailbox.enqueue(workerId, runId, payload);
     this.config.onCommandDispatched?.({
       runId,
       commandId: payload.commandId,
@@ -647,7 +548,7 @@ export class RuntimeHost implements RuntimeHostContract {
   /** worker 拉取 run config。 */
   getRunConfig(workerId: string, runId: string): RunConfig | undefined {
     if (!this.pool.ownsRun(workerId, runId)) return undefined;
-    return this.runConfigs.get(runId);
+    return this.sessions.getConfig(runId);
   }
 
   /** worker 注册握手。 */
@@ -705,8 +606,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
   private clearRunState(runId: string): void {
     this.pool.dissociateRun(runId);
-    this.runConfigs.delete(runId);
-    this.states.delete(runId);
+    this.sessions.delete(runId);
   }
 
   private makeRuntimeInstanceRef(

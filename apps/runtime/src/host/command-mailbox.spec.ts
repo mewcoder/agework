@@ -13,6 +13,22 @@ function makeCommand(seq: number, runId = "run-1"): RunChannelMessage<CommandPay
 }
 
 describe("CommandMailbox", () => {
+  it("owns per-worker command sequence allocation", () => {
+    const mailbox = new CommandMailbox();
+    const payload = {
+      type: "interrupt" as const,
+      commandId: "cmd-1",
+      runId: "run-1",
+    };
+
+    expect(mailbox.enqueue("worker-1", "run-1", payload).seq).toBe(1);
+    expect(mailbox.enqueue("worker-1", "run-1", payload).seq).toBe(2);
+    expect(mailbox.enqueue("worker-2", "run-1", payload).seq).toBe(1);
+
+    mailbox.cleanup("worker-1");
+    expect(mailbox.enqueue("worker-1", "run-1", payload).seq).toBe(1);
+  });
+
   it("pollImmediate returns only commands after afterSeq", () => {
     const mailbox = new CommandMailbox();
     mailbox.push("worker-1", makeCommand(1));
