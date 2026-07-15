@@ -124,6 +124,30 @@ describe("RuntimeHost", () => {
     host.drain();
   });
 
+  it("rejects a runtimeType not advertised as available by this Host", async () => {
+    const start = vi.fn();
+    injectProvider(host, start);
+    const input = makeSubmitInput("run-1");
+    input.placement.runtimeType = "docker";
+
+    await expect(host.submitRun(input)).rejects.toThrow(
+      "runtimeType docker is not available on this Host"
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it("rejects an owner scope outside the Host capability", async () => {
+    const start = vi.fn();
+    injectProvider(host, start);
+    const input = makeSubmitInput("run-1");
+    input.placement.owner = "user:user-1";
+
+    await expect(host.submitRun(input)).rejects.toThrow(
+      "runtimeType native does not support user scope on this Host"
+    );
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it("launches a worker, handshakes, then dispatches the first user_message", async () => {
     injectProvider(
       host,

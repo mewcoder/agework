@@ -174,6 +174,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
   private async acceptRun(input: SubmitRunInput): Promise<void> {
     const { runId, placement } = input;
+    this.assertPlacementSupported(placement);
 
     // spec/config 组装失败同步抛出(配置/入参问题),由调用方按启动失败处理。
     // 每次 run 都建 RunConfig(不只新建 worker 时)——复用已有 worker 的 run
@@ -214,6 +215,24 @@ export class RuntimeHost implements RuntimeHostContract {
     const workerId = this.sessions.workerId(runId);
     if (!workerId) return;
     this.dispatch(workerId, runId, payload);
+  }
+
+  private assertPlacementSupported(
+    placement: SubmitRunInput["placement"]
+  ): void {
+    const capability = this.config.capabilities[placement.runtimeType];
+    if (!capability?.available) {
+      const reason = capability?.reason ? `: ${capability.reason}` : "";
+      throw new Error(
+        `runtimeType ${placement.runtimeType} is not available on this Host${reason}`
+      );
+    }
+    const { scope } = parseOwnerKey(placement.owner);
+    if (!capability.scopes.includes(scope)) {
+      throw new Error(
+        `runtimeType ${placement.runtimeType} does not support ${scope} scope on this Host`
+      );
+    }
   }
 
   // ── 业务级收尾 ──────────────────────────────────────────────────────
