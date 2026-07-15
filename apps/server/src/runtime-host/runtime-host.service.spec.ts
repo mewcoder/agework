@@ -4,6 +4,7 @@ import { RuntimeHostRepository } from "./runtime-host.repository";
 import type { RuntimeHostRow } from "./runtime-host.types";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import { RuntimeHostService } from "./runtime-host.service";
+import type { RuntimeHostOperations } from "@agework/shared/protocol";
 
 const mockEnvConfig = {
   claude: {
@@ -14,35 +15,6 @@ const mockEnvConfig = {
   codex: { executablePath: null, version: null, authAvailable: false },
   detectedAt: "2026-07-06T00:00:00.000Z",
 };
-
-const local = vi.hoisted(() => ({
-  listDirectory: vi.fn(),
-  createDirectory: vi.fn(),
-  listFiles: vi.fn(),
-  readFile: vi.fn(),
-  listChangedFiles: vi.fn(),
-  readFileDiff: vi.fn(),
-  searchFiles: vi.fn(),
-}));
-
-vi.mock("@agework/shared/cli", () => ({
-  detectEnvConfig: () => mockEnvConfig,
-}));
-vi.mock("@agework/shared/filesystem/directory-browser", () => ({
-  listDirectory: local.listDirectory,
-  createDirectory: local.createDirectory,
-}));
-vi.mock("@agework/shared/filesystem", () => ({
-  createFsTimeoutSignal: () => AbortSignal.timeout(8_000),
-  listFiles: local.listFiles,
-  readFile: local.readFile,
-  searchFiles: local.searchFiles,
-}));
-vi.mock("@agework/shared/git", () => ({
-  NotGitRepositoryError: class NotGitRepositoryError extends Error {},
-  listChangedFiles: local.listChangedFiles,
-  readFileDiff: local.readFileDiff,
-}));
 
 function makeRow(overrides: Partial<RuntimeHostRow> = {}): RuntimeHostRow {
   return {
@@ -78,8 +50,8 @@ describe("RuntimeHostService", () => {
   let tunnelHandler: {
     closeConnection: ReturnType<typeof vi.fn>;
     isConnected: ReturnType<typeof vi.fn>;
-    sendRequest: ReturnType<typeof vi.fn>;
   };
+  let operations: Record<keyof RuntimeHostOperations, ReturnType<typeof vi.fn>>;
   let service: RuntimeHostService;
 
   beforeEach(() => {
@@ -93,33 +65,6 @@ describe("RuntimeHostService", () => {
       getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
       getLaunchTimeoutSeconds: vi.fn().mockReturnValue(20),
     };
-    local.listDirectory.mockReturnValue({
-      path: "/home/agework",
-      entries: ["/home/agework/foo"],
-    });
-    local.createDirectory.mockReturnValue({ path: "/home/agework/new" });
-    local.listFiles.mockResolvedValue({
-      path: "src",
-      list: [{ name: "a.ts", type: "file", size: 10 }],
-      truncated: false,
-    });
-    local.readFile.mockResolvedValue({
-      path: "a.ts",
-      encoding: "utf8",
-      content: "hello",
-      size: 5,
-      truncated: false,
-    });
-    local.listChangedFiles.mockResolvedValue({
-      list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
-      truncated: false,
-    });
-    local.readFileDiff.mockResolvedValue({
-      path: "a.ts",
-      status: "modified",
-      before: "old",
-      after: "new",
-    });
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
       listVisibleToOwner: vi.fn().mockResolvedValue([makeRow()]),
@@ -134,12 +79,53 @@ describe("RuntimeHostService", () => {
     tunnelHandler = {
       closeConnection: vi.fn(),
       isConnected: vi.fn().mockReturnValue(false),
-      sendRequest: vi.fn(),
+    };
+    operations = {
+      releaseOwner: vi.fn().mockResolvedValue(undefined),
+      detectEnv: vi.fn().mockResolvedValue({
+        native: {
+          available: true,
+          scopes: ["workspace"],
+          cli: mockEnvConfig,
+        },
+      }),
+      installCli: vi.fn().mockResolvedValue({ executablePath: "/cli/claude" }),
+      listDirectory: vi.fn().mockResolvedValue({
+        path: "/home/agework",
+        entries: ["/home/agework/foo"],
+      }),
+      createDirectory: vi.fn().mockResolvedValue(undefined),
+      listFiles: vi.fn().mockResolvedValue({
+        path: "src",
+        list: [{ name: "a.ts", type: "file", size: 10 }],
+        truncated: false,
+      }),
+      readFile: vi.fn().mockResolvedValue({
+        path: "a.ts",
+        encoding: "utf8",
+        content: "hello",
+        size: 5,
+        truncated: false,
+      }),
+      readFileDiff: vi.fn().mockResolvedValue({
+        path: "a.ts",
+        status: "modified",
+        before: "old",
+        after: "new",
+      }),
+      searchFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
+      listChangedFiles: vi.fn().mockResolvedValue({
+        list: [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 0 },
+        ],
+        truncated: false,
+      }),
     };
     service = new RuntimeHostService(
       configService as ConfigService,
       repository as unknown as RuntimeHostRepository,
-      tunnelHandler as unknown as HostTunnelHandler
+      tunnelHandler as unknown as HostTunnelHandler,
+      operations as unknown as RuntimeHostOperations
     );
   });
 
@@ -195,8 +181,7 @@ describe("RuntimeHostService", () => {
       "builtin",
       expect.objectContaining({ claude: expect.any(Object) })
     );
-    // 不应该走隧道
-    expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
+    expect(operations.detectEnv).toHaveBeenCalledWith("builtin");
   });
 
   it("detectEnv for registered runtime uses tunnel when connected", async () => {
@@ -210,7 +195,7 @@ describe("RuntimeHostService", () => {
       codex: { executablePath: null, version: null, authAvailable: false },
       detectedAt: "2026-07-06T01:00:00.000Z",
     };
-    tunnelHandler.sendRequest.mockResolvedValue({
+    operations.detectEnv.mockResolvedValue({
       native: {
         available: true,
         scopes: ["workspace"],
@@ -224,12 +209,40 @@ describe("RuntimeHostService", () => {
       "rt-1",
       mockEnvConfig
     );
+    expect(operations.detectEnv).toHaveBeenCalledWith("rt-1");
   });
 
   it("detectEnv for disconnected registered runtime returns null", async () => {
     tunnelHandler.isConnected.mockReturnValue(false);
     const result = await service.detectEnv("rt-1");
     expect(result.envConfig).toBeNull();
+    expect(operations.detectEnv).not.toHaveBeenCalled();
+  });
+
+  it("detectEnv rejects a missing runtime before reaching the execution plane", async () => {
+    repository.findById.mockResolvedValueOnce(null);
+
+    await expect(service.detectEnv("missing")).rejects.toThrow(
+      "runtime not found: missing"
+    );
+    expect(operations.detectEnv).not.toHaveBeenCalled();
+  });
+
+  it("installCli delegates execution to RuntimeHostOperations and stores the override", async () => {
+    repository.findById.mockResolvedValueOnce(
+      makeRow({ id: "builtin", source: "builtin" })
+    );
+
+    await service.installCli("builtin", "claude");
+
+    expect(operations.installCli).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      agentType: "claude",
+    });
+    expect(repository.updateEnvConfigOverride).toHaveBeenCalledWith("builtin", {
+      claude: { executablePath: "/cli/claude" },
+    });
+    expect(operations.detectEnv).toHaveBeenCalledWith("builtin");
   });
 
   it("create stores only the sha256 of the pairing token and returns the plaintext once", async () => {
@@ -319,13 +332,16 @@ describe("RuntimeHostService", () => {
     expect(result).toBeNull();
   });
 
-  it("listDirectory for builtin Host reads the local filesystem", async () => {
+  it("listDirectory delegates builtin Host access to RuntimeHostOperations", async () => {
     const result = await service.listDirectory(
       "u-1",
       "builtin",
       "/home/agework"
     );
-    expect(local.listDirectory).toHaveBeenCalledWith("/home/agework");
+    expect(operations.listDirectory).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      path: "/home/agework",
+    });
     expect(result).toEqual({
       path: "/home/agework",
       list: ["/home/agework/foo"],
@@ -347,45 +363,46 @@ describe("RuntimeHostService", () => {
   });
 
   it("listDirectory wraps underlying filesystem errors as BadRequestException", async () => {
-    local.listDirectory.mockImplementationOnce(() => {
-      throw new Error("目录不存在或不可访问");
-    });
+    operations.listDirectory.mockRejectedValueOnce(
+      new Error("目录不存在或不可访问")
+    );
     await expect(
       service.listDirectory("u-1", "builtin", "/no/such/dir")
     ).rejects.toThrow("目录不存在或不可访问");
   });
 
-  it("createDirectory for builtin Host writes the local filesystem", async () => {
+  it("createDirectory delegates builtin Host access to RuntimeHostOperations", async () => {
     const result = await service.createDirectory(
       "u-1",
       "builtin",
       "/home/agework/new"
     );
-    expect(local.createDirectory).toHaveBeenCalledWith("/home/agework/new");
+    expect(operations.createDirectory).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      path: "/home/agework/new",
+    });
     expect(result).toEqual({ path: "/home/agework/new" });
   });
 
-  it("createDirectory for registered Host uses host.createDirectory", async () => {
+  it("createDirectory delegates registered Host access to RuntimeHostOperations", async () => {
     tunnelHandler.isConnected.mockReturnValue(true);
-    tunnelHandler.sendRequest.mockResolvedValue({ path: "/data/new" });
     const result = await service.createDirectory("u-1", "rt-1", "/data/new");
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "rt-1",
-      expect.objectContaining({ method: "host.createDirectory" }),
-      expect.any(Number)
-    );
+    expect(operations.createDirectory).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      path: "/data/new",
+    });
     expect(result).toEqual({ path: "/data/new" });
   });
 
-  // ── 文件预览（builtin 直读，registered 经隧道 RPC） ─────
+  // ── 文件预览（统一经 RuntimeHostOperations） ─────
 
-  it("listFiles for builtin Host reads the local filesystem", async () => {
+  it("listFiles for builtin Host uses RuntimeHostOperations", async () => {
     const result = await service.listFiles("builtin", "/tmp/ws", "src");
-    expect(local.listFiles).toHaveBeenCalledWith(
-      "/tmp/ws",
-      "src",
-      expect.any(AbortSignal)
-    );
+    expect(operations.listFiles).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      rootPath: "/tmp/ws",
+      path: "src",
+    });
     expect(result).toEqual({
       path: "src",
       list: [{ name: "a.ts", type: "file", size: 10 }],
@@ -393,18 +410,18 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("listFiles for registered Host uses host.listFiles", async () => {
-    tunnelHandler.sendRequest.mockResolvedValue({
+  it("listFiles for registered Host uses RuntimeHostOperations", async () => {
+    operations.listFiles.mockResolvedValue({
       path: "src",
       list: [{ name: "b.ts", type: "file", size: 20 }],
       truncated: false,
     });
     const result = await service.listFiles("rt-1", "/remote/ws", "src");
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "rt-1",
-      expect.objectContaining({ method: "host.listFiles" }),
-      expect.any(Number)
-    );
+    expect(operations.listFiles).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      rootPath: "/remote/ws",
+      path: "src",
+    });
     expect(result).toEqual({
       path: "src",
       list: [{ name: "b.ts", type: "file", size: 20 }],
@@ -413,19 +430,19 @@ describe("RuntimeHostService", () => {
   });
 
   it("listFiles wraps underlying errors as BadRequestException", async () => {
-    local.listFiles.mockRejectedValueOnce(new Error("路径越界"));
+    operations.listFiles.mockRejectedValueOnce(new Error("路径越界"));
     await expect(service.listFiles("builtin", "/tmp/ws", "..")).rejects.toThrow(
       "路径越界"
     );
   });
 
-  it("readFile for builtin Host reads the local filesystem", async () => {
+  it("readFile for builtin Host uses RuntimeHostOperations", async () => {
     const result = await service.readFile("builtin", "/tmp/ws", "a.ts");
-    expect(local.readFile).toHaveBeenCalledWith(
-      "/tmp/ws",
-      "a.ts",
-      expect.any(AbortSignal)
-    );
+    expect(operations.readFile).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      rootPath: "/tmp/ws",
+      path: "a.ts",
+    });
     expect(result).toEqual({
       path: "a.ts",
       encoding: "utf8",
@@ -435,8 +452,8 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("readFile for registered Host uses host.readFile", async () => {
-    tunnelHandler.sendRequest.mockResolvedValue({
+  it("readFile for registered Host uses RuntimeHostOperations", async () => {
+    operations.readFile.mockResolvedValue({
       path: "a.ts",
       encoding: "utf8",
       content: "remote",
@@ -444,11 +461,11 @@ describe("RuntimeHostService", () => {
       truncated: false,
     });
     const result = await service.readFile("rt-1", "/remote/ws", "a.ts");
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "rt-1",
-      expect.objectContaining({ method: "host.readFile" }),
-      expect.any(Number)
-    );
+    expect(operations.readFile).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      rootPath: "/remote/ws",
+      path: "a.ts",
+    });
     expect(result).toEqual({
       path: "a.ts",
       encoding: "utf8",
@@ -459,7 +476,9 @@ describe("RuntimeHostService", () => {
   });
 
   it("readFile wraps underlying errors as BadRequestException", async () => {
-    local.readFile.mockRejectedValueOnce(new Error("二进制文件不支持预览"));
+    operations.readFile.mockRejectedValueOnce(
+      new Error("二进制文件不支持预览")
+    );
     await expect(
       service.readFile("builtin", "/tmp/ws", "bin.dat")
     ).rejects.toThrow("二进制文件不支持预览");
@@ -467,34 +486,40 @@ describe("RuntimeHostService", () => {
 
   // ── 变更查看(git diff) ────────────────────────────────────────
 
-  it("listChangedFiles for builtin Host reads the local git repository", async () => {
+  it("listChangedFiles for builtin Host uses RuntimeHostOperations", async () => {
     const result = await service.listChangedFiles("builtin", "/tmp/ws");
-    expect(local.listChangedFiles).toHaveBeenCalledWith("/tmp/ws");
+    expect(operations.listChangedFiles).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      rootPath: "/tmp/ws",
+    });
     expect(result).toEqual({
       list: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
       truncated: false,
     });
   });
 
-  it("listChangedFiles for registered Host uses host.listChangedFiles", async () => {
-    tunnelHandler.sendRequest.mockResolvedValue({
+  it("listChangedFiles for registered Host uses RuntimeHostOperations", async () => {
+    operations.listChangedFiles.mockResolvedValue({
       list: [
         { path: "b.ts", status: "added", additions: null, deletions: null },
       ],
       truncated: false,
     });
     const result = await service.listChangedFiles("rt-1", "/remote/ws");
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "rt-1",
-      expect.objectContaining({ method: "host.listChangedFiles" }),
-      expect.any(Number)
-    );
+    expect(operations.listChangedFiles).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      rootPath: "/remote/ws",
+    });
     expect(result.list[0].path).toBe("b.ts");
   });
 
-  it("readFileDiff for builtin Host reads the local git repository", async () => {
+  it("readFileDiff for builtin Host uses RuntimeHostOperations", async () => {
     const result = await service.readFileDiff("builtin", "/tmp/ws", "a.ts");
-    expect(local.readFileDiff).toHaveBeenCalledWith("/tmp/ws", "a.ts");
+    expect(operations.readFileDiff).toHaveBeenCalledWith({
+      runtimeHostId: "builtin",
+      rootPath: "/tmp/ws",
+      path: "a.ts",
+    });
     expect(result).toEqual({
       path: "a.ts",
       status: "modified",
@@ -503,19 +528,19 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("readFileDiff for registered Host uses host.readFileDiff", async () => {
-    tunnelHandler.sendRequest.mockResolvedValue({
+  it("readFileDiff for registered Host uses RuntimeHostOperations", async () => {
+    operations.readFileDiff.mockResolvedValue({
       path: "a.ts",
       status: "modified",
       before: "remote-old",
       after: "remote-new",
     });
     const result = await service.readFileDiff("rt-1", "/remote/ws", "a.ts");
-    expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
-      "rt-1",
-      expect.objectContaining({ method: "host.readFileDiff" }),
-      expect.any(Number)
-    );
+    expect(operations.readFileDiff).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      rootPath: "/remote/ws",
+      path: "a.ts",
+    });
     expect(result.after).toBe("remote-new");
   });
 });

@@ -1,21 +1,18 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   NotFoundException,
   type OnApplicationBootstrap,
 } from "@nestjs/common";
 import { createHash, randomBytes } from "node:crypto";
-import { generateId, type AgentType } from "@agework/shared";
+import { type AgentType } from "@agework/shared";
 import type {
-  DirectoryListing,
-  HostCapabilityStatus,
-  InstallCliResult,
   RuntimeCapabilities,
+  RuntimeHostOperations,
   RuntimeSpec,
-  HostTunnelAllRpcRequest,
-  HostTunnelHostNotification,
   WorkerScope,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
@@ -34,41 +31,22 @@ import type {
   WorkspaceFileDiffResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
-import { NotGitRepositoryError } from "@agework/shared/git";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
-import type { RuntimeConfig, RuntimeType } from "@agework/providers";
+import type { RuntimeType } from "@agework/providers";
 import { ConfigService } from "../config/config.service";
-import { toRuntimeConfig } from "./builtin/runtime-config";
 import { RuntimeHostRepository } from "./runtime-host.repository";
 import type { RuntimeHostRow } from "./runtime-host.types";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
-import { BUILTIN_HOST_ID, isBuiltinHostId } from "./runtime-host.types";
-import type { HostUpstreamPort } from "./runtime-host.types";
 import {
-  detectEnvConfig,
-  installCli as installLocalCli,
-} from "@agework/shared/cli";
-import {
-  createDirectory as createDirectoryOnDisk,
-  listDirectory as listDirectoryOnDisk,
-} from "@agework/shared/filesystem/directory-browser";
-import {
-  createFsTimeoutSignal,
-  listFiles as listFilesDirect,
-  readFile as readFileDirect,
-  searchFiles as searchFilesDirect,
-} from "@agework/shared/filesystem";
-import {
-  listChangedFiles as listChangedFilesDirect,
-  readFileDiff as readFileDiffDirect,
-} from "@agework/shared/git";
-
-/** CLI 安装要跑 npm install(上限 120s),隧道等待要给足余量。 */
-const INSTALL_CLI_TIMEOUT_MS = 150_000;
+  BUILTIN_HOST_ID,
+  isBuiltinHostId,
+  RUNTIME_HOST_OPERATIONS,
+} from "./runtime-host.types";
+import { resolveRuntimeHostCliPaths } from "./environment/runtime-host-environment";
 
 /**
- * RuntimeHost 注册领域门面：管理 Host 注册表、placement 配置、能力与隧道传输。
- * worker 生命周期只经 RuntimeHostContract；本类不再持有第二套 Runtime 抽象。
+ * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
+ * 所有执行机动作统一经 RuntimeHostOperations；本类不自行访问执行机或拼隧道 RPC。
  */
 @Injectable()
 export class RuntimeHostService implements OnApplicationBootstrap {
@@ -77,7 +55,9 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   constructor(
     private readonly configService: ConfigService,
     private readonly repository: RuntimeHostRepository,
-    private readonly tunnelHandler: HostTunnelHandler
+    private readonly tunnelHandler: HostTunnelHandler,
+    @Inject(RUNTIME_HOST_OPERATIONS)
+    private readonly operations: RuntimeHostOperations
   ) {}
 
   /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
@@ -97,8 +77,11 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     });
 
     if (allowedRuntimeTypes.includes("native")) {
-      const envConfig = detectEnvConfig();
-      await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
+      const envConfig = (await this.operations.detectEnv(BUILTIN_HOST_ID))
+        .native?.cli;
+      if (envConfig) {
+        await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
+      }
     }
     this.logger.log(
       `builtin Runtime Host ready: ${allowedRuntimeTypes.join(", ")}`
@@ -210,30 +193,13 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`runtime not found: ${id}`);
     }
-    let executablePath: string;
-    if (isBuiltinHostId(id)) {
-      // builtin Host 就是 server 本机,直接在进程内安装
-      executablePath = await installLocalCli(
-        agentType,
-        this.configService.getHostCliDir()
-      );
-    } else {
-      if (!this.tunnelHandler.isConnected(id)) {
-        throw new BadRequestException(`runtime ${id} is not connected`);
-      }
-      // registered Host:经隧道让目标机器自己装(npm install 上限 120s,给足余量)
-      const result = await this.sendTunnelRequest<InstallCliResult>(
-        id,
-        {
-          jsonrpc: "2.0",
-          id: generateId(),
-          method: "host.installCli",
-          params: { runtimeHostId: id, agentType },
-        },
-        INSTALL_CLI_TIMEOUT_MS
-      );
-      executablePath = result.executablePath;
+    if (!isBuiltinHostId(id) && !this.tunnelHandler.isConnected(id)) {
+      throw new BadRequestException(`runtime ${id} is not connected`);
     }
+    const { executablePath } = await this.operations.installCli({
+      runtimeHostId: id,
+      agentType,
+    });
     await this.updateEnvConfigOverride(id, agentType, executablePath);
     return this.detectEnv(id);
   }
@@ -245,26 +211,17 @@ export class RuntimeHostService implements OnApplicationBootstrap {
    *   runtime 未连接时返回 null。
    */
   async detectEnv(id: string): Promise<DetectEnvResponse> {
+    const row = await this.repository.findById(id);
+    if (!row) {
+      throw new NotFoundException(`runtime not found: ${id}`);
+    }
     // registered 未连接:不是错误,只是此刻无法检测(前端按离线展示)
     if (!this.tunnelHandler.isConnected(id) && !isBuiltinHostId(id)) {
       return { envConfig: null };
     }
     let envConfig: RuntimeEnvConfig | undefined;
     try {
-      envConfig = isBuiltinHostId(id)
-        ? detectEnvConfig()
-        : (
-            await this.sendTunnelRequest<HostCapabilityStatus>(
-              id,
-              {
-                jsonrpc: "2.0",
-                id: generateId(),
-                method: "host.detectEnv",
-                params: { runtimeHostId: id },
-              },
-              this.configService.getLaunchTimeoutSeconds() * 1000
-            )
-          ).native?.cli;
+      envConfig = (await this.operations.detectEnv(id)).native?.cli;
     } catch (err) {
       // 检测/RPC 失败与「未检出 CLI」是两回事,失败要让调用方看见
       throw new BadRequestException(
@@ -288,18 +245,10 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   ): Promise<HostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      const result = isBuiltinHostId(id)
-        ? listDirectoryOnDisk(path)
-        : await this.sendTunnelRequest<DirectoryListing>(
-            id,
-            {
-              jsonrpc: "2.0",
-              id: generateId(),
-              method: "host.listDirectory",
-              params: { runtimeHostId: id, path },
-            },
-            this.configService.getLaunchTimeoutSeconds() * 1000
-          );
+      const result = await this.operations.listDirectory({
+        runtimeHostId: id,
+        path,
+      });
       return { path: result.path, list: result.entries };
     } catch (err) {
       throw new BadRequestException(
@@ -316,17 +265,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   ): Promise<CreateHostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      if (isBuiltinHostId(id)) return createDirectoryOnDisk(path);
-      await this.sendTunnelRequest<never>(
-        id,
-        {
-          jsonrpc: "2.0",
-          id: generateId(),
-          method: "host.createDirectory",
-          params: { runtimeHostId: id, path },
-        },
-        this.configService.getLaunchTimeoutSeconds() * 1000
-      );
+      await this.operations.createDirectory({ runtimeHostId: id, path });
       return { path };
     } catch (err) {
       throw new BadRequestException(
@@ -338,8 +277,8 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   // ── 文件预览 ───────────────────────────────────────────────────────
 
   /**
-   * builtin Host 直读本机硬盘；registered Host 经 host.* 隧道 RPC。
-   * 安全校验复用 shared/fileBrowser，rootPath 由 WorkspaceService 查出后传入。
+   * 文件操作统一下调 RuntimeHostOperations；rootPath 由 WorkspaceService 查出后传入。
+   * builtin / registered 分流与路径安全校验由执行面实现负责。
    */
   async listFiles(
     runtimeHostId: string,
@@ -347,28 +286,11 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      if (!isBuiltinHostId(runtimeHostId)) {
-        return await this.sendTunnelRequest<WorkspaceFileListResponse>(
-          runtimeHostId,
-          {
-            jsonrpc: "2.0",
-            id: generateId(),
-            method: "host.listFiles",
-            params: { runtimeHostId, rootPath, path: relativePath },
-          },
-          this.configService.getLaunchTimeoutSeconds() * 1000
-        );
-      }
-      const result = await listFilesDirect(
+      return await this.operations.listFiles({
+        runtimeHostId,
         rootPath,
-        relativePath,
-        createFsTimeoutSignal()
-      );
-      return {
-        path: result.path,
-        list: result.list,
-        truncated: result.truncated,
-      };
+        path: relativePath,
+      });
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -383,30 +305,11 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      if (!isBuiltinHostId(runtimeHostId)) {
-        return await this.sendTunnelRequest<WorkspaceFileReadResponse>(
-          runtimeHostId,
-          {
-            jsonrpc: "2.0",
-            id: generateId(),
-            method: "host.readFile",
-            params: { runtimeHostId, rootPath, path: relativePath },
-          },
-          this.configService.getLaunchTimeoutSeconds() * 1000
-        );
-      }
-      const result = await readFileDirect(
+      return await this.operations.readFile({
+        runtimeHostId,
         rootPath,
-        relativePath,
-        createFsTimeoutSignal()
-      );
-      return {
-        path: result.path,
-        encoding: result.encoding,
-        content: result.content,
-        size: result.size,
-        truncated: result.truncated,
-      };
+        path: relativePath,
+      });
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -417,27 +320,18 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   // ── 变更查看(diff,只读) ──────
 
   /**
-   * 变更查看：builtin Host 在本机 workspace 目录直跑 git；registered Host 经
-   * host.* 隧道 RPC。rootPath 由 WorkspaceService 查出后传入。
-   * 非 git 目录 → BadRequestException(可区分「非 git」);git 失败 → BadRequestException。
+   * 变更查看统一下调 RuntimeHostOperations，rootPath 由 WorkspaceService 查出后传入。
+   * 执行面错误统一映射为 BadRequestException。
    */
   async listChangedFiles(
     runtimeHostId: string,
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return isBuiltinHostId(runtimeHostId)
-        ? await listChangedFilesDirect(rootPath)
-        : await this.sendTunnelRequest<WorkspaceChangedFilesResponse>(
-            runtimeHostId,
-            {
-              jsonrpc: "2.0",
-              id: generateId(),
-              method: "host.listChangedFiles",
-              params: { runtimeHostId, rootPath },
-            },
-            this.configService.getLaunchTimeoutSeconds() * 1000
-          );
+      return await this.operations.listChangedFiles({
+        runtimeHostId,
+        rootPath,
+      });
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -450,22 +344,11 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return isBuiltinHostId(runtimeHostId)
-        ? await readFileDiffDirect(rootPath, relativePath)
-        : await this.sendTunnelRequest<WorkspaceFileDiffResponse>(
-            runtimeHostId,
-            {
-              jsonrpc: "2.0",
-              id: generateId(),
-              method: "host.readFileDiff",
-              params: {
-                runtimeHostId,
-                rootPath,
-                path: relativePath,
-              },
-            },
-            this.configService.getLaunchTimeoutSeconds() * 1000
-          );
+      return await this.operations.readFileDiff({
+        runtimeHostId,
+        rootPath,
+        path: relativePath,
+      });
     } catch (err) {
       throw this.toChangeViewError(err);
     }
@@ -477,18 +360,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     rootPath: string
   ): Promise<WorkspaceFileSearchResponse> {
     try {
-      return isBuiltinHostId(runtimeHostId)
-        ? await searchFilesDirect(rootPath)
-        : await this.sendTunnelRequest<WorkspaceFileSearchResponse>(
-            runtimeHostId,
-            {
-              jsonrpc: "2.0",
-              id: generateId(),
-              method: "host.searchFiles",
-              params: { runtimeHostId, rootPath },
-            },
-            this.configService.getLaunchTimeoutSeconds() * 1000
-          );
+      return await this.operations.searchFiles({ runtimeHostId, rootPath });
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -497,9 +369,6 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   }
 
   private toChangeViewError(err: unknown): BadRequestException {
-    if (err instanceof NotGitRepositoryError) {
-      return new BadRequestException("该工作空间不是 Git 仓库,无法查看变更");
-    }
     return new BadRequestException(
       err instanceof Error ? err.message : String(err)
     );
@@ -519,58 +388,9 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     }
   }
 
-  /**
-   * 按 id 查 Runtime 行（无 owner 校验——内部/Host 契约用）。
-   * Phase 2 expand：RuntimeHostAdapter.detectEnv 需要读取 runtimeType/capabilities/envConfig
-   * 来构造 HostCapabilityStatus。
-   */
+  /** 按 id 查 RuntimeHost 行（无 owner 校验，供 server 内部恢复流程使用）。 */
   getRuntimeHostRow(id: string): Promise<RuntimeHostRow | null> {
     return this.repository.findById(id);
-  }
-
-  /**
-   * `@agework/providers` 的 RuntimeConfig(server 配置拼装,见 builtin/runtime-config.ts)。
-   * 供进程内 builtin RuntimeHost 构造 provider 配置。
-   */
-  getProviderRuntimeConfig(): RuntimeConfig {
-    return toRuntimeConfig(this.configService);
-  }
-
-  // ── Phase 2 隧道公开面(对 HostTunnelHandler 的薄转发)────────────
-  //
-  // RuntimeHostAdapter 经这里走隧道,不直接 reach
-  // gateway 内部文件(模块边界:跨模块只调根 Service)。
-
-  /** 向已建连的 registered Host 发一次隧道 RPC(host.* / launch/stop/destroy)。 */
-  sendTunnelRequest<Result>(
-    runtimeHostId: string,
-    request: HostTunnelAllRpcRequest,
-    timeoutMs: number
-  ): Promise<Result> {
-    return this.tunnelHandler.sendRequest<Result>(
-      runtimeHostId,
-      request,
-      timeoutMs
-    );
-  }
-
-  /** 列出所有隧道在线的 registered Host id（builtin Host 不走隧道）。 */
-  listConnectedRuntimeHostIds(): string[] {
-    return this.tunnelHandler.listConnected();
-  }
-
-  /** 向目标 Host 发一条单向隧道通知(不等回应,不在线即丢弃,best-effort)。 */
-  sendTunnelNotification(
-    runtimeHostId: string,
-    notification: HostTunnelHostNotification
-  ): void {
-    this.tunnelHandler.sendNotification(runtimeHostId, notification);
-  }
-
-  /** 接线 host.upstream 回流 Port(Host → server 单向回流,进程内仅一个实现方,
-   *  启动期一次)。契约见 `runtime.types.ts` 的 `HostUpstreamPort`。 */
-  setHostUpstreamPort(port: HostUpstreamPort): void {
-    this.tunnelHandler.setHostUpstreamPort(port);
   }
 
   /**
@@ -584,23 +404,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   } | null> {
     const row = await this.repository.findById(id);
     if (!row) return null;
-    const envConfig = row.envConfig as RuntimeEnvConfig | null;
-    const override =
-      row.envConfigOverride as RuntimeHostEnvConfigOverride | null;
-    return {
-      claude: resolveAgentPath(
-        override?.claude?.executablePath,
-        envConfig?.claude.executablePath ?? null
-      ),
-      codex: resolveAgentPath(
-        override?.codex?.executablePath,
-        envConfig?.codex.executablePath ?? null
-      ),
-      opencode: resolveAgentPath(
-        override?.opencode?.executablePath,
-        envConfig?.opencode?.executablePath ?? null
-      ),
-    };
+    return resolveRuntimeHostCliPaths(row);
   }
 }
 
@@ -690,11 +494,4 @@ function mergeOverride(
     result[key] = { executablePath };
   }
   return result;
-}
-
-function resolveAgentPath(
-  overridePath: string | undefined,
-  detectedPath: string | null
-): string | null {
-  return overridePath ?? detectedPath ?? null;
 }

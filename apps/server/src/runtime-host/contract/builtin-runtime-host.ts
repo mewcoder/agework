@@ -3,8 +3,11 @@ import type { FactoryProvider } from "@nestjs/common";
 import { RuntimeHost, WorkerHttpServer } from "@agework/runtime/host";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
-import { RuntimeHostService } from "../runtime-host.service";
 import { RunEventService } from "../../run-event/run-event.service";
+import { RuntimeHostRepository } from "../runtime-host.repository";
+import { BUILTIN_HOST_ID } from "../runtime-host.types";
+import { toRuntimeConfig } from "../builtin/runtime-config";
+import { resolveRuntimeHostCliPaths } from "../environment/runtime-host-environment";
 
 /**
  * 进程内 builtin RuntimeHost 的注入 token。
@@ -21,17 +24,17 @@ const logger = new Logger("BuiltinRuntimeHost");
 
 export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
   provide: BUILTIN_RUNTIME_HOST,
-  inject: [ConfigService, RuntimeHostService, RunEventService],
+  inject: [ConfigService, RuntimeHostRepository, RunEventService],
   useFactory: async (
     configService: ConfigService,
-    runtimeService: RuntimeHostService,
+    repository: RuntimeHostRepository,
     runEvents: RunEventService
   ): Promise<RuntimeHost> => {
     const workerPort = configService.getBuiltinWorkerHttpPort();
     const apiBasePath = configService.getApiBasePath();
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
-    const providerConfig = runtimeService.getProviderRuntimeConfig();
+    const providerConfig = toRuntimeConfig(configService);
     // provider（native/sandbox）用 RuntimeConfig.serverBaseUrl 覆盖 worker 的
     // AGEWORK_WORKER_API_BASE env——因此 providerConfig.serverBaseUrl 也必须
     // 指向 Host 的 worker HTTP 端点,而非 server 的主端口。
@@ -58,14 +61,10 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       providerConfig,
       workerApiBaseUrl,
       resolveCliPaths: async () => {
-        const resolved = await runtimeService.getResolvedCliPaths(
-          runtimeService.getBuiltinHostId()
-        );
-        return {
-          claude: resolved?.claude ?? null,
-          codex: resolved?.codex ?? null,
-          opencode: resolved?.opencode ?? null,
-        };
+        const row = await repository.findById(BUILTIN_HOST_ID);
+        return row
+          ? resolveRuntimeHostCliPaths(row)
+          : { claude: null, codex: null, opencode: null };
       },
       // 「命令已下发」是记账不是执行回流,直接落 run-event 账本(best-effort)
       onCommandDispatched: ({ runId, commandId, commandType }) => {

@@ -6,9 +6,9 @@ import type {
 } from "@agework/shared/protocol";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeHostAdapter } from "./runtime-host.adapter";
-import type { RuntimeHostService } from "../runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
 import type { RunEventService } from "../../run-event/run-event.service";
+import type { HostTunnelHandler } from "../gateway/host-tunnel.handler";
 
 function makeBuiltinHost() {
   return {
@@ -17,18 +17,30 @@ function makeBuiltinHost() {
     command: vi.fn().mockResolvedValue(undefined),
     releaseRun: vi.fn(),
     releaseOwner: vi.fn().mockResolvedValue(undefined),
+    detectEnv: vi.fn().mockResolvedValue({
+      native: { available: true, scopes: ["workspace"] },
+    }),
+    installCli: vi.fn().mockResolvedValue({ executablePath: "/cli/claude" }),
+    listDirectory: vi.fn().mockResolvedValue({ path: "/tmp", entries: [] }),
+    createDirectory: vi.fn().mockResolvedValue(undefined),
+    listFiles: vi
+      .fn()
+      .mockResolvedValue({ path: "", list: [], truncated: false }),
+    readFile: vi.fn(),
+    readFileDiff: vi.fn(),
+    searchFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
+    listChangedFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
     listWorkers: vi.fn().mockResolvedValue([]),
     stopWorker: vi.fn().mockResolvedValue(undefined),
   };
 }
 
-function makeRuntimeService() {
+function makeTunnelHandler() {
   return {
-    sendTunnelRequest: vi.fn().mockResolvedValue(null),
-    sendTunnelNotification: vi.fn(),
-    listConnectedRuntimeHostIds: vi.fn().mockReturnValue([]),
+    sendRequest: vi.fn().mockResolvedValue(null),
+    sendNotification: vi.fn(),
+    listConnected: vi.fn().mockReturnValue([]),
     setHostUpstreamPort: vi.fn(),
-    getRuntimeHostRow: vi.fn().mockResolvedValue(null),
   };
 }
 
@@ -82,17 +94,17 @@ function makeSubmitInput(runtimeHostId: string): SubmitRunInput {
 
 describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   let builtinHost: ReturnType<typeof makeBuiltinHost>;
-  let runtimeService: ReturnType<typeof makeRuntimeService>;
+  let tunnelHandler: ReturnType<typeof makeTunnelHandler>;
   let runEvents: ReturnType<typeof makeRunEvents>;
   let upstream: ReturnType<typeof makeUpstream>;
   let adapter: RuntimeHostAdapter;
 
   beforeEach(() => {
     builtinHost = makeBuiltinHost();
-    runtimeService = makeRuntimeService();
+    tunnelHandler = makeTunnelHandler();
     runEvents = makeRunEvents();
     adapter = new RuntimeHostAdapter(
-      runtimeService as unknown as RuntimeHostService,
+      tunnelHandler as unknown as HostTunnelHandler,
       makeConfigService() as unknown as ConfigService,
       runEvents as unknown as RunEventService,
       builtinHost as unknown as RuntimeHost
@@ -105,7 +117,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     runtimeHostId: string,
     notification: HostUpstreamNotification
   ) => Promise<void> {
-    const port = runtimeService.setHostUpstreamPort.mock.calls[0][0] as {
+    const port = tunnelHandler.setHostUpstreamPort.mock.calls[0][0] as {
       onHostUpstream: (
         runtimeHostId: string,
         notification: HostUpstreamNotification
@@ -117,7 +129,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
   it("setUpstream wires the in-process host and the host upstream port", () => {
     expect(builtinHost.setUpstream).toHaveBeenCalledWith(upstream);
-    expect(runtimeService.setHostUpstreamPort).toHaveBeenCalledTimes(1);
+    expect(tunnelHandler.setHostUpstreamPort).toHaveBeenCalledTimes(1);
   });
 
   describe("submitRun", () => {
@@ -125,15 +137,15 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       await adapter.submitRun(makeSubmitInput("builtin"));
 
       expect(builtinHost.submitRun).toHaveBeenCalledTimes(1);
-      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+      expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
 
     it("routes everything else (registered) through the tunnel", async () => {
       await adapter.submitRun(makeSubmitInput("rt-registered-1"));
 
       expect(builtinHost.submitRun).not.toHaveBeenCalled();
-      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
-      const [runtimeHostId, request] = runtimeService.sendTunnelRequest.mock
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledTimes(1);
+      const [runtimeHostId, request] = tunnelHandler.sendRequest.mock
         .calls[0] as [string, { method: string }];
       expect(runtimeHostId).toBe("rt-registered-1");
       expect(request.method).toBe("host.submitRun");
@@ -160,9 +172,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     });
 
     it("reports tunnel submit failures upstream instead of throwing", async () => {
-      runtimeService.sendTunnelRequest.mockRejectedValue(
-        new Error("host offline")
-      );
+      tunnelHandler.sendRequest.mockRejectedValue(new Error("host offline"));
 
       await adapter.submitRun(makeSubmitInput("rt-registered-1"));
 
@@ -196,7 +206,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         payload: cancel,
       });
 
-      const call = runtimeService.sendTunnelRequest.mock.calls.find(
+      const call = tunnelHandler.sendRequest.mock.calls.find(
         ([, request]) =>
           (request as { method: string }).method === "host.command"
       );
@@ -214,7 +224,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         payload: { ...cancel, runId: "run-x" },
       });
 
-      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledWith(
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
         "rt-registered-1",
         expect.objectContaining({ method: "host.command" }),
         expect.any(Number)
@@ -230,7 +240,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         runtimeHostId: "builtin",
         runId: "run-1",
       });
-      expect(runtimeService.sendTunnelNotification).not.toHaveBeenCalled();
+      expect(tunnelHandler.sendNotification).not.toHaveBeenCalled();
     });
 
     it("notifies the tunnel host to clean up its run state", async () => {
@@ -239,7 +249,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         runId: "run-1",
       });
 
-      expect(runtimeService.sendTunnelNotification).toHaveBeenCalledWith(
+      expect(tunnelHandler.sendNotification).toHaveBeenCalledWith(
         "rt-registered-1",
         expect.objectContaining({
           method: "host.releaseRun",
@@ -272,7 +282,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
       expect(upstream.emit).toHaveBeenCalledTimes(1);
       expect(upstream.notifyRunFailed).toHaveBeenCalledWith("run-9", "boom");
-      expect(runtimeService.sendTunnelNotification).toHaveBeenCalledWith(
+      expect(tunnelHandler.sendNotification).toHaveBeenCalledWith(
         "rt-registered-1",
         expect.objectContaining({
           method: "host.releaseRun",
@@ -308,7 +318,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         },
       });
 
-      const call = runtimeService.sendTunnelRequest.mock.calls.find(
+      const call = tunnelHandler.sendRequest.mock.calls.find(
         ([, request]) =>
           (request as { method: string }).method === "host.command"
       );
@@ -321,10 +331,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       builtinHost.listWorkers.mockResolvedValue([
         { workerId: "w-local", runtimeHostId: "" },
       ]);
-      runtimeService.listConnectedRuntimeHostIds.mockReturnValue([
-        "rt-registered-1",
-      ]);
-      runtimeService.sendTunnelRequest.mockResolvedValue({
+      tunnelHandler.listConnected.mockReturnValue(["rt-registered-1"]);
+      tunnelHandler.sendRequest.mockResolvedValue({
         workers: [{ workerId: "w-remote", runtimeHostId: "" }],
       });
 
@@ -338,8 +346,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
 
     it("listWorkers tolerates an unreachable tunnel host", async () => {
       builtinHost.listWorkers.mockResolvedValue([{ workerId: "w-local" }]);
-      runtimeService.listConnectedRuntimeHostIds.mockReturnValue(["rt-dead"]);
-      runtimeService.sendTunnelRequest.mockRejectedValue(new Error("timeout"));
+      tunnelHandler.listConnected.mockReturnValue(["rt-dead"]);
+      tunnelHandler.sendRequest.mockRejectedValue(new Error("timeout"));
 
       await expect(adapter.listWorkers()).resolves.toEqual([
         { workerId: "w-local", runtimeHostId: "builtin" },
@@ -356,7 +364,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         runtimeHostId: "builtin",
         key: "workspace:ws-1#native",
       });
-      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+      expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
 
     it("stopWorker routes registered hosts through their own tunnel only", async () => {
@@ -366,8 +374,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       });
 
       expect(builtinHost.stopWorker).not.toHaveBeenCalled();
-      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
-      const [runtimeHostId, request] = runtimeService.sendTunnelRequest.mock
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledTimes(1);
+      const [runtimeHostId, request] = tunnelHandler.sendRequest.mock
         .calls[0] as [string, { method: string; params: unknown }];
       expect(runtimeHostId).toBe("rt-registered-1");
       expect(request.method).toBe("host.stopWorker");
@@ -387,7 +395,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         runtimeHostId: "builtin",
         owner: "workspace:ws-1",
       });
-      expect(runtimeService.sendTunnelRequest).not.toHaveBeenCalled();
+      expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
 
     it("releaseOwner routes registered hosts through their own tunnel only", async () => {
@@ -397,8 +405,8 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       });
 
       expect(builtinHost.releaseOwner).not.toHaveBeenCalled();
-      expect(runtimeService.sendTunnelRequest).toHaveBeenCalledTimes(1);
-      const [runtimeHostId, request] = runtimeService.sendTunnelRequest.mock
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledTimes(1);
+      const [runtimeHostId, request] = tunnelHandler.sendRequest.mock
         .calls[0] as [string, { method: string; params: unknown }];
       expect(runtimeHostId).toBe("rt-registered-1");
       expect(request.method).toBe("host.releaseOwner");
@@ -410,13 +418,9 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("detectEnv", () => {
-    it("returns the Runtime Host capability matrix", async () => {
-      runtimeService.getRuntimeHostRow.mockResolvedValue({
-        source: "registered",
-        capabilities: {
-          docker: { available: true, scopes: ["user", "workspace"] },
-        },
-        envConfig: null,
+    it("delegates builtin detection to the in-process Host", async () => {
+      builtinHost.detectEnv.mockResolvedValue({
+        docker: { available: true, scopes: ["user", "workspace"] },
       });
 
       const status = await adapter.detectEnv("builtin");
@@ -424,12 +428,85 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       expect(status).toEqual({
         docker: { available: true, scopes: ["user", "workspace"] },
       });
+      expect(builtinHost.detectEnv).toHaveBeenCalledWith("builtin");
+      expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
 
-    it("throws when the runtime host row is missing", async () => {
-      runtimeService.getRuntimeHostRow.mockResolvedValue(null);
+    it("delegates registered detection through the tunnel", async () => {
+      tunnelHandler.sendRequest.mockResolvedValue({
+        docker: {
+          available: true,
+          scopes: ["user", "workspace"],
+        },
+      });
 
-      await expect(adapter.detectEnv("missing")).rejects.toThrow(/not found/);
+      const status = await adapter.detectEnv("rt-1");
+
+      expect(status).toEqual({
+        docker: {
+          available: true,
+          scopes: ["user", "workspace"],
+        },
+      });
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
+        "rt-1",
+        expect.objectContaining({ method: "host.detectEnv" }),
+        expect.any(Number)
+      );
+    });
+  });
+
+  describe("workspace data operations", () => {
+    it("routes builtin file reads to the in-process Host", async () => {
+      builtinHost.readFile.mockResolvedValue({
+        path: "a.ts",
+        encoding: "utf8",
+        content: "local",
+        size: 5,
+        truncated: false,
+      });
+
+      await adapter.readFile({
+        runtimeHostId: "builtin",
+        rootPath: "/workspace",
+        path: "a.ts",
+      });
+
+      expect(builtinHost.readFile).toHaveBeenCalledWith({
+        runtimeHostId: "builtin",
+        rootPath: "/workspace",
+        path: "a.ts",
+      });
+      expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
+    });
+
+    it("routes registered file reads through the tunnel", async () => {
+      tunnelHandler.sendRequest.mockResolvedValue({
+        path: "a.ts",
+        encoding: "utf8",
+        content: "remote",
+        size: 6,
+        truncated: false,
+      });
+
+      await adapter.readFile({
+        runtimeHostId: "rt-1",
+        rootPath: "/workspace",
+        path: "a.ts",
+      });
+
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
+        "rt-1",
+        expect.objectContaining({
+          method: "host.readFile",
+          params: {
+            runtimeHostId: "rt-1",
+            rootPath: "/workspace",
+            path: "a.ts",
+          },
+        }),
+        expect.any(Number)
+      );
     });
   });
 });

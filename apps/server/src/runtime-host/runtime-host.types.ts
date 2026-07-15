@@ -3,7 +3,7 @@ import type { HostUpstreamNotification } from "@agework/shared/protocol";
 /**
  * host.upstream 回流 Port(架构规则 §4 决策链 5:infra 运行时回流):
  * registered Host 经隧道上行的事件/终态事实,由上层 runtime-host 模块实现、
- * 启动期经 `RuntimeHostService.setHostUpstreamPort` 接线。
+ * 启动期由 `RuntimeHostAdapter` 向 `HostTunnelHandler` 接线。
  * 返回 Promise 时按连接串行 await,处理完成后才向 Host 回 ACK 水位。
  */
 export interface HostUpstreamPort {

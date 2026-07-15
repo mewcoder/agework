@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { generateId, isTerminalRunStatus } from "@agework/shared";
-import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
   CreateDirectoryInput,
   DirectoryListing,
@@ -26,7 +25,6 @@ import type {
   WorkspaceFileQuery,
 } from "@agework/shared/protocol";
 import type {
-  RuntimeEnvConfig,
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
   WorkspaceFileListResponse,
@@ -34,11 +32,11 @@ import type {
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import type { RuntimeHost } from "@agework/runtime/host";
-import { RuntimeHostService } from "../runtime-host.service";
 import { BUILTIN_HOST_ID, isBuiltinHostId } from "../runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
+import { HostTunnelHandler } from "../gateway/host-tunnel.handler";
 
 /** CLI 安装要跑 npm install(上限 120s),隧道等待要给足余量。 */
 const INSTALL_CLI_TIMEOUT_MS = 150_000;
@@ -51,8 +49,8 @@ const INSTALL_CLI_TIMEOUT_MS = 150_000;
  * - **registered**:隧道在线的 Host，经 `host.*` 隧道 RPC 下发，事件流经
  *   `host.upstream`（ACK 水位）回流。
  *
- * 旧 worker-manager 执行栈(connection/instance/registry)自此不再被任何
- * 新 run 触达,Worker 表停写(表结构保留,Phase 3 删除)。
+ * RuntimeHostAdapter 是 builtin / registered 的唯一分流点；上层 Service
+ * 只编排用例，不再自行直读执行机或拼 host.* RPC。
  */
 @Injectable()
 export class RuntimeHostAdapter implements RuntimeHostContract {
@@ -60,7 +58,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   private upstream!: RuntimeHostUpstream;
 
   constructor(
-    private readonly runtimeService: RuntimeHostService,
+    private readonly tunnelHandler: HostTunnelHandler,
     private readonly configService: ConfigService,
     private readonly runEvents: RunEventService,
     @Inject(BUILTIN_RUNTIME_HOST)
@@ -72,7 +70,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     // 进程内 builtin Host 直接回流；registered Host 的事件经隧道回流
     this.builtinHost.setUpstream(upstream);
     // 实现并接线 runtime 模块定义的 host.upstream 回流 Port
-    this.runtimeService.setHostUpstreamPort({
+    this.tunnelHandler.setHostUpstreamPort({
       onHostUpstream: (runtimeHostId, notification) =>
         this.onTunnelUpstream(runtimeHostId, notification, upstream),
     });
@@ -103,7 +101,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       return;
     }
     // 隧道 Host 的状态清理:单向通知,best-effort(Host 掉线就等它的 fence 自清)
-    this.runtimeService.sendTunnelNotification(input.runtimeHostId, {
+    this.tunnelHandler.sendNotification(input.runtimeHostId, {
       jsonrpc: "2.0",
       method: "host.releaseRun",
       params: input,
@@ -117,7 +115,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     const { runId, placement } = input;
     try {
       const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-      await this.runtimeService.sendTunnelRequest(
+      await this.tunnelHandler.sendRequest(
         placement.runtimeHostId,
         {
           jsonrpc: "2.0",
@@ -152,7 +150,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       .catch(() => {});
     try {
       const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-      await this.runtimeService.sendTunnelRequest(
+      await this.tunnelHandler.sendRequest(
         runtimeHostId,
         {
           jsonrpc: "2.0",
@@ -206,7 +204,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       await this.builtinHost.releaseOwner(input);
       return;
     }
-    await this.runtimeService.sendTunnelRequest<never>(
+    await this.tunnelHandler.sendRequest<never>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -219,24 +217,26 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
   }
 
   async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
-    const row = await this.runtimeService.getRuntimeHostRow(runtimeHostId);
-    if (!row) {
-      throw new Error(`runtime host not found: ${runtimeHostId}`);
+    if (isBuiltinHostId(runtimeHostId)) {
+      return this.builtinHost.detectEnv(runtimeHostId);
     }
-    const capabilities = normalizeRuntimeCapabilities(row.capabilities);
-    const envConfig = row.envConfig as RuntimeEnvConfig | null;
-    if (!envConfig || !capabilities.native) return capabilities;
-    return {
-      ...capabilities,
-      native: { ...capabilities.native, cli: envConfig },
-    } satisfies HostCapabilityStatus;
+    return this.tunnelHandler.sendRequest<HostCapabilityStatus>(
+      runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.detectEnv",
+        params: { runtimeHostId },
+      },
+      this.configService.getLaunchTimeoutSeconds() * 1000
+    );
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.installCli(input);
     }
-    return this.runtimeService.sendTunnelRequest<InstallCliResult>(
+    return this.tunnelHandler.sendRequest<InstallCliResult>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -252,7 +252,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.listDirectory(input);
     }
-    return this.runtimeService.sendTunnelRequest<DirectoryListing>(
+    return this.tunnelHandler.sendRequest<DirectoryListing>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -269,7 +269,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       await this.builtinHost.createDirectory(input);
       return;
     }
-    await this.runtimeService.sendTunnelRequest<never>(
+    await this.tunnelHandler.sendRequest<never>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -287,7 +287,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.listFiles(input);
     }
-    return this.runtimeService.sendTunnelRequest<WorkspaceFileListResponse>(
+    return this.tunnelHandler.sendRequest<WorkspaceFileListResponse>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -303,7 +303,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.readFile(input);
     }
-    return this.runtimeService.sendTunnelRequest<WorkspaceFileReadResponse>(
+    return this.tunnelHandler.sendRequest<WorkspaceFileReadResponse>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -321,7 +321,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.readFileDiff(input);
     }
-    return this.runtimeService.sendTunnelRequest<WorkspaceFileDiffResponse>(
+    return this.tunnelHandler.sendRequest<WorkspaceFileDiffResponse>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -339,7 +339,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.searchFiles(input);
     }
-    return this.runtimeService.sendTunnelRequest<WorkspaceFileSearchResponse>(
+    return this.tunnelHandler.sendRequest<WorkspaceFileSearchResponse>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -357,7 +357,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     if (isBuiltinHostId(input.runtimeHostId)) {
       return this.builtinHost.listChangedFiles(input);
     }
-    return this.runtimeService.sendTunnelRequest<WorkspaceChangedFilesResponse>(
+    return this.tunnelHandler.sendRequest<WorkspaceChangedFilesResponse>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
@@ -380,12 +380,12 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     }));
     const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
     const tunnelWorkers = await Promise.all(
-      this.runtimeService
-        .listConnectedRuntimeHostIds()
+      this.tunnelHandler
+        .listConnected()
         .map(async (runtimeHostId): Promise<WorkerSnapshot[]> => {
           try {
             const hostResult =
-              await this.runtimeService.sendTunnelRequest<HostListWorkersRpcResult>(
+              await this.tunnelHandler.sendRequest<HostListWorkersRpcResult>(
                 runtimeHostId,
                 {
                   jsonrpc: "2.0",
@@ -416,7 +416,7 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
       await this.builtinHost.stopWorker(input);
       return;
     }
-    await this.runtimeService.sendTunnelRequest<never>(
+    await this.tunnelHandler.sendRequest<never>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
