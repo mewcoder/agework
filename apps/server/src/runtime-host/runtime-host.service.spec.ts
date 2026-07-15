@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ConfigService } from "../config/config.service";
 import { RuntimeHostRepository } from "./runtime-host.repository";
 import type {
   RuntimeHostConnectivity,
@@ -40,7 +39,6 @@ function makeRow(overrides: Partial<RuntimeHostRow> = {}): RuntimeHostRow {
 
 // RuntimeHost 的 worker 生命周期由 apps/runtime 测试；这里测注册表、策略与 Host 路由。
 describe("RuntimeHostService", () => {
-  let configService: Partial<ConfigService>;
   let repository: {
     create: ReturnType<typeof vi.fn>;
     listVisibleToOwner: ReturnType<typeof vi.fn>;
@@ -66,16 +64,6 @@ describe("RuntimeHostService", () => {
   let service: RuntimeHostService;
 
   beforeEach(() => {
-    configService = {
-      getDefaultRuntimeType: vi.fn().mockReturnValue("native"),
-      getDefaultWorkerScope: vi.fn().mockReturnValue("user"),
-      getAllowedRuntimeTypes: vi
-        .fn()
-        .mockReturnValue(["native", "docker", "opensandbox"]),
-      getAllowedScopes: vi.fn().mockReturnValue(["user", "workspace"]),
-      getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
-      getLaunchTimeoutSeconds: vi.fn().mockReturnValue(20),
-    };
     repository = {
       create: vi.fn().mockResolvedValue(makeRow()),
       listVisibleToOwner: vi.fn().mockResolvedValue([makeRow()]),
@@ -99,6 +87,8 @@ describe("RuntimeHostService", () => {
           scopes: ["workspace"],
           cli: mockEnvConfig,
         },
+        docker: { available: true, scopes: ["user", "workspace"] },
+        opensandbox: { available: true, scopes: ["user", "workspace"] },
       }),
       installCli: vi.fn().mockResolvedValue({ executablePath: "/cli/claude" }),
     };
@@ -135,7 +125,6 @@ describe("RuntimeHostService", () => {
       }),
     };
     service = new RuntimeHostService(
-      configService as ConfigService,
       repository as unknown as RuntimeHostRepository,
       connectivity as unknown as RuntimeHostConnectivity,
       environment as unknown as RuntimeHostEnvironment,
@@ -166,13 +155,17 @@ describe("RuntimeHostService", () => {
     expect(result.ownerId).toBe("ws-1");
   });
 
-  it("onApplicationBootstrap: upserts one multi-runtimeType builtin Host", async () => {
+  it("onApplicationBootstrap persists the builtin Host capability report", async () => {
     await service.onApplicationBootstrap();
     expect(repository.upsertBuiltin).toHaveBeenCalledTimes(1);
     expect(repository.upsertBuiltin).toHaveBeenCalledWith({
       name: "builtin",
       capabilities: {
-        native: { available: true, scopes: ["workspace"] },
+        native: {
+          available: true,
+          scopes: ["workspace"],
+          cli: mockEnvConfig,
+        },
         docker: { available: true, scopes: ["user", "workspace"] },
         opensandbox: {
           available: true,

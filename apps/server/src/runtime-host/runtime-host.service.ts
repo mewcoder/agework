@@ -10,11 +10,9 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type {
-  RuntimeCapabilities,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,
   RuntimeSpec,
-  WorkerScope,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
@@ -33,8 +31,6 @@ import type {
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
-import type { RuntimeType } from "@agework/providers";
-import { ConfigService } from "../config/config.service";
 import { RuntimeHostRepository } from "./runtime-host.repository";
 import {
   BUILTIN_HOST_ID,
@@ -56,7 +52,6 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   private readonly logger = new Logger(RuntimeHostService.name);
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly repository: RuntimeHostRepository,
     @Inject(RUNTIME_HOST_CONNECTIVITY)
     private readonly connectivity: RuntimeHostConnectivity,
@@ -66,31 +61,21 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     private readonly workspaceData: RuntimeHostWorkspaceData
   ) {}
 
-  /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
+  /** 启动时只初始化一行 builtin Host，并持久化 Host 报告的完整能力矩阵。 */
   async onApplicationBootstrap(): Promise<void> {
-    const allowedRuntimeTypes = this.configService.getAllowedRuntimeTypes();
-    const capabilities: RuntimeCapabilities = {};
-    for (const runtimeType of allowedRuntimeTypes) {
-      capabilities[runtimeType] = {
-        available: true,
-        scopes: runtimeTypeScopes(runtimeType),
-      };
-    }
+    const capabilities = await this.environment.detectEnv(BUILTIN_HOST_ID);
     await this.repository.upsertBuiltin({
       name: BUILTIN_HOST_ID,
       capabilities,
       tokenHash: null,
     });
 
-    if (allowedRuntimeTypes.includes("native")) {
-      const envConfig = (await this.environment.detectEnv(BUILTIN_HOST_ID))
-        .native?.cli;
-      if (envConfig) {
-        await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
-      }
+    const envConfig = capabilities.native?.cli;
+    if (envConfig) {
+      await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
     }
     this.logger.log(
-      `builtin Runtime Host ready: ${allowedRuntimeTypes.join(", ")}`
+      `builtin Runtime Host ready: ${Object.keys(capabilities).join(", ")}`
     );
   }
 
@@ -485,12 +470,6 @@ function mergeAgent(
     detectedPath: detected.executablePath,
     version: detected.version,
   };
-}
-
-/** native 没有容器,只允许 workspace 范围的独占子进程;docker/opensandbox 有容器
- *  边界兜底,支持 user/workspace 两种复用范围。 */
-function runtimeTypeScopes(runtimeType: RuntimeType): WorkerScope[] {
-  return runtimeType === "native" ? ["workspace"] : ["user", "workspace"];
 }
 
 function isPrismaUniqueError(err: unknown): boolean {
