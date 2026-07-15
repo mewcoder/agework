@@ -4,21 +4,20 @@ import {
   RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
   RUNTIME_TUNNEL_CLOSE_GONE,
   type HostTunnelRegisterMessage,
-  type HostTunnelServerMessage,
   type HostTunnelAllRpcRequest,
-  type HostTunnelHostNotification,
   type RuntimeHostContract,
   type HostListWorkersRpcResult,
   type InstallCliResult,
   type RuntimeCapabilities,
   type WorkerScope,
 } from "@agework/shared/protocol";
+import { rpcError, rpcSuccess } from "@agework/shared/protocol/rpc";
 import {
-  isRpcNotification,
-  isRpcRequest,
-  rpcError,
-  rpcSuccess,
-} from "@agework/shared/protocol/rpc";
+  isHostTunnelHostRpcRequest,
+  isHostTunnelRegisteredMessage,
+  isHostTunnelServerNotification,
+  isWireMessageType,
+} from "@agework/shared/protocol/wire";
 import { AGEWORK_VERSION } from "@agework/shared";
 import type { RuntimeEnvConfig } from "@agework/shared/api";
 import type { RegisteredRuntimeConfig, RuntimeType } from "./config.js";
@@ -159,31 +158,30 @@ export class TunnelClient {
       );
     } catch {
       log("malformed tunnel message from server", "error");
+      ws.close(1008, "malformed tunnel message");
       return;
     }
 
-    if (isRpcRequest(parsed)) {
-      this.onRpcRequest(ws, parsed as HostTunnelAllRpcRequest);
+    if (isHostTunnelHostRpcRequest(parsed)) {
+      this.onRpcRequest(ws, parsed);
       return;
     }
 
     // Phase 2: server 的单向通知——ACK 水位清缓冲 / run 终结清状态
-    if (isRpcNotification(parsed)) {
-      const notification = parsed as HostTunnelHostNotification;
-      if (notification.method === "host.upstreamAck") {
-        const { seq } = notification.params;
+    if (isHostTunnelServerNotification(parsed)) {
+      if (parsed.method === "host.upstreamAck") {
+        const { seq } = parsed.params;
         this.options.tunnelUpstream?.onAck(seq);
-      } else if (notification.method === "host.releaseRun") {
-        this.options.hostContract.releaseRun(notification.params);
+      } else if (parsed.method === "host.releaseRun") {
+        this.options.hostContract.releaseRun(parsed.params);
       }
       return;
     }
 
-    const message = parsed as HostTunnelServerMessage;
-    if (message.type === "registered") {
-      if (message.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
+    if (isWireMessageType(parsed, "registered")) {
+      if (parsed.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
         log(
-          `server tunnel protocol ${String(message.protocolVersion)} is incompatible with host protocol ${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`,
+          `server tunnel protocol ${String(parsed.protocolVersion)} is incompatible with host protocol ${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`,
           "error"
         );
         ws.close(
@@ -192,14 +190,23 @@ export class TunnelClient {
         );
         return;
       }
+      if (!isHostTunnelRegisteredMessage(parsed)) {
+        log("invalid registered handshake from server", "error");
+        ws.close(1008, "invalid registered handshake");
+        return;
+      }
       log(
-        `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
+        `registered as runtime ${parsed.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
       );
       this.reconnectDelayMs = this.baseDelayMs; // 注册成功即重置退避
       // Phase 2: 注册完成才接线上行通道(绑定会话 epoch),并补发未 ACK 通知
-      this.options.tunnelUpstream?.setSession(ws, message.epoch);
-      this.scheduleHeartbeat(ws, message.heartbeatIntervalSeconds);
+      this.options.tunnelUpstream?.setSession(ws, parsed.epoch);
+      this.scheduleHeartbeat(ws, parsed.heartbeatIntervalSeconds);
+      return;
     }
+
+    log("invalid tunnel message from server", "error");
+    ws.close(1008, "invalid tunnel message");
   }
 
   private onRpcRequest(ws: WebSocket, request: HostTunnelAllRpcRequest): void {

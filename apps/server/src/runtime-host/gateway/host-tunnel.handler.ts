@@ -14,18 +14,18 @@ import {
   RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
   RUNTIME_TUNNEL_CLOSE_GONE,
   normalizeRuntimeCapabilities,
-  type HostTunnelClientMessage,
   type HostTunnelRegisteredMessage,
   type HostTunnelAllRpcRequest,
   type HostTunnelHostNotification,
   type HostUpstreamEnvelope,
 } from "@agework/shared/protocol";
+import { type RpcId, type RpcResponse } from "@agework/shared/protocol/rpc";
 import {
-  isRpcResponse,
-  isRpcNotification,
-  type RpcId,
-  type RpcResponse,
-} from "@agework/shared/protocol/rpc";
+  isHostTunnelClientNotification,
+  isHostTunnelClientMessage,
+  isHostTunnelHostRpcResponse,
+  isWireMessageType,
+} from "@agework/shared/protocol/wire";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import { ConfigService } from "../../config/config.service";
 import { RuntimeHostRepository } from "../runtime-host.repository";
@@ -278,10 +278,11 @@ export class HostTunnelHandler
       this.logger.warn(
         `runtime ${runtimeHostId} sent malformed tunnel message`
       );
+      ws.close(1008, "malformed tunnel message");
       return;
     }
 
-    if (isRpcResponse(parsed)) {
+    if (isHostTunnelHostRpcResponse(parsed)) {
       if (this.connections.get(runtimeHostId) !== ws) {
         this.logger.warn(
           `dropped RPC response from an unregistered connection of runtime ${runtimeHostId}`
@@ -293,93 +294,84 @@ export class HostTunnelHandler
     }
 
     // Phase 2: host.upstream 通知（Host → server，单向,带 seq/epoch 信封）
-    if (isRpcNotification(parsed)) {
-      if (parsed.method === "host.upstream") {
-        this.onUpstreamEnvelope(
-          runtimeHostId,
-          ws,
-          parsed.params as HostUpstreamEnvelope
+    if (isHostTunnelClientNotification(parsed)) {
+      this.onUpstreamEnvelope(runtimeHostId, ws, parsed.params);
+      return;
+    }
+
+    if (isWireMessageType(parsed, "register")) {
+      if (parsed.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
+        this.logger.warn(
+          `runtime ${runtimeHostId} tunnel protocol mismatch: host=${String(parsed.protocolVersion)} server=${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`
         );
+        ws.close(
+          RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
+          "incompatible tunnel protocol"
+        );
+        return;
+      }
+      if (!isHostTunnelClientMessage(parsed)) {
+        this.logger.warn(
+          `runtime ${runtimeHostId} sent an invalid register handshake`
+        );
+        ws.close(1008, "invalid register handshake");
+        return;
+      }
+      const capabilities = normalizeRuntimeCapabilities(parsed.capabilities);
+      const found = await this.repository.markRegistered(
+        runtimeHostId,
+        capabilities,
+        parsed.envConfig
+      );
+      if (!found) {
+        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
+        return;
+      }
+      // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
+      const previous = this.connections.get(runtimeHostId);
+      if (previous && previous !== ws) {
+        previous.close(CLOSE_REPLACED, "replaced");
+      }
+      this.connections.set(runtimeHostId, ws);
+      if (parsed.version && parsed.version !== AGEWORK_VERSION) {
+        this.logger.warn(
+          `runtime ${runtimeHostId} version mismatch: manager=${parsed.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
+        );
+      }
+      const reply: HostTunnelRegisteredMessage = {
+        type: "registered",
+        runtimeHostId,
+        heartbeatIntervalSeconds: this.heartbeatIntervalSeconds(),
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+        // Phase 2: 每次 register 递增会话 epoch,Host 盖在上行信封里,
+        // 被顶掉的旧连接残留消息按 epoch 丢弃(防脑裂)。
+        epoch: this.nextEpoch(runtimeHostId),
+      };
+      ws.send(JSON.stringify(reply));
+      // 注册成功的事实:下游据此做重连对账(如补发离线期间丢失的 owner 级释放)
+      this.events.emit(
+        RUNTIME_HOST_CONNECTED_EVENT,
+        new RuntimeHostConnectedEvent(runtimeHostId)
+      );
+      return;
+    }
+
+    if (isHostTunnelClientMessage(parsed) && parsed.type === "heartbeat") {
+      if (this.connections.get(runtimeHostId) !== ws) {
+        this.logger.warn(
+          `dropped heartbeat from an unregistered connection of runtime ${runtimeHostId}`
+        );
+        return;
+      }
+      const found = await this.repository.touchHeartbeat(runtimeHostId);
+      if (!found) {
+        ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
       }
       return;
     }
 
-    const message = parsed as HostTunnelClientMessage;
-    switch (message.type) {
-      case "register": {
-        if (message.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
-          this.logger.warn(
-            `runtime ${runtimeHostId} tunnel protocol mismatch: host=${String(message.protocolVersion)} server=${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`
-          );
-          ws.close(
-            RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
-            "incompatible tunnel protocol"
-          );
-          return;
-        }
-        const capabilities = normalizeRuntimeCapabilities(message.capabilities);
-        if (Object.keys(capabilities).length === 0) {
-          this.logger.warn(
-            `runtime ${runtimeHostId} registered without a valid capability matrix`
-          );
-          ws.close(1008, "invalid capability matrix");
-          return;
-        }
-        const found = await this.repository.markRegistered(
-          runtimeHostId,
-          capabilities,
-          message.envConfig
-        );
-        if (!found) {
-          ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
-          return;
-        }
-        // 握手校验通过,此刻才绑定路由身份:顶掉同名旧连接、登记为在线连接
-        const previous = this.connections.get(runtimeHostId);
-        if (previous && previous !== ws) {
-          previous.close(CLOSE_REPLACED, "replaced");
-        }
-        this.connections.set(runtimeHostId, ws);
-        if (message.version && message.version !== AGEWORK_VERSION) {
-          this.logger.warn(
-            `runtime ${runtimeHostId} version mismatch: manager=${message.version} server=${AGEWORK_VERSION} (允许接入,Registered 远程 manager 单独构建后可能与 server 漂移)`
-          );
-        }
-        const reply: HostTunnelRegisteredMessage = {
-          type: "registered",
-          runtimeHostId,
-          heartbeatIntervalSeconds: this.heartbeatIntervalSeconds(),
-          protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
-          // Phase 2: 每次 register 递增会话 epoch,Host 盖在上行信封里,
-          // 被顶掉的旧连接残留消息按 epoch 丢弃(防脑裂)。
-          epoch: this.nextEpoch(runtimeHostId),
-        };
-        ws.send(JSON.stringify(reply));
-        // 注册成功的事实:下游据此做重连对账(如补发离线期间丢失的 owner 级释放)
-        this.events.emit(
-          RUNTIME_HOST_CONNECTED_EVENT,
-          new RuntimeHostConnectedEvent(runtimeHostId)
-        );
-        return;
-      }
-      case "heartbeat": {
-        if (this.connections.get(runtimeHostId) !== ws) {
-          this.logger.warn(
-            `dropped heartbeat from an unregistered connection of runtime ${runtimeHostId}`
-          );
-          return;
-        }
-        const found = await this.repository.touchHeartbeat(runtimeHostId);
-        if (!found) {
-          ws.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
-        }
-        return;
-      }
-      default:
-        this.logger.warn(
-          `runtime ${runtimeHostId} sent unknown tunnel message type`
-        );
-    }
+    this.logger.warn(`runtime ${runtimeHostId} sent invalid tunnel message`);
+    ws.close(1008, "invalid tunnel message");
   }
 
   /** register 时递增该 runtime 的隧道会话 epoch 并返回。 */

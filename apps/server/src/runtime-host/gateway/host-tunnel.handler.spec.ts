@@ -423,7 +423,7 @@ describe("HostTunnelHandler", () => {
       expect(received).toEqual([{ kind: "runCancelled", runId: "live-run" }]);
     });
 
-    it("drops a bare notification without an envelope (双栈兼容分支已删)", async () => {
+    it("rejects a bare notification without an envelope", async () => {
       const received: unknown[] = [];
       handler.setHostUpstreamPort({
         onHostUpstream: (_runtimeId, notification) => {
@@ -432,7 +432,7 @@ describe("HostTunnelHandler", () => {
       });
       const ws = connect();
       await once(ws, "open");
-      const epoch = await register(ws);
+      await register(ws);
 
       ws.send(
         JSON.stringify({
@@ -441,13 +441,10 @@ describe("HostTunnelHandler", () => {
           params: { kind: "runCancelled", runId: "legacy-run" },
         })
       );
-      // 用一条带信封的通知作为同步屏障:它的 ACK 回来时,前面的裸通知必已被处理(丢弃)
-      sendUpstream(ws, 1, epoch, "envelope-run");
-      await nextMessage(ws);
+      const [code] = (await once(ws, "close")) as [number];
 
-      expect(received).toEqual([
-        { kind: "runCancelled", runId: "envelope-run" },
-      ]);
+      expect(code).toBe(1008);
+      expect(received).toEqual([]);
     });
   });
 

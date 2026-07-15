@@ -6,6 +6,7 @@
     ".": "./src/common/index.ts",
     "./protocol": "./src/protocol/index.ts",
     "./protocol/rpc": "./src/protocol/rpc.ts",
+    "./protocol/wire": "./src/protocol/wire.ts",
     "./api": "./src/api/index.ts",
     "./cli": "./src/cli/cli-resolver.ts",
     "./filesystem": "./src/filesystem/file-browser.ts",

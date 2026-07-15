@@ -116,7 +116,23 @@ describe("WorkerHttpTransport", () => {
   it("fetches run config by runId", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ config: { runId: "run-1", conversationId: "conversation-1", agentProviderConfig: { agentType: "claude", source: "custom" } } }),
+      json: async () => ({
+        config: {
+          runId: "run-1",
+          conversationId: "conversation-1",
+          workspaceId: "workspace-1",
+          runtimePath: "/workspace",
+          env: {},
+          input: {},
+          agentProviderConfig: {
+            agentType: "claude",
+            source: "custom",
+            baseUrl: "https://example.test",
+            apiKey: "key",
+            model: "model-1",
+          },
+        },
+      }),
     });
     vi.stubGlobal("fetch", fetchMock);
     const client = new WorkerHttpTransport();
@@ -131,6 +147,28 @@ describe("WorkerHttpTransport", () => {
       signal: expect.any(AbortSignal),
     });
     expect(config).toMatchObject({ runId: "run-1" });
+  });
+
+  it("rejects malformed command poll and run config responses", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ messages: [{ method: "run.interrupt" }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ config: { runId: "run-1" } }),
+      });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new WorkerHttpTransport();
+
+    await expect(client.pollCommands()).rejects.toThrow(
+      "invalid command poll response from host"
+    );
+    await expect(client.fetchRunConfig("run-1")).rejects.toThrow(
+      "invalid run config response from host"
+    );
   });
 
   it("adds waitMs when long-polling commands", async () => {
@@ -378,7 +416,11 @@ describe("WorkerHttpTransport", () => {
     vi.stubGlobal("fetch", fetchMock);
     const client = new WorkerHttpTransport();
     const msg = {
-      runId: "run-1", seq: 0, type: "agui.event", payload: { type: "RAW" }, ts: "",
+      runId: "run-1",
+      seq: 0,
+      type: "agui.event",
+      payload: { type: "RAW" },
+      ts: "",
     } as unknown as UpstreamMessage;
     const seqInLastCall = () =>
       JSON.parse(fetchMock.mock.lastCall?.[1]?.body as string).meta.seq;
@@ -691,9 +733,15 @@ describe("WorkerHttpTransport", () => {
       const p2 = client.emit("run-1", mk(2));
       const p3 = client.emit("run-1", mk(3));
 
-      const a1 = expect(p1).rejects.toThrow("Event POST failed: 400 bad request");
-      const a2 = expect(p2).rejects.toThrow("Event POST failed: 400 bad request");
-      const a3 = expect(p3).rejects.toThrow("Event POST failed: 400 bad request");
+      const a1 = expect(p1).rejects.toThrow(
+        "Event POST failed: 400 bad request"
+      );
+      const a2 = expect(p2).rejects.toThrow(
+        "Event POST failed: 400 bad request"
+      );
+      const a3 = expect(p3).rejects.toThrow(
+        "Event POST failed: 400 bad request"
+      );
       await vi.runAllTimersAsync();
       await Promise.all([a1, a2, a3]);
       vi.useRealTimers();

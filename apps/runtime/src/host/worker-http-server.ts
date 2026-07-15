@@ -13,6 +13,7 @@ import {
   type WorkerRegisterResponse,
 } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
+import { isWorkerRegisterRequest } from "@agework/shared/protocol/wire";
 import { AGEWORK_VERSION } from "@agework/shared";
 import type { RuntimeHost } from "./runtime-host.js";
 
@@ -124,25 +125,25 @@ export class WorkerHttpServer {
     req: IncomingMessage,
     res: ServerResponse
   ): Promise<void> {
-    const body = (await this.readJsonBody(req)) as
-      | {
-          startToken?: string;
-          pid?: number;
-          protocolVersion?: unknown;
-          version?: string;
-        }
-      | undefined;
-    if (body?.protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION) {
+    const body = await this.readJsonBody(req);
+    const protocolVersion =
+      typeof body === "object" && body !== null && !Array.isArray(body)
+        ? Reflect.get(body, "protocolVersion")
+        : undefined;
+    if (protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION) {
       this.sendJson(res, 409, {
-        error: `incompatible worker protocol: worker=${String(body?.protocolVersion)} host=${RUNTIME_WORKER_HTTP_PROTOCOL_VERSION}`,
+        error: `incompatible worker protocol: worker=${String(protocolVersion)} host=${RUNTIME_WORKER_HTTP_PROTOCOL_VERSION}`,
       });
       return;
     }
-    const startToken =
-      typeof body?.startToken === "string" ? body.startToken : "";
-    const pid = typeof body?.pid === "number" ? body.pid : undefined;
+    if (!isWorkerRegisterRequest(body)) {
+      this.sendJson(res, 400, { error: "invalid worker register request" });
+      return;
+    }
 
-    const accepted = this.host.registerWorker(workerId, startToken, { pid });
+    const accepted = this.host.registerWorker(workerId, body.startToken, {
+      pid: body.pid,
+    });
     if (!accepted) {
       this.sendJson(res, 400, {
         error: "no pending launch handshake, or token mismatch",

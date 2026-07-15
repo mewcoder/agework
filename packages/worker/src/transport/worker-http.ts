@@ -6,7 +6,6 @@ import type {
   UpstreamMessageInput,
   WorkerCommandRpcRequest,
   WorkerRegisterRequest,
-  WorkerRegisterResponse,
 } from "@agework/shared/protocol";
 import {
   RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
@@ -18,6 +17,11 @@ import {
   isWorkerCommandRpcRequest,
   rpcRequestToCommandMessage,
 } from "@agework/shared/protocol/rpc";
+import {
+  isWorkerCommandPollResponse,
+  isWorkerRegisterResponse,
+  isWorkerRunConfigResponse,
+} from "@agework/shared/protocol/wire";
 import { AGEWORK_VERSION } from "@agework/shared";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
@@ -68,7 +72,9 @@ export class WorkerHttpTransport {
     // 兜底端点——缺配置直接 fail fast,不做指向错误对象的默认值。
     const apiBase = process.env.AGEWORK_WORKER_API_BASE;
     if (!apiBase) {
-      throw new Error("AGEWORK_WORKER_API_BASE is required for resident worker");
+      throw new Error(
+        "AGEWORK_WORKER_API_BASE is required for resident worker"
+      );
     }
     this.apiBase = apiBase;
     this.workerId = process.env.AGEWORK_WORKER_ID ?? "";
@@ -81,9 +87,7 @@ export class WorkerHttpTransport {
     workerLog("runtime-host http client initialized", {
       apiBase: this.apiBase,
       workerId: this.workerId,
-      logFile:
-        process.env.AGEWORK_WORKER_LOG_FILE ??
-        "/tmp/agework-worker.log",
+      logFile: process.env.AGEWORK_WORKER_LOG_FILE ?? "/tmp/agework-worker.log",
     });
   }
 
@@ -104,33 +108,41 @@ export class WorkerHttpTransport {
         (waitMs > 0 ? waitMs : 0) + POLL_TIMEOUT_MARGIN_MS
       );
     } catch (err) {
-      workerLog("command poll failed", {
-        workerId: this.workerId,
-        afterSeq: this.commandSeq,
-        ...errorDetails(err),
-      }, "warn");
+      workerLog(
+        "command poll failed",
+        {
+          workerId: this.workerId,
+          afterSeq: this.commandSeq,
+          ...errorDetails(err),
+        },
+        "warn"
+      );
       // 网络瞬时故障不崩溃，返回空让调用方重试
       return { commands: [] };
     }
 
     if (!res.ok) {
       const body = await safeText(res);
-      workerLog("command poll returned non-ok", {
-        workerId: this.workerId,
-        afterSeq: this.commandSeq,
-        status: res.status,
-        body,
-      }, res.status === 401 ? "error" : "warn");
+      workerLog(
+        "command poll returned non-ok",
+        {
+          workerId: this.workerId,
+          afterSeq: this.commandSeq,
+          status: res.status,
+          body,
+        },
+        res.status === 401 ? "error" : "warn"
+      );
       if (this.handleFatalResponse(res, { afterSeq: this.commandSeq })) {
         return { commands: [] };
       }
       return { commands: [] };
     }
 
-    const data = (await res.json()) as {
-      messages?: WorkerCommandRpcRequest[];
-      queueEpoch?: number;
-    };
+    const data: unknown = await res.json();
+    if (!isWorkerCommandPollResponse(data)) {
+      throw new Error("invalid command poll response from host");
+    }
 
     const previousEpoch = this.queueEpoch;
     if (data.queueEpoch !== undefined) {
@@ -141,11 +153,15 @@ export class WorkerHttpTransport {
       data.queueEpoch !== undefined &&
       data.queueEpoch !== previousEpoch
     ) {
-      workerLog("queue epoch changed, resetting afterSeq and re-polling", {
-        workerId: this.workerId,
-        previousEpoch,
-        newEpoch: data.queueEpoch,
-      }, "warn");
+      workerLog(
+        "queue epoch changed, resetting afterSeq and re-polling",
+        {
+          workerId: this.workerId,
+          previousEpoch,
+          newEpoch: data.queueEpoch,
+        },
+        "warn"
+      );
       this.commandSeq = 0;
       // 本次响应已经是用过期的 afterSeq 请求出来的，服务端重启后新队列从 seq 1
       // 开始，这次 messages 大概率把新队列的命令全过滤掉了。用重置后的
@@ -156,25 +172,33 @@ export class WorkerHttpTransport {
     const commands = normalizeCommandPollResponse(data);
     if (commands.length > 0) {
       this.emptyPolls = 0;
-      workerLog("command poll received commands", {
-        workerId: this.workerId,
-        afterSeq: this.commandSeq,
-        count: commands.length,
-        commands: commands.map((command) => ({
-          seq: command.seq,
-          runId: command.runId,
-          type: command.payload.type,
-          commandId: command.payload.commandId,
-        })),
-      }, "debug");
+      workerLog(
+        "command poll received commands",
+        {
+          workerId: this.workerId,
+          afterSeq: this.commandSeq,
+          count: commands.length,
+          commands: commands.map((command) => ({
+            seq: command.seq,
+            runId: command.runId,
+            type: command.payload.type,
+            commandId: command.payload.commandId,
+          })),
+        },
+        "debug"
+      );
     } else {
       this.emptyPolls += 1;
       if (this.emptyPolls <= 3 || this.emptyPolls % 30 === 0) {
-        workerLog("command poll empty", {
-          workerId: this.workerId,
-          afterSeq: this.commandSeq,
-          emptyPolls: this.emptyPolls,
-        }, "debug");
+        workerLog(
+          "command poll empty",
+          {
+            workerId: this.workerId,
+            afterSeq: this.commandSeq,
+            emptyPolls: this.emptyPolls,
+          },
+          "debug"
+        );
       }
     }
     for (const command of commands) {
@@ -186,10 +210,14 @@ export class WorkerHttpTransport {
   }
 
   async fetchRunConfig(runId: string): Promise<RunConfig> {
-    workerLog("fetch run config", {
-      runId,
-      workerId: this.workerId,
-    }, "debug");
+    workerLog(
+      "fetch run config",
+      {
+        runId,
+        workerId: this.workerId,
+      },
+      "debug"
+    );
     const res = await fetchWithTimeout(
       `${this.apiBase}/worker/runs/${runId}`,
       { headers: this.buildAuthHeaders() },
@@ -197,24 +225,35 @@ export class WorkerHttpTransport {
     );
     if (!res.ok) {
       const body = await safeText(res);
-      workerLog("fetch run config returned non-ok", {
-        runId,
-        workerId: this.workerId,
-        status: res.status,
-        body,
-      }, "warn");
+      workerLog(
+        "fetch run config returned non-ok",
+        {
+          runId,
+          workerId: this.workerId,
+          status: res.status,
+          body,
+        },
+        "warn"
+      );
       this.handleFatalResponse(res, { runId });
       throw new Error(`Failed to fetch run config: ${res.status} ${body}`);
     }
-    const data = (await res.json()) as { config: RunConfig };
-    workerLog("fetch run config ok", {
-      runId,
-      workerId: this.workerId,
-      conversationId: data.config.conversationId,
-      agentType: data.config.agentProviderConfig.agentType,
-      runtimePath: data.config.runtimePath,
-      agentProviderSource: data.config.agentProviderConfig.source,
-    }, "debug");
+    const data: unknown = await res.json();
+    if (!isWorkerRunConfigResponse(data)) {
+      throw new Error("invalid run config response from host");
+    }
+    workerLog(
+      "fetch run config ok",
+      {
+        runId,
+        workerId: this.workerId,
+        conversationId: data.config.conversationId,
+        agentType: data.config.agentProviderConfig.agentType,
+        runtimePath: data.config.runtimePath,
+        agentProviderSource: data.config.agentProviderConfig.source,
+      },
+      "debug"
+    );
     return data.config;
   }
 
@@ -253,9 +292,7 @@ export class WorkerHttpTransport {
     if (!isWorkerRegisterResponse(response)) {
       throw new Error("register failed: malformed host handshake response");
     }
-    if (
-      response.protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION
-    ) {
+    if (response.protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION) {
       throw new Error(
         `incompatible host protocol: host=${String(response.protocolVersion)} worker=${RUNTIME_WORKER_HTTP_PROTOCOL_VERSION}`
       );
@@ -332,13 +369,17 @@ export class WorkerHttpTransport {
         );
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        workerLog("emit event request failed", {
-          ...summary,
-          source: "worker",
-          eventType: "emit.retry",
-          attempt: attempt + 1,
-          ...errorDetails(err),
-        }, "warn");
+        workerLog(
+          "emit event request failed",
+          {
+            ...summary,
+            source: "worker",
+            eventType: "emit.retry",
+            attempt: attempt + 1,
+            ...errorDetails(err),
+          },
+          "warn"
+        );
         if (attempt < EMIT_RETRY_ATTEMPTS - 1) {
           await sleep(EMIT_RETRY_DELAYS_MS[attempt] ?? 4_000);
         }
@@ -352,38 +393,50 @@ export class WorkerHttpTransport {
       // 4xx = client error, don't retry. 服务端已拒绝，事件会永久丢失，提级为 error 以保证可见。
       if (res.status >= 400 && res.status < 500) {
         const responseBody = await safeText(res);
-        workerLog("emit event returned client error", {
-          ...summary,
-          source: "worker",
-          eventType: "emit.failed",
-          attempt: attempt + 1,
-          status: res.status,
-          body: responseBody,
-        }, "error");
+        workerLog(
+          "emit event returned client error",
+          {
+            ...summary,
+            source: "worker",
+            eventType: "emit.failed",
+            attempt: attempt + 1,
+            status: res.status,
+            body: responseBody,
+          },
+          "error"
+        );
         throw new Error(`Event POST failed: ${res.status} ${responseBody}`);
       }
 
       const responseBody = await safeText(res);
       lastError = new Error(`Event POST failed: ${res.status} ${responseBody}`);
-      workerLog("emit event returned retryable non-ok", {
-        ...summary,
-        source: "worker",
-        eventType: "emit.retry",
-        attempt: attempt + 1,
-        status: res.status,
-        body: responseBody,
-      }, "warn");
+      workerLog(
+        "emit event returned retryable non-ok",
+        {
+          ...summary,
+          source: "worker",
+          eventType: "emit.retry",
+          attempt: attempt + 1,
+          status: res.status,
+          body: responseBody,
+        },
+        "warn"
+      );
       if (attempt < EMIT_RETRY_ATTEMPTS - 1) {
         await sleep(EMIT_RETRY_DELAYS_MS[attempt] ?? 4_000);
       }
     }
-    workerLog("emit event failed after retries", {
-      ...summary,
-      source: "worker",
-      eventType: "emit.failed",
-      attempts: EMIT_RETRY_ATTEMPTS,
-      error: lastError?.message,
-    }, "error");
+    workerLog(
+      "emit event failed after retries",
+      {
+        ...summary,
+        source: "worker",
+        eventType: "emit.failed",
+        attempts: EMIT_RETRY_ATTEMPTS,
+        error: lastError?.message,
+      },
+      "error"
+    );
     throw lastError ?? new Error("Event POST failed after retries");
   }
 
@@ -469,14 +522,6 @@ async function safeText(res: Response): Promise<string> {
   } catch {
     return "";
   }
-}
-
-function isWorkerRegisterResponse(
-  value: unknown
-): value is WorkerRegisterResponse {
-  if (typeof value !== "object" || value === null) return false;
-  const response = value as Record<string, unknown>;
-  return response.ok === true && typeof response.protocolVersion === "number";
 }
 
 function summarizeUpstreamMessage(msg: UpstreamMessage) {

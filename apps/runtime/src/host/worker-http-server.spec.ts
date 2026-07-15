@@ -72,4 +72,17 @@ describe("WorkerHttpServer register protocol", () => {
     });
     expect(host.registerWorker).not.toHaveBeenCalled();
   });
+
+  it("rejects malformed registration fields before consuming the handshake", async () => {
+    const response = await register({
+      startToken: 42,
+      protocolVersion: RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid worker register request",
+    });
+    expect(host.registerWorker).not.toHaveBeenCalled();
+  });
 });

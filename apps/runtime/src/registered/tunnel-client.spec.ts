@@ -165,6 +165,25 @@ describe("TunnelClient", () => {
     expect(connections).toHaveLength(1);
   });
 
+  it("closes a registered handshake with invalid field types", async () => {
+    makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    await connections[0].nextMessage();
+
+    connections[0].ws.send(
+      JSON.stringify({
+        type: "registered",
+        runtimeHostId: "rt-1",
+        heartbeatIntervalSeconds: "1",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+      })
+    );
+
+    const [code] = (await once(connections[0].ws, "close")) as [number];
+    expect(code).toBe(1008);
+  });
+
   it("exits via onGone on 4410 and does not reconnect", async () => {
     const { onGone } = makeClient();
     client!.start();
