@@ -86,7 +86,6 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
         useServerProxy: false,
       },
     },
-    workerApiBaseUrl,
     // native runtimeType 的 CLI 路径:Host 就是执行机器本机——
     // 一键安装目录优先(host.installCli 装的),否则按本机 PATH 检测结果
     resolveCliPaths: async () => {

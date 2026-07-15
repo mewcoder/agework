@@ -55,7 +55,6 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       cliInstallDir: configService.getHostCliDir(),
       capabilities,
       providerConfig,
-      workerApiBaseUrl,
       resolveCliPaths: async () => {
         const row = await repository.findById(BUILTIN_HOST_ID);
         return row

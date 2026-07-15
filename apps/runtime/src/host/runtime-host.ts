@@ -79,13 +79,8 @@ export interface RuntimeHostConfig {
   cliInstallDir: string;
   /** 这台 Host 支持的 runtimeType 能力矩阵。 */
   capabilities: HostCapabilityStatus;
-  /** Runtime provider 配置（传给 @agework/providers）。 */
+  /** Runtime provider 配置（包含 Worker 回连地址，传给 @agework/providers）。 */
   providerConfig: RuntimeConfig;
-  /**
-   * worker 回连 Host 的 HTTP 基地址（如 `http://0.0.0.0:7101/api/v1`）。
-   * worker 的 AGEWORK_WORKER_API_BASE 设为此值；builtin 与 registered 都由各自 Host 承接数据面。
-   */
-  workerApiBaseUrl?: string;
   /**
    * native runtimeType 的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
    * 由宿主注入:builtin 用 server 的 RuntimeService 解析,daemon 用本机 detectEnvConfig。
@@ -395,7 +390,6 @@ export class RuntimeHost implements RuntimeHostContract {
 
     // 构建 worker env
     const workerEnv = buildWorkerEnv(
-      this.config,
       placement,
       startToken,
       workerId,
