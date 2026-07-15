@@ -281,3 +281,12 @@ export type WorkerRegisterRequest = {
   /** Worker 产物版本(来自 bundled `AGEWORK_VERSION`),Host 用于握手比对告警。 */
   version?: string;
 };
+
+/**
+ * Host 接受 Worker 注册后的握手回包。Worker 必须校验回显版本，
+ * 避免只有 Host 单向校验 Worker，却让新 Worker 连到旧 Host。
+ */
+export type WorkerRegisterResponse = {
+  ok: true;
+  protocolVersion: number;
+};

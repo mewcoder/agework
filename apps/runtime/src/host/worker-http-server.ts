@@ -10,6 +10,7 @@ import {
   WORKER_TOKEN_HEADER,
   type RunConfig,
   type WorkerCommandRpcRequest,
+  type WorkerRegisterResponse,
 } from "@agework/shared/protocol";
 import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { AGEWORK_VERSION } from "@agework/shared";
@@ -154,10 +155,11 @@ export class WorkerHttpServer {
         `[agework-runtime] worker version mismatch: worker=${body.version} host=${AGEWORK_VERSION}`
       );
     }
-    this.sendJson(res, 200, {
+    const response: WorkerRegisterResponse = {
       ok: true,
       protocolVersion: RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
-    });
+    };
+    this.sendJson(res, 200, response);
   }
 
   private async handleGetRunConfig(

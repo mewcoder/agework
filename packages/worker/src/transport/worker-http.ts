@@ -6,6 +6,7 @@ import type {
   UpstreamMessageInput,
   WorkerCommandRpcRequest,
   WorkerRegisterRequest,
+  WorkerRegisterResponse,
 } from "@agework/shared/protocol";
 import {
   RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
@@ -243,6 +244,22 @@ export class WorkerHttpTransport {
       const responseBody = await safeText(res);
       throw new Error(`register failed: ${res.status} ${responseBody}`);
     }
+    let response: unknown;
+    try {
+      response = await res.json();
+    } catch {
+      throw new Error("register failed: malformed host handshake response");
+    }
+    if (!isWorkerRegisterResponse(response)) {
+      throw new Error("register failed: malformed host handshake response");
+    }
+    if (
+      response.protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION
+    ) {
+      throw new Error(
+        `incompatible host protocol: host=${String(response.protocolVersion)} worker=${RUNTIME_WORKER_HTTP_PROTOCOL_VERSION}`
+      );
+    }
   }
 
   async emit(runId: string, msg: UpstreamMessageInput): Promise<void> {
@@ -452,6 +469,14 @@ async function safeText(res: Response): Promise<string> {
   } catch {
     return "";
   }
+}
+
+function isWorkerRegisterResponse(
+  value: unknown
+): value is WorkerRegisterResponse {
+  if (typeof value !== "object" || value === null) return false;
+  const response = value as Record<string, unknown>;
+  return response.ok === true && typeof response.protocolVersion === "number";
 }
 
 function summarizeUpstreamMessage(msg: UpstreamMessage) {

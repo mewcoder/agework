@@ -311,7 +311,10 @@ describe("WorkerHttpTransport", () => {
 
   it("registers with the worker's register endpoint, sending startToken and pid", async () => {
     vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "token-1");
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, protocolVersion: 1 }),
+    });
     vi.stubGlobal("fetch", fetchMock);
     const client = new WorkerHttpTransport();
 
@@ -328,6 +331,32 @@ describe("WorkerHttpTransport", () => {
       pid: process.pid,
       protocolVersion: 1,
     });
+  });
+
+  it("rejects a host with an incompatible protocol version", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, protocolVersion: 2 }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new WorkerHttpTransport();
+
+    await expect(client.register()).rejects.toThrow(
+      "incompatible host protocol: host=2 worker=1"
+    );
+  });
+
+  it("rejects a malformed host handshake response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new WorkerHttpTransport();
+
+    await expect(client.register()).rejects.toThrow(
+      "register failed: malformed host handshake response"
+    );
   });
 
   it("rejects when the register endpoint returns non-ok", async () => {

@@ -71,6 +71,7 @@ export type {
   RunChannel,
   RunExecutionHandle,
   WorkerRegisterRequest,
+  WorkerRegisterResponse,
   WorkerScope,
   RuntimeSpec,
   NativeRuntimeSpec,
