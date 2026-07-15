@@ -118,8 +118,7 @@ export class WorkspaceService {
     return {
       workspaceId: workspace.id,
       workspaceRootPath: workspace.directory.rootPath,
-      // runtimeType 快照列(workspace.runtimeType),创建时写入。
-      runtimeType: workspace.runtimeType ?? "native",
+      runtimeType: workspace.runtimeType,
       scope: workspace.scope,
       username: workspace.user.username,
       runtimeHostId: workspace.runtimeHostId,
@@ -501,7 +500,7 @@ export class WorkspaceService {
       } | null;
       runtimeHost: { source: string };
       scope: string;
-      runtimeType?: string | null;
+      runtimeType: string;
     },
   >(workspace: T) {
     const {
@@ -516,12 +515,11 @@ export class WorkspaceService {
         `Workspace ${(rest as { id?: string }).id ?? "unknown"} has no directory binding`
       );
     }
-    const runtimeType = rtSnapshot ?? this.runtimePolicy.defaultRuntimeType();
     const workspaceWorkerScope =
       this.runtimePolicy.resolveStoredWorkerScope(storedWorkerScope);
     return {
       ...rest,
-      runtimeType,
+      runtimeType: rtSnapshot,
       scope: workspaceWorkerScope,
       rootPath: directory.rootPath,
       directoryStatus: directory.status,

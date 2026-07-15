@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeHostContract } from "@agework/shared/protocol";
 import type { WorkspaceRepository } from "../workspace.repository";
 import { WorkspaceDeletedEvent } from "../workspace.events";
 import { RuntimeHostConnectedEvent } from "../../runtime-host/runtime-host.events";
+import type { RuntimeHostOwnerReconciliation } from "../../runtime-host/runtime-host.types";
 import { WorkspaceOwnerReleaseListener } from "./workspace-owner-release.listener";
 
-function makeHostContract(overrides: Record<string, unknown> = {}) {
+function makeOwnerReconciliation(overrides: Record<string, unknown> = {}) {
   return {
     releaseOwner: vi.fn().mockResolvedValue(undefined),
-    listWorkers: vi.fn().mockResolvedValue([]),
+    listOwners: vi.fn().mockResolvedValue([]),
     ...overrides,
-  } as unknown as RuntimeHostContract;
+  } as unknown as RuntimeHostOwnerReconciliation;
 }
 
 function makeRepository(activeIds: string[] = []) {
@@ -20,14 +20,10 @@ function makeRepository(activeIds: string[] = []) {
 }
 
 function makeListener(
-  hostContract: RuntimeHostContract,
+  hostOwners: RuntimeHostOwnerReconciliation,
   repository = makeRepository()
 ) {
-  return new WorkspaceOwnerReleaseListener(
-    hostContract,
-    hostContract,
-    repository
-  );
+  return new WorkspaceOwnerReleaseListener(hostOwners, repository);
 }
 
 function worker(
@@ -35,20 +31,20 @@ function worker(
   scope: string,
   ownerId: string
 ): Record<string, unknown> {
-  return { runtimeHostId, scope, ownerId };
+  return { runtimeHostId, owner: `${scope}:${ownerId}` };
 }
 
 describe("WorkspaceOwnerReleaseListener", () => {
   it("releases only the deleted workspace owner on its configured host", async () => {
-    const hostContract = makeHostContract();
-    const listener = makeListener(hostContract);
+    const hostOwners = makeOwnerReconciliation();
+    const listener = makeListener(hostOwners);
 
     await listener.onWorkspaceDeleted(
       new WorkspaceDeletedEvent("ws-1", "user-1", "rt-1")
     );
 
-    expect(hostContract.releaseOwner).toHaveBeenCalledTimes(1);
-    expect(hostContract.releaseOwner).toHaveBeenCalledWith({
+    expect(hostOwners.releaseOwner).toHaveBeenCalledTimes(1);
+    expect(hostOwners.releaseOwner).toHaveBeenCalledWith({
       runtimeHostId: "rt-1",
       owner: "workspace:ws-1",
     });
@@ -56,8 +52,8 @@ describe("WorkspaceOwnerReleaseListener", () => {
 
   describe("重连对账", () => {
     it("releases workers of deleted workspaces on the reconnected host only", async () => {
-      const hostContract = makeHostContract({
-        listWorkers: vi.fn().mockResolvedValue([
+      const hostOwners = makeOwnerReconciliation({
+        listOwners: vi.fn().mockResolvedValue([
           worker("rt-1", "workspace", "ws-deleted"),
           worker("rt-1", "workspace", "ws-alive"),
           // 其它 Host 的 worker、user-scope worker 都不参与对账
@@ -66,7 +62,7 @@ describe("WorkspaceOwnerReleaseListener", () => {
         ]),
       });
       const repository = makeRepository(["ws-alive"]);
-      const listener = makeListener(hostContract, repository);
+      const listener = makeListener(hostOwners, repository);
 
       await listener.onRuntimeHostConnected(
         new RuntimeHostConnectedEvent("rt-1")
@@ -76,31 +72,32 @@ describe("WorkspaceOwnerReleaseListener", () => {
         "ws-deleted",
         "ws-alive",
       ]);
-      expect(hostContract.releaseOwner).toHaveBeenCalledTimes(1);
-      expect(hostContract.releaseOwner).toHaveBeenCalledWith({
+      expect(hostOwners.listOwners).toHaveBeenCalledWith("rt-1");
+      expect(hostOwners.releaseOwner).toHaveBeenCalledTimes(1);
+      expect(hostOwners.releaseOwner).toHaveBeenCalledWith({
         runtimeHostId: "rt-1",
         owner: "workspace:ws-deleted",
       });
     });
 
     it("skips owner queries when the host has no workspace workers", async () => {
-      const hostContract = makeHostContract();
+      const hostOwners = makeOwnerReconciliation();
       const repository = makeRepository();
-      const listener = makeListener(hostContract, repository);
+      const listener = makeListener(hostOwners, repository);
 
       await listener.onRuntimeHostConnected(
         new RuntimeHostConnectedEvent("rt-1")
       );
 
       expect(repository.listActiveIds).not.toHaveBeenCalled();
-      expect(hostContract.releaseOwner).not.toHaveBeenCalled();
+      expect(hostOwners.releaseOwner).not.toHaveBeenCalled();
     });
 
     it("swallows reconcile failures (best-effort,下次重连再对账)", async () => {
-      const hostContract = makeHostContract({
-        listWorkers: vi.fn().mockRejectedValue(new Error("tunnel timeout")),
+      const hostOwners = makeOwnerReconciliation({
+        listOwners: vi.fn().mockRejectedValue(new Error("tunnel timeout")),
       });
-      const listener = makeListener(hostContract);
+      const listener = makeListener(hostOwners);
 
       await expect(
         listener.onRuntimeHostConnected(new RuntimeHostConnectedEvent("rt-1"))

@@ -80,8 +80,8 @@ model Workspace {
   // user（同用户项目共享）或 workspace（项目独享环境）。
   scope String
   // 执行方式（native / docker / opensandbox），创建时从 RuntimeHost 能力
-  // 列表选定。Phase 2 expand 列，旧 Runtime.runtimeType 派生链已删除。
-  runtimeType    String?
+  // 列表选定。必填；默认值只用于旧 nullable 列升级时回填，业务创建始终显式写入。
+  runtimeType    String                  @default("native")
   // 绑定的 RuntimeHost（builtin 或 registered）；创建时写入，不可改（要换 = 删了重建）。
   // 必填——builtin RuntimeHost 保证每个 Workspace 创建时都能落到一个真实存在的行。
   // registered RuntimeHost 被注销（removedAt 有值）后行仍在，runtimeHostId 不变，

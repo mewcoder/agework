@@ -32,10 +32,10 @@ pnpm init:prod
 | 命令                    | 说明                |
 | ----------------------- | ------------------- |
 | `pnpm dev`              | 同时启动 API 和 Web |
-| `pnpm dev:api`          | 只启动后端          |
+| `pnpm dev:server`       | 只启动后端          |
 | `pnpm dev:web`          | 只启动前端          |
 | `pnpm typecheck`        | 全仓类型检查        |
-| `pnpm test:api`         | 后端单测            |
+| `pnpm test:server`      | 后端单测（自动准备生成物） |
 | `pnpm test:web`         | 前端单测            |
 | `pnpm db:push`          | 同步数据库 schema   |
 | `pnpm db:reset`         | 重置数据库          |

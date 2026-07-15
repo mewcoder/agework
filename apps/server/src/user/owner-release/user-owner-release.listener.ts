@@ -1,11 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import {
-  userOwnerKey,
-  type RuntimeHostDiagnostics,
-  type RuntimeHostOperations,
-  type WorkerSnapshot,
-} from "@agework/shared/protocol";
+import { parseOwnerKey, userOwnerKey } from "@agework/shared/protocol";
 import {
   USER_DELETED_EVENT,
   USER_DISABLED_EVENT,
@@ -17,8 +12,8 @@ import {
   RuntimeHostConnectedEvent,
 } from "../../runtime-host/runtime-host.events";
 import {
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_OPERATIONS,
+  RUNTIME_HOST_OWNER_RECONCILIATION,
+  type RuntimeHostOwnerReconciliation,
 } from "../../runtime-host/runtime-host.types";
 import { UserRepository } from "../user.repository";
 
@@ -37,10 +32,8 @@ export class UserOwnerReleaseListener {
   private readonly logger = new Logger(UserOwnerReleaseListener.name);
 
   constructor(
-    @Inject(RUNTIME_HOST_OPERATIONS)
-    private readonly hostOperations: RuntimeHostOperations,
-    @Inject(RUNTIME_HOST_DIAGNOSTICS)
-    private readonly hostDiagnostics: RuntimeHostDiagnostics,
+    @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
+    private readonly hostOwners: RuntimeHostOwnerReconciliation,
     private readonly userRepository: UserRepository
   ) {}
 
@@ -49,13 +42,13 @@ export class UserOwnerReleaseListener {
     userId,
   }: UserDisabledEvent | UserDeletedEvent): Promise<void> {
     try {
-      const workers = await this.hostDiagnostics.listWorkers();
       const hostIds = new Set(
-        workers
-          .filter(
-            (worker) => worker.scope === "user" && worker.ownerId === userId
-          )
-          .map((worker) => worker.runtimeHostId)
+        (await this.hostOwners.listOwners())
+          .filter(({ owner }) => {
+            const parsed = parseOwnerKey(owner);
+            return parsed.scope === "user" && parsed.id === userId;
+          })
+          .map(({ runtimeHostId }) => runtimeHostId)
       );
       for (const runtimeHostId of hostIds) {
         await this.releaseOwnerOn(runtimeHostId, userId);
@@ -74,10 +67,9 @@ export class UserOwnerReleaseListener {
     runtimeHostId,
   }: RuntimeHostConnectedEvent): Promise<void> {
     try {
-      const workers = (await this.hostDiagnostics.listWorkers()).filter(
-        (worker) => worker.runtimeHostId === runtimeHostId
+      const userIds = distinctUserOwnerIds(
+        await this.hostOwners.listOwners(runtimeHostId)
       );
-      const userIds = distinctUserOwnerIds(workers);
       if (userIds.length === 0) return;
       const activeIds = new Set(
         await this.userRepository.listActiveIds(userIds)
@@ -104,7 +96,7 @@ export class UserOwnerReleaseListener {
     userId: string
   ): Promise<void> {
     try {
-      await this.hostOperations.releaseOwner({
+      await this.hostOwners.releaseOwner({
         runtimeHostId,
         owner: userOwnerKey(userId),
       });
@@ -118,12 +110,15 @@ export class UserOwnerReleaseListener {
   }
 }
 
-function distinctUserOwnerIds(workers: WorkerSnapshot[]): string[] {
+function distinctUserOwnerIds(
+  refs: Awaited<ReturnType<RuntimeHostOwnerReconciliation["listOwners"]>>
+): string[] {
   return [
     ...new Set(
-      workers
-        .filter((worker) => worker.scope === "user")
-        .map((worker) => worker.ownerId)
+      refs
+        .map(({ owner }) => parseOwnerKey(owner))
+        .filter(({ scope }) => scope === "user")
+        .map(({ id }) => id)
     ),
   ];
 }

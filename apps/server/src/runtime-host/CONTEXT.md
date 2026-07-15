@@ -2,7 +2,7 @@
 
 server 侧 RuntimeHost 域的唯一模块:**节点资源**(注册行、配对、隧道、判死、envConfig、目录浏览)+ **下发面**(contract 实现与 Host 路由、builtin 装配、admin worker 观测)。RuntimeHost 是 worker 运行的载体——builtin（本机 in-process）或 registered（远程机器注册）。
 
-worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由 Host 进程内自治,server 只经契约下发与观测。owner 生命周期清理(workspace 删除 / user 禁用删除 / 重连对账)不在本模块——workspace、user 模块各自的 `owner-release/` listener 监听事件后向下调本模块的 operations/diagnostics token。
+worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由 Host 进程内自治,server 只经契约下发与观测。owner 生命周期清理(workspace 删除 / user 禁用删除 / 重连对账)不在本模块——workspace、user 模块各自的 `owner-release/` listener 监听事件后向下调 owner reconciliation token。该端口只暴露 Host + OwnerKey，不向业务模块泄漏 Worker 快照。
 
 控制隧道只承载 `host.*` 契约；旧 `LocalRuntime` / `RemoteRuntime`、`runtime.*` RPC
 和 registered `Launcher` 已删除。worker 生命周期由 `RuntimeHost` 内部按 `runtimeType`

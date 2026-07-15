@@ -1,10 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import {
-  workspaceOwnerKey,
-  type RuntimeHostDiagnostics,
-  type RuntimeHostOperations,
-} from "@agework/shared/protocol";
+import { parseOwnerKey, workspaceOwnerKey } from "@agework/shared/protocol";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
@@ -14,8 +10,8 @@ import {
   RuntimeHostConnectedEvent,
 } from "../../runtime-host/runtime-host.events";
 import {
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_OPERATIONS,
+  RUNTIME_HOST_OWNER_RECONCILIATION,
+  type RuntimeHostOwnerReconciliation,
 } from "../../runtime-host/runtime-host.types";
 import { WorkspaceRepository } from "../workspace.repository";
 
@@ -34,10 +30,8 @@ export class WorkspaceOwnerReleaseListener {
   private readonly logger = new Logger(WorkspaceOwnerReleaseListener.name);
 
   constructor(
-    @Inject(RUNTIME_HOST_OPERATIONS)
-    private readonly hostOperations: RuntimeHostOperations,
-    @Inject(RUNTIME_HOST_DIAGNOSTICS)
-    private readonly hostDiagnostics: RuntimeHostDiagnostics,
+    @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
+    private readonly hostOwners: RuntimeHostOwnerReconciliation,
     private readonly workspaceRepository: WorkspaceRepository
   ) {}
 
@@ -47,7 +41,7 @@ export class WorkspaceOwnerReleaseListener {
     runtimeHostId,
   }: WorkspaceDeletedEvent): Promise<void> {
     try {
-      await this.hostOperations.releaseOwner({
+      await this.hostOwners.releaseOwner({
         runtimeHostId,
         owner: workspaceOwnerKey(workspaceId),
       });
@@ -67,13 +61,10 @@ export class WorkspaceOwnerReleaseListener {
     try {
       const workspaceIds = [
         ...new Set(
-          (await this.hostDiagnostics.listWorkers())
-            .filter(
-              (worker) =>
-                worker.runtimeHostId === runtimeHostId &&
-                worker.scope === "workspace"
-            )
-            .map((worker) => worker.ownerId)
+          (await this.hostOwners.listOwners(runtimeHostId))
+            .map(({ owner }) => parseOwnerKey(owner))
+            .filter(({ scope }) => scope === "workspace")
+            .map(({ id }) => id)
         ),
       ];
       if (workspaceIds.length === 0) return;
@@ -86,7 +77,7 @@ export class WorkspaceOwnerReleaseListener {
           `reconcile: releasing workers of deleted workspace ${workspaceId} on host ${runtimeHostId}`
         );
         try {
-          await this.hostOperations.releaseOwner({
+          await this.hostOwners.releaseOwner({
             runtimeHostId,
             owner: workspaceOwnerKey(workspaceId),
           });

@@ -5,7 +5,7 @@
   <p>把 Claude、Codex 等 AI Agent 放进一个可部署、可管理、可追踪的工作系统。</p>
   <p>
     <img src="https://img.shields.io/badge/status-active%20development-blue?style=flat-square" alt="Active development" />
-    <img src="https://img.shields.io/badge/node-%3E%3D20-43853d?style=flat-square" alt="Node.js >=20" />
+    <img src="https://img.shields.io/badge/node-%3E%3D22-43853d?style=flat-square" alt="Node.js >=22" />
     <img src="https://img.shields.io/badge/pnpm-10.33.4-f69220?style=flat-square" alt="pnpm 10.33.4" />
     <img src="https://img.shields.io/badge/monorepo-Turborepo-000000?style=flat-square" alt="Turborepo" />
   </p>
@@ -55,7 +55,7 @@ AgeWork 的目标就是把这些能力组织成一个可以长期运行的工作
 
 ### Requirements
 
-- Node.js `>=20`
+- Node.js `>=22`
 - pnpm `10.33.4`
 - Docker：仅在使用 sandbox、OpenSandbox 或构建 worker 镜像时需要
 
@@ -89,10 +89,10 @@ pnpm dev
 | `pnpm init:dev` | 初始化开发环境 |
 | `pnpm init:prod` | 初始化生产环境 |
 | `pnpm dev` | 同时启动 API 和 Web |
-| `pnpm dev:api` | 只启动后端服务 |
+| `pnpm dev:server` | 只启动后端服务 |
 | `pnpm dev:web` | 只启动前端服务 |
 | `pnpm typecheck` | 全仓类型检查 |
-| `pnpm test:api` | 后端单元测试 |
+| `pnpm test:server` | 后端单元测试（自动生成 Prisma Client 与所需 workspace 产物） |
 | `pnpm test:web` | 前端单元测试 |
 | `pnpm db:push` | 同步数据库 schema |
 | `pnpm db:studio` | 打开 Prisma Studio |

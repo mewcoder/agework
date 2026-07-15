@@ -787,29 +787,11 @@ describe("WorkspaceService", () => {
       expect(view.runtimeType).toBe("docker");
     });
 
-    it("falls back to native when runtimeType snapshot is null (Phase 3: RuntimeHost.runtimeType 列已删)", async () => {
-      const repo = makeRepo({
-        findRunView: vi.fn().mockResolvedValue({
-          id: "ws-1",
-          runtimeType: null,
-          runtimeHost: { source: "builtin" },
-          scope: "workspace",
-          runtimeHostId: "builtin",
-          directory: { rootPath: "/tmp/ws" },
-          user: { username: "mew" },
-        }),
-      });
-      const service = makeService(repo, makeConfig());
-
-      const view = await service.getRunContext("ws-1");
-
-      expect(view.runtimeType).toBe("native");
-    });
-
     it("carries the bound runtimeHostId through for Registered runtime workspaces", async () => {
       const repo = makeRepo({
         findRunView: vi.fn().mockResolvedValue({
           id: "ws-1",
+          runtimeType: "docker",
           runtimeHost: { source: "registered" },
           scope: "workspace",
           runtimeHostId: "rt-1",

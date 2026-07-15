@@ -1,4 +1,8 @@
-import type { HostUpstreamNotification } from "@agework/shared/protocol";
+import type {
+  HostUpstreamNotification,
+  OwnerKey,
+  ReleaseOwnerInput,
+} from "@agework/shared/protocol";
 
 /**
  * host.upstream 回流 Port(架构规则 §4 决策链 5:infra 运行时回流):
@@ -31,6 +35,21 @@ export type RuntimeHostRow = {
   removedAt: Date | null;
 };
 
+/** owner 生命周期对账只暴露 Host + OwnerKey，不把 Worker 现场泄漏给业务模块。 */
+export type RuntimeHostOwnerRef = {
+  runtimeHostId: string;
+  owner: OwnerKey;
+};
+
+/** Workspace/User 删除与 Host 重连对账使用的专用端口。 */
+export interface RuntimeHostOwnerReconciliation {
+  /** runtimeHostId 省略时聚合所有在线 Host；指定时只查询目标 Host。 */
+  listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]>;
+
+  /** 定向释放目标 Host 上的 owner 资源；幂等。 */
+  releaseOwner(input: ReleaseOwnerInput): Promise<void>;
+}
+
 /** builtin（本机 in-process）RuntimeHost 的固定 id。所有 runtimeType 都走这一个 Host。 */
 export const BUILTIN_HOST_ID = "builtin";
 
@@ -43,3 +62,6 @@ export function isBuiltinHostId(runtimeHostId: string): boolean {
 export const RUNTIME_HOST_EXECUTION = Symbol("RuntimeHostExecution");
 export const RUNTIME_HOST_OPERATIONS = Symbol("RuntimeHostOperations");
 export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");
+export const RUNTIME_HOST_OWNER_RECONCILIATION = Symbol(
+  "RuntimeHostOwnerReconciliation"
+);

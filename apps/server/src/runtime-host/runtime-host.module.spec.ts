@@ -1,4 +1,4 @@
-import { Injectable, Module } from "@nestjs/common";
+import { Inject, Injectable, Module } from "@nestjs/common";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -9,10 +9,18 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RuntimeHostService } from "./runtime-host.service";
 import { RuntimeHostModule } from "./runtime-host.module";
 import { BUILTIN_RUNTIME_HOST } from "./contract/builtin-runtime-host";
+import {
+  RUNTIME_HOST_OWNER_RECONCILIATION,
+  type RuntimeHostOwnerReconciliation,
+} from "./runtime-host.types";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
-  constructor(readonly runtimeService: RuntimeHostService) {}
+  constructor(
+    readonly runtimeService: RuntimeHostService,
+    @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
+    readonly ownerReconciliation: RuntimeHostOwnerReconciliation
+  ) {}
 }
 
 @Module({
@@ -38,13 +46,14 @@ describe("RuntimeHostModule wiring", () => {
     );
   });
 
-  it("exports only RuntimeHostService to downstream modules", async () => {
+  it("exports the root Service and narrow role ports to downstream modules", async () => {
     testingModule = await createRuntimeTestingModule([
       DownstreamRuntimeConsumerModule,
     ]);
 
     const consumer = testingModule.get(DownstreamRuntimeConsumer);
     expect(consumer.runtimeService).toBe(testingModule.get(RuntimeHostService));
+    expect(consumer.ownerReconciliation).toBeDefined();
   });
 });
 

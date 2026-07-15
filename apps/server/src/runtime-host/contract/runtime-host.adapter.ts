@@ -32,7 +32,12 @@ import type {
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import type { RuntimeHost } from "@agework/runtime/host";
-import { BUILTIN_HOST_ID, isBuiltinHostId } from "../runtime-host.types";
+import {
+  BUILTIN_HOST_ID,
+  isBuiltinHostId,
+  type RuntimeHostOwnerReconciliation,
+  type RuntimeHostOwnerRef,
+} from "../runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
@@ -53,7 +58,9 @@ const INSTALL_CLI_TIMEOUT_MS = 150_000;
  * 只编排用例，不再自行直读执行机或拼 host.* RPC。
  */
 @Injectable()
-export class RuntimeHostAdapter implements RuntimeHostContract {
+export class RuntimeHostAdapter
+  implements RuntimeHostContract, RuntimeHostOwnerReconciliation
+{
   private readonly logger = new Logger(RuntimeHostAdapter.name);
   private upstream!: RuntimeHostUpstream;
 
@@ -373,32 +380,13 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
     // 进程内 builtin Host + 所有隧道在线的 registered Host 现场查询；
     // 这是 worker 状态的唯一权威来源。Host 本地不知道自己的注册 id,
     // 快照的 runtimeHostId 在这里按路由来源盖章。
-    const builtinWorkers = await this.builtinHost.listWorkers();
-    const result = builtinWorkers.map((worker) => ({
-      ...worker,
-      runtimeHostId: BUILTIN_HOST_ID,
-    }));
-    const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
+    const result = await this.listWorkersOn(BUILTIN_HOST_ID);
     const tunnelWorkers = await Promise.all(
       this.tunnelHandler
         .listConnected()
         .map(async (runtimeHostId): Promise<WorkerSnapshot[]> => {
           try {
-            const hostResult =
-              await this.tunnelHandler.sendRequest<HostListWorkersRpcResult>(
-                runtimeHostId,
-                {
-                  jsonrpc: "2.0",
-                  id: generateId(),
-                  method: "host.listWorkers",
-                  params: {},
-                },
-                timeoutMs
-              );
-            return hostResult.workers.map((worker) => ({
-              ...worker,
-              runtimeHostId,
-            }));
+            return await this.listWorkersOn(runtimeHostId);
           } catch (err) {
             this.logger.warn(
               `host.listWorkers failed for ${runtimeHostId}: ${String(err)}`
@@ -408,6 +396,46 @@ export class RuntimeHostAdapter implements RuntimeHostContract {
         })
     );
     return result.concat(tunnelWorkers.flat());
+  }
+
+  async listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]> {
+    const workers = runtimeHostId
+      ? await this.listWorkersOn(runtimeHostId)
+      : await this.listWorkers();
+    const refs = new Map<string, RuntimeHostOwnerRef>();
+    for (const worker of workers) {
+      if (worker.scope !== "workspace" && worker.scope !== "user") continue;
+      const owner = `${worker.scope}:${worker.ownerId}` as const;
+      const ref = { runtimeHostId: worker.runtimeHostId, owner };
+      refs.set(`${ref.runtimeHostId}\0${ref.owner}`, ref);
+    }
+    return [...refs.values()];
+  }
+
+  private async listWorkersOn(
+    runtimeHostId: string
+  ): Promise<WorkerSnapshot[]> {
+    if (isBuiltinHostId(runtimeHostId)) {
+      return (await this.builtinHost.listWorkers()).map((worker) => ({
+        ...worker,
+        runtimeHostId: BUILTIN_HOST_ID,
+      }));
+    }
+    const hostResult =
+      await this.tunnelHandler.sendRequest<HostListWorkersRpcResult>(
+        runtimeHostId,
+        {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.listWorkers",
+          params: {},
+        },
+        this.configService.getLaunchTimeoutSeconds() * 1000
+      );
+    return hostResult.workers.map((worker) => ({
+      ...worker,
+      runtimeHostId,
+    }));
   }
 
   async stopWorker(input: StopWorkerInput): Promise<void> {

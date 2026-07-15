@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "node scripts/clean-dev.mjs && turbo dev --filter=server --filter=web",
-    "dev:server": "pnpm --filter server dev",
+    "dev:server": "turbo dev --filter=server",
     "dev:web": "pnpm --filter web dev",
     "clean:dev": "node scripts/clean-dev.mjs",
     "dev:reset": "node scripts/init.mjs --dev --reset --no-install",
@@ -58,6 +58,6 @@
   },
   "packageManager": "pnpm@10.33.4",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   }
 }

@@ -354,6 +354,39 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       ]);
     });
 
+    it("listOwners exposes deduplicated Host + OwnerKey refs instead of worker snapshots", async () => {
+      builtinHost.listWorkers.mockResolvedValue([
+        { scope: "workspace", ownerId: "ws-1" },
+        { scope: "workspace", ownerId: "ws-1" },
+      ]);
+      tunnelHandler.listConnected.mockReturnValue(["rt-registered-1"]);
+      tunnelHandler.sendRequest.mockResolvedValue({
+        workers: [{ scope: "user", ownerId: "user-1" }],
+      });
+
+      await expect(adapter.listOwners()).resolves.toEqual([
+        { runtimeHostId: "builtin", owner: "workspace:ws-1" },
+        { runtimeHostId: "rt-registered-1", owner: "user:user-1" },
+      ]);
+    });
+
+    it("listOwners can query one registered Host without scanning the others", async () => {
+      tunnelHandler.listConnected.mockReturnValue(["rt-other"]);
+      tunnelHandler.sendRequest.mockResolvedValue({
+        workers: [{ scope: "user", ownerId: "user-1" }],
+      });
+
+      await expect(adapter.listOwners("rt-1")).resolves.toEqual([
+        { runtimeHostId: "rt-1", owner: "user:user-1" },
+      ]);
+      expect(builtinHost.listWorkers).not.toHaveBeenCalled();
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
+        "rt-1",
+        expect.objectContaining({ method: "host.listWorkers" }),
+        expect.any(Number)
+      );
+    });
+
     it("stopWorker routes builtin to the in-process host without touching the tunnel", async () => {
       await adapter.stopWorker({
         runtimeHostId: "builtin",

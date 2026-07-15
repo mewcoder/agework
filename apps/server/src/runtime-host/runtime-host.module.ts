@@ -14,6 +14,7 @@ import {
   RUNTIME_HOST_DIAGNOSTICS,
   RUNTIME_HOST_EXECUTION,
   RUNTIME_HOST_OPERATIONS,
+  RUNTIME_HOST_OWNER_RECONCILIATION,
 } from "./runtime-host.types";
 
 /**
@@ -28,7 +29,7 @@ import {
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
  * - owner 生命周期清理不在本模块:workspace / user 模块各自监听事件后
- *   向下调本模块的 operations/diagnostics token(避免反向依赖成环)。
+ *   向下调 owner reconciliation token；业务模块不消费 Worker diagnostics。
  */
 @Module({
   imports: [RunEventModule],
@@ -42,6 +43,10 @@ import {
     { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_OPERATIONS, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
+    {
+      provide: RUNTIME_HOST_OWNER_RECONCILIATION,
+      useExisting: RuntimeHostAdapter,
+    },
   ],
   controllers: [
     RuntimeHostController,
@@ -53,6 +58,7 @@ import {
     RUNTIME_HOST_EXECUTION,
     RUNTIME_HOST_OPERATIONS,
     RUNTIME_HOST_DIAGNOSTICS,
+    RUNTIME_HOST_OWNER_RECONCILIATION,
   ],
 })
 export class RuntimeHostModule {}
