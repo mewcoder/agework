@@ -257,28 +257,27 @@ export interface RuntimeHostExecution {
   setUpstream(upstream: RuntimeHostUpstream): void;
 }
 
-/** Host 环境、owner 生命周期和工作空间数据面的运维能力。 */
-export interface RuntimeHostOperations {
-
-  // —— 业务级收尾 ——
-
+/** Host 上 owner 级资源生命周期。 */
+export interface RuntimeHostOwnerLifecycle {
   /**
    * owner 级释放：workspace 删除传 workspace:X，user 注销/禁用传 user:Y。
    * 按 runtimeHostId 定向路由到目标 Host,不广播。
    * 幂等、可重试；目标键无 worker 时为空操作（见 §3.5 场景 4）。
    */
   releaseOwner(input: ReleaseOwnerInput): Promise<void>;
+}
 
-  // —— 环境 ——
-
+/** Host 本机环境与 CLI 能力。 */
+export interface RuntimeHostEnvironment {
   /** 每种 runtimeType 的可用性 + CLI 检测结果，构成目标 Host 的能力矩阵。 */
   detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus>;
 
   /** 在目标 Host 上安装 agent CLI(仅 native runtimeType 有意义),返回可执行路径。 */
   installCli(input: InstallCliInput): Promise<InstallCliResult>;
+}
 
-  // —— 工作空间文件（数据面统一入口） ——
-
+/** Host 上工作空间文件与 Git 数据面。 */
+export interface RuntimeHostWorkspaceData {
   /** 列出 path 下的子目录（不含文件）。path 省略时列出 Host 本机的用户主目录。 */
   listDirectory(input: ListDirectoryInput): Promise<DirectoryListing>;
 
@@ -301,7 +300,6 @@ export interface RuntimeHostOperations {
   listChangedFiles(
     input: ListChangedFilesInput
   ): Promise<WorkspaceChangedFilesResponse>;
-
 }
 
 /** admin / reconciliation 显式使用的现场诊断面。业务执行不得依赖。 */
@@ -318,8 +316,11 @@ export interface RuntimeHostDiagnostics {
  * 方向永远向下；builtin 走进程内调用，registered 走控制隧道。
  */
 export interface RuntimeHostContract
-  extends RuntimeHostExecution,
-    RuntimeHostOperations,
+  extends
+    RuntimeHostExecution,
+    RuntimeHostOwnerLifecycle,
+    RuntimeHostEnvironment,
+    RuntimeHostWorkspaceData,
     RuntimeHostDiagnostics {}
 
 /**

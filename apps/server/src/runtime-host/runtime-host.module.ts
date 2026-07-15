@@ -12,9 +12,10 @@ import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
 import { RunEventModule } from "../run-event/run-event.module";
 import {
   RUNTIME_HOST_DIAGNOSTICS,
+  RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_OPERATIONS,
   RUNTIME_HOST_OWNER_RECONCILIATION,
+  RUNTIME_HOST_WORKSPACE_DATA,
 } from "./runtime-host.types";
 
 /**
@@ -23,8 +24,8 @@ import {
  *
  * - `HostTunnelHandler`(隧道 WS 端点)、`HostLivenessWatchdog`(Host 级判死)、
  *   builtin Host 实例都是 internal provider,不 export。
- * - `RuntimeHostAdapter` 类本身不直接 export,而是按 execution / operations /
- *   diagnostics 三个角色 token 对外暴露契约;run 模块只消费执行面契约,不感知
+ * - `RuntimeHostAdapter` 类本身不直接 export,而是按 execution / environment /
+ *   workspace-data / diagnostics 角色 token 对外暴露契约;run 模块只消费执行面契约,不感知
  *   builtin/registered 的路由细节。
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
@@ -41,7 +42,8 @@ import {
     builtinRuntimeHostProvider,
     RuntimeHostAdapter,
     { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_OPERATIONS, useExisting: RuntimeHostAdapter },
+    { provide: RUNTIME_HOST_ENVIRONMENT, useExisting: RuntimeHostAdapter },
+    { provide: RUNTIME_HOST_WORKSPACE_DATA, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
     {
       provide: RUNTIME_HOST_OWNER_RECONCILIATION,
@@ -56,7 +58,8 @@ import {
   exports: [
     RuntimeHostService,
     RUNTIME_HOST_EXECUTION,
-    RUNTIME_HOST_OPERATIONS,
+    RUNTIME_HOST_ENVIRONMENT,
+    RUNTIME_HOST_WORKSPACE_DATA,
     RUNTIME_HOST_DIAGNOSTICS,
     RUNTIME_HOST_OWNER_RECONCILIATION,
   ],

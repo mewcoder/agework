@@ -11,7 +11,8 @@ import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type {
   RuntimeCapabilities,
-  RuntimeHostOperations,
+  RuntimeHostEnvironment,
+  RuntimeHostWorkspaceData,
   RuntimeSpec,
   WorkerScope,
 } from "@agework/shared/protocol";
@@ -40,13 +41,14 @@ import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
-  RUNTIME_HOST_OPERATIONS,
+  RUNTIME_HOST_ENVIRONMENT,
+  RUNTIME_HOST_WORKSPACE_DATA,
 } from "./runtime-host.types";
 import { resolveRuntimeHostCliPaths } from "./environment/runtime-host-environment";
 
 /**
  * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
- * 所有执行机动作统一经 RuntimeHostOperations；本类不自行访问执行机或拼隧道 RPC。
+ * 所有执行机动作统一经最小 RuntimeHost 角色端口；本类不自行访问执行机或拼隧道 RPC。
  */
 @Injectable()
 export class RuntimeHostService implements OnApplicationBootstrap {
@@ -56,8 +58,10 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     private readonly configService: ConfigService,
     private readonly repository: RuntimeHostRepository,
     private readonly tunnelHandler: HostTunnelHandler,
-    @Inject(RUNTIME_HOST_OPERATIONS)
-    private readonly operations: RuntimeHostOperations
+    @Inject(RUNTIME_HOST_ENVIRONMENT)
+    private readonly environment: RuntimeHostEnvironment,
+    @Inject(RUNTIME_HOST_WORKSPACE_DATA)
+    private readonly workspaceData: RuntimeHostWorkspaceData
   ) {}
 
   /** 启动时只初始化一行 builtin Host，所有允许的 runtimeType 都写入能力矩阵。 */
@@ -77,7 +81,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     });
 
     if (allowedRuntimeTypes.includes("native")) {
-      const envConfig = (await this.operations.detectEnv(BUILTIN_HOST_ID))
+      const envConfig = (await this.environment.detectEnv(BUILTIN_HOST_ID))
         .native?.cli;
       if (envConfig) {
         await this.repository.updateEnvConfig(BUILTIN_HOST_ID, envConfig);
@@ -196,7 +200,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     if (!isBuiltinHostId(id) && !this.tunnelHandler.isConnected(id)) {
       throw new BadRequestException(`runtime ${id} is not connected`);
     }
-    const { executablePath } = await this.operations.installCli({
+    const { executablePath } = await this.environment.installCli({
       runtimeHostId: id,
       agentType,
     });
@@ -221,7 +225,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     }
     let envConfig: RuntimeEnvConfig | undefined;
     try {
-      envConfig = (await this.operations.detectEnv(id)).native?.cli;
+      envConfig = (await this.environment.detectEnv(id)).native?.cli;
     } catch (err) {
       // 检测/RPC 失败与「未检出 CLI」是两回事,失败要让调用方看见
       throw new BadRequestException(
@@ -245,7 +249,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   ): Promise<HostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      const result = await this.operations.listDirectory({
+      const result = await this.workspaceData.listDirectory({
         runtimeHostId: id,
         path,
       });
@@ -265,7 +269,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   ): Promise<CreateHostDirectoryResponse> {
     await this.assertRuntimeReachable(ownerId, id);
     try {
-      await this.operations.createDirectory({ runtimeHostId: id, path });
+      await this.workspaceData.createDirectory({ runtimeHostId: id, path });
       return { path };
     } catch (err) {
       throw new BadRequestException(
@@ -277,7 +281,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   // ── 文件预览 ───────────────────────────────────────────────────────
 
   /**
-   * 文件操作统一下调 RuntimeHostOperations；rootPath 由 WorkspaceService 查出后传入。
+   * 文件操作统一下调 RuntimeHostWorkspaceData；rootPath 由 WorkspaceService 查出后传入。
    * builtin / registered 分流与路径安全校验由执行面实现负责。
    */
   async listFiles(
@@ -286,7 +290,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      return await this.operations.listFiles({
+      return await this.workspaceData.listFiles({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -305,7 +309,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      return await this.operations.readFile({
+      return await this.workspaceData.readFile({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -320,7 +324,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   // ── 变更查看(diff,只读) ──────
 
   /**
-   * 变更查看统一下调 RuntimeHostOperations，rootPath 由 WorkspaceService 查出后传入。
+   * 变更查看统一下调 RuntimeHostWorkspaceData，rootPath 由 WorkspaceService 查出后传入。
    * 执行面错误统一映射为 BadRequestException。
    */
   async listChangedFiles(
@@ -328,7 +332,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return await this.operations.listChangedFiles({
+      return await this.workspaceData.listChangedFiles({
         runtimeHostId,
         rootPath,
       });
@@ -344,7 +348,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return await this.operations.readFileDiff({
+      return await this.workspaceData.readFileDiff({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -360,7 +364,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     rootPath: string
   ): Promise<WorkspaceFileSearchResponse> {
     try {
-      return await this.operations.searchFiles({ runtimeHostId, rootPath });
+      return await this.workspaceData.searchFiles({ runtimeHostId, rootPath });
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)

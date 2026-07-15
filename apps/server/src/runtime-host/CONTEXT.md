@@ -46,14 +46,14 @@ _Avoid_: CLI availability、system status
 server 进程内的 RuntimeHost 实例（`@agework/runtime/host`,与 registered daemon 同构）。固定 id `"builtin"`，`source: "builtin"`。自管 WorkerHttpServer，worker 数据面不再连 server 旧端点。所有 runtimeType（native/docker/opensandbox）共用一行，能力矩阵在 `capabilities` JSON 里。
 
 **RuntimeHostContract**:
-server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseOwner` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。寻址单位是 run / owner / host,没有 workerId——worker 是 Host 内部现场。按 execution / operations / diagnostics 三个角色 token 注入,消费者不能越面调用。
+server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseOwner` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。寻址单位是 run / owner / host,没有 workerId——worker 是 Host 内部现场。按 execution / owner-lifecycle / environment / workspace-data / diagnostics 角色 token 注入,消费者不能越面调用。
 _Avoid_: WorkerManagerService（已删）、Runtime 接口（旧名）
 
 **RuntimeHostAdapter**:
 `RuntimeHostContract` 的 server 侧实现（internal provider,不 export）。builtin Host 走进程内调用；registered Host 经隧道 RPC 转发。按 `runtimeHostId` 路由到正确的 Host。
 
 **执行边界**:
-`RuntimeHostService` 是模块根门面，负责鉴权、注册数据和用例编排；CLI、环境、目录、文件、Git 与 worker 动作必须统一下调 execution / operations / diagnostics 角色 token。`RuntimeHostAdapter` 是 builtin / registered 的唯一分流点，Service 不直接访问本机执行资源，也不自行拼 `host.*` RPC。
+`RuntimeHostService` 是模块根门面，负责鉴权、注册数据和用例编排；CLI/环境统一下调 environment，目录/文件/Git 统一下调 workspace-data，run 与 worker 动作分别经 execution / diagnostics 角色 token。`RuntimeHostAdapter` 是 builtin / registered 的唯一分流点，Service 不直接访问本机执行资源，也不自行拼 `host.*` RPC。
 
 **WorkerKey**:
 worker 池的唯一键：`${OwnerKey}#${runtimeType}`。同一 (owner, runtimeType) 至多一个活跃 worker。stopWorker / fence 全部用它。
