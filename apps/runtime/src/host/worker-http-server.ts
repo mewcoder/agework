@@ -29,7 +29,7 @@ import type { RuntimeHost } from "./runtime-host.js";
  * - POST /worker/runs/:runId/events   → runtimeHost.postEvent()
  *
  * 鉴权：commands/runConfig/events 三个端点共用 token 校验（runtimeHost.validateWorkerToken），
- * register 靠 body 里的 startToken 匹配 HandshakeStore——与 server 侧 WorkerTokenGuard 同约定。
+ * register 靠 body 里的 startToken 匹配 Host 内的 HandshakeStore。
  */
 export class WorkerHttpServer {
   private server?: Server;
@@ -150,7 +150,7 @@ export class WorkerHttpServer {
       });
       return;
     }
-    // 版本校验（与 server 侧同约定：不匹配仅告警，不拒绝接入）
+    // 应用版本不匹配仅告警；线协议版本已在注册解码时强校验。
     if (typeof body?.version === "string" && body.version !== AGEWORK_VERSION) {
       console.warn(
         `[agework-runtime] worker version mismatch: worker=${body.version} host=${AGEWORK_VERSION}`
@@ -204,7 +204,7 @@ export class WorkerHttpServer {
 
   // ── 工具 ────────────────────────────────────────────────────────────
 
-  /** token 校验：不匹配返回 410（与 server 侧 WorkerTokenGuard 同约定）。 */
+  /** token 校验：不匹配返回 410，让旧 Worker 退出。 */
   private guardToken(
     req: IncomingMessage,
     res: ServerResponse,

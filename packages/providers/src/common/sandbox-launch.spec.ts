@@ -11,7 +11,7 @@ import type { RuntimeConfig, RuntimeLaunchContext } from "../types";
 const CONFIG: RuntimeConfig = {
   workerImage: "agework/runtime:latest",
   runtimeLogHostPath: "/tmp/agework-logs/runtime",
-  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
   local: {
     workerEntryPath: "/tmp/worker/index.js",
     tsxCliPath: "/tmp/tsx/cli.mjs",

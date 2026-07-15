@@ -20,9 +20,9 @@ export async function runWorker() {
     workerId: process.env.AGEWORK_WORKER_ID,
   });
 
-  // 进入命令轮询循环前先向 server 注册握手,证明这个进程/容器真的活着能通信。
-  // server 在此之前不会把该 worker 判定为 running（见 WorkerHandshakeStore）。
-  // 重试用尽说明这个进程反正没法正常工作,主动退出比等 server 侧 launchTimeout
+  // 进入命令轮询循环前先向所属 Host 注册握手,证明这个进程/容器真的活着能通信。
+  // Host 在此之前不会把该 worker 判定为 ready（见 WorkerHandshakeStore）。
+  // 重试用尽说明这个进程反正没法正常工作,主动退出比等 Host 侧 launchTimeout
   // 超时收敛更快。
   await registerWithRetry(client);
 

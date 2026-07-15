@@ -39,7 +39,7 @@ export class NativeRuntimeProvider implements RuntimeProvider {
         ...process.env,
         ...ctx.workerEnv,
         AGEWORK_WORKER_ROLE: "worker",
-        AGEWORK_WORKER_API_BASE: this.config.serverBaseUrl,
+        AGEWORK_WORKER_API_BASE: this.config.workerApiBaseUrl,
         AGEWORK_WORKER_RUN_START_TOKEN: startToken,
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"],

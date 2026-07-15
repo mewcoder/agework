@@ -1,7 +1,7 @@
 /**
  * 工作空间文件浏览器（worker 侧）。
  *
- * 实现已提取到 `@agework/shared/filesystem`，worker、RuntimeHost 和 server builtin
+ * 实现已提取到 `@agework/shared/filesystem`，worker 与 RuntimeHost
  * 文件入口共用同一份安全校验 + fs 读取逻辑。此文件保留为 re-export
  * 入口，worker 内部调用方（workspace-file-command.handler.ts）不需要改。
  *

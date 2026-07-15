@@ -16,7 +16,7 @@ const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 const CONFIG: RuntimeConfig = {
   workerImage: "agework/runtime:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
-  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
   local: {
     workerEntryPath: "/tmp/worker/index.js",
     tsxCliPath: "/tmp/tsx/cli.mjs",

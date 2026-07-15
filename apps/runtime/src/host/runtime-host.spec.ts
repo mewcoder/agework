@@ -34,7 +34,7 @@ function makeConfig(
     providerConfig: {
       workerImage: "",
       runtimeLogHostPath: "/tmp/agework-host-test/logs",
-      serverBaseUrl: "http://127.0.0.1:7101/api/v1",
+      workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
       native: { runtimeEntryPath: "/tmp/agework-host-test/main.mjs" },
       openSandbox: {
         domain: "",

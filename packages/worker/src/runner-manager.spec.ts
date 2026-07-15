@@ -103,8 +103,8 @@ describe("RunnerManager", () => {
     );
   });
 
-  it("does not leak the worker's own server credentials into the runner env", async () => {
-    vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://internal-server:3000");
+  it("does not leak the worker's own Host credentials into the runner env", async () => {
+    vi.stubEnv("AGEWORK_WORKER_API_BASE", "http://internal-host:7101");
     vi.stubEnv("AGEWORK_WORKER_START_TOKEN", "super-secret-token");
     vi.stubEnv("AGEWORK_PRIVATE_DATABASE_URL", "postgres://should-never-leak");
     vi.stubEnv("AGEWORK_WORKER_LOG_LEVEL", "debug");

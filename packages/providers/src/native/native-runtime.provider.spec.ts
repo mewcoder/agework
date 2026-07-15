@@ -22,7 +22,7 @@ vi.mock("node:child_process", () => ({ fork: forkMock.fork }));
 const CONFIG: RuntimeConfig = {
   workerImage: "agework/runtime:latest",
   runtimeLogHostPath: "/tmp/agework-logs/runtime",
-  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
   native: {
     runtimeEntryPath: "/pkg/agework-runtime/main.mjs",
   },
@@ -88,7 +88,7 @@ describe("NativeRuntimeProvider", () => {
         expect.objectContaining({
           env: expect.objectContaining({
             AGEWORK_WORKER_ROLE: "worker",
-            AGEWORK_WORKER_API_BASE: "http://127.0.0.1:3000/api/v1",
+            AGEWORK_WORKER_API_BASE: "http://127.0.0.1:7101/api/v1",
             AGEWORK_WORKER_START_TOKEN: "provisioner-tok",
             AGEWORK_WORKER_RUN_START_TOKEN: expect.any(String),
           }),

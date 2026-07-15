@@ -148,8 +148,8 @@ export function buildWorkerEnv(
   if (runConfig.workerLogFilePath) {
     env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
   }
-  // provider（native / sandbox）会用 RuntimeConfig.serverBaseUrl 覆盖此值，
-  // 因此 providerConfig.serverBaseUrl 必须指向本 Host 的 worker HTTP 端点。
+  // provider（native / sandbox）会用 RuntimeConfig.workerApiBaseUrl 覆盖此值，
+  // 因此该地址必须指向本 Host 的 worker HTTP 端点。
   if (config.workerApiBaseUrl) {
     env.AGEWORK_WORKER_API_BASE = config.workerApiBaseUrl;
   }

@@ -292,16 +292,6 @@ export class ConfigService implements OnModuleInit {
   }
 
   /**
-   * worker 回连 server 的基地址:显式覆盖(远程部署)> loopback + 端口 + base path。
-   * docker/opensandbox provider 会自行把 loopback 换成 host.docker.internal。
-   */
-  getServerBaseUrl(): string {
-    const override = this.getEnv(EnvKey.SERVER_BASE_URL)?.trim();
-    if (override) return override;
-    return `http://127.0.0.1:${getPort()}${this.getApiBasePath()}`;
-  }
-
-  /**
    * agent event trace 开关与单文件上限：仅控制 raw/agui 大 payload 是否落 JSONL 文件，
    * 不影响 RunEvent 索引记录。默认开启（排查问题需要事后可查），单文件大小由
    * maxFileMb 兜底；显式设为 0/false/no/off 才关闭。

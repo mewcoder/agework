@@ -279,7 +279,7 @@ describe("WorkerHttpTransport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("retries emit on server error (5xx)", async () => {
+  it("retries emit on Runtime Host error (5xx)", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({ ok: false, status: 502 })
@@ -320,7 +320,7 @@ describe("WorkerHttpTransport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects after exhausting emit retries on server error (5xx)", async () => {
+  it("rejects after exhausting emit retries on Runtime Host error (5xx)", async () => {
     vi.useFakeTimers();
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -487,7 +487,7 @@ describe("WorkerHttpTransport", () => {
       await client.pollCommands(); // records epoch 1000 baseline, commandSeq -> 9
       fetchMock.mockClear();
 
-      // server restarted: new epoch, and the stale afterSeq=9 request comes back
+      // Host queue restarted: new epoch, and the stale afterSeq=9 request comes back
       // empty because the new queue starts at seq 1
       fetchMock
         .mockResolvedValueOnce({

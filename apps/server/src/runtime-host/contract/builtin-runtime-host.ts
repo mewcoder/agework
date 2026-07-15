@@ -34,11 +34,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
     const apiBasePath = configService.getApiBasePath();
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
-    const providerConfig = toRuntimeConfig(configService);
-    // provider（native/sandbox）用 RuntimeConfig.serverBaseUrl 覆盖 worker 的
-    // AGEWORK_WORKER_API_BASE env——因此 providerConfig.serverBaseUrl 也必须
-    // 指向 Host 的 worker HTTP 端点,而非 server 的主端口。
-    providerConfig.serverBaseUrl = workerApiBaseUrl;
+    const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
     const capabilities = Object.fromEntries(
       configService.getAllowedRuntimeTypes().map((runtimeType) => [
         runtimeType,

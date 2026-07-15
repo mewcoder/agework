@@ -56,7 +56,7 @@ export class WorkerHttpTransport {
   private readonly token: string;
   private commandSeq = 0;
   private emptyPolls = 0;
-  /** server 侧队列的代次标识，未定义表示还没见过任何 epoch（冷启动）。 */
+  /** Host 侧队列的代次标识，未定义表示还没见过任何 epoch（冷启动）。 */
   private queueEpoch: number | undefined;
   private readonly eventSeqs = new Map<string, number>();
   /**
@@ -449,7 +449,7 @@ export class WorkerHttpTransport {
   }
 
   /**
-   * token 已被 server 判定为不再有效,直接退出进程,不重试、不重连——由容器编排层
+   * token 已被 Runtime Host 判定为不再有效,直接退出进程,不重试、不重连——由容器编排层
    * 决定是否重新拉起。commands 轮询、fetchRunConfig、事件上行三条路径共用同一判定,
    * 避免同一种凭证失效在不同端点上恢复语义不一致。
    * - 410 = token 已被顶替/驱逐(比如被新的 worker 进程接管)。
@@ -463,8 +463,8 @@ export class WorkerHttpTransport {
     if (res.status !== 410 && res.status !== 401) return false;
     workerLog(
       res.status === 401
-        ? "worker token rejected by server, exiting"
-        : "worker token evicted by server, exiting",
+        ? "worker token rejected by runtime host, exiting"
+        : "worker token evicted by runtime host, exiting",
       {
         workerId: this.workerId,
         status: res.status,

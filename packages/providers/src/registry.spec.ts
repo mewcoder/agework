@@ -5,7 +5,7 @@ import type { RuntimeConfig, RuntimeType } from "./types";
 const CONFIG: RuntimeConfig = {
   workerImage: "agework-worker:test",
   runtimeLogHostPath: "/tmp/agework-runtime-logs",
-  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
   native: {
     runtimeEntryPath: "/tmp/worker/index.js",
   },

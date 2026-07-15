@@ -36,10 +36,9 @@ export type NativeProviderConfig = {
 export type RuntimeConfig = {
   workerImage: string;
   runtimeLogHostPath: string;
-  /** worker 回连 server 的地址。默认 127.0.0.1:<port><path>;docker / opensandbox
-   *  provider 会把 127.0.0.1/localhost 换成 host.docker.internal。远程部署经
-   *  AGEWORK_SERVER_BASE_URL 覆盖成真实可达地址,不触发替换。 */
-  serverBaseUrl: string;
+  /** worker 回连所属 Runtime Host 的 HTTP 地址。容器 provider 会把
+   *  127.0.0.1/localhost 换成 host.docker.internal。 */
+  workerApiBaseUrl: string;
   native: NativeProviderConfig;
   openSandbox: OpenSandboxConnectionConfig;
 };

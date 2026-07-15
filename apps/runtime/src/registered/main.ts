@@ -48,7 +48,7 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
   const workerApiBaseUrl = `http://127.0.0.1:${workerPort}/api/v1`;
   const userWorkspaceRoot =
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
-  // 与 server 侧 builtin Host 的约定一致:~/.agework/cli/<agent>/
+  // 与 builtin Host 的约定一致:~/.agework/cli/<agent>/
   const cliInstallDir = join(homedir(), ".agework", "cli");
   // 启动时按类型探测一次真实可用性,register 上报 + Host 能力矩阵共用
   const capabilities = buildCapabilities(
@@ -57,9 +57,9 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
   );
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
-  // providerConfig.serverBaseUrl 设为 Host 的 worker HTTP 端点——
+  // providerConfig.workerApiBaseUrl 指向 Host 的 worker HTTP 端点——
   // provider（native/sandbox）用它设置 worker 的 AGEWORK_WORKER_API_BASE，
-  // 使 worker 数据面对端从 server 切到 Host。
+  // Worker 数据面只连接自己的 Host。
   const hostConfig: RuntimeHostConfig = {
     runtimeLogDir: config.runtimeLogHostPath,
     getUserWorkspace: (username) => {
@@ -75,7 +75,7 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     providerConfig: {
       workerImage: config.workerImage ?? "",
       runtimeLogHostPath: config.runtimeLogHostPath,
-      serverBaseUrl: workerApiBaseUrl,
+      workerApiBaseUrl,
       native: {
         runtimeEntryPath: config.runtimeEntryPath ?? process.argv[1] ?? "",
       },

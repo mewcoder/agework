@@ -19,7 +19,7 @@ const RUNTIME_LOG_MOUNT = "/home/agework/.agework/logs/runtime";
 const CONFIG: RuntimeConfig = {
   workerImage: "agework/runtime:latest",
   runtimeLogHostPath: RUNTIME_LOG_HOST,
-  serverBaseUrl: "http://127.0.0.1:3000/api/v1",
+  workerApiBaseUrl: "http://127.0.0.1:7101/api/v1",
   local: {
     workerEntryPath: "/tmp/worker/index.js",
     tsxCliPath: "/tmp/tsx/cli.mjs",
@@ -129,24 +129,24 @@ describe("DockerRuntimeProvider", () => {
       const runArgs = runArgsOf();
       expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
       expect(runArgs).toContain(
-        "AGEWORK_WORKER_API_BASE=http://host.docker.internal:3000/api/v1"
+        "AGEWORK_WORKER_API_BASE=http://host.docker.internal:7101/api/v1"
       );
     });
 
-    it("leaves a non-loopback serverBaseUrl (remote override) unchanged", async () => {
+    it("leaves a non-loopback workerApiBaseUrl unchanged", async () => {
       mockExecFile.mockImplementation(((...args: any[]) => {
         args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
       }) as any);
 
       const provider = new DockerRuntimeProvider({
         ...CONFIG,
-        serverBaseUrl: "https://api.example.com/api/v1",
+        workerApiBaseUrl: "https://host.example.com/api/v1",
       });
       await provider.start(makeCtx());
 
       const runArgs = runArgsOf();
       expect(runArgs).toContain(
-        "AGEWORK_WORKER_API_BASE=https://api.example.com/api/v1"
+        "AGEWORK_WORKER_API_BASE=https://host.example.com/api/v1"
       );
     });
 

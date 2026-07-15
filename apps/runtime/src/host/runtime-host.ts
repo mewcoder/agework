@@ -523,7 +523,7 @@ export class RuntimeHost implements RuntimeHostContract {
     });
   }
 
-  // ── worker HTTP 端点支持（供 server 侧注册路由时调用） ──────────────
+  // ── worker HTTP 端点支持（仅供本 Host 的 WorkerHttpServer 调用） ────
 
   /** worker 长轮询拉取命令。 */
   pollCommands(
