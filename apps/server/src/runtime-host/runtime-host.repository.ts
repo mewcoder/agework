@@ -188,12 +188,20 @@ export class RuntimeHostRepository {
     });
   }
 
-  /** 判死:online 但心跳早于 cutoff 的行标记 offline,返回条数。 */
-  async markStaleOnlineAsOffline(cutoff: Date): Promise<number> {
-    const { count } = await this.prisma.runtimeHost.updateMany({
+  /** 判死:online 但心跳早于 cutoff 的行标记 offline,返回被判死的 id 列表
+   *  (调用方据此回收内存里的半开隧道连接)。 */
+  async markStaleOnlineAsOffline(cutoff: Date): Promise<string[]> {
+    const stale = await this.prisma.runtimeHost.findMany({
       where: { status: "online", lastHeartbeatAt: { lt: cutoff } },
+      select: { id: true },
+    });
+    if (stale.length === 0) return [];
+    const ids = stale.map((row) => row.id);
+    await this.prisma.runtimeHost.updateMany({
+      // 仍带 stale 守卫:查询到更新之间若有心跳刷新,不误判活着的 runtime。
+      where: { id: { in: ids }, status: "online", lastHeartbeatAt: { lt: cutoff } },
       data: { status: "offline" },
     });
-    return count;
+    return ids;
   }
 }

@@ -266,6 +266,22 @@ describe("HostTunnelHandler", () => {
     expect(code).toBe(4410);
   });
 
+  it("reapConnection terminates the half-open socket and cleans up (not 4410)", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    await register(ws);
+    expect(handler.isConnected("rt-1")).toBe(true);
+
+    handler.reapConnection("rt-1");
+    const [code] = (await once(ws, "close")) as [number];
+    // terminate 是异常关闭(1006),不是 4410——client 据此正常重连而非退出
+    expect(code).not.toBe(4410);
+    await vi.waitFor(() => {
+      expect(handler.isConnected("rt-1")).toBe(false);
+      expect(repository.markOffline).toHaveBeenCalledWith("rt-1");
+    });
+  });
+
   it("destroys upgrade requests for non-tunnel paths", async () => {
     const ws = new WebSocket(`${baseUrl}/api/v1/other`, {
       headers: { authorization: `Bearer ${GOOD_TOKEN}` },

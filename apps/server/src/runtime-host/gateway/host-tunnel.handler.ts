@@ -109,6 +109,17 @@ export class HostTunnelHandler
     socket.close(RUNTIME_TUNNEL_CLOSE_GONE, "runtime deleted");
   }
 
+  /**
+   * 判死回收:强制丢弃心跳超时的半开僵尸连接,让 isConnected() 与 DB 收敛,
+   * 不再把 RPC 发到死 socket 上干等超时。用 terminate 而非 close——半开连接
+   * 的关闭握手可能永远等不到对端回应;terminate 触发 'close' 事件,复用既有
+   * 清理(reject pending + markOffline)。区别于 closeConnection 的 4410 删除
+   * 语义:这里不预删 connections,client 收到异常关闭(1006)后正常重连。
+   */
+  reapConnection(runtimeHostId: string): void {
+    this.connections.get(runtimeHostId)?.terminate();
+  }
+
   /** runtime 是否在线（隧道连接存在）。 */
   isConnected(runtimeHostId: string): boolean {
     return this.connections.has(runtimeHostId);

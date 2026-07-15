@@ -4,18 +4,26 @@ import { HostLivenessWatchdog } from "./host-liveness.watchdog";
 
 describe("HostLivenessWatchdog", () => {
   const repository = {
-    markStaleOnlineAsOffline: vi.fn().mockResolvedValue(0),
+    markStaleOnlineAsOffline: vi.fn().mockResolvedValue([]),
   };
   const configService = {
     getHeartbeatCheckIntervalSeconds: vi.fn().mockReturnValue(10),
     getHeartbeatTimeoutSeconds: vi.fn().mockReturnValue(30),
   } as unknown as ConfigService;
+  const tunnelHandler = {
+    reapConnection: vi.fn(),
+  };
   let watchdog: HostLivenessWatchdog;
 
   beforeEach(() => {
     vi.useFakeTimers();
     repository.markStaleOnlineAsOffline.mockClear();
-    watchdog = new HostLivenessWatchdog(repository as never, configService);
+    tunnelHandler.reapConnection.mockClear();
+    watchdog = new HostLivenessWatchdog(
+      repository as never,
+      configService,
+      tunnelHandler as never
+    );
   });
 
   afterEach(() => {
@@ -33,6 +41,17 @@ describe("HostLivenessWatchdog", () => {
     expect(repository.markStaleOnlineAsOffline).toHaveBeenCalledTimes(1);
     const cutoff = repository.markStaleOnlineAsOffline.mock.calls[0][0] as Date;
     expect(cutoff.getTime()).toBe(now + 10_000 - 30_000);
+  });
+
+  it("reaps the in-memory tunnel connection of each stale runtime", async () => {
+    repository.markStaleOnlineAsOffline.mockResolvedValueOnce(["rt-1", "rt-2"]);
+    watchdog.onApplicationBootstrap();
+
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    expect(tunnelHandler.reapConnection).toHaveBeenCalledWith("rt-1");
+    expect(tunnelHandler.reapConnection).toHaveBeenCalledWith("rt-2");
+    expect(tunnelHandler.reapConnection).toHaveBeenCalledTimes(2);
   });
 
   it("stops sweeping after shutdown", async () => {
