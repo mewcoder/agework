@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { UpstreamMessage } from "@agework/shared/protocol";
-import { WorkerHttpTransport } from "./worker-http";
+import { WorkerHttpTransport, EMIT_QUEUE_MAX } from "./worker-http";
 
 describe("WorkerHttpTransport", () => {
   beforeEach(() => {
@@ -745,6 +745,54 @@ describe("WorkerHttpTransport", () => {
       await vi.runAllTimersAsync();
       await Promise.all([a1, a2, a3]);
       vi.useRealTimers();
+    });
+
+    it("bounds the backlog and evicts oldest intermediate events, keeping terminal run.status", async () => {
+      const mkStatus = () =>
+        ({
+          runId: "run-1",
+          seq: 0,
+          type: "run.status",
+          payload: { status: "finished" },
+          ts: "",
+        }) as unknown as UpstreamMessage;
+
+      // 第一批 POST 永久挂起,期间入队的事件累积 → 触发有界丢弃。
+      let releaseFirst: (() => void) | undefined;
+      const bodies: string[] = [];
+      const fetchMock = vi.fn((_url: string, init: RequestInit) => {
+        bodies.push(init.body as string);
+        if (bodies.length === 1) {
+          return new Promise<Response>((resolve) => {
+            releaseFirst = () => resolve({ ok: true } as Response);
+          });
+        }
+        return Promise.resolve({ ok: true } as Response);
+      });
+      vi.stubGlobal("fetch", fetchMock);
+      const client = new WorkerHttpTransport();
+
+      void client.emit("run-1", mk(1)); // 起第一批(独占),此后 POST 挂起
+      const terminalSettled = client.emit("run-1", mkStatus()); // 终态,必须活到底
+      // 灌入远超上限的中间事件,逼队列有界丢弃
+      for (let i = 0; i < EMIT_QUEUE_MAX + 500; i++) {
+        void client.emit("run-1", mk(100 + i));
+      }
+
+      releaseFirst?.();
+
+      // 第二批发出后收集其 seq;队列被 splice 全量取走,故第二批 = 存活的积压
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await terminalSettled;
+
+      const secondBatch = JSON.parse(bodies[1]!) as Array<{
+        meta: { seq: number };
+      }>;
+      // 积压被削到上限以内(允许等于上限)
+      expect(secondBatch.length).toBeLessThanOrEqual(EMIT_QUEUE_MAX);
+      // 终态 run.status(seq 2)从未被丢弃,仍在存活积压中
+      const hasTerminal = secondBatch.some((m) => m.meta.seq === 2);
+      expect(hasTerminal).toBe(true);
     });
   });
 });

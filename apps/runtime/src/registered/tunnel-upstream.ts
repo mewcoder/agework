@@ -31,13 +31,16 @@ export class TunnelUpstream implements RuntimeHostUpstream {
   private epoch?: number;
   private seq = 0;
   private buffer: BufferedEntry[] = [];
+  /** 已 ACK 前缀边界:buffer[0, head) 逻辑上已移除。ACK 只推进 head 而不重建数组,
+   *  高频 ACK 下把每次 O(n) 的 filter 降为 O(移除数);head 过大时一次性压实回收。 */
+  private head = 0;
 
   /** 注册完成后接线:绑定新连接与会话 epoch,并补发全部未 ACK 通知。 */
   setSession(ws: WebSocket, epoch: number | undefined): void {
     this.ws = ws;
     this.epoch = epoch;
-    for (const entry of this.buffer) {
-      this.write(entry);
+    for (let i = this.head; i < this.buffer.length; i++) {
+      this.write(this.buffer[i]!);
     }
   }
 
@@ -46,14 +49,22 @@ export class TunnelUpstream implements RuntimeHostUpstream {
     this.ws = undefined;
   }
 
-  /** server 的累计 ACK 水位:≤seq 的通知已被接收,丢弃对应缓冲。 */
+  /** server 的累计 ACK 水位:≤seq 的通知已被接收,推进 head 越过对应前缀。
+   *  buffer 按 seq 严格升序(++seq 追加),故 ≤seq 的一定是最旧前缀。 */
   onAck(seq: number): void {
-    this.buffer = this.buffer.filter((entry) => entry.seq > seq);
+    while (this.head < this.buffer.length && this.buffer[this.head]!.seq <= seq) {
+      this.head++;
+    }
+    // head 累积过大时压实,避免已 ACK 前缀长期占内存。
+    if (this.head > 1024 && this.head * 2 > this.buffer.length) {
+      this.buffer = this.buffer.slice(this.head);
+      this.head = 0;
+    }
   }
 
   /** 测试观测:当前未 ACK 的缓冲数量。 */
   bufferedCount(): number {
-    return this.buffer.length;
+    return this.buffer.length - this.head;
   }
 
   async emit(
@@ -98,11 +109,18 @@ export class TunnelUpstream implements RuntimeHostUpstream {
   }
 
   private trimBuffer(): void {
-    while (this.buffer.length > MAX_BUFFERED) {
-      const idx = this.buffer.findIndex(isDroppable);
+    while (this.buffer.length - this.head > MAX_BUFFERED) {
+      // 只在未 ACK 的有效区间 [head, end) 里找最旧的可丢弃中间事件。
+      let idx = -1;
+      for (let i = this.head; i < this.buffer.length; i++) {
+        if (isDroppable(this.buffer[i]!)) {
+          idx = i;
+          break;
+        }
+      }
       if (idx < 0) {
         // 全是终态事实还塞爆了(异常场景):只能丢最旧的,保住最新真相
-        this.buffer.shift();
+        this.head++;
         continue;
       }
       this.buffer.splice(idx, 1);

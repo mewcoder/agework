@@ -2,6 +2,7 @@ import type {
   RunConfig,
   CommandPayload,
   RunChannelMessage,
+  RunStatusPayload,
   UpstreamMessage,
   UpstreamMessageInput,
   WorkerCommandRpcRequest,
@@ -22,7 +23,7 @@ import {
   isWorkerRegisterResponse,
   isWorkerRunConfigResponse,
 } from "@agework/shared/protocol/wire";
-import { AGEWORK_VERSION } from "@agework/shared";
+import { AGEWORK_VERSION, isTerminalRunStatus } from "@agework/shared";
 import { errorDetails, workerLog } from "../logging/worker-log.js";
 
 /**
@@ -42,12 +43,24 @@ const RUN_CONFIG_TIMEOUT_MS = 10_000;
 const REGISTER_TIMEOUT_MS = 10_000;
 /** long-poll 客户端超时 = 服务端等待窗口 + 余量,保证正常挂起不被误伤。 */
 const POLL_TIMEOUT_MARGIN_MS = 10_000;
+/**
+ * 单 run 上行待发队列上限。POST 卡住(慢 / 重试最长 ~17s)期间新事件会在此累积;
+ * 超限即丢最旧的可丢弃中间事件(agui 流可断档,由 runner raw jsonl 事后补查),
+ * 保留终态 run.status——防止常驻 worker 的堆随某个卡住的 run 无界膨胀。
+ * 与 Host 侧 TunnelUpstream 的有界丢弃策略同构(保终态、丢最旧中间事件)。
+ */
+export const EMIT_QUEUE_MAX = 2000;
 
 type EmitWaiter = { resolve: () => void; reject: (err: unknown) => void };
-/** 单个 runId 的上行发送状态:待发队列 + 对应 waiter + 是否已有 flush 循环在跑。 */
+/** 单条待发上行事件:线格式 + 是否终态(终态永不因超限被丢) + 对应 waiter。 */
+type QueuedEvent = {
+  wire: unknown;
+  terminal: boolean;
+  waiter: EmitWaiter;
+};
+/** 单个 runId 的上行发送状态:待发队列 + 是否已有 flush 循环在跑。 */
 type EmitState = {
-  queue: unknown[];
-  waiters: EmitWaiter[];
+  queue: QueuedEvent[];
   loop?: Promise<void>;
 };
 export class WorkerHttpTransport {
@@ -66,6 +79,8 @@ export class WorkerHttpTransport {
    * 原来的顺序保证(服务端按 seq 去重不会丢早序事件)。
    */
   private readonly emitStates = new Map<string, EmitState>();
+  /** 累计因队列超限被丢弃的中间事件数(仅诊断,节流打日志用)。 */
+  private droppedEmitCount = 0;
 
   constructor() {
     // 数据面对端是 Host 的 worker HTTP(由 provider 注入),server 上没有
@@ -311,16 +326,58 @@ export class WorkerHttpTransport {
     }
     let state = this.emitStates.get(runId);
     if (!state) {
-      state = { queue: [], waiters: [] };
+      state = { queue: [] };
       this.emitStates.set(runId, state);
     }
-    state.queue.push(encodeUpstreamMessageToWire(message));
+    const terminal =
+      message.type === "run.status" &&
+      isTerminalRunStatus((message.payload as RunStatusPayload).status);
     const settled = new Promise<void>((resolve, reject) => {
-      state!.waiters.push({ resolve, reject });
+      state!.queue.push({
+        wire: encodeUpstreamMessageToWire(message),
+        terminal,
+        waiter: { resolve, reject },
+      });
     });
+    this.enforceQueueCap(runId, state);
     // flush 循环自驱动;emit 返回的是本条事件所在批次的结果 promise。
     state.loop ??= this.flushLoop(runId);
     return settled;
+  }
+
+  /**
+   * 队列超上限时丢最旧的可丢弃中间事件(保留终态 run.status),被丢事件的 waiter
+   * 按已尽力投递 resolve——负载削峰而非报错。全是终态还超限的异常场景不丢(终态必达)。
+   */
+  private enforceQueueCap(runId: string, state: EmitState): void {
+    let dropped = 0;
+    while (state.queue.length > EMIT_QUEUE_MAX) {
+      const idx = state.queue.findIndex((entry) => !entry.terminal);
+      if (idx < 0) break; // 全是终态事实:允许暂时超限,绝不丢终态
+      const [entry] = state.queue.splice(idx, 1);
+      entry.waiter.resolve();
+      dropped++;
+    }
+    if (dropped === 0) return;
+    this.droppedEmitCount += dropped;
+    // 节流:首次及每累计 1000 条打一次 warn,避免持续过载时刷屏。
+    if (
+      this.droppedEmitCount - dropped < 1 ||
+      Math.floor(this.droppedEmitCount / 1000) >
+        Math.floor((this.droppedEmitCount - dropped) / 1000)
+    ) {
+      workerLog(
+        "emit queue overflow, dropping oldest intermediate events",
+        {
+          runId,
+          workerId: this.workerId,
+          droppedThisTime: dropped,
+          droppedTotal: this.droppedEmitCount,
+          queueMax: EMIT_QUEUE_MAX,
+        },
+        "warn"
+      );
+    }
   }
 
   /**
@@ -335,13 +392,13 @@ export class WorkerHttpTransport {
         this.emitStates.delete(runId);
         return;
       }
-      const batch = state.queue.splice(0, state.queue.length);
-      const waiters = state.waiters.splice(0, state.waiters.length);
+      const entries = state.queue.splice(0, state.queue.length);
+      const batch = entries.map((entry) => entry.wire);
       try {
         await this.postBatch(runId, batch);
-        for (const waiter of waiters) waiter.resolve();
+        for (const entry of entries) entry.waiter.resolve();
       } catch (err) {
-        for (const waiter of waiters) waiter.reject(err);
+        for (const entry of entries) entry.waiter.reject(err);
       }
     }
   }

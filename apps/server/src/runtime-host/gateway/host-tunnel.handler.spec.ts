@@ -408,6 +408,54 @@ describe("HostTunnelHandler", () => {
       expect(ack.params.seq).toBe(3);
     });
 
+    it("acks immediately and processes runs in parallel (慢 run 不队头阻塞)", async () => {
+      // run-A 的处理挂起不 resolve;run-B 的处理立即完成。验证:两条都被立即
+      // ACK(ACK 与处理解耦),且 run-B 在 run-A 仍挂起时就被处理(per-run 并行)。
+      let releaseA: (() => void) | undefined;
+      const processedB: string[] = [];
+      handler.setHostUpstreamPort({
+        onHostUpstream: (_runtimeHostId, notification) => {
+          if (notification.runId === "run-A") {
+            return new Promise<void>((resolve) => {
+              releaseA = resolve;
+            });
+          }
+          processedB.push(notification.runId);
+          return undefined;
+        },
+      });
+      const ws = connect();
+      await once(ws, "open");
+      const epoch = await register(ws);
+      // 持久监听收集所有 ACK(两个 ACK 几乎同时到,once 会丢第二条)
+      const ackedSeqs: number[] = [];
+      ws.on("message", (data: unknown) => {
+        const msg = JSON.parse(String(data)) as {
+          method?: string;
+          params?: { seq?: number };
+        };
+        if (
+          msg.method === "host.upstreamAck" &&
+          msg.params?.seq !== undefined
+        ) {
+          ackedSeqs.push(msg.params.seq);
+        }
+      });
+
+      sendUpstream(ws, 1, epoch, "run-A");
+      sendUpstream(ws, 2, epoch, "run-B");
+
+      // 累计 ACK 水位推进到 2(合流后可能只回一条 seq=2),即使 run-A 处理仍挂起
+      await vi.waitFor(() => {
+        expect(ackedSeqs.at(-1)).toBe(2);
+      });
+      // run-A 仍挂起(releaseA 未调用),run-B 已在其独立链上被处理完
+      await vi.waitFor(() => {
+        expect(processedB).toEqual(["run-B"]);
+      });
+      releaseA?.();
+    });
+
     it("drops stale-epoch envelopes without acking", async () => {
       const received: unknown[] = [];
       handler.setHostUpstreamPort({
