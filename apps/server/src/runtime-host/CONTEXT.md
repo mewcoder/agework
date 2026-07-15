@@ -8,6 +8,10 @@ worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由
 和 registered `Launcher` 已删除。worker 生命周期由 `RuntimeHost` 内部按 `runtimeType`
 选择 provider。
 
+Host 隧道与 Host↔Worker HTTP 数据面各自声明独立的线协议版本，不拿应用版本
+`AGEWORK_VERSION` 充当兼容性判断。当前是开发态的一次性协议升级，不保留旧协议
+兼容分支；协议版本缺失或不一致时，必须在注册绑定/消耗启动令牌之前拒绝。
+
 ## Language
 
 **Runtime（执行环境形态）**:

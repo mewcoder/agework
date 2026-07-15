@@ -1,5 +1,7 @@
 import { WebSocket, type RawData } from "ws";
 import {
+  RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+  RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
   RUNTIME_TUNNEL_CLOSE_GONE,
   type HostTunnelRegisterMessage,
   type HostTunnelServerMessage,
@@ -77,6 +79,8 @@ export interface TunnelClientOptions {
   tunnelUpstream?: TunnelUpstream;
   /** runtime 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
   onGone: () => void;
+  /** 协议明确不兼容(收到/触发 4411):调用方应退出并升级,不再重连。 */
+  onIncompatible?: (reason: string) => void;
   /** 重连退避起始值,仅测试用;默认 1s,翻倍封顶 30s。 */
   reconnectBaseDelayMs?: number;
 }
@@ -125,6 +129,7 @@ export class TunnelClient {
       const envConfig = detectEnvConfig();
       const register: HostTunnelRegisterMessage = {
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         capabilities:
           this.options.capabilities ??
           buildCapabilities(this.options.config.runtimeTypes, () => ({
@@ -176,6 +181,17 @@ export class TunnelClient {
 
     const message = parsed as HostTunnelServerMessage;
     if (message.type === "registered") {
+      if (message.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
+        log(
+          `server tunnel protocol ${String(message.protocolVersion)} is incompatible with host protocol ${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`,
+          "error"
+        );
+        ws.close(
+          RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
+          "incompatible tunnel protocol"
+        );
+        return;
+      }
       log(
         `registered as runtime ${message.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
       );
@@ -281,9 +297,16 @@ export class TunnelClient {
       this.options.onGone();
       return;
     }
+    if (code === RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE) {
+      const reason = `tunnel protocol incompatible (code ${RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE}); upgrade server and runtime together`;
+      log(reason, "error");
+      this.stopped = true;
+      this.options.onIncompatible?.(reason);
+      return;
+    }
     const ceiling = this.reconnectDelayMs;
     this.reconnectDelayMs = Math.min(this.reconnectDelayMs * 2, 30_000);
-    // 加抖动:server 重启后大量 manager 不要锁步同时重连(惊群),
+    // 加抖动:Server 重启后大量 Host 不要锁步同时重连(惊群),
     // 在当前退避档的 50%~100% 之间随机取一个延迟。
     const delay = Math.round(ceiling / 2 + Math.random() * (ceiling / 2));
     log(`tunnel closed (code ${code}), reconnecting in ${delay}ms`);

@@ -51,6 +51,7 @@ import {
 import type { CodexAppServerTraceSink } from "../base/app-server/types";
 import {
   ApprovalBridge,
+  BASE_COMMAND_APPROVAL_DECISIONS,
   classifyApprovalMethod,
   type ApprovalInterruptInfo,
   type PendingCodexRequest,
@@ -65,19 +66,6 @@ import { pickSafeEnv } from "../../common/safe-env";
 const logger = new Logger("CodexAppServerAdapter");
 
 const PROVIDER_NAME = "_agework";
-
-/**
- * Schema base decision set for command/file approvals — the string variants
- * of the generated `CommandExecutionApprovalDecision` / `FileChangeApprovalDecision`.
- * Object variants (execpolicy / network-policy amendments) are only allowed
- * when the server explicitly listed them in `availableDecisions`.
- */
-const BASE_APPROVAL_DECISIONS = [
-  "accept",
-  "acceptForSession",
-  "decline",
-  "cancel",
-] as const;
 
 // ── Env-driven config (§12 of migration doc) ────────────────────────────────
 
@@ -678,7 +666,7 @@ export class CodexAppServerAgentAdapter extends AbstractAgent {
     decision: unknown,
   ): boolean {
     const allowed: readonly string[] =
-      pending.availableDecisions ?? BASE_APPROVAL_DECISIONS;
+      pending.availableDecisions ?? BASE_COMMAND_APPROVAL_DECISIONS;
     if (typeof decision === "string") return allowed.includes(decision);
     if (decision && typeof decision === "object" && !Array.isArray(decision)) {
       const keys = Object.keys(decision as Record<string, unknown>);

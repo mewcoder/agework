@@ -1,5 +1,11 @@
-import { realpathSync } from "node:fs";
+import {
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import {
   CodexAppServerProcess,
@@ -186,25 +192,26 @@ describe("CodexAppServerProcess", () => {
   });
 
   it("forceKill() sends SIGKILL to the child process", async () => {
-    // Spawn a long-running node process as a stand-in for codex app-server.
-    // We use a node one-liner that stays alive until killed.
+    // CodexAppServerProcess always appends `app-server`; put a long-running
+    // Node script at that path so the child cannot exit before forceKill().
+    const cwd = mkdtempSync(join(tmpdir(), "agework-codex-process-"));
+    writeFileSync(join(cwd, "app-server"), "setInterval(() => {}, 1000);\n");
     const proc = new CodexAppServerProcess({
       codexPath: NODE,
-      cwd: process.cwd(),
+      cwd,
       env: {},
     });
-    proc.start();
-    expect(proc.pid).toBeDefined();
+    try {
+      proc.start();
+      expect(proc.pid).toBeDefined();
 
-    // Give the process a moment to start
-    await new Promise((r) => setTimeout(r, 50));
-
-    // forceKill should cause the process to exit
-    proc.forceKill();
-    const exit = await proc.exit;
-    expect(proc.hasExited).toBe(true);
-    // SIGKILL results in signal "SIGKILL" and null exit code
-    expect(exit.signal).toBe("SIGKILL");
+      proc.forceKill();
+      const exit = await proc.exit;
+      expect(proc.hasExited).toBe(true);
+      expect(exit).toEqual({ code: null, signal: "SIGKILL" });
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   it("forceKill() is a no-op when process has already exited", async () => {

@@ -363,6 +363,12 @@ describe("CodexAppServerAgentAdapter", () => {
     // Respond to turn/interrupt so interruptRun can proceed
     const interruptReq = parseSent(transport).find((m) => m.method === "turn/interrupt")!;
     transport.pushLine(JSON.stringify({ id: interruptReq.id, result: {} }));
+    transport.pushLine(
+      JSON.stringify({
+        method: "turn/completed",
+        params: { turn: { id: "turn-1", status: "interrupted" } },
+      }),
+    );
 
     // Check that turn/interrupt was sent
     const interruptMsg = parseSent(transport).find(

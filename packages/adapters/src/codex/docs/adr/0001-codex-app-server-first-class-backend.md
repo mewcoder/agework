@@ -13,7 +13,7 @@ Codex 接入原走 `@openai/codex-sdk`。核实其 `dist/index.d.ts` 全部公�
 
 1. Codex First-class 后端迁到 `codex app-server`(newline-delimited JSON over stdio 子进程),assistant-ui/AG-UI 链路不变——app-server 只投影为 AG-UI 事件,不进 Server 控制面、不暴露浏览器。
 2. **第一版一个 Codex Runner 一个 app-server 子进程**。与现有 runner 隔离模型一致(等同 Claude `query()` 每 run spawn `claude`),Worker 级共享 app-server 明确留作未来 ADR。
-3. **版本源真相 = 锁 Managed + 握手 gate + capability 降级**:`generate-ts` 只对 Managed runtime 锁定的 codex 版本(当前 0.144.1)生成并提交入库,CI 加 schema drift 检查;`initialize` 记录运行期 `codexVersion`,与生成版本不一致时已知兼容按 capability 降级、不兼容 `RUN_ERROR(version_mismatch)`;Registered/用户自带 codex 为 **best-effort,不阻塞**。理由:app-server 与 generate-ts 均 `[experimental]`,而运行期二进制由 runtime 环境提供、可能漂移,不能只靠"构建期锁一个版本"假设运行期一致。
+3. **版本源真相 = 锁 Managed + 握手 gate + capability 降级**:`@openai/codex-sdk` 精确锁定 Managed runtime 的 codex 版本(当前 0.144.1),构建/类型检查按该版本自动生成被忽略的 TypeScript schema,避免提交约 600 个派生文件;`initialize` 记录运行期 `codexVersion`,与生成版本不一致时已知兼容按 capability 降级、不兼容 `RUN_ERROR(version_mismatch)`;Registered/用户自带 codex 为 **best-effort,不阻塞**。理由:app-server 与 generate-ts 均 `[experimental]`,而运行期二进制由 runtime 环境提供、可能漂移,不能只靠"构建期锁一个版本"假设运行期一致。
 4. 旧 SDK adapter 保留为回退(factory + `AGEWORK_CODEX_BACKEND=sdk|app-server` env 切换),app-server 为默认 backend。SDK 删除留待稳定后单独 PR。
 5. backend 选择经 `packages/adapters/src/codex/factory.ts`,上层 worker/runner 不知具体 backend。
 

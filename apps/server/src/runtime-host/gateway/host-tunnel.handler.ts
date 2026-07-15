@@ -10,6 +10,8 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
 import {
+  RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+  RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
   RUNTIME_TUNNEL_CLOSE_GONE,
   normalizeRuntimeCapabilities,
   type HostTunnelClientMessage,
@@ -305,6 +307,16 @@ export class HostTunnelHandler
     const message = parsed as HostTunnelClientMessage;
     switch (message.type) {
       case "register": {
+        if (message.protocolVersion !== RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION) {
+          this.logger.warn(
+            `runtime ${runtimeHostId} tunnel protocol mismatch: host=${String(message.protocolVersion)} server=${RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION}`
+          );
+          ws.close(
+            RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
+            "incompatible tunnel protocol"
+          );
+          return;
+        }
         const capabilities = normalizeRuntimeCapabilities(message.capabilities);
         if (Object.keys(capabilities).length === 0) {
           this.logger.warn(
@@ -337,6 +349,7 @@ export class HostTunnelHandler
           type: "registered",
           runtimeHostId,
           heartbeatIntervalSeconds: this.heartbeatIntervalSeconds(),
+          protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
           // Phase 2: 每次 register 递增会话 epoch,Host 盖在上行信封里,
           // 被顶掉的旧连接残留消息按 epoch 丢弃(防脑裂)。
           epoch: this.nextEpoch(runtimeHostId),

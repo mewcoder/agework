@@ -8,8 +8,9 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "generate:codex-types": "node scripts/generate-codex-types.mjs",
+    "typecheck": "pnpm generate:codex-types && tsc --noEmit",
+    "test": "pnpm generate:codex-types && vitest run"
   },
   "dependencies": {
     "@ag-ui/client": "catalog:",
@@ -18,7 +19,7 @@
     "@agework/shared": "workspace:*",
     "@anthropic-ai/claude-agent-sdk": "^0.3.207",
     "@nestjs/common": "^11.0.1",
-    "@openai/codex-sdk": "^0.144.1",
+    "@openai/codex-sdk": "0.144.1",
     "rxjs": "7.8.1",
     "zod": "^4.4.3"
   },

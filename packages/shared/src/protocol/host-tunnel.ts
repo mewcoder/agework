@@ -28,24 +28,26 @@ import type { RuntimeCapabilities } from "./runtime-capabilities";
 import type { RuntimeEnvConfig } from "../common";
 
 /**
- * Registered Runtime 控制隧道协议(agework-runtime/manager ⇄ server/runtime-gateway)。
+ * Registered Runtime 控制隧道协议(Runtime Host ⇄ Server runtime gateway)。
  * 出站 WS 连接,runtime 配对 token 鉴权(HTTP upgrade 时经 Authorization header 携带);
  * 与 Host↔worker 的数据面(worker-http,startToken 鉴权)完全独立。
  */
 
 export type { RuntimeCapabilities } from "./runtime-capabilities";
 
-/** manager → server:注册(隧道建连后第一条消息)。 */
+/** Host → Server:注册(隧道建连后第一条消息)。 */
 export interface HostTunnelRegisterMessage {
   type: "register";
   capabilities: RuntimeCapabilities;
-  /** manager 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
+  /** 控制隧道线协议版本。缺失或不匹配都拒绝注册。 */
+  protocolVersion: number;
+  /** Host 产物版本(来自 bundled `AGEWORK_VERSION`),Server 用于握手比对告警。 */
   version?: string;
-  /** manager 启动时检测本机 agent CLI 的结果（路径/版本/认证状态）。 */
+  /** Host 启动时检测本机 agent CLI 的结果（路径/版本/认证状态）。 */
   envConfig?: RuntimeEnvConfig;
 }
 
-/** manager → server:心跳。 */
+/** Host → Server:心跳。 */
 export interface HostTunnelHeartbeatMessage {
   type: "heartbeat";
 }
@@ -54,11 +56,13 @@ export type HostTunnelClientMessage =
   | HostTunnelRegisterMessage
   | HostTunnelHeartbeatMessage;
 
-/** server → manager:注册成功回执,带心跳节奏。 */
+/** Server → Host:注册成功回执,带心跳节奏。 */
 export interface HostTunnelRegisteredMessage {
   type: "registered";
   runtimeHostId: string;
   heartbeatIntervalSeconds: number;
+  /** server 的控制隧道线协议版本。缺失或不匹配都视为不兼容。 */
+  protocolVersion: number;
   /** Phase 2: 隧道会话 epoch,每次 register 递增。Host 把它盖在所有
    *  host.upstream 信封上,server 丢弃非当前 epoch 的消息(防脑裂:
    *  被顶掉的旧连接残留消息不得混入新会话)。builtin(进程内)无隧道,不使用。 */

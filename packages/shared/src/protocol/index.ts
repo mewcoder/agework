@@ -233,6 +233,15 @@ export type {
   HostListWorkersRpcResult,
 } from "./host-tunnel";
 
-/** 隧道 WS 关闭码:runtime 已被删除(撤 token),manager 收到后应退出而不是重连。
+/** 隧道 WS 关闭码:Runtime Host 已被删除(撤 token),Host 收到后应退出而不是重连。
  *  (运行时值必须内联在本入口文件,原因见 common/index.ts 的 generateId 注释。) */
 export const RUNTIME_TUNNEL_CLOSE_GONE = 4410;
+
+/** RuntimeHost 控制隧道线协议版本。独立于 AGEWORK_VERSION，应用版本变化不等于协议破坏。 */
+export const RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION = 1;
+
+/** Host ↔ Worker HTTP 数据面线协议版本。 */
+export const RUNTIME_WORKER_HTTP_PROTOCOL_VERSION = 1;
+
+/** 隧道双方明确声明了不兼容的协议版本；Host 应停止重连，等待升级。 */
+export const RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE = 4411;

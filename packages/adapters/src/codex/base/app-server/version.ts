@@ -7,11 +7,10 @@
  * by the server during `initialize` (【决策1】 version gate).
  *
  * When upgrading codex:
- * 1. Update the codex binary.
- * 2. Re-run `codex app-server generate-ts --out packages/adapters/src/codex/base/app-server/generated`.
- * 3. Update this constant to match the new version.
- * 4. Review the diff of generated types.
- * 5. Run fixtures + smoke test.
+ * 1. Update the exact `@openai/codex-sdk` dependency.
+ * 2. Update this constant to match the new version.
+ * 3. Run `pnpm --filter @agework/adapters generate:codex-types`.
+ * 4. Run fixtures + smoke test.
  */
 
 /** The codex version that the generated types in `generated/` were produced from. */

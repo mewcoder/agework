@@ -8,6 +8,7 @@ import type {
   WorkerRegisterRequest,
 } from "@agework/shared/protocol";
 import {
+  RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
   WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
 } from "@agework/shared/protocol";
@@ -218,7 +219,7 @@ export class WorkerHttpTransport {
 
   /**
    * 进入命令轮询循环前的注册握手:带上 launch 时下发的 startToken 证明自己是
-   * server 期望的那个进程/容器,server 收到后才把该 worker 判定为 running。
+   * Host 期望的那个进程/容器,Host 收到后才把该 worker 判定为 running。
    * 重试/兜底退出由调用方（worker.ts runWorker）负责。
    */
   async register(): Promise<void> {
@@ -226,6 +227,7 @@ export class WorkerHttpTransport {
     const body: WorkerRegisterRequest = {
       startToken: process.env.AGEWORK_WORKER_START_TOKEN ?? "",
       pid: process.pid,
+      protocolVersion: RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
       version: AGEWORK_VERSION,
     };
     const res = await fetchWithTimeout(

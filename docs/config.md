@@ -34,7 +34,7 @@ AgeWork 配置按边界分为四类：
 | `AGEWORK_BODY_LIMIT`           | `50mb`                               | 保留 ENV | API 请求体大小上限。                                                                               |
 | `AGEWORK_LOG_LEVEL`            | dev: `debug`；prod: `error,warn,log` | 保留 ENV | 可选 `debug`、`verbose`、`warn`、`error`。                                                         |
 | `AGEWORK_DATA_DIR`             | `~/.agework`                         | 保留 ENV | AgeWork 本机数据根目录。                                                                           |
-| `AGEWORK_PRIVATE_DATABASE_URL` | `file:./dev.db`                      | 保留 ENV | Prisma 数据库连接。开发默认 SQLite；生产可切 PostgreSQL。                                          |
+| `AGEWORK_PRIVATE_DATABASE_URL` | `file:./dev.db`                      | 保留 ENV | Prisma 数据库连接。当前仅支持 SQLite；项目仍处于开发态。                                           |
 | `AGEWORK_PRIVATE_JWT_SECRET`   | init 写入                            | 保留 ENV | JWT 签名密钥，由初始化流程生成并写入 `.env`；正常不需要手动配置。生产环境缺失会启动失败。          |
 | `AGEWORK_DEV_AUTH_DISABLED`    | `false`                              | 保留 ENV | 仅在 `NODE_ENV` 为空或 `development` 时有效。为 `true` 时使用真实 admin 超级管理员并跳过登录验证。 |
 

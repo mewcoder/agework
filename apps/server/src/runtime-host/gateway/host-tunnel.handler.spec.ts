@@ -6,6 +6,10 @@ import { WebSocket } from "ws";
 import type { ConfigService } from "../../config/config.service";
 import type { HttpAdapterHost } from "@nestjs/core";
 import { HostTunnelHandler } from "./host-tunnel.handler";
+import {
+  RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+  RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE,
+} from "@agework/shared/protocol";
 
 const GOOD_TOKEN = "good-token";
 const GOOD_HASH = createHash("sha256").update(GOOD_TOKEN).digest("hex");
@@ -85,6 +89,7 @@ describe("HostTunnelHandler", () => {
     ws.send(
       JSON.stringify({
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -100,6 +105,7 @@ describe("HostTunnelHandler", () => {
     ws.send(
       JSON.stringify({
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -109,6 +115,7 @@ describe("HostTunnelHandler", () => {
       type: "registered",
       runtimeHostId: "rt-1",
       heartbeatIntervalSeconds: 10,
+      protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
       epoch: 1,
     });
     expect(repository.markRegistered).toHaveBeenCalledWith(
@@ -123,12 +130,50 @@ describe("HostTunnelHandler", () => {
     );
   });
 
+  it("rejects a register without protocolVersion before binding the runtime", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    ws.send(
+      JSON.stringify({
+        type: "register",
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      })
+    );
+
+    const [code] = (await once(ws, "close")) as [number];
+    expect(code).toBe(RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE);
+    expect(handler.isConnected("rt-1")).toBe(false);
+    expect(repository.markRegistered).not.toHaveBeenCalled();
+  });
+
+  it("rejects an explicitly incompatible protocol before binding the runtime", async () => {
+    const ws = connect();
+    await once(ws, "open");
+    ws.send(
+      JSON.stringify({
+        type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION + 1,
+        capabilities: {
+          docker: { available: true, scopes: ["user", "workspace"] },
+        },
+      })
+    );
+
+    const [code] = (await once(ws, "close")) as [number];
+    expect(code).toBe(RUNTIME_TUNNEL_CLOSE_INCOMPATIBLE);
+    expect(handler.isConnected("rt-1")).toBe(false);
+    expect(repository.markRegistered).not.toHaveBeenCalled();
+  });
+
   it("rejects the removed single-runtime registration shape", async () => {
     const ws = connect();
     await once(ws, "open");
     ws.send(
       JSON.stringify({
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         runtimeType: "docker",
         capabilities: { scopes: ["user", "workspace"] },
       })
@@ -145,6 +190,7 @@ describe("HostTunnelHandler", () => {
     first.send(
       JSON.stringify({
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },
@@ -158,6 +204,7 @@ describe("HostTunnelHandler", () => {
     second.send(
       JSON.stringify({
         type: "register",
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },

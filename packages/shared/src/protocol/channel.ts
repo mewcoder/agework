@@ -276,6 +276,8 @@ export interface RunExecutionHandle {
 export type WorkerRegisterRequest = {
   startToken: string;
   pid?: number;
-  /** worker 产物版本(来自 bundled `AGEWORK_VERSION`),server 用于握手比对告警。 */
+  /** Host ↔ Worker HTTP 线协议版本。缺失或不匹配都拒绝注册。 */
+  protocolVersion: number;
+  /** Worker 产物版本(来自 bundled `AGEWORK_VERSION`),Host 用于握手比对告警。 */
   version?: string;
 };

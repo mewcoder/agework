@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { once } from "node:events";
 import { WebSocketServer, type WebSocket, type RawData } from "ws";
-import { RUNTIME_TUNNEL_CLOSE_GONE } from "@agework/shared/protocol";
+import {
+  RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
+  RUNTIME_TUNNEL_CLOSE_GONE,
+} from "@agework/shared/protocol";
 import { TunnelClient } from "./tunnel-client.js";
 import type { RegisteredRuntimeConfig } from "./config.js";
 
@@ -64,7 +67,7 @@ describe("TunnelClient", () => {
     wss.close();
   });
 
-  function makeClient(onGone = vi.fn()) {
+  function makeClient(onGone = vi.fn(), onIncompatible = vi.fn()) {
     const config: RegisteredRuntimeConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
@@ -84,9 +87,10 @@ describe("TunnelClient", () => {
       config,
       hostContract: hostContract as never,
       onGone,
+      onIncompatible,
       reconnectBaseDelayMs: 20,
     });
-    return { client, onGone, hostContract };
+    return { client, onGone, onIncompatible, hostContract };
   }
 
   it("connects with the pairing token, registers, then heartbeats at the given interval", async () => {
@@ -98,6 +102,7 @@ describe("TunnelClient", () => {
 
     await expect(connections[0].nextMessage()).resolves.toEqual({
       type: "register",
+      protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
       capabilities: {
         docker: {
           available: true,
@@ -113,11 +118,51 @@ describe("TunnelClient", () => {
         type: "registered",
         runtimeHostId: "rt-1",
         heartbeatIntervalSeconds: 0.05,
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
       })
     );
     await expect(connections[0].nextMessage()).resolves.toEqual({
       type: "heartbeat",
     });
+  });
+
+  it("stops reconnecting when the server declares an incompatible protocol", async () => {
+    const { onIncompatible } = makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    await connections[0].nextMessage();
+
+    connections[0].ws.send(
+      JSON.stringify({
+        type: "registered",
+        runtimeHostId: "rt-1",
+        heartbeatIntervalSeconds: 1,
+        protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION + 1,
+      })
+    );
+
+    await vi.waitFor(() => expect(onIncompatible).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(connections).toHaveLength(1);
+  });
+
+  it("rejects a server response without a protocol version", async () => {
+    const { onIncompatible } = makeClient();
+    client!.start();
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    await connections[0].nextMessage();
+
+    connections[0].ws.send(
+      JSON.stringify({
+        type: "registered",
+        runtimeHostId: "rt-1",
+        heartbeatIntervalSeconds: 1,
+      })
+    );
+
+    await vi.waitFor(() => expect(onIncompatible).toHaveBeenCalledOnce());
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(connections).toHaveLength(1);
   });
 
   it("exits via onGone on 4410 and does not reconnect", async () => {

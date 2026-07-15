@@ -87,6 +87,17 @@ export type ApprovalKind =
   | "permission";
 
 /**
+ * Schema base decision set for command approvals. Object variants are only
+ * accepted when the app-server explicitly lists them in availableDecisions.
+ */
+export const BASE_COMMAND_APPROVAL_DECISIONS = [
+  "accept",
+  "acceptForSession",
+  "decline",
+  "cancel",
+] as const;
+
+/**
  * Classify a server request method into an approval kind.
  */
 export function classifyApprovalMethod(method: string): ApprovalKind | null {
@@ -341,7 +352,9 @@ export class ApprovalBridge {
       if (params.cwd) metadata.cwd = params.cwd;
       if (params.reason) metadata.reason = params.reason;
       if (params.networkApprovalContext) metadata.networkApprovalContext = params.networkApprovalContext;
-      if (request.availableDecisions) metadata.availableDecisions = request.availableDecisions;
+      metadata.availableDecisions = request.availableDecisions ?? [
+        ...BASE_COMMAND_APPROVAL_DECISIONS,
+      ];
     } else if (kind === "file") {
       if (params.reason) metadata.reason = params.reason;
       if (params.grantRoot) metadata.grantRoot = params.grantRoot;

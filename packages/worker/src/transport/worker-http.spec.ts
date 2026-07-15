@@ -326,6 +326,7 @@ describe("WorkerHttpTransport", () => {
     ).toMatchObject({
       startToken: "token-1",
       pid: process.pid,
+      protocolVersion: 1,
     });
   });
 

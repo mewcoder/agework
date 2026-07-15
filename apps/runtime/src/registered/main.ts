@@ -120,6 +120,7 @@ export async function runRegisteredRuntime(): Promise<void> {
     hostContract: runtimeHost,
     tunnelUpstream,
     onGone: () => process.exit(0),
+    onIncompatible: () => process.exit(1),
   });
   const shutdown = () => {
     client.stop();

@@ -5,6 +5,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import {
+  RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
   WORKER_ID_HEADER,
   WORKER_TOKEN_HEADER,
   type RunConfig,
@@ -123,8 +124,19 @@ export class WorkerHttpServer {
     res: ServerResponse
   ): Promise<void> {
     const body = (await this.readJsonBody(req)) as
-      | { startToken?: string; pid?: number; version?: string }
+      | {
+          startToken?: string;
+          pid?: number;
+          protocolVersion?: unknown;
+          version?: string;
+        }
       | undefined;
+    if (body?.protocolVersion !== RUNTIME_WORKER_HTTP_PROTOCOL_VERSION) {
+      this.sendJson(res, 409, {
+        error: `incompatible worker protocol: worker=${String(body?.protocolVersion)} host=${RUNTIME_WORKER_HTTP_PROTOCOL_VERSION}`,
+      });
+      return;
+    }
     const startToken =
       typeof body?.startToken === "string" ? body.startToken : "";
     const pid = typeof body?.pid === "number" ? body.pid : undefined;
@@ -142,7 +154,10 @@ export class WorkerHttpServer {
         `[agework-runtime] worker version mismatch: worker=${body.version} host=${AGEWORK_VERSION}`
       );
     }
-    this.sendJson(res, 200, { ok: true });
+    this.sendJson(res, 200, {
+      ok: true,
+      protocolVersion: RUNTIME_WORKER_HTTP_PROTOCOL_VERSION,
+    });
   }
 
   private async handleGetRunConfig(
