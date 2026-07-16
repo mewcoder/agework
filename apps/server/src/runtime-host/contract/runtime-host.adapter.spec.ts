@@ -6,6 +6,7 @@ import type {
 } from "@agework/shared/protocol";
 import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeHostAdapter } from "./runtime-host.adapter";
+import { TunnelRuntimeHost } from "./tunnel-runtime-host";
 import type { ConfigService } from "../../config/config.service";
 import type { RunEventService } from "../../run-event/run-event.service";
 import type { HostTunnelHandler } from "../gateway/host-tunnel.handler";
@@ -104,9 +105,15 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     builtinHost = makeBuiltinHost();
     tunnelHandler = makeTunnelHandler();
     runEvents = makeRunEvents();
+    // registered 侧 stub 用真的 TunnelRuntimeHost 建在 mock handler 之上——
+    // 隧道 RPC 拼装内聚其中,对 tunnelHandler 的断言仍在传输边界成立。
+    const tunnelHost = new TunnelRuntimeHost(
+      tunnelHandler as unknown as HostTunnelHandler,
+      makeConfigService() as unknown as ConfigService
+    );
     adapter = new RuntimeHostAdapter(
       tunnelHandler as unknown as HostTunnelHandler,
-      makeConfigService() as unknown as ConfigService,
+      tunnelHost,
       runEvents as unknown as RunEventService,
       builtinHost as unknown as RuntimeHost
     );

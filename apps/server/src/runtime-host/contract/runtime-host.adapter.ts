@@ -1,11 +1,10 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import { generateId, isTerminalRunStatus } from "@agework/shared";
+import { isTerminalRunStatus } from "@agework/shared";
 import type {
   CreateDirectoryInput,
   DirectoryListing,
   HostCapabilityStatus,
   HostUpstreamNotification,
-  HostListWorkersRpcResult,
   InstallCliInput,
   InstallCliResult,
   ListChangedFilesInput,
@@ -41,24 +40,26 @@ import {
   type RuntimeHostOwnerReconciliation,
   type RuntimeHostOwnerRef,
 } from "../runtime-host.types";
-import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
 import { HostTunnelHandler } from "../gateway/host-tunnel.handler";
-
-/** CLI 安装要跑 npm install(上限 120s),隧道等待要给足余量。 */
-const INSTALL_CLI_TIMEOUT_MS = 150_000;
+import {
+  TunnelRuntimeHost,
+  type RoutedRuntimeHost,
+} from "./tunnel-runtime-host";
 
 /**
  * `RuntimeHostContract` 的 server 侧路由实现(目标架构设计文档 §7 Phase 2):
  * run 模块只经契约动词消费执行面,本类按 placement.runtimeHostId 分两路——
  * - **builtin**:进程内 RuntimeHost 库实例(`BUILTIN_RUNTIME_HOST`)，所有
  *   runtimeType 都在同一 Host 内按 provider 分派。
- * - **registered**:隧道在线的 Host，经 `host.*` 隧道 RPC 下发，事件流经
- *   `host.upstream`（ACK 水位）回流。
+ * - **registered**:隧道在线的 Host,经 `TunnelRuntimeHost` 的 `host.*` 隧道
+ *   RPC 下发,事件流经 `host.upstream`（ACK 水位）回流。
  *
- * RuntimeHostAdapter 是 builtin / registered 的唯一分流点；上层 Service
- * 只编排用例，不再自行直读执行机或拼 host.* RPC。
+ * `route()` 是 builtin / registered 的唯一分流点:纯下发面动词按 Host id 二选一
+ * 直投;少数带跨面副作用的(命令记账、submitRun 失败通知、builtin+registered
+ * 快照合并)在本类显式编排。上层 Service 只编排用例,不再自行直读执行机或拼
+ * host.* RPC。
  */
 @Injectable()
 export class RuntimeHostAdapter
@@ -73,11 +74,16 @@ export class RuntimeHostAdapter
 
   constructor(
     private readonly tunnelHandler: HostTunnelHandler,
-    private readonly configService: ConfigService,
+    private readonly tunnelHost: TunnelRuntimeHost,
     private readonly runEvents: RunEventService,
     @Inject(BUILTIN_RUNTIME_HOST)
     private readonly builtinHost: RuntimeHost
   ) {}
+
+  /** 按 runtimeHostId 取对应下发面:builtin 进程内实例 / registered 隧道 stub。 */
+  private route(runtimeHostId: string): RoutedRuntimeHost {
+    return isBuiltinHostId(runtimeHostId) ? this.builtinHost : this.tunnelHost;
+  }
 
   setUpstream(upstream: RuntimeHostUpstream): void {
     this.upstream = upstream;
@@ -104,13 +110,17 @@ export class RuntimeHostAdapter
   }
 
   async submitRun(input: SubmitRunInput): Promise<void> {
-    const { placement } = input;
-    if (isBuiltinHostId(placement.runtimeHostId)) {
+    if (isBuiltinHostId(input.placement.runtimeHostId)) {
       // spec/config 组装失败在受理前同步抛出(配置/入参问题),由调用方按启动失败处理
       await this.builtinHost.submitRun(input);
       return;
     }
-    await this.submitRunViaTunnel(input);
+    // 隧道传输失败发生在受理之后(异步),吞错并转 upstream 判死
+    await this.tunnelHost.submitRun(input).catch((err) => {
+      this.upstream
+        .notifyRunFailed(input.runId, `tunnel submitRun failed: ${String(err)}`)
+        .catch(() => {});
+    });
   }
 
   async command(input: RuntimeHostCommandInput): Promise<void> {
@@ -119,79 +129,22 @@ export class RuntimeHostAdapter
       await this.builtinHost.command(input);
       return;
     }
-    await this.commandViaTunnel(input);
-  }
-
-  releaseRun(input: RuntimeHostRunRef): void {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      this.builtinHost.releaseRun(input);
-      return;
-    }
-    // 隧道 Host 的状态清理:单向通知,best-effort(Host 掉线就等它的 fence 自清)
-    this.tunnelHandler.sendNotification(input.runtimeHostId, {
-      jsonrpc: "2.0",
-      method: "host.releaseRun",
-      params: input,
-    });
-  }
-
-  // ── registered Host 隧道路径 ──────────────────────────────────────
-
-  /** 通过隧道向 Host 发 submitRun。 */
-  private async submitRunViaTunnel(input: SubmitRunInput): Promise<void> {
-    const { runId, placement } = input;
-    try {
-      const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-      await this.tunnelHandler.sendRequest(
-        placement.runtimeHostId,
-        {
-          jsonrpc: "2.0",
-          id: runId,
-          method: "host.submitRun",
-          params: input,
-        },
-        timeoutMs
-      );
-    } catch (err) {
-      this.upstream
-        .notifyRunFailed(runId, `tunnel submitRun failed: ${String(err)}`)
-        .catch(() => {});
-    }
-  }
-
-  /** 通过隧道向 Host 发 command。 */
-  private async commandViaTunnel(
-    input: RuntimeHostCommandInput
-  ): Promise<void> {
-    const { runtimeHostId, payload } = input;
-    const { runId } = payload;
     // 「命令已下发」记账(进程内 Host 由 onCommandDispatched 钩子记,这里补隧道路径)
+    const { runId, commandId, type } = input.payload;
     this.runEvents
       .append(
-        this.runEvents.commandSent({
-          runId,
-          commandId: payload.commandId,
-          commandType: payload.type,
-        })
+        this.runEvents.commandSent({ runId, commandId, commandType: type })
       )
       .catch(() => {});
-    try {
-      const timeoutMs = this.configService.getLaunchTimeoutSeconds() * 1000;
-      await this.tunnelHandler.sendRequest(
-        runtimeHostId,
-        {
-          jsonrpc: "2.0",
-          id: `${runId}:${payload.commandId}`,
-          method: "host.command",
-          params: input,
-        },
-        timeoutMs
-      );
-    } catch (err) {
+    await this.tunnelHost.command(input).catch((err) => {
       this.logger.warn(
         `tunnel command failed for run ${runId}: ${String(err)}`
       );
-    }
+    });
+  }
+
+  releaseRun(input: RuntimeHostRunRef): void {
+    this.route(input.runtimeHostId).releaseRun(input);
   }
 
   /** 隧道 upstream 通知 → RuntimeHostUpstream 回流。
@@ -223,199 +176,69 @@ export class RuntimeHostAdapter
     }
   }
 
-  // ── 环境 / 文件 / 观测 契约方法 ─────────────────────────────────────
+  // ── 环境 / 文件 / 观测 契约方法（按 runtimeHostId 定向分派） ───────────
 
   async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
-    // 按 runtimeHostId 定向路由;目标 Host 无该 owner 的 worker 时为空操作(幂等)
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      await this.builtinHost.releaseOwner(input);
-      return;
-    }
-    await this.tunnelHandler.sendRequest<never>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.releaseOwner",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    // 目标 Host 无该 owner 的 worker 时为空操作(幂等)
+    await this.route(input.runtimeHostId).releaseOwner(input);
   }
 
   async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
-    if (isBuiltinHostId(runtimeHostId)) {
-      return this.builtinHost.detectEnv(runtimeHostId);
-    }
-    return this.tunnelHandler.sendRequest<HostCapabilityStatus>(
-      runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.detectEnv",
-        params: { runtimeHostId },
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(runtimeHostId).detectEnv(runtimeHostId);
   }
 
   async installCli(input: InstallCliInput): Promise<InstallCliResult> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.installCli(input);
-    }
-    return this.tunnelHandler.sendRequest<InstallCliResult>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.installCli",
-        params: input,
-      },
-      INSTALL_CLI_TIMEOUT_MS
-    );
+    return this.route(input.runtimeHostId).installCli(input);
   }
 
   async listDirectory(input: ListDirectoryInput): Promise<DirectoryListing> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.listDirectory(input);
-    }
-    return this.tunnelHandler.sendRequest<DirectoryListing>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.listDirectory",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).listDirectory(input);
   }
 
   async createDirectory(input: CreateDirectoryInput): Promise<void> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      await this.builtinHost.createDirectory(input);
-      return;
-    }
-    await this.tunnelHandler.sendRequest<never>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.createDirectory",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    await this.route(input.runtimeHostId).createDirectory(input);
   }
 
   async listFiles(
     input: WorkspaceFileQuery
   ): Promise<WorkspaceFileListResponse> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.listFiles(input);
-    }
-    return this.tunnelHandler.sendRequest<WorkspaceFileListResponse>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.listFiles",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).listFiles(input);
   }
 
   async readFile(input: ReadFileInput): Promise<WorkspaceFileReadResponse> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.readFile(input);
-    }
-    return this.tunnelHandler.sendRequest<WorkspaceFileReadResponse>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.readFile",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).readFile(input);
   }
 
   async readFileDiff(
     input: ReadFileDiffInput
   ): Promise<WorkspaceFileDiffResponse> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.readFileDiff(input);
-    }
-    return this.tunnelHandler.sendRequest<WorkspaceFileDiffResponse>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.readFileDiff",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).readFileDiff(input);
   }
 
   async searchFiles(
     input: SearchFilesInput
   ): Promise<WorkspaceFileSearchResponse> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.searchFiles(input);
-    }
-    return this.tunnelHandler.sendRequest<WorkspaceFileSearchResponse>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.searchFiles",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).searchFiles(input);
   }
 
   async listChangedFiles(
     input: ListChangedFilesInput
   ): Promise<WorkspaceChangedFilesResponse> {
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      return this.builtinHost.listChangedFiles(input);
-    }
-    return this.tunnelHandler.sendRequest<WorkspaceChangedFilesResponse>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.listChangedFiles",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+    return this.route(input.runtimeHostId).listChangedFiles(input);
+  }
+
+  async stopWorker(input: StopWorkerInput): Promise<void> {
+    // 按 runtimeHostId 定向路由;WorkerKey = `${OwnerKey}#${RuntimeType}`。
+    await this.route(input.runtimeHostId).stopWorker(input);
   }
 
   async listWorkers(): Promise<WorkerSnapshot[]> {
     // 进程内 builtin Host + 所有隧道在线的 registered Host 现场查询；
     // 这是 worker 状态的唯一权威来源。Host 本地不知道自己的注册 id,
-    // 快照的 runtimeHostId 在这里按路由来源盖章。
-    const result = await this.listWorkersOn(BUILTIN_HOST_ID);
-    const tunnelWorkers = await Promise.all(
-      this.tunnelHandler
-        .listConnected()
-        .map(async (runtimeHostId): Promise<WorkerSnapshot[]> => {
-          try {
-            return await this.listWorkersOn(runtimeHostId);
-          } catch (err) {
-            this.logger.warn(
-              `host.listWorkers failed for ${runtimeHostId}: ${String(err)}`
-            );
-            return [];
-          }
-        })
-    );
-    return result.concat(tunnelWorkers.flat());
+    // 快照的 runtimeHostId 在这里/隧道 stub 里按路由来源盖章。
+    const builtin = await this.builtinWorkers();
+    const tunnel = await this.tunnelHost.listWorkers();
+    return builtin.concat(tunnel);
   }
 
   async listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]> {
@@ -432,48 +255,18 @@ export class RuntimeHostAdapter
     return [...refs.values()];
   }
 
-  private async listWorkersOn(
-    runtimeHostId: string
-  ): Promise<WorkerSnapshot[]> {
-    if (isBuiltinHostId(runtimeHostId)) {
-      return (await this.builtinHost.listWorkers()).map((worker) => ({
-        ...worker,
-        runtimeHostId: BUILTIN_HOST_ID,
-      }));
-    }
-    const hostResult =
-      await this.tunnelHandler.sendRequest<HostListWorkersRpcResult>(
-        runtimeHostId,
-        {
-          jsonrpc: "2.0",
-          id: generateId(),
-          method: "host.listWorkers",
-          params: {},
-        },
-        this.configService.getLaunchTimeoutSeconds() * 1000
-      );
-    return hostResult.workers.map((worker) => ({
-      ...worker,
-      runtimeHostId,
-    }));
+  private listWorkersOn(runtimeHostId: string): Promise<WorkerSnapshot[]> {
+    return isBuiltinHostId(runtimeHostId)
+      ? this.builtinWorkers()
+      : this.tunnelHost.listWorkersOn(runtimeHostId);
   }
 
-  async stopWorker(input: StopWorkerInput): Promise<void> {
-    // 按 runtimeHostId 定向路由;WorkerKey = `${OwnerKey}#${RuntimeType}`。
-    if (isBuiltinHostId(input.runtimeHostId)) {
-      await this.builtinHost.stopWorker(input);
-      return;
-    }
-    await this.tunnelHandler.sendRequest<never>(
-      input.runtimeHostId,
-      {
-        jsonrpc: "2.0",
-        id: generateId(),
-        method: "host.stopWorker",
-        params: input,
-      },
-      this.configService.getLaunchTimeoutSeconds() * 1000
-    );
+  /** 进程内 builtin Host 的 worker 快照;Host 本地 runtimeHostId 为空,这里盖章。 */
+  private async builtinWorkers(): Promise<WorkerSnapshot[]> {
+    return (await this.builtinHost.listWorkers()).map((worker) => ({
+      ...worker,
+      runtimeHostId: BUILTIN_HOST_ID,
+    }));
   }
 }
 

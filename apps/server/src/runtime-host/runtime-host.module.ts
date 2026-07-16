@@ -8,6 +8,7 @@ import { RuntimeHostRepository } from "./runtime-host.repository";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 import { HostLivenessWatchdog } from "./gateway/host-liveness.watchdog";
 import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
+import { TunnelRuntimeHost } from "./contract/tunnel-runtime-host";
 import { builtinRuntimeHostProvider } from "./contract/builtin-runtime-host";
 import { RunEventModule } from "../run-event/run-event.module";
 import {
@@ -43,6 +44,7 @@ import {
     HostTunnelHandler,
     HostLivenessWatchdog,
     builtinRuntimeHostProvider,
+    TunnelRuntimeHost,
     RuntimeHostAdapter,
     { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_UPSTREAM_BINDING, useExisting: RuntimeHostAdapter },
