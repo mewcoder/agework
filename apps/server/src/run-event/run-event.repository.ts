@@ -113,8 +113,6 @@ export class RunEventRepository {
       return {
         list: filtered.slice(skip, skip + take),
         total: filtered.length,
-        pageNo: skip / take + 1,
-        pageSize: take,
       };
     }
 
@@ -128,12 +126,7 @@ export class RunEventRepository {
       this.prisma.runEvent.count({ where }),
     ]);
 
-    return {
-      list,
-      total,
-      pageNo: skip / take + 1,
-      pageSize: take,
-    };
+    return { list, total };
   }
 }
 

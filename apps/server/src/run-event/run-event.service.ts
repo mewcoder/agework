@@ -41,14 +41,18 @@ export class RunEventService {
     private readonly rawJsonlReader: RawJsonlReader
   ) {}
 
-  /** 管理端：按 run 查询事件（读路径，委托 Repository）。 */
-  listForAdmin(params: Parameters<RunEventRepository["listAdminEvents"]>[0]) {
-    return this.repository.listAdminEvents(params);
+  /** 管理端：按 run 查询事件（读路径，委托 Repository；分页信封在此收口）。 */
+  async listForAdmin(
+    params: Parameters<RunEventRepository["listAdminEvents"]>[0]
+  ) {
+    const { list, total } = await this.repository.listAdminEvents(params);
+    return { list, total, ...pageEnvelope(params) };
   }
 
-  /** 管理端：按 run 查询本地 raw/agui JSONL 流水（读路径，委托 RawJsonlReader）。 */
+  /** 管理端：按 run 查询本地 raw/agui JSONL 流水（读路径，委托 RawJsonlReader；分页信封在此收口）。 */
   listRawForAdmin(params: Parameters<RawJsonlReader["listForAdmin"]>[0]) {
-    return this.rawJsonlReader.listForAdmin(params);
+    const { list, total } = this.rawJsonlReader.listForAdmin(params);
+    return { list, total, ...pageEnvelope(params) };
   }
 
   /**
@@ -664,6 +668,14 @@ export class RunEventService {
       error: payload.error,
     });
   }
+}
+
+/** 分页响应信封:由根 Service 收口(数据层只回 list/total)。 */
+function pageEnvelope(params: { take: number; skip: number }): {
+  pageNo: number;
+  pageSize: number;
+} {
+  return { pageNo: params.skip / params.take + 1, pageSize: params.take };
 }
 
 export function compactData(input: Record<string, unknown>): RunEventData {

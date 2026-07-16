@@ -391,6 +391,60 @@ describe("RunEventService append", () => {
   });
 });
 
+describe("RunEventService admin read pagination", () => {
+  it("listForAdmin adds the page envelope over the repository's list/total", async () => {
+    const listAdminEvents = vi
+      .fn()
+      .mockResolvedValue({ list: [{ id: "e-1" }], total: 42 });
+    const service = new RunEventService(
+      { listAdminEvents } as never,
+      {} as never,
+      {} as never
+    );
+
+    const result = await service.listForAdmin({
+      runId: "run-1",
+      take: 20,
+      skip: 40,
+    });
+
+    expect(listAdminEvents).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", take: 20, skip: 40 })
+    );
+    expect(result).toEqual({
+      list: [{ id: "e-1" }],
+      total: 42,
+      pageNo: 3,
+      pageSize: 20,
+    });
+  });
+
+  it("listRawForAdmin adds the page envelope over the reader's list/total", () => {
+    const listForAdmin = vi
+      .fn()
+      .mockReturnValue({ list: [{ ts: "t" }], total: 5 });
+    const service = new RunEventService(
+      {} as never,
+      {} as never,
+      { listForAdmin } as never
+    );
+
+    const result = service.listRawForAdmin({
+      runId: "run-1",
+      conversationId: "c-1",
+      take: 10,
+      skip: 0,
+    });
+
+    expect(result).toEqual({
+      list: [{ ts: "t" }],
+      total: 5,
+      pageNo: 1,
+      pageSize: 10,
+    });
+  });
+});
+
 describe("RunEventRepository", () => {
   it("returns the existing row when an eventKey unique conflict races insert", async () => {
     const existing = makeDbRunEventRow({

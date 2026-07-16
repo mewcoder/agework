@@ -28,19 +28,14 @@ const CHANNEL_FILE_SUFFIX: Record<RawJsonlChannel, string> = {
 export class RawJsonlReader {
   constructor(private readonly configService: ConfigService) {}
 
-  /** 按 run 过滤指定 channel 的 raw JSONL 行，管理端诊断用。 */
+  /** 按 run 过滤指定 channel 的 raw JSONL 行，管理端诊断用。分页信封由 RunEventService 收口。 */
   listForAdmin(params: {
     runId: string;
     conversationId: string;
     channel?: RawJsonlChannel[];
     take: number;
     skip: number;
-  }): {
-    list: RawJsonlLine[];
-    total: number;
-    pageNo: number;
-    pageSize: number;
-  } {
+  }): { list: RawJsonlLine[]; total: number } {
     const { runId, conversationId, channel, take, skip } = params;
     const channels = channel?.length
       ? channel
@@ -53,12 +48,7 @@ export class RawJsonlReader {
       .filter((line) => line.runId === runId)
       .sort((a, b) => a.ts.localeCompare(b.ts));
 
-    return {
-      list: lines.slice(skip, skip + take),
-      total: lines.length,
-      pageNo: skip / take + 1,
-      pageSize: take,
-    };
+    return { list: lines.slice(skip, skip + take), total: lines.length };
   }
 
   private readChannel(

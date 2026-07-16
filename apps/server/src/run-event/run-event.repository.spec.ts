@@ -51,11 +51,12 @@ describe("RunEventRepository.listAdminEvents", () => {
       skip: 0,
     });
     expect(count).toHaveBeenCalledWith({ where: expectedWhere });
+    // 数据层只回 list/total,分页信封由 RunEventService 收口。
     expect(result).toMatchObject({
       total: 1,
-      pageNo: 1,
-      pageSize: 20,
       list: [{ id: "event-1", type: "run.status_changed" }],
     });
+    expect(result).not.toHaveProperty("pageNo");
+    expect(result).not.toHaveProperty("pageSize");
   });
 });

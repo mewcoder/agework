@@ -29,7 +29,8 @@ describe("RawJsonlReader", () => {
       skip: 0,
     });
 
-    expect(result).toEqual({ list: [], total: 0, pageNo: 1, pageSize: 10 });
+    // 分页信封由 RunEventService 收口;reader 只回 list/total。
+    expect(result).toEqual({ list: [], total: 0 });
   });
 
   it("reads and filters raw + agui lines by runId across both channels", () => {
