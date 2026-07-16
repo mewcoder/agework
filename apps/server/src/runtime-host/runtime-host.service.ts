@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Inject,
@@ -10,9 +11,12 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type {
+  RuntimeHostDiagnostics,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,
   RuntimeSpec,
+  WorkerKey,
+  WorkerSnapshot,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
 import type {
@@ -36,6 +40,7 @@ import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
   RUNTIME_HOST_CONNECTIVITY,
+  RUNTIME_HOST_DIAGNOSTICS,
   RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_WORKSPACE_DATA,
   type RuntimeHostConnectivity,
@@ -58,7 +63,9 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     @Inject(RUNTIME_HOST_ENVIRONMENT)
     private readonly environment: RuntimeHostEnvironment,
     @Inject(RUNTIME_HOST_WORKSPACE_DATA)
-    private readonly workspaceData: RuntimeHostWorkspaceData
+    private readonly workspaceData: RuntimeHostWorkspaceData,
+    @Inject(RUNTIME_HOST_DIAGNOSTICS)
+    private readonly diagnostics: RuntimeHostDiagnostics
   ) {}
 
   /** 启动时只初始化一行 builtin Host，并持久化 Host 报告的完整能力矩阵。 */
@@ -124,6 +131,33 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   async listForAdmin(): Promise<{ list: RuntimeHostResponse[] }> {
     const rows = await this.repository.listAll();
     return { list: rows.map(toRuntimeHostResponse) };
+  }
+
+  /** admin: 现场查询所有 Host(builtin + registered)上的 worker 快照,不入库。 */
+  async listWorkersForAdmin(): Promise<{ list: WorkerSnapshot[] }> {
+    return { list: await this.diagnostics.listWorkers() };
+  }
+
+  /**
+   * admin: 按 runtimeHostId 定向停止目标 Host 上的一个 worker。
+   * 目标 Host 离线/超时是预期失败,按上游不可达(502)报告。
+   */
+  async stopWorkerForAdmin(
+    runtimeHostId: string,
+    workerKey: string
+  ): Promise<void> {
+    try {
+      await this.diagnostics.stopWorker({
+        runtimeHostId,
+        key: workerKey as WorkerKey,
+      });
+    } catch (err) {
+      throw new BadGatewayException(
+        `stop worker failed on host ${runtimeHostId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
   }
 
   /**

@@ -6,6 +6,7 @@ import type {
 } from "./runtime-host.types";
 import { RuntimeHostService } from "./runtime-host.service";
 import type {
+  RuntimeHostDiagnostics,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,
 } from "@agework/shared/protocol";
@@ -59,6 +60,10 @@ describe("RuntimeHostService", () => {
   >;
   let workspaceData: Record<
     keyof RuntimeHostWorkspaceData,
+    ReturnType<typeof vi.fn>
+  >;
+  let diagnostics: Record<
+    keyof RuntimeHostDiagnostics,
     ReturnType<typeof vi.fn>
   >;
   let service: RuntimeHostService;
@@ -124,11 +129,16 @@ describe("RuntimeHostService", () => {
         truncated: false,
       }),
     };
+    diagnostics = {
+      listWorkers: vi.fn().mockResolvedValue([]),
+      stopWorker: vi.fn().mockResolvedValue(undefined),
+    };
     service = new RuntimeHostService(
       repository as unknown as RuntimeHostRepository,
       connectivity as unknown as RuntimeHostConnectivity,
       environment as unknown as RuntimeHostEnvironment,
-      workspaceData as unknown as RuntimeHostWorkspaceData
+      workspaceData as unknown as RuntimeHostWorkspaceData,
+      diagnostics as unknown as RuntimeHostDiagnostics
     );
   });
 
@@ -312,6 +322,37 @@ describe("RuntimeHostService", () => {
     const { list } = await service.listForAdmin();
     expect(list).toHaveLength(1);
     expect(list[0].id).toBe("rt-1");
+  });
+
+  it("listWorkersForAdmin wraps the live worker snapshots in a list envelope", async () => {
+    diagnostics.listWorkers.mockResolvedValueOnce([
+      { runtimeHostId: "builtin", workerId: "w-1", status: "ready" },
+    ]);
+    const result = await service.listWorkersForAdmin();
+    expect(diagnostics.listWorkers).toHaveBeenCalled();
+    expect(result).toEqual({
+      list: [{ runtimeHostId: "builtin", workerId: "w-1", status: "ready" }],
+    });
+  });
+
+  it("stopWorkerForAdmin routes to the diagnostics contract with the target host and key", async () => {
+    await service.stopWorkerForAdmin("rt-1", "workspace:ws-1#native");
+    expect(diagnostics.stopWorker).toHaveBeenCalledWith({
+      runtimeHostId: "rt-1",
+      key: "workspace:ws-1#native",
+    });
+  });
+
+  it("stopWorkerForAdmin maps contract failures to 502 (目标 Host 不可达)", async () => {
+    diagnostics.stopWorker.mockRejectedValueOnce(
+      new Error("runtime host rt-1 is not connected")
+    );
+    await expect(
+      service.stopWorkerForAdmin("rt-1", "workspace:ws-1#native")
+    ).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("rt-1 is not connected"),
+    });
   });
 
   it("delete revokes the row without consulting Host connectivity", async () => {
