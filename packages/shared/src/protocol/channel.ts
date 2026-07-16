@@ -1,5 +1,5 @@
 import type { BaseEvent } from "@ag-ui/core";
-import type { AgentType, PendingAction, RunStatus } from "../common";
+import type { AgentType, ApiFormat, PendingAction, RunStatus } from "../common";
 import type { RunChannelMessage } from "./run-channel-message";
 import type { AgentEventTraceConfig, AgentEventTracePayload } from "./trace";
 
@@ -103,6 +103,8 @@ export type SystemAgentProviderConfig = {
 export type CustomAgentProviderConfig = {
   agentType: AgentType;
   source: "custom";
+  /** ModelProvider 的 API 协议格式;codex 据此定 wire_api,opencode 据此选 provider npm。 */
+  apiFormat: ApiFormat;
   baseUrl: string;
   apiKey: string;
   /** API 在 build provider config 阶段已解析好的单模型。 */

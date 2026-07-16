@@ -63,7 +63,7 @@ export class TitleGenerator {
     );
     if (!resolved || resolved.source === "system") return null;
 
-    const built = getLLMClient(input.agentType, resolved.providerConfig);
+    const built = getLLMClient(resolved.apiFormat, resolved.providerConfig);
     if ("error" in built) return null;
 
     const { text } = await generateText({

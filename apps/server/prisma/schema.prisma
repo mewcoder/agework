@@ -139,7 +139,9 @@ model Message {
 
 model ModelProvider {
   id          String   @id
-  agentType   String
+  /// API 协议格式:anthropic | openai-responses | openai-compatible。创建后不可改。
+  /// 哪些 agent 可用不落库:由 agent 侧声明的支持格式(shared AGENT_API_FORMAT_SUPPORT)派生。
+  apiFormat   String
   scope       String   @default("global")
   userId      String?
   name        String
@@ -152,9 +154,8 @@ model ModelProvider {
   updatedAt   DateTime @updatedAt
   user        User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  @@index([agentType, scope])
-  @@index([agentType, userId])
-  @@index([agentType, scope, userId, name])
+  @@index([apiFormat, scope])
+  @@index([scope, userId, name])
   @@index([userId])
 }
 

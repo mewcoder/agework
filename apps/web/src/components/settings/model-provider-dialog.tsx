@@ -13,13 +13,22 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { AgentIcon } from "@/components/icons/agent";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ModelProvider, ProviderConfigValues } from "@/hooks/model-provider-hooks";
-import { useAgentOptions } from "@/hooks/use-agent-options";
 import { errorMessage } from "@/utils/error";
-import { type ManagedAgent, isManagedAgent, agentOrDefault } from "@/utils/model-provider";
-import { AGENT_LABELS } from "@agework/shared";
+import {
+  API_FORMATS,
+  API_FORMAT_LABELS,
+  isApiFormat,
+  type AgentType,
+  type ApiFormat,
+} from "@agework/shared";
 import {
   type ModelProviderDialogFormValues,
   MODEL_CONFIG_NAME_MAX_LENGTH,
@@ -76,38 +85,49 @@ function HiddenInput({
   );
 }
 
+/** 各 API 格式下模型/BaseURL 输入框的示例占位。 */
+const MODEL_PLACEHOLDERS: Record<ApiFormat, string> = {
+  anthropic: "claude-sonnet-4-6",
+  "openai-responses": "gpt-5.5",
+  "openai-compatible": "gpt-5.5",
+};
+
+const BASE_URL_PLACEHOLDERS: Record<ApiFormat, string> = {
+  anthropic: "https://api.anthropic.com",
+  "openai-responses": "https://api.openai.com/v1",
+  "openai-compatible": "https://api.openai.com/v1",
+};
+
+export type ModelProviderSaveValues = {
+  name: string;
+  providerConfig: ProviderConfigValues;
+  apiFormat: ApiFormat;
+};
+
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agent: string;
+  /** 从某个 agent 的上下文进入时,新建默认它的原生格式并只勾选它自己。 */
+  defaultAgent?: AgentType;
   modelProvider?: ModelProvider;
-  onSave: (
-    name: string,
-    providerConfig: ProviderConfigValues,
-    agent: ManagedAgent,
-  ) => Promise<void>;
+  onSave: (values: ModelProviderSaveValues) => Promise<void>;
   isSaving?: boolean;
-  allowAgentSelect?: boolean;
 };
 
-type ModelProviderDialogFormProps = Omit<Props, "open" | "agent"> & {
-  agent: ManagedAgent;
-};
+type ModelProviderDialogFormProps = Omit<Props, "open">;
 
 function ModelProviderDialogForm({
   onOpenChange,
-  agent,
+  defaultAgent,
   modelProvider,
   onSave,
   isSaving,
-  allowAgentSelect,
 }: ModelProviderDialogFormProps) {
   const isEdit = !!modelProvider;
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const { data: agentOptions } = useAgentOptions();
   const form = useForm<ModelProviderDialogFormValues>({
     resolver: zodResolver(modelProviderDialogFormSchema),
-    defaultValues: initialFormValues(modelProvider, agent),
+    defaultValues: initialFormValues(modelProvider, defaultAgent),
   });
 
   async function handleSubmit(values: ModelProviderDialogFormValues) {
@@ -115,7 +135,11 @@ function ModelProviderDialogForm({
     setSubmitError(null);
 
     try {
-      await onSave(name, buildProviderConfig(values), values.agent);
+      await onSave({
+        name,
+        providerConfig: buildProviderConfig(values),
+        apiFormat: values.apiFormat,
+      });
       onOpenChange(false);
     } catch (error) {
       setSubmitError(errorMessage(error, "保存配置失败"));
@@ -157,11 +181,8 @@ function ModelProviderDialogForm({
   const modelFields = useWatch({ control: form.control, name: "models" }) ?? [];
   const baseUrlValue = useWatch({ control: form.control, name: "baseUrl" }) ?? "";
   const apiKeyValue = useWatch({ control: form.control, name: "apiKey" }) ?? "";
+  const apiFormatValue = useWatch({ control: form.control, name: "apiFormat" });
   const formId = `model-provider-dialog-form-${modelProvider?.modelProviderId ?? "new"}`;
-  const showAgentSelect = allowAgentSelect && !isEdit;
-  const agents = agentOptions?.list ?? [
-    { id: agent, label: AGENT_LABELS[agent] },
-  ];
   const hasRequiredFields =
     !!baseUrlValue.trim() && !!apiKeyValue.trim() && modelFields.some((m) => m?.trim());
 
@@ -173,49 +194,6 @@ function ModelProviderDialogForm({
         {...NO_AUTOFILL_PROPS}
       >
         <FieldGroup>
-          {showAgentSelect && (
-            <Controller
-              name="agent"
-              control={form.control}
-              render={({ field, fieldState }) => (
-                <Field data-invalid={fieldState.invalid}>
-                  <FieldLabel>Agent 类型</FieldLabel>
-                  <ToggleGroup
-                    variant="segment"
-                    spacing={0}
-                    value={field.value ? [field.value] : []}
-                    onValueChange={(value) => {
-                      const next = value[0];
-                      if (!next || !isManagedAgent(next)) return;
-                      field.onChange(next);
-                    }}
-                    className="grid w-full"
-                    style={{
-                      gridTemplateColumns: `repeat(${agents.length}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {agents.map((option) => (
-                      <ToggleGroupItem
-                        key={option.id}
-                        value={option.id}
-                        className="w-full"
-                      >
-                        <AgentIcon agent={option.id} />
-                        {option.label}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
-                  <FieldDescription>
-                    选择后会显示对应 Agent 的连接参数
-                  </FieldDescription>
-                  {fieldState.invalid && (
-                    <FieldError errors={[fieldState.error]} />
-                  )}
-                </Field>
-              )}
-            />
-          )}
-
           <Controller
             name="name"
             control={form.control}
@@ -245,6 +223,42 @@ function ModelProviderDialogForm({
           />
 
           <Controller
+            name="apiFormat"
+            control={form.control}
+            render={({ field, fieldState }) => (
+              <Field data-invalid={fieldState.invalid}>
+                <FieldLabel>API 格式</FieldLabel>
+                <Select
+                  items={API_FORMATS.map((format) => ({
+                    value: format,
+                    label: API_FORMAT_LABELS[format],
+                  }))}
+                  value={field.value}
+                  onValueChange={(value) => {
+                    if (!value || !isApiFormat(value)) return;
+                    field.onChange(value);
+                  }}
+                  disabled={isEdit}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="选择 API 格式" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {API_FORMATS.map((format) => (
+                      <SelectItem key={format} value={format}>
+                        {API_FORMAT_LABELS[format]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {fieldState.invalid && (
+                  <FieldError errors={[fieldState.error]} />
+                )}
+              </Field>
+            )}
+          />
+
+          <Controller
             name="baseUrl"
             control={form.control}
             render={({ field, fieldState }) => (
@@ -257,7 +271,7 @@ function ModelProviderDialogForm({
                   onChange={field.onChange}
                   onBlur={field.onBlur}
                   aria-invalid={fieldState.invalid}
-                  placeholder="https://api.anthropic.com"
+                  placeholder={BASE_URL_PLACEHOLDERS[apiFormatValue]}
                   spellCheck={false}
                   {...NO_AUTOFILL_PROPS}
                   className="font-mono text-sm"
@@ -304,7 +318,7 @@ function ModelProviderDialogForm({
                       onChange={field.onChange}
                       onBlur={field.onBlur}
                       aria-invalid={fieldState.invalid}
-                      placeholder="claude-opus-4-8"
+                      placeholder={MODEL_PLACEHOLDERS[apiFormatValue]}
                       spellCheck={false}
                       {...NO_AUTOFILL_PROPS}
                       className="font-mono text-sm"
@@ -443,15 +457,13 @@ function ModelProviderDialogForm({
 export function ModelProviderDialog({
   open,
   onOpenChange,
-  agent,
+  defaultAgent,
   modelProvider,
   onSave,
   isSaving,
-  allowAgentSelect = false,
 }: Props) {
-  const resolvedAgent = agentOrDefault(modelProvider?.agentType ?? agent);
   const isEdit = !!modelProvider;
-  const formKey = `${resolvedAgent}:${modelProvider?.modelProviderId ?? "new"}:${modelProvider?.updatedAt ?? ""}`;
+  const formKey = `${defaultAgent ?? "any"}:${modelProvider?.modelProviderId ?? "new"}:${modelProvider?.updatedAt ?? ""}`;
 
   return (
     <FormDialog
@@ -460,18 +472,17 @@ export function ModelProviderDialog({
       title={isEdit ? "编辑模型服务" : "新建模型服务"}
       description={isEdit
         ? "更新模型服务的连接参数"
-        : "创建 Claude 或 Codex 的全局模型服务"}
+        : "创建全局模型服务"}
       footer="none"
     >
       {open && (
         <ModelProviderDialogForm
           key={formKey}
           onOpenChange={onOpenChange}
-          agent={resolvedAgent}
+          defaultAgent={defaultAgent}
           modelProvider={modelProvider}
           onSave={onSave}
           isSaving={isSaving}
-          allowAgentSelect={allowAgentSelect}
         />
       )}
     </FormDialog>

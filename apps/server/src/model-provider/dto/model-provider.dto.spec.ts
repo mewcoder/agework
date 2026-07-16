@@ -17,7 +17,7 @@ function transformBody<T extends object>(
 describe("CreateModelProviderDto", () => {
   it("accepts a valid payload", async () => {
     const result = await transformBody(CreateModelProviderDto, {
-      agentType: "claude",
+      apiFormat: "anthropic",
       name: "My Config",
       providerConfig: {
         baseUrl: "https://example.com",
@@ -37,14 +37,14 @@ describe("CreateModelProviderDto", () => {
 
   it("rejects a payload missing required fields", async () => {
     await expect(
-      transformBody(CreateModelProviderDto, { agentType: "claude" })
+      transformBody(CreateModelProviderDto, { apiFormat: "anthropic" })
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("rejects an unsupported agentType", async () => {
+  it("rejects an unsupported apiFormat", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {
-        agentType: "unknown",
+        apiFormat: "unknown",
         name: "My Config",
         providerConfig: {
           baseUrl: "https://example.com",
@@ -59,7 +59,7 @@ describe("CreateModelProviderDto", () => {
   it("rejects a providerConfig with non-string values", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {
-        agentType: "claude",
+        apiFormat: "anthropic",
         name: "My Config",
         providerConfig: {
           baseUrl: "https://example.com",
@@ -74,7 +74,7 @@ describe("CreateModelProviderDto", () => {
   it("rejects a non-object providerConfig", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {
-        agentType: "claude",
+        apiFormat: "anthropic",
         name: "My Config",
         providerConfig: "not-an-object",
       })
@@ -84,7 +84,7 @@ describe("CreateModelProviderDto", () => {
   it("rejects a providerConfig with empty models array", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {
-        agentType: "claude",
+        apiFormat: "anthropic",
         name: "My Config",
         providerConfig: {
           baseUrl: "https://example.com",
@@ -99,7 +99,7 @@ describe("CreateModelProviderDto", () => {
   it("rejects a providerConfig missing baseUrl/apiKey", async () => {
     await expect(
       transformBody(CreateModelProviderDto, {
-        agentType: "claude",
+        apiFormat: "anthropic",
         name: "My Config",
         providerConfig: { models: ["claude-test"], extraConfig: {} },
       })

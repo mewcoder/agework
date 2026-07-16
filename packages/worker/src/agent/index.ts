@@ -125,6 +125,11 @@ export function createAgentDriver(
           baseUrl: agentProviderConfig.baseUrl,
           extraConfig: agentProviderConfig.extraConfig,
         };
+  // claude 只有 anthropic 一种格式,不需要;codex/opencode 据此选 wire_api / provider npm。
+  const apiFormat =
+    agentProviderConfig.source === "custom"
+      ? agentProviderConfig.apiFormat
+      : undefined;
 
   if (agentProviderConfig.agentType === "claude") {
     return new AdapterDriver(
@@ -150,6 +155,7 @@ export function createAgentDriver(
       createAcpAdapter(profile, {
         source: agentProviderConfig.source,
         cwd: runtimePath,
+        apiFormat,
         ...credentials,
         trace,
         pendingActionSink,
@@ -163,6 +169,8 @@ export function createAgentDriver(
   return new AdapterDriver(
     createCodexAdapter({
       ...credentials,
+      // 矩阵保证 codex 不会拿到 anthropic 格式;这里做类型收窄兜底。
+      apiFormat: apiFormat === "anthropic" ? undefined : apiFormat,
       cwd: runtimePath,
       trace,
       pendingActionSink,

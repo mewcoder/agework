@@ -2,7 +2,7 @@ import { Pencil, Trash2, Plus, Zap, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AgentIcon } from '@/components/icons/agent';
-import { ModelProviderDialog } from '@/components/settings/model-provider-dialog';
+import { ModelProviderDialog, type ModelProviderSaveValues } from '@/components/settings/model-provider-dialog';
 import { ConfirmDeleteDialog } from '@/components/confirm-delete-dialog';
 import { useConfirmDelete } from '@/hooks/use-confirm-delete';
 import { SettingsSection, SettingsItem } from '@/components/settings/settings-section';
@@ -14,7 +14,6 @@ import {
   useDeleteModelProvider,
   useTestModelProvider,
   type ModelProvider,
-  type ProviderConfigValues,
 } from '@/hooks/model-provider-hooks';
 import { useAgentOptions } from '@/hooks/use-agent-options';
 import { errorMessage } from '@/utils/error';
@@ -140,22 +139,22 @@ function ModelProviderRow({
 
 function ModelProviderList({ agent, canManage }: { agent: AgentType; canManage: boolean }) {
   const { data: modelProviders = [], isLoading } = useModelProviders(agent);
-  const createModelProvider = useCreateModelProvider(agent);
-  const updateModelProvider = useUpdateModelProvider(agent);
-  const deleteModelProvider = useDeleteModelProvider(agent);
+  const createModelProvider = useCreateModelProvider();
+  const updateModelProvider = useUpdateModelProvider();
+  const deleteModelProvider = useDeleteModelProvider();
 
   const formDialog = useFormDialog<ModelProvider>();
   const deleteDialog = useConfirmDelete<ModelProvider>();
 
-  async function handleSave(name: string, providerConfig: ProviderConfigValues) {
+  async function handleSave(values: ModelProviderSaveValues) {
     if (formDialog.target) {
       await updateModelProvider.mutateAsync({
         modelProviderId: formDialog.target.modelProviderId,
-        name,
-        providerConfig,
+        name: values.name,
+        providerConfig: values.providerConfig,
       });
     } else {
-      await createModelProvider.mutateAsync({ name, providerConfig });
+      await createModelProvider.mutateAsync(values);
     }
     formDialog.close();
   }
@@ -201,7 +200,7 @@ function ModelProviderList({ agent, canManage }: { agent: AgentType; canManage: 
       <ModelProviderDialog
         open={formDialog.open}
         onOpenChange={formDialog.onOpenChange}
-        agent={agent}
+        defaultAgent={agent}
         modelProvider={formDialog.target}
         onSave={handleSave}
         isSaving={createModelProvider.isPending || updateModelProvider.isPending}

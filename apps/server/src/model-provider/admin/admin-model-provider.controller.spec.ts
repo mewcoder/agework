@@ -20,20 +20,20 @@ function makeController() {
 }
 
 describe("AdminModelProviderController", () => {
-  it("list() delegates with agentType", async () => {
+  it("list() delegates without params", async () => {
     const { controller, service } = makeController();
-    await controller.list({ agentType: "claude" });
-    expect(service.listForAdmin).toHaveBeenCalledWith("claude");
+    await controller.list();
+    expect(service.listForAdmin).toHaveBeenCalledWith();
   });
 
   it("create() delegates with all body fields", async () => {
     const { controller, service } = makeController();
     await controller.create({
-      agentType: "claude",
+      apiFormat: "anthropic",
       name: "provider",
       providerConfig: {},
     } as never);
-    expect(service.create).toHaveBeenCalledWith("claude", "provider", {});
+    expect(service.create).toHaveBeenCalledWith("anthropic", "provider", {});
   });
 
   it("update() delegates with all body fields", async () => {

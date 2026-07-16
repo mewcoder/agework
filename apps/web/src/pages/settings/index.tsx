@@ -175,7 +175,7 @@ export default function SettingsPage() {
         <div className="space-y-6">
           <SettingsPageHeader
             title="模型服务管理"
-            description="管理 Claude 和 Codex 的全局模型服务配置"
+            description="管理全局模型服务配置"
           />
           <ModelProviderPanel showHeader={false} />
         </div>

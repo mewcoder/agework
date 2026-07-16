@@ -121,6 +121,8 @@ export type AgentPendingActionSink = (event: {
 export type CodexAppServerAdapterConfig = {
   apiKey?: string;
   baseUrl?: string;
+  /** `openai-compatible` → wire_api="chat";其余(含未传)→ wire_api="responses"。 */
+  apiFormat?: "openai-responses" | "openai-compatible";
   model?: string;
   cwd?: string;
   modelReasoningEffort?: "low" | "medium" | "high" | "xhigh";
@@ -1036,14 +1038,16 @@ export class CodexAppServerAgentAdapter extends AbstractAgent {
       .replace(/\/v1$/, "");
     if (!baseUrl) return undefined;
 
+    // openai-compatible 格式走 wire_api="chat",用 env_key 挂 Bearer key(不是 OpenAI 官方鉴权)
     return {
       model_provider: PROVIDER_NAME,
       model_providers: {
         [PROVIDER_NAME]: {
           name: "OpenAI",
           base_url: baseUrl,
-          wire_api: "responses",
-          requires_openai_auth: true,
+          ...(this.config.apiFormat === "openai-compatible"
+            ? { wire_api: "chat", env_key: "OPENAI_API_KEY" }
+            : { wire_api: "responses", requires_openai_auth: true }),
         },
       },
     };

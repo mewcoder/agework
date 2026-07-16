@@ -6,38 +6,41 @@ function makeRepo(modelProvider: Record<string, unknown>) {
 }
 
 describe("ModelProviderRepository", () => {
-  it("findManyByAgent excludes disabled by default and orders by createdAt asc", async () => {
+  it("findManyByApiFormats excludes disabled by default and orders by createdAt asc", async () => {
     const findMany = vi.fn().mockResolvedValue([]);
     const repo = makeRepo({ findMany });
 
-    await repo.findManyByAgent("claude", false);
+    await repo.findManyByApiFormats(["anthropic"], false);
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { agentType: "claude", isEnabled: true },
+      where: { apiFormat: { in: ["anthropic"] }, isEnabled: true },
       orderBy: { createdAt: "asc" },
     });
   });
 
-  it("findManyByAgent includes disabled when requested", async () => {
+  it("findManyByApiFormats includes disabled when requested", async () => {
     const findMany = vi.fn().mockResolvedValue([]);
     const repo = makeRepo({ findMany });
 
-    await repo.findManyByAgent("claude", true);
+    await repo.findManyByApiFormats(
+      ["openai-responses", "openai-compatible"],
+      true
+    );
 
     expect(findMany).toHaveBeenCalledWith({
-      where: { agentType: "claude" },
+      where: { apiFormat: { in: ["openai-responses", "openai-compatible"] } },
       orderBy: { createdAt: "asc" },
     });
   });
 
-  it("findEnabled scopes to id + agentType + enabled", async () => {
+  it("findEnabled scopes to id + enabled", async () => {
     const findFirst = vi.fn().mockResolvedValue(null);
     const repo = makeRepo({ findFirst });
 
-    await repo.findEnabled("mp-1", "claude");
+    await repo.findEnabled("mp-1");
 
     expect(findFirst).toHaveBeenCalledWith({
-      where: { id: "mp-1", agentType: "claude", isEnabled: true },
+      where: { id: "mp-1", isEnabled: true },
     });
   });
 
@@ -46,7 +49,6 @@ describe("ModelProviderRepository", () => {
     const repo = makeRepo({ findFirst });
 
     await repo.findIdByName({
-      agentType: "claude",
       scope: "global",
       userId: null,
       name: "dup",
@@ -55,7 +57,6 @@ describe("ModelProviderRepository", () => {
 
     expect(findFirst).toHaveBeenCalledWith({
       where: {
-        agentType: "claude",
         scope: "global",
         userId: null,
         name: "dup",

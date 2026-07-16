@@ -1,4 +1,4 @@
-import type { AgentType, ListResponse } from "../common";
+import type { ApiFormat, ListResponse } from "../common";
 
 export type ModelProviderScope = "system" | "global" | "user";
 
@@ -11,7 +11,8 @@ export type ProviderConfig = {
 
 export type ModelProviderResponse = {
   modelProviderId: string;
-  agentType: AgentType;
+  /** 该服务端点说哪种 API 协议。哪些 agent 可用由 agent 侧声明(AGENT_API_FORMAT_SUPPORT)派生,平台不逐服务配置。 */
+  apiFormat: ApiFormat;
   scope: ModelProviderScope;
   userId: string | null;
   name: string;
@@ -25,11 +26,12 @@ export type ModelProviderResponse = {
 };
 
 export type CreateModelProviderRequest = {
-  agentType: AgentType;
+  apiFormat: ApiFormat;
   name: string;
   providerConfig: ProviderConfig;
 };
 
+/** apiFormat 创建后不可改。 */
 export type UpdateModelProviderRequest = {
   id: string;
   name: string;

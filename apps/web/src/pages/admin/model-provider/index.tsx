@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
 import { PlusIcon } from "lucide-react";
-import { ModelProviderDialog } from "@/components/settings/model-provider-dialog";
+import {
+  ModelProviderDialog,
+  type ModelProviderSaveValues,
+} from "@/components/settings/model-provider-dialog";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { useConfirmDelete } from "@/hooks/use-confirm-delete";
@@ -19,14 +21,12 @@ import {
   useSetModelProviderEnabled,
   useUpdateModelProvider,
   type ModelProvider,
-  type ProviderConfigValues,
 } from "@/hooks/model-provider-hooks";
 import { cn } from "@/lib/utils";
+import { API_FORMAT_AGENT_TYPES, isApiFormat } from "@agework/shared";
 import {
   agentLabel,
-  isManagedAgent,
-  type ManagedAgent,
-  compareModelProviders,
+  apiFormatLabel,
   getBaseUrl,
   getModel,
 } from "@/utils/model-provider";
@@ -40,121 +40,34 @@ export function ModelProviderPanel({
 }: {
   showHeader?: boolean;
 }) {
-  const { data: claudeModelProviders = [], isLoading: isLoadingClaude } =
-    useAdminModelProviders("claude");
-  const { data: codexModelProviders = [], isLoading: isLoadingCodex } =
-    useAdminModelProviders("codex");
-  const { data: opencodeModelProviders = [], isLoading: isLoadingOpencode } =
-    useAdminModelProviders("opencode");
-  const createClaudeModelProvider = useCreateModelProvider("claude");
-  const createCodexModelProvider = useCreateModelProvider("codex");
-  const createOpencodeModelProvider = useCreateModelProvider("opencode");
-  const updateClaudeModelProvider = useUpdateModelProvider("claude");
-  const updateCodexModelProvider = useUpdateModelProvider("codex");
-  const updateOpencodeModelProvider = useUpdateModelProvider("opencode");
-  const setClaudeModelProviderEnabled = useSetModelProviderEnabled("claude");
-  const setCodexModelProviderEnabled = useSetModelProviderEnabled("codex");
-  const setOpencodeModelProviderEnabled = useSetModelProviderEnabled("opencode");
-  const deleteClaudeModelProvider = useDeleteModelProvider("claude");
-  const deleteCodexModelProvider = useDeleteModelProvider("codex");
-  const deleteOpencodeModelProvider = useDeleteModelProvider("opencode");
+  const { data: modelProviders = [], isLoading } = useAdminModelProviders();
+  const createModelProvider = useCreateModelProvider();
+  const updateModelProvider = useUpdateModelProvider();
+  const setModelProviderEnabled = useSetModelProviderEnabled();
+  const deleteModelProvider = useDeleteModelProvider();
 
   const formDialog = useFormDialog<ModelProvider>();
-  const [dialogAgent, setDialogAgent] = useState<ManagedAgent>("claude");
   const deleteDialog = useConfirmDelete<ModelProvider>();
 
-  const modelProviders = useMemo(
-    () =>
-      [
-        ...claudeModelProviders,
-        ...codexModelProviders,
-        ...opencodeModelProviders,
-      ].sort(compareModelProviders),
-    [claudeModelProviders, codexModelProviders, opencodeModelProviders],
-  );
-  const isLoading = isLoadingClaude || isLoadingCodex || isLoadingOpencode;
-
-  function openCreateDialog() {
-    setDialogAgent("claude");
-    formDialog.openCreate();
-  }
-
-  function openEditDialog(modelProvider: ModelProvider) {
-    const agent = isManagedAgent(modelProvider.agentType) ? modelProvider.agentType : "claude";
-    setDialogAgent(agent);
-    formDialog.openEdit(modelProvider);
-  }
-
-  function createMutationFor(agent: ManagedAgent) {
-    return agent === "claude"
-      ? createClaudeModelProvider
-      : agent === "opencode"
-        ? createOpencodeModelProvider
-        : createCodexModelProvider;
-  }
-
-  function updateMutationFor(agent: ManagedAgent) {
-    return agent === "claude"
-      ? updateClaudeModelProvider
-      : agent === "opencode"
-        ? updateOpencodeModelProvider
-        : updateCodexModelProvider;
-  }
-
-  function deleteMutationFor(agentType: string) {
-    return agentType === "claude"
-      ? deleteClaudeModelProvider
-      : agentType === "opencode"
-        ? deleteOpencodeModelProvider
-        : deleteCodexModelProvider;
-  }
-
-  function setEnabledMutationFor(agentType: string) {
-    return agentType === "claude"
-      ? setClaudeModelProviderEnabled
-      : agentType === "opencode"
-        ? setOpencodeModelProviderEnabled
-        : setCodexModelProviderEnabled;
-  }
-
-  async function handleSave(
-    name: string,
-    providerConfig: ProviderConfigValues,
-    agent: ManagedAgent,
-  ) {
+  async function handleSave(values: ModelProviderSaveValues) {
     if (formDialog.target) {
-      const agent = isManagedAgent(formDialog.target.agentType)
-        ? formDialog.target.agentType
-        : dialogAgent;
-      await updateMutationFor(agent).mutateAsync({
+      await updateModelProvider.mutateAsync({
         modelProviderId: formDialog.target.modelProviderId,
-        name,
-        providerConfig,
+        name: values.name,
+        providerConfig: values.providerConfig,
       });
     } else {
-      await createMutationFor(agent).mutateAsync({ name, providerConfig });
+      await createModelProvider.mutateAsync(values);
     }
     formDialog.close();
   }
 
   function handleDelete() {
     if (!deleteDialog.target) return;
-    deleteMutationFor(deleteDialog.target.agentType).mutate(deleteDialog.target.modelProviderId, {
+    deleteModelProvider.mutate(deleteDialog.target.modelProviderId, {
       onSuccess: () => deleteDialog.cancelDelete(),
     });
   }
-
-  const dialogMutation = formDialog.target
-    ? updateMutationFor(
-        isManagedAgent(formDialog.target.agentType) ? formDialog.target.agentType : dialogAgent,
-      )
-    : undefined;
-  const isDialogSaving = formDialog.target
-    ? dialogMutation?.isPending
-    : createClaudeModelProvider.isPending || createCodexModelProvider.isPending;
-  const deleteMutation = deleteDialog.target
-    ? deleteMutationFor(deleteDialog.target.agentType)
-    : deleteClaudeModelProvider;
 
   const columns: DataTableColumnDef<ModelProvider>[] = [
     {
@@ -168,16 +81,32 @@ export function ModelProviderPanel({
       ),
     },
     {
-      id: "agent",
-      header: "Agent",
+      id: "apiFormat",
+      header: "API 格式",
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <AgentIcon agent={row.original.agentType} />
-          <DataTableText className="font-medium">
-            {agentLabel(row.original.agentType)}
-          </DataTableText>
-        </div>
+        <DataTableBadge variant="outline">
+          {apiFormatLabel(row.original.apiFormat)}
+        </DataTableBadge>
       ),
+    },
+    {
+      id: "agents",
+      header: "适用 Agent",
+      cell: ({ row }) => {
+        const agentTypes = isApiFormat(row.original.apiFormat)
+          ? API_FORMAT_AGENT_TYPES[row.original.apiFormat]
+          : [];
+        return (
+          <div className="flex items-center gap-2">
+            {agentTypes.map((agentType) => (
+              <div key={agentType} className="flex items-center gap-1" title={agentLabel(agentType)}>
+                <AgentIcon agent={agentType} />
+                <DataTableText>{agentLabel(agentType)}</DataTableText>
+              </div>
+            ))}
+          </div>
+        );
+      },
     },
     {
       id: "model",
@@ -205,19 +134,18 @@ export function ModelProviderPanel({
       meta: { headerClassName: "pr-4 text-right", cellClassName: "pr-4 text-right" },
       cell: ({ row }) => {
         const modelProvider = row.original;
-        const setEnabledMutation = setEnabledMutationFor(modelProvider.agentType);
 
         return (
           <ModelProviderActions
             modelProvider={modelProvider}
-            isTogglingEnabled={setEnabledMutation.isPending}
+            isTogglingEnabled={setModelProviderEnabled.isPending}
             onToggleEnabled={() =>
-              setEnabledMutation.mutate({
+              setModelProviderEnabled.mutate({
                 modelProviderId: modelProvider.modelProviderId,
                 isEnabled: !modelProvider.isEnabled,
               })
             }
-            onEdit={() => openEditDialog(modelProvider)}
+            onEdit={() => formDialog.openEdit(modelProvider)}
             onDelete={() => deleteDialog.requestDelete(modelProvider)}
           />
         );
@@ -242,7 +170,7 @@ export function ModelProviderPanel({
           </div>
         )}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button size="sm" onClick={openCreateDialog}>
+          <Button size="sm" onClick={formDialog.openCreate}>
             <PlusIcon data-icon="inline-start" />
             新建模型服务
           </Button>
@@ -254,25 +182,27 @@ export function ModelProviderPanel({
         data={modelProviders}
         isLoading={isLoading}
         emptyText="暂无模型服务"
-        tableClassName="min-w-[860px]"
+        tableClassName="min-w-[960px]"
         getRowId={(modelProvider) => modelProvider.modelProviderId}
       />
 
       <ModelProviderDialog
         open={formDialog.open}
         onOpenChange={formDialog.onOpenChange}
-        agent={dialogAgent}
         modelProvider={formDialog.target}
         onSave={handleSave}
-        isSaving={isDialogSaving}
-        allowAgentSelect
+        isSaving={
+          formDialog.target
+            ? updateModelProvider.isPending
+            : createModelProvider.isPending
+        }
       />
 
       <ConfirmDeleteDialog
         open={deleteDialog.isOpen}
         onOpenChange={deleteDialog.onOpenChange}
         onConfirm={handleDelete}
-        isPending={deleteMutation.isPending}
+        isPending={deleteModelProvider.isPending}
         title="删除模型服务"
         targetName={deleteDialog.target?.name}
       />

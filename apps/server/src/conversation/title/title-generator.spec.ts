@@ -18,6 +18,7 @@ vi.mock("@ai-sdk/openai", () => ({
 
 const CUSTOM_PROVIDER = {
   source: "custom",
+  apiFormat: "anthropic",
   providerConfig: {
     baseUrl: "https://api.example.com",
     apiKey: " sk-test ",

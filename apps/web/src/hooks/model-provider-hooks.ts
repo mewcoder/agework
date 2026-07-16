@@ -1,15 +1,19 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { modelProvidersApi } from '@/api/model-providers';
 import type { ProviderConfigValues } from '@/api/model-providers';
-import type { AgentType } from '@agework/shared';
+import type { AgentType, ApiFormat } from '@agework/shared';
 export type { ModelProvider, ProviderConfigValues, ModelProviderTestResponse } from '@/api/model-providers';
 
 function queryKey(agentType: AgentType, runtimeHostId?: string) {
   return ['model-providers', agentType, runtimeHostId ?? null];
 }
 
-function adminQueryKey(agentType: AgentType) {
-  return ['admin-model-providers', agentType];
+const ADMIN_QUERY_KEY = ['admin-model-providers'];
+
+/** 一个模型服务可服务多个 agent,写操作后按前缀失效全部 agent 的列表缓存。 */
+function invalidateModelProviderQueries(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['model-providers'] });
+  qc.invalidateQueries({ queryKey: ADMIN_QUERY_KEY });
 }
 
 export function useModelProviders(agentType: AgentType, runtimeHostId?: string) {
@@ -20,60 +24,58 @@ export function useModelProviders(agentType: AgentType, runtimeHostId?: string) 
   });
 }
 
-export function useAdminModelProviders(agentType: AgentType) {
+export function useAdminModelProviders() {
   return useQuery({
-    queryKey: adminQueryKey(agentType),
-    queryFn: () => modelProvidersApi.adminList(agentType),
+    queryKey: ADMIN_QUERY_KEY,
+    queryFn: () => modelProvidersApi.adminList(),
     select: (data) => data.list,
   });
 }
 
-export function useCreateModelProvider(agentType: AgentType) {
+export function useCreateModelProvider() {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: (data: { name: string; providerConfig: ProviderConfigValues }) =>
-      modelProvidersApi.create({ agentType, ...data }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKey(agentType) });
-      qc.invalidateQueries({ queryKey: adminQueryKey(agentType) });
-    },
+    mutationFn: (data: {
+      apiFormat: ApiFormat;
+      name: string;
+      providerConfig: ProviderConfigValues;
+    }) => modelProvidersApi.create(data),
+    onSuccess: () => invalidateModelProviderQueries(qc),
   });
 }
 
-export function useUpdateModelProvider(agentType: AgentType) {
+export function useUpdateModelProvider() {
   const qc = useQueryClient();
   return useMutation({
     meta: { suppressGlobalError: true },
-    mutationFn: ({ modelProviderId, name, providerConfig }: { modelProviderId: string; name: string; providerConfig: ProviderConfigValues }) =>
-      modelProvidersApi.update({ id: modelProviderId, name, providerConfig }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKey(agentType) });
-      qc.invalidateQueries({ queryKey: adminQueryKey(agentType) });
-    },
+    mutationFn: ({
+      modelProviderId,
+      name,
+      providerConfig,
+    }: {
+      modelProviderId: string;
+      name: string;
+      providerConfig: ProviderConfigValues;
+    }) => modelProvidersApi.update({ id: modelProviderId, name, providerConfig }),
+    onSuccess: () => invalidateModelProviderQueries(qc),
   });
 }
 
-export function useSetModelProviderEnabled(agentType: AgentType) {
+export function useSetModelProviderEnabled() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ modelProviderId, isEnabled }: { modelProviderId: string; isEnabled: boolean }) =>
       modelProvidersApi.setEnabled({ id: modelProviderId, isEnabled }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKey(agentType) });
-      qc.invalidateQueries({ queryKey: adminQueryKey(agentType) });
-    },
+    onSuccess: () => invalidateModelProviderQueries(qc),
   });
 }
 
-export function useDeleteModelProvider(agentType: AgentType) {
+export function useDeleteModelProvider() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (modelProviderId: string) => modelProvidersApi.delete({ id: modelProviderId }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKey(agentType) });
-      qc.invalidateQueries({ queryKey: adminQueryKey(agentType) });
-    },
+    onSuccess: () => invalidateModelProviderQueries(qc),
   });
 }
 

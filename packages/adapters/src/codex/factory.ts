@@ -47,6 +47,11 @@ export type CodexAgentInstance = AbstractAgent & {
 export type CodexBackendConfig = {
   apiKey?: string;
   baseUrl?: string;
+  /**
+   * ModelProvider 的 API 协议格式。`openai-compatible` → wire_api="chat" + env_key,
+   * 其余(含未传,兼容旧下发)→ wire_api="responses" + requires_openai_auth。
+   */
+  apiFormat?: "openai-responses" | "openai-compatible";
   model?: string;
   cwd?: string;
   modelReasoningEffort?: "low" | "medium" | "high" | "xhigh";
@@ -98,6 +103,7 @@ export function createCodexAdapter(
     const sdkConfig: CodexAdapterConfig = {
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,
+      apiFormat: config.apiFormat,
       model: config.model,
       cwd: config.cwd,
       modelReasoningEffort: config.modelReasoningEffort,
@@ -112,6 +118,7 @@ export function createCodexAdapter(
   const appServerConfig: CodexAppServerAdapterConfig = {
     apiKey: config.apiKey,
     baseUrl: config.baseUrl,
+    apiFormat: config.apiFormat,
     model: config.model,
     cwd: config.cwd,
     modelReasoningEffort: config.modelReasoningEffort,

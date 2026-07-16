@@ -21,12 +21,13 @@ describe("getLLMClient", () => {
       languageModel: vi.fn().mockReturnValue("anthropic-model"),
     } as never);
     vi.mocked(createOpenAI).mockReturnValue({
-      chat: vi.fn().mockReturnValue("openai-model"),
+      chat: vi.fn().mockReturnValue("openai-chat-model"),
+      responses: vi.fn().mockReturnValue("openai-responses-model"),
     } as never);
   });
 
-  it("builds an anthropic model for claude, trimming key and picking first non-empty model", () => {
-    const built = getLLMClient("claude", CONFIG);
+  it("builds an anthropic model for anthropic format, trimming key and picking first non-empty model", () => {
+    const built = getLLMClient("anthropic", CONFIG);
 
     expect(createAnthropic).toHaveBeenCalledWith({
       authToken: "sk-test",
@@ -35,24 +36,34 @@ describe("getLLMClient", () => {
     expect(built).toEqual({ model: "anthropic-model" });
   });
 
-  it("builds an openai chat model for non-claude agents", () => {
-    const built = getLLMClient("codex", CONFIG);
+  it("builds an openai responses model for openai-responses format", () => {
+    const built = getLLMClient("openai-responses", CONFIG);
 
     expect(createOpenAI).toHaveBeenCalledWith({
       apiKey: "sk-test",
       baseURL: "https://api.example.com/v1",
     });
-    expect(built).toEqual({ model: "openai-model" });
+    expect(built).toEqual({ model: "openai-responses-model" });
+  });
+
+  it("builds an openai chat model for openai-compatible format", () => {
+    const built = getLLMClient("openai-compatible", CONFIG);
+
+    expect(createOpenAI).toHaveBeenCalledWith({
+      apiKey: "sk-test",
+      baseURL: "https://api.example.com/v1",
+    });
+    expect(built).toEqual({ model: "openai-chat-model" });
   });
 
   it("returns an error when required config is missing", () => {
-    expect(getLLMClient("claude", { ...CONFIG, apiKey: "  " })).toEqual({
+    expect(getLLMClient("anthropic", { ...CONFIG, apiKey: "  " })).toEqual({
       error: "未配置 apiKey",
     });
-    expect(getLLMClient("claude", { ...CONFIG, models: [] })).toEqual({
+    expect(getLLMClient("anthropic", { ...CONFIG, models: [] })).toEqual({
       error: "未配置 models",
     });
-    expect(getLLMClient("claude", { ...CONFIG, baseUrl: "" })).toEqual({
+    expect(getLLMClient("anthropic", { ...CONFIG, baseUrl: "" })).toEqual({
       error: "未配置 baseUrl",
     });
     expect(createAnthropic).not.toHaveBeenCalled();

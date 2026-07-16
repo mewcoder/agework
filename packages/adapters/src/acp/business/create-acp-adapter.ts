@@ -11,6 +11,8 @@ export type CreateAcpAdapterOptions = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  /** ModelProvider 的 API 协议格式,透传给 profile 选接入方式。 */
+  apiFormat?: string;
   extraConfig?: Record<string, string>;
   /** Resolved agent CLI path (overrides the profile's default command). */
   executablePath?: string;
@@ -47,6 +49,7 @@ export function createAcpAdapter(
     apiKey: opts.apiKey,
     baseUrl: opts.baseUrl,
     model: opts.model,
+    apiFormat: opts.apiFormat,
     extraConfig: opts.extraConfig,
   });
 

@@ -16,24 +16,30 @@ export class ModelProviderRepository {
     return this.prisma.modelProvider.findUnique({ where: { id } });
   }
 
-  findEnabled(id: string, agentType: string) {
+  findEnabled(id: string) {
     return this.prisma.modelProvider.findFirst({
-      where: { id, agentType, isEnabled: true },
+      where: { id, isEnabled: true },
     });
   }
 
-  findManyByAgent(agentType: string, includeDisabled: boolean) {
+  /** 按 API 格式集合查(调用方传入某 agent 声明消费的格式集合)。 */
+  findManyByApiFormats(apiFormats: string[], includeDisabled: boolean) {
     return this.prisma.modelProvider.findMany({
       where: {
-        agentType,
+        apiFormat: { in: apiFormats },
         ...(includeDisabled ? {} : { isEnabled: true }),
       },
       orderBy: { createdAt: "asc" },
     });
   }
 
+  findAll() {
+    return this.prisma.modelProvider.findMany({
+      orderBy: { createdAt: "asc" },
+    });
+  }
+
   findIdByName(opts: {
-    agentType: string;
     scope: string;
     userId: string | null;
     name: string;
@@ -41,7 +47,6 @@ export class ModelProviderRepository {
   }): Promise<{ id: string } | null> {
     return this.prisma.modelProvider.findFirst({
       where: {
-        agentType: opts.agentType,
         scope: opts.scope,
         userId: opts.userId,
         name: opts.name,

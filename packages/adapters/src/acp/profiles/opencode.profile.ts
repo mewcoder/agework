@@ -1,18 +1,22 @@
 import type { AcpAgentProfile, AcpProfileEnvInput } from "./profile";
 
 const OPENCODE_PROVIDER = "_agework";
-const DEFAULT_PROVIDER_NPM = "@ai-sdk/openai-compatible";
-// Only these provider npm packages may be selected via extraConfig (doc §7.2).
-const ALLOWED_PROVIDER_NPM = new Set([
-  "@ai-sdk/openai-compatible",
-  "@ai-sdk/openai",
-]);
 
-function resolveProviderNpm(extraConfig?: Record<string, string>): string {
-  const requested = extraConfig?.providerNpm;
-  return requested && ALLOWED_PROVIDER_NPM.has(requested)
-    ? requested
-    : DEFAULT_PROVIDER_NPM;
+/** ModelProvider 的 apiFormat → OpenCode provider npm 包(见 opencode providers 文档)。未传/未知按 chat 兜底。 */
+function resolveProviderNpm(apiFormat?: string): string {
+  if (apiFormat === "anthropic") return "@ai-sdk/anthropic";
+  if (apiFormat === "openai-responses") return "@ai-sdk/openai";
+  return "@ai-sdk/openai-compatible";
+}
+
+/**
+ * anthropic 格式的存库 baseUrl 沿用 Claude Code 的 ANTHROPIC_BASE_URL 惯例(不带 /v1),
+ * 而 @ai-sdk/anthropic 的 baseURL 需要带 /v1,这里补齐(与 server getLLMClient 同规则)。
+ */
+function resolveBaseUrl(input: AcpProfileEnvInput): string | undefined {
+  if (!input.baseUrl || input.apiFormat !== "anthropic") return input.baseUrl;
+  const trimmed = input.baseUrl.replace(/\/$/, "");
+  return trimmed.endsWith("/v1") ? trimmed : `${trimmed}/v1`;
 }
 
 /**
@@ -27,10 +31,10 @@ function buildCustomConfig(input: AcpProfileEnvInput): string {
     model: `${OPENCODE_PROVIDER}/${model}`,
     provider: {
       [OPENCODE_PROVIDER]: {
-        npm: resolveProviderNpm(input.extraConfig),
+        npm: resolveProviderNpm(input.apiFormat),
         name: "AgeWork",
         options: {
-          baseURL: input.baseUrl,
+          baseURL: resolveBaseUrl(input),
           apiKey: "{env:AGEWORK_OPENCODE_API_KEY}",
         },
         models: { [model]: { name: model } },

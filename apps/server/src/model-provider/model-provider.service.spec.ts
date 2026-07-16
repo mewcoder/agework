@@ -5,7 +5,8 @@ function createService(overrides: Record<string, unknown> = {}) {
   const repo = {
     findById: vi.fn().mockResolvedValue(null),
     findEnabled: vi.fn().mockResolvedValue(null),
-    findManyByAgent: vi.fn().mockResolvedValue([]),
+    findManyByApiFormats: vi.fn().mockResolvedValue([]),
+    findAll: vi.fn().mockResolvedValue([]),
     findIdByName: vi.fn().mockResolvedValue(null),
     create: vi.fn(),
     update: vi.fn(),
@@ -37,10 +38,10 @@ function createService(overrides: Record<string, unknown> = {}) {
 describe("ModelProviderService", () => {
   it("desensitizes apiKey for listEnabled (non-admin) responses", async () => {
     const { service } = createService({
-      findManyByAgent: vi.fn().mockResolvedValue([
+      findManyByApiFormats: vi.fn().mockResolvedValue([
         {
           id: "mp-1",
-          agentType: "claude",
+          apiFormat: "anthropic",
           scope: "global",
           userId: null,
           name: "test",
@@ -71,10 +72,10 @@ describe("ModelProviderService", () => {
 
   it("keeps the real apiKey for listForAdmin (admin) responses", async () => {
     const { service } = createService({
-      findManyByAgent: vi.fn().mockResolvedValue([
+      findAll: vi.fn().mockResolvedValue([
         {
           id: "mp-1",
-          agentType: "claude",
+          apiFormat: "anthropic",
           scope: "global",
           userId: null,
           name: "test",
@@ -89,7 +90,7 @@ describe("ModelProviderService", () => {
       ]),
     });
 
-    const result = await service.listForAdmin("claude");
+    const result = await service.listForAdmin();
 
     expect(JSON.parse(result.list[0].providerConfig)).toEqual({
       baseUrl: "https://example.com/anthropic",
@@ -150,7 +151,7 @@ describe("ModelProviderService", () => {
     const { service } = createService({
       findEnabled: vi.fn().mockResolvedValue({
         id: "mp-1",
-        agentType: "claude",
+        apiFormat: "anthropic",
         scope: "global",
         isEnabled: true,
         baseUrl: "https://example.com",
@@ -164,6 +165,7 @@ describe("ModelProviderService", () => {
       service.resolveEnabledProvider("claude", "mp-1")
     ).resolves.toEqual({
       source: "custom",
+      apiFormat: "anthropic",
       providerConfig: {
         baseUrl: "https://example.com",
         apiKey: "sk-test",
@@ -171,6 +173,51 @@ describe("ModelProviderService", () => {
         extraConfig: { FOO: "bar" },
       },
     });
+  });
+
+  it("queries listEnabled by the agent's declared api formats", async () => {
+    const findManyByApiFormats = vi.fn().mockResolvedValue([]);
+    const { service, configService } = createService({ findManyByApiFormats });
+    configService.isSystemEnvEnabled.mockReturnValue(false);
+
+    await service.listEnabled("codex");
+
+    expect(findManyByApiFormats).toHaveBeenCalledWith(
+      ["openai-responses"],
+      false
+    );
+  });
+
+  it("returns null from resolveEnabledProvider when the agent does not consume the format", async () => {
+    const { service } = createService({
+      findEnabled: vi.fn().mockResolvedValue({
+        id: "mp-1",
+        apiFormat: "openai-compatible",
+        scope: "global",
+        isEnabled: true,
+        baseUrl: "https://example.com",
+        apiKey: "sk-test",
+        models: ["m"],
+        extraConfig: {},
+      }),
+    });
+
+    await expect(
+      service.resolveEnabledProvider("claude", "mp-1")
+    ).resolves.toBeNull();
+  });
+
+  it("rejects create with an unknown api format", async () => {
+    const { service } = createService();
+
+    await expect(
+      service.create("grpc", "bad", {
+        baseUrl: "https://example.com",
+        apiKey: "sk",
+        models: ["m"],
+        extraConfig: {},
+      })
+    ).rejects.toThrow("不支持的 API 格式");
   });
 
   it("rejects setEnabled for system provider", async () => {
@@ -193,7 +240,7 @@ describe("ModelProviderService", () => {
       const { service } = createService({
         findById: vi.fn().mockResolvedValue({
           id: "mp-1",
-          agentType: "codex",
+          apiFormat: "openai-responses",
           scope: "global",
           isEnabled: true,
           baseUrl: "https://example.com",

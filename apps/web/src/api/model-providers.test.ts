@@ -27,16 +27,16 @@ describe('modelProvidersApi', () => {
   describe('adminList', () => {
     it('使用 admin 端点', async () => {
       mockApiGet.mockResolvedValue({ list: [] });
-      await modelProvidersApi.adminList('codex');
+      await modelProvidersApi.adminList();
 
-      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/model-providers/list?agentType=codex');
+      expect(mockApiGet).toHaveBeenCalledWith('/api/v1/admin/model-providers/list');
     });
   });
 
   describe('create', () => {
     it('调用 admin create 端点', async () => {
       const body = {
-        agentType: 'claude' as const,
+        apiFormat: 'anthropic' as const,
         name: 'test-provider',
         providerConfig: { baseUrl: 'https://example.com', apiKey: 'sk-test', models: ['m'], extraConfig: {} },
       };

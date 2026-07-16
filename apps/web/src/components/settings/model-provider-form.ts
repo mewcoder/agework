@@ -1,6 +1,11 @@
 import { z } from "zod";
 import type { ProviderConfigValues } from "@/hooks/model-provider-hooks";
-import { type ManagedAgent, MANAGED_AGENTS } from "@/utils/model-provider";
+import {
+  AGENT_NATIVE_API_FORMAT,
+  API_FORMATS,
+  isApiFormat,
+  type AgentType,
+} from "@agework/shared";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
@@ -20,7 +25,7 @@ export type CustomField = { key: string; value: string };
 
 export const modelProviderDialogFormSchema = z
   .object({
-    agent: z.enum(MANAGED_AGENTS),
+    apiFormat: z.enum(API_FORMATS),
     name: z
       .string()
       .refine((value) => value.trim().length > 0, {
@@ -109,15 +114,27 @@ function parseProviderConfig(providerConfig: string): {
 
 export function initialFormValues(
   modelProvider: import("@/hooks/model-provider-hooks").ModelProvider | undefined,
-  agent: ManagedAgent,
+  defaultAgent?: AgentType,
 ): ModelProviderDialogFormValues {
   if (!modelProvider) {
-    return { agent, name: "", baseUrl: "", apiKey: "", models: [""], custom: [] };
+    // 从某个 agent 的上下文进入时,默认它的原生格式。
+    return {
+      apiFormat: defaultAgent
+        ? AGENT_NATIVE_API_FORMAT[defaultAgent]
+        : "anthropic",
+      name: "",
+      baseUrl: "",
+      apiKey: "",
+      models: [""],
+      custom: [],
+    };
   }
 
   const parsed = parseProviderConfig(modelProvider.providerConfig);
   return {
-    agent,
+    apiFormat: isApiFormat(modelProvider.apiFormat)
+      ? modelProvider.apiFormat
+      : "anthropic",
     name: modelProvider.name,
     baseUrl: parsed.baseUrl,
     apiKey: parsed.apiKey,

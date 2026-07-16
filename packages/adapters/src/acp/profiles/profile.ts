@@ -7,6 +7,8 @@ export type AcpProfileEnvInput = {
   apiKey?: string;
   baseUrl?: string;
   model?: string;
+  /** ModelProvider 的 API 协议格式(如 "openai-responses"),profile 据此选接入方式。 */
+  apiFormat?: string;
   /** Whitelisted per-profile overrides (never spread raw). */
   extraConfig?: Record<string, string>;
 };

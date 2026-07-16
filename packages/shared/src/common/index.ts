@@ -45,6 +45,73 @@ export function isAgentType(value: unknown): value is AgentType {
   );
 }
 
+/** 模型服务的 API 协议格式。provider 的固有属性是「说哪种协议」,支持哪些 agent 由此派生。 */
+export const API_FORMATS = [
+  "anthropic",
+  "openai-responses",
+  "openai-compatible",
+] as const;
+export type ApiFormat = (typeof API_FORMATS)[number];
+
+export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
+  anthropic: "Anthropic Messages",
+  "openai-responses": "OpenAI Responses API",
+  "openai-compatible": "OpenAI Chat Completions",
+};
+
+/**
+ * 每个 agent 自己声明消费哪些 API 格式(source of truth,格式→agent 的矩阵由此反查派生)。
+ * `native` 是它的原生协议(「系统环境」虚拟 provider 展示用),必须包含在 `supported` 内。
+ *
+ * - claude(Claude Code)只认 Anthropic Messages。
+ * - codex 原生 Responses(技术上可走 wire_api="chat" 消费 openai-compatible,产品上未放开)。
+ * - opencode 三种都支持:按格式选 @ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic
+ *   (见 opencode providers 文档,profile 里做包选择)。
+ */
+export const AGENT_API_FORMAT_SUPPORT: Record<
+  AgentType,
+  { native: ApiFormat; supported: readonly ApiFormat[] }
+> = {
+  claude: { native: "anthropic", supported: ["anthropic"] },
+  codex: { native: "openai-responses", supported: ["openai-responses"] },
+  opencode: {
+    native: "openai-compatible",
+    supported: ["openai-compatible", "openai-responses", "anthropic"],
+  },
+};
+
+function agentTypesForFormat(format: ApiFormat): readonly AgentType[] {
+  return AGENT_TYPES.filter((agentType) =>
+    AGENT_API_FORMAT_SUPPORT[agentType].supported.includes(format)
+  );
+}
+
+/** 派生:API 格式 → 可消费该格式的 agent。 */
+export const API_FORMAT_AGENT_TYPES: Record<ApiFormat, readonly AgentType[]> =
+  {
+    anthropic: agentTypesForFormat("anthropic"),
+    "openai-responses": agentTypesForFormat("openai-responses"),
+    "openai-compatible": agentTypesForFormat("openai-compatible"),
+  };
+
+/** 派生:agent 各自的原生 API 格式。 */
+export const AGENT_NATIVE_API_FORMAT: Record<AgentType, ApiFormat> = {
+  claude: AGENT_API_FORMAT_SUPPORT.claude.native,
+  codex: AGENT_API_FORMAT_SUPPORT.codex.native,
+  opencode: AGENT_API_FORMAT_SUPPORT.opencode.native,
+};
+
+export function isApiFormat(value: unknown): value is ApiFormat {
+  return (
+    typeof value === "string" && API_FORMATS.includes(value as ApiFormat)
+  );
+}
+
+/** 某 agent 声明消费的全部 API 格式。 */
+export function apiFormatsForAgent(agentType: AgentType): ApiFormat[] {
+  return [...AGENT_API_FORMAT_SUPPORT[agentType].supported];
+}
+
 /** 检测到的单个 agent CLI 环境信息（上报层，不可被 admin 直接覆写）。 */
 export type AgentDetectedEnv = {
   /** 检测到的可执行文件绝对路径；没找到为 null。 */

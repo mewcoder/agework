@@ -1,5 +1,5 @@
 import { IsIn, IsNotEmpty, IsString } from "class-validator";
-import { AGENT_TYPES, type AgentType } from "@agework/shared";
+import { API_FORMATS, type ApiFormat } from "@agework/shared";
 import type {
   CreateModelProviderRequest,
   ProviderConfig,
@@ -9,8 +9,8 @@ import { IsValidProviderConfig } from "./is-valid-provider-config.validator";
 export class CreateModelProviderDto implements CreateModelProviderRequest {
   @IsString()
   @IsNotEmpty()
-  @IsIn(AGENT_TYPES)
-  agentType!: AgentType;
+  @IsIn(API_FORMATS)
+  apiFormat!: ApiFormat;
 
   @IsString()
   @IsNotEmpty()

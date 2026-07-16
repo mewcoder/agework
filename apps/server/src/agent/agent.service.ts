@@ -305,6 +305,7 @@ export class AgentService {
     const config: CustomAgentProviderConfig = {
       agentType,
       source: "custom",
+      apiFormat: resolved.apiFormat,
       baseUrl,
       apiKey,
       model,

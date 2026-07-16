@@ -18,7 +18,7 @@ export async function ensureMockProvider(): Promise<void> {
   const api = await request.newContext({ baseURL: API_BASE_URL });
   try {
     const listResponse = await api.get(
-      `${API_PREFIX}/admin/model-providers/list?agentType=claude`
+      `${API_PREFIX}/admin/model-providers/list`
     );
     if (!listResponse.ok()) {
       throw new Error(
@@ -37,7 +37,7 @@ export async function ensureMockProvider(): Promise<void> {
       `${API_PREFIX}/admin/model-providers/create`,
       {
       data: {
-        agentType: "claude",
+        apiFormat: "anthropic",
         name: MOCK_PROVIDER_NAME,
         providerConfig: {
           baseUrl: "mock://e2e",

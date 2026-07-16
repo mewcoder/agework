@@ -3,7 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { generateId, isAgentType, type AgentType } from "@agework/shared";
+import {
+  AGENT_NATIVE_API_FORMAT,
+  apiFormatsForAgent,
+  generateId,
+  isAgentType,
+  isApiFormat,
+  type AgentType,
+  type ApiFormat,
+} from "@agework/shared";
 import type { ProviderConfig } from "@agework/shared/api";
 import { generateText } from "ai";
 import { normalizeBaseUrl } from "../common/base-url";
@@ -19,7 +27,7 @@ const MODEL_PROVIDER_SCOPE_GLOBAL = "global";
 type ModelProviderScope = "system" | "global" | "user";
 type ResolvedModelProvider =
   | { source: "system" }
-  | { source: "custom"; providerConfig: ProviderConfig };
+  | { source: "custom"; apiFormat: ApiFormat; providerConfig: ProviderConfig };
 type ProviderConfigColumns = {
   baseUrl: string;
   apiKey: string;
@@ -87,19 +95,7 @@ export class ModelProviderService {
     }
   }
 
-  private async list(agentType: string, includeDisabled: boolean) {
-    const resolvedAgentType = this.resolveAgentType(agentType);
-    const modelProviders = await this.repo.findManyByAgent(
-      resolvedAgentType,
-      includeDisabled
-    );
-    // desensitize: includeDisabled=true 代表走 admin 接口（listForAdmin），不脱敏；
-    // includeDisabled=false 代表 listEnabled（非 admin），脱敏。
-    const desensitize = !includeDisabled;
-    return modelProviders.map((p) => toModelProviderDto(p, desensitize));
-  }
-
-  /** 列出指定 agent 类型下已启用的模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。
+  /** 列出指定 agent 类型可用的已启用模型服务，供非 admin 调用方使用；返回结果脱敏（`apiKey` 置空）。
    *
    * 「系统环境」模型配置的可见性由两层 AND 决定（见 runtime 模块 CONTEXT.md）：
    * 1. admin 全局开关 SYSTEM_ENV_ENABLED
@@ -113,9 +109,9 @@ export class ModelProviderService {
       runtimeHostId
     );
 
-    // 获取已启用的自定义模型服务
-    const enabledProviders = await this.repo.findManyByAgent(
-      resolvedAgentType,
+    // 已启用的自定义模型服务:agent 声明消费哪些格式,按格式匹配即可用,不逐服务配置。
+    const enabledProviders = await this.repo.findManyByApiFormats(
+      apiFormatsForAgent(resolvedAgentType),
       false
     );
 
@@ -144,30 +140,29 @@ export class ModelProviderService {
     return !!resolvedPath;
   }
 
-  /** 列出指定 agent 类型下全部模型服务（含未启用），供 admin 管理端使用；原样回显 `apiKey`，不脱敏。 */
-  async listForAdmin(agentType: string) {
-    const list = await this.list(agentType, true);
-    return { list };
+  /** 列出全部模型服务（含未启用），供 admin 管理端使用；原样回显 `apiKey`，不脱敏。 */
+  async listForAdmin() {
+    const modelProviders = await this.repo.findAll();
+    return { list: modelProviders.map((p) => toModelProviderDto(p, false)) };
   }
 
   /** 创建一个全局作用域的自定义模型服务；校验 baseUrl 合法性与同 scope 下名称唯一性。 */
   async create(
-    agentType: string,
+    apiFormat: string,
     name: string,
     providerConfig: ProviderConfig
   ) {
-    const resolvedAgentType = this.resolveAgentType(agentType);
+    const resolvedApiFormat = this.resolveApiFormat(apiFormat);
     const providerName = this.normalizeName(name);
     this.validateBaseUrl(providerConfig.baseUrl);
     await this.assertNameAvailable(
-      resolvedAgentType,
       MODEL_PROVIDER_SCOPE_GLOBAL,
       null,
       providerName
     );
     const modelProvider = await this.repo.create({
       id: generateId(),
-      agentType: resolvedAgentType,
+      apiFormat: resolvedApiFormat,
       scope: MODEL_PROVIDER_SCOPE_GLOBAL,
       userId: null,
       name: providerName,
@@ -180,7 +175,7 @@ export class ModelProviderService {
     return toModelProviderDto(modelProvider, false);
   }
 
-  /** 更新一个自定义模型服务的名称与配置；系统环境模型服务（id 为 `system`）不可更新。 */
+  /** 更新一个自定义模型服务的名称与配置；apiFormat 创建后不可改；系统环境（id 为 `system`）不可更新。 */
   async update(
     modelProviderId: string,
     name: string,
@@ -194,7 +189,6 @@ export class ModelProviderService {
     this.validateBaseUrl(providerConfig.baseUrl);
     const providerName = this.normalizeName(name);
     await this.assertNameAvailable(
-      modelProvider.agentType,
       modelProvider.scope,
       modelProvider.userId,
       providerName,
@@ -241,13 +235,18 @@ export class ModelProviderService {
         : null;
     }
 
-    const modelProvider = await this.repo.findEnabled(
-      modelProviderId,
-      agentType
-    );
-    if (!modelProvider) return null;
+    const resolvedAgentType = this.resolveAgentType(agentType);
+    const modelProvider = await this.repo.findEnabled(modelProviderId);
+    if (
+      !modelProvider ||
+      !isApiFormat(modelProvider.apiFormat) ||
+      !apiFormatsForAgent(resolvedAgentType).includes(modelProvider.apiFormat)
+    ) {
+      return null;
+    }
     return {
       source: "custom",
+      apiFormat: modelProvider.apiFormat,
       providerConfig: toProviderConfig(modelProvider),
     };
   }
@@ -278,10 +277,16 @@ export class ModelProviderService {
     if (!includeDisabled && !modelProvider.isEnabled)
       throw new BadRequestException(`模型服务不可用: ${modelProviderId}`);
 
+    if (!isApiFormat(modelProvider.apiFormat)) {
+      return {
+        success: false,
+        latency: 0,
+        error: `未知的 API 格式: ${modelProvider.apiFormat}`,
+      };
+    }
     const providerConfig = toProviderConfig(modelProvider);
-    const agentType = modelProvider.agentType as AgentType;
 
-    const built = getLLMClient(agentType, providerConfig);
+    const built = getLLMClient(modelProvider.apiFormat, providerConfig);
     if ("error" in built) {
       return { success: false, latency: 0, error: built.error };
     }
@@ -314,6 +319,13 @@ export class ModelProviderService {
     return agentType;
   }
 
+  private resolveApiFormat(apiFormat: string): ApiFormat {
+    if (!isApiFormat(apiFormat)) {
+      throw new BadRequestException(`不支持的 API 格式: ${apiFormat}`);
+    }
+    return apiFormat;
+  }
+
   private normalizeName(name: string): string {
     const trimmed = name?.trim();
     if (!trimmed) throw new BadRequestException("name is required");
@@ -321,14 +333,12 @@ export class ModelProviderService {
   }
 
   private async assertNameAvailable(
-    agentType: string,
     scope: string,
     userId: string | null,
     name: string,
     excludeId?: string
   ) {
     const existing = await this.repo.findIdByName({
-      agentType,
       scope,
       userId,
       name,
@@ -343,7 +353,7 @@ export class ModelProviderService {
 function toModelProviderDto(
   modelProvider: ProviderConfigColumns & {
     id: string;
-    agentType: string;
+    apiFormat: string;
     scope: string;
     userId: string | null;
     name: string;
@@ -355,7 +365,7 @@ function toModelProviderDto(
 ) {
   return {
     modelProviderId: modelProvider.id,
-    agentType: modelProvider.agentType,
+    apiFormat: modelProvider.apiFormat,
     scope: modelProvider.scope as ModelProviderScope,
     userId: modelProvider.userId,
     name: modelProvider.name,
@@ -382,7 +392,7 @@ function buildSystemModelProviderDto(agentType: AgentType) {
   };
   return {
     modelProviderId: SYSTEM_MODEL_PROVIDER_ID,
-    agentType,
+    apiFormat: AGENT_NATIVE_API_FORMAT[agentType],
     scope: MODEL_PROVIDER_SCOPE_SYSTEM as ModelProviderScope,
     userId: null,
     name: "系统环境",

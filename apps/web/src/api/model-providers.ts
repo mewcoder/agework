@@ -22,8 +22,8 @@ export const modelProvidersApi = {
     return apiGet<ModelProviderListResponse>(`/api/v1/model-providers/list?${params.toString()}`);
   },
 
-  adminList: (agentType: AgentType) =>
-    apiGet<ModelProviderListResponse>(`/api/v1/admin/model-providers/list?agentType=${encodeURIComponent(agentType)}`),
+  adminList: () =>
+    apiGet<ModelProviderListResponse>('/api/v1/admin/model-providers/list'),
 
   create: (body: CreateModelProviderRequest) =>
     apiPost<ModelProviderResponse>('/api/v1/admin/model-providers/create', body),
