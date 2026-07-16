@@ -239,7 +239,7 @@ export function ModelProvider({
         <div>
           <h2 className="text-lg font-semibold">模型服务</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            为每个 Agent 配置 API Key、模型和访问地址，可保存多个模型服务并随时切换
+            管理全局模型服务，含 API Key、模型和访问地址，各 Agent 按格式匹配可用服务
           </p>
         </div>
       )}

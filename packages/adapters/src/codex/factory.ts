@@ -48,8 +48,8 @@ export type CodexBackendConfig = {
   apiKey?: string;
   baseUrl?: string;
   /**
-   * ModelProvider 的 API 协议格式。`openai-compatible` → wire_api="chat" + env_key,
-   * 其余(含未传,兼容旧下发)→ wire_api="responses" + requires_openai_auth。
+   * ModelProvider 的 API 协议格式;source=system(系统环境,无自定义 provider)时不存在。
+   * `openai-compatible` → wire_api="chat" + env_key;否则 wire_api="responses" + requires_openai_auth。
    */
   apiFormat?: "openai-responses" | "openai-compatible";
   model?: string;

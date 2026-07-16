@@ -2,7 +2,7 @@ import type { AcpAgentProfile, AcpProfileEnvInput } from "./profile";
 
 const OPENCODE_PROVIDER = "_agework";
 
-/** ModelProvider 的 apiFormat → OpenCode provider npm 包(见 opencode providers 文档)。未传/未知按 chat 兜底。 */
+/** ModelProvider 的 apiFormat → OpenCode provider npm 包(见 opencode providers 文档)。 */
 function resolveProviderNpm(apiFormat?: string): string {
   if (apiFormat === "anthropic") return "@ai-sdk/anthropic";
   if (apiFormat === "openai-responses") return "@ai-sdk/openai";

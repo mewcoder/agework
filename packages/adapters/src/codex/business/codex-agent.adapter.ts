@@ -12,7 +12,7 @@ const PROVIDER_NAME = "_agework";
 export type CodexAdapterConfig = {
   apiKey?: string;
   baseUrl?: string;
-  /** `openai-compatible` → wire_api="chat";其余(含未传)→ wire_api="responses"。 */
+  /** `openai-compatible` → wire_api="chat";否则 wire_api="responses"。system 模式无此值。 */
   apiFormat?: "openai-responses" | "openai-compatible";
   model?: string;
   cwd?: string;
