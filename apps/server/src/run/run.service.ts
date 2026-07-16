@@ -58,9 +58,9 @@ export class RunService implements OnApplicationBootstrap {
 
   /** 管理端：分页查询 run 列表。 */
   async listForAdmin(params: { status?: string; take: number; skip: number }) {
-    const { list, total } = await this.runRepository.listForAdmin(params);
+    const { runs, total } = await this.runRepository.listForAdmin(params);
     return {
-      list,
+      list: runs.map(toAdminRunListItem),
       total,
       pageNo: params.skip / params.take + 1,
       pageSize: params.take,
@@ -69,13 +69,13 @@ export class RunService implements OnApplicationBootstrap {
 
   /** 管理端：单个 run 详情；worker 快照经执行面契约的观测口补齐。 */
   async getDetailForAdmin(id: string) {
-    const detail = await this.runRepository.findAdminDetail(id);
-    if (!detail) {
+    const row = await this.runRepository.findAdminDetail(id);
+    if (!row) {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
     const workers = await this.runtimeHostDiagnostics.listWorkers();
     const worker = workers.find((w) => w.runIds.includes(id)) ?? null;
-    return { ...detail, worker };
+    return { ...toAdminRunDetail(row), worker };
   }
 
   /** 管理端：按 run 查询事件（编排 run-events 的读路径）。 */
@@ -332,4 +332,54 @@ function extractResumePayload(resume: unknown): {
   }
   // resolved → pass through opaque payload
   return { status: "resolved", payload: entry.payload };
+}
+
+type AdminRunListRow = Awaited<
+  ReturnType<RunRepository["listForAdmin"]>
+>["runs"][number];
+
+type AdminRunDetailRow = NonNullable<
+  Awaited<ReturnType<RunRepository["findAdminDetail"]>>
+>;
+
+/** 管理端列表项响应形状:摊平 owner 上下文,附派生字段。 */
+function toAdminRunListItem(row: AdminRunListRow) {
+  const { conversation, ...run } = row;
+  return {
+    ...run,
+    userId: conversation.workspace.userId,
+    workspaceId: conversation.workspaceId,
+    username: conversation.workspace.user.username,
+    conversationTitle: conversation.title,
+    workspaceName: conversation.workspace.name,
+  };
+}
+
+/** 管理端详情响应形状:摊平派生字段 + 保留 conversation / workspace / user 嵌套视图。 */
+function toAdminRunDetail(row: AdminRunDetailRow) {
+  const { conversation, ...runData } = row;
+  const workspace = conversation.workspace;
+  return {
+    ...runData,
+    userId: workspace.userId,
+    workspaceId: conversation.workspaceId,
+    username: workspace.user.username,
+    conversationTitle: conversation.title,
+    workspaceName: workspace.name,
+    conversation: {
+      id: conversation.id,
+      title: conversation.title,
+      runStatus: conversation.runStatus,
+      pendingUserAction: conversation.pendingUserAction,
+      agentSessionId: conversation.agentSessionId,
+    },
+    workspace: {
+      id: workspace.id,
+      name: workspace.name,
+    },
+    user: {
+      id: workspace.user.id,
+      username: workspace.user.username,
+    },
+  };
 }

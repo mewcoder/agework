@@ -150,21 +150,13 @@ describe("RunRepository", () => {
     });
   });
 
-  it("returns admin run detail with owner context (runtime view added by RunService)", async () => {
-    const now = new Date("2026-06-17T00:00:00.000Z");
-    const findRun = vi.fn().mockResolvedValue({
+  it("queries admin run detail with owner-context join and returns the raw row (响应塑形归 RunService)", async () => {
+    const row = {
       id: "run-1",
       conversationId: "conversation-1",
       agentType: "claude",
       runtimeType: "sandbox",
       status: "running",
-      phase: null,
-      lastSeq: 2,
-      error: null,
-      startedAt: now,
-      finishedAt: null,
-      createdAt: now,
-      updatedAt: now,
       conversation: {
         id: "conversation-1",
         title: "Fix login",
@@ -179,36 +171,22 @@ describe("RunRepository", () => {
           user: { id: "user-1", username: "mew" },
         },
       },
-    });
+    };
+    const findRun = vi.fn().mockResolvedValue(row);
     const service = new RunRepository({
       run: { findUnique: findRun },
     } as never);
 
     const detail = await service.findAdminDetail("run-1");
 
+    // 携带 owner 上下文的 join(数据访问),不在 repository 摊平/塑形
     expect(findRun).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: "run-1" } })
+      expect.objectContaining({
+        where: { id: "run-1" },
+        include: expect.objectContaining({ conversation: expect.any(Object) }),
+      })
     );
-    expect(detail).toMatchObject({
-      id: "run-1",
-      userId: "user-1",
-      workspaceId: "workspace-1",
-      username: "mew",
-      conversationTitle: "Fix login",
-      workspaceName: "AgeWork",
-      runtimeType: "sandbox",
-      conversation: {
-        id: "conversation-1",
-        runStatus: "running",
-        agentSessionId: "session-1",
-      },
-      workspace: { id: "workspace-1", name: "AgeWork" },
-      user: { id: "user-1", username: "mew" },
-    });
-    // workerInstance 视图不再由 repository 提供
-    expect(detail).not.toHaveProperty("workerInstance");
-    // 详情不再内嵌事件列表，事件改由 listAdminEvents 独立分页提供
-    expect(detail).not.toHaveProperty("events");
+    expect(detail).toBe(row);
   });
 
   it("finds the most recent active run for a conversation", async () => {

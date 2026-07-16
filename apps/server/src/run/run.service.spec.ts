@@ -306,6 +306,116 @@ describe("RunService", () => {
     });
   });
 
+  describe("listForAdmin()", () => {
+    it("flattens owner context into each list item and adds a page envelope", async () => {
+      mockRunRepository.listForAdmin = vi.fn().mockResolvedValue({
+        runs: [
+          {
+            id: "run-1",
+            runtimeType: "native",
+            status: "running",
+            conversation: {
+              title: "Fix login",
+              workspaceId: "workspace-1",
+              workspace: {
+                name: "AgeWork",
+                userId: "user-1",
+                user: { username: "mew" },
+              },
+            },
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await service.listForAdmin({ take: 20, skip: 0 });
+
+      expect(result).toEqual({
+        list: [
+          {
+            id: "run-1",
+            runtimeType: "native",
+            status: "running",
+            userId: "user-1",
+            workspaceId: "workspace-1",
+            username: "mew",
+            conversationTitle: "Fix login",
+            workspaceName: "AgeWork",
+          },
+        ],
+        total: 1,
+        pageNo: 1,
+        pageSize: 20,
+      });
+    });
+  });
+
+  describe("getDetailForAdmin()", () => {
+    const rawRow = {
+      id: "run-1",
+      runtimeType: "sandbox",
+      status: "running",
+      conversation: {
+        id: "conversation-1",
+        title: "Fix login",
+        runStatus: "running",
+        pendingUserAction: null,
+        agentSessionId: "session-1",
+        workspaceId: "workspace-1",
+        workspace: {
+          id: "workspace-1",
+          name: "AgeWork",
+          userId: "user-1",
+          user: { id: "user-1", username: "mew" },
+        },
+      },
+    };
+
+    it("reshapes the raw row and attaches the live worker snapshot", async () => {
+      mockRunRepository.findAdminDetail = vi.fn().mockResolvedValue(rawRow);
+      mockRuntimeHost.listWorkers = vi
+        .fn()
+        .mockResolvedValue([{ workerId: "w-1", runIds: ["run-1"] }]);
+
+      const detail = await service.getDetailForAdmin("run-1");
+
+      expect(detail).toMatchObject({
+        id: "run-1",
+        userId: "user-1",
+        workspaceId: "workspace-1",
+        username: "mew",
+        conversationTitle: "Fix login",
+        workspaceName: "AgeWork",
+        runtimeType: "sandbox",
+        conversation: {
+          id: "conversation-1",
+          runStatus: "running",
+          agentSessionId: "session-1",
+        },
+        workspace: { id: "workspace-1", name: "AgeWork" },
+        user: { id: "user-1", username: "mew" },
+        worker: { workerId: "w-1", runIds: ["run-1"] },
+      });
+    });
+
+    it("attaches a null worker when no live snapshot references the run", async () => {
+      mockRunRepository.findAdminDetail = vi.fn().mockResolvedValue(rawRow);
+      mockRuntimeHost.listWorkers = vi.fn().mockResolvedValue([]);
+
+      const detail = await service.getDetailForAdmin("run-1");
+
+      expect(detail.worker).toBeNull();
+    });
+
+    it("throws NotFound when the run does not exist", async () => {
+      mockRunRepository.findAdminDetail = vi.fn().mockResolvedValue(null);
+
+      await expect(service.getDetailForAdmin("missing")).rejects.toThrow(
+        "Run missing 不存在"
+      );
+    });
+  });
+
   describe("listRawEventsForAdmin()", () => {
     it("returns an empty page when the run has no conversation", async () => {
       mockRunRepository.findConversationId = vi.fn().mockResolvedValue(null);

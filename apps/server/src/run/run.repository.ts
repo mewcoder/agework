@@ -131,6 +131,7 @@ export class RunRepository {
     return run?.conversationId ?? null;
   }
 
+  /** 管理端列表:按 status 过滤 + 分页,带 owner 上下文 join。响应塑形归 RunService。 */
   async listForAdmin(params: { status?: string; take: number; skip: number }) {
     const { status, take, skip } = params;
     const where = status ? { status } : undefined;
@@ -160,22 +161,12 @@ export class RunRepository {
       this.prisma.run.count({ where }),
     ]);
 
-    return {
-      list: runs.map(({ conversation, ...run }) => ({
-        ...run,
-        userId: conversation.workspace.userId,
-        workspaceId: conversation.workspaceId,
-        username: conversation.workspace.user.username,
-        conversationTitle: conversation.title,
-        workspaceName: conversation.workspace.name,
-      })),
-      total,
-    };
+    return { runs, total };
   }
 
-  /** 管理端详情视图(可空,不抛异常;非空守卫在 Service)。 */
-  async findAdminDetail(id: string) {
-    const run = await this.prisma.run.findUnique({
+  /** 管理端详情:按 id 查带 owner 上下文的 run 行(可空,不抛异常;非空守卫与响应塑形归 Service)。 */
+  findAdminDetail(id: string) {
+    return this.prisma.run.findUnique({
       where: { id },
       include: {
         conversation: {
@@ -198,35 +189,5 @@ export class RunRepository {
         },
       },
     });
-
-    if (!run) return null;
-
-    const { conversation, ...runData } = run;
-    const workspace = conversation.workspace;
-
-    // worker 快照由 RunService 经 RuntimeHostContract 现场查询补齐。
-    return {
-      ...runData,
-      userId: workspace.userId,
-      workspaceId: conversation.workspaceId,
-      username: workspace.user.username,
-      conversationTitle: conversation.title,
-      workspaceName: workspace.name,
-      conversation: {
-        id: conversation.id,
-        title: conversation.title,
-        runStatus: conversation.runStatus,
-        pendingUserAction: conversation.pendingUserAction,
-        agentSessionId: conversation.agentSessionId,
-      },
-      workspace: {
-        id: workspace.id,
-        name: workspace.name,
-      },
-      user: {
-        id: workspace.user.id,
-        username: workspace.user.username,
-      },
-    };
   }
 }
