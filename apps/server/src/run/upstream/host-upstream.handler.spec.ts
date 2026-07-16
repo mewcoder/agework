@@ -95,7 +95,6 @@ describe("HostUpstreamHandler", () => {
       runStatusService,
       aguiEvents,
       seqGate,
-      mockRunRepository as RunRepository,
       mockRuntimeHost as RuntimeHostExecution,
       mockRuntimeHost as RuntimeHostUpstreamBinding
     );
@@ -366,6 +365,31 @@ describe("HostUpstreamHandler", () => {
     // 终态清理已 forget 该 run 的 seq 游标,迟到的状态消息必须在 seq 记账之前
     // 被拦下,否则会把已清空的 per-run seq 状态重建出来。
     expect(acceptSpy).not.toHaveBeenCalled();
+  });
+
+  it("drops late non-status events after terminal without a false seq gap", async () => {
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "run.status" as const,
+      payload: { status: "finished" as const },
+      ts: new Date().toISOString(),
+    });
+    const acceptSpy = vi.spyOn(seqGate, "accept");
+    (mockRunEvents.append as ReturnType<typeof vi.fn>).mockClear();
+
+    // 终态清理已 forget seq 游标。一条迟到的 agui 事件(seq=7)若进闸门会以
+    // lastSeq=0 造出假 gap{expected:1,got:7} 诊断——终态守卫必须在 seq 记账前拦下。
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 7,
+      type: "agui.event" as const,
+      payload: { type: "TEXT_MESSAGE_CONTENT" },
+      ts: new Date().toISOString(),
+    });
+
+    expect(acceptSpy).not.toHaveBeenCalled();
+    expect(mockRunEvents.append).not.toHaveBeenCalled();
   });
 
   it("records a seq gap as a system.issue event but still processes the message", async () => {

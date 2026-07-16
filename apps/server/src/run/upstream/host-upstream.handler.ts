@@ -18,7 +18,6 @@ import {
   LiveRunRegistry,
   type RunTimeoutErrorPort,
 } from "../live-run/live-run.registry";
-import { RunRepository } from "../run.repository";
 import { swallow } from "../../common/swallow";
 import { generateId, isTerminalRunStatus } from "@agework/shared";
 import { type RunStatusDecision } from "../status/run-status.policy";
@@ -56,7 +55,6 @@ export class HostUpstreamHandler
     private readonly runStatusService: RunStatusService,
     private readonly aguiEvents: HostAgUiEventHandler,
     private readonly seqGate: UpstreamSeqStore,
-    private readonly runRepository: RunRepository,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
     @Inject(RUNTIME_HOST_UPSTREAM_BINDING)
@@ -131,6 +129,19 @@ export class HostUpstreamHandler
         this.logIgnoredRunStatus(runId, message.payload as RunStatusPayload);
         return;
       }
+    } else if (this.isTerminalOrFinalizing(runId)) {
+      // 终态 / 终态处理中的 run:迟到的非状态上行事件(worker 重试的重复投递或
+      // run 结束后的残余)直接丢弃。终态清理已 forget 该 run 的 seq 游标,这类
+      // 事件若进闸门会以 lastSeq=0 造出假的 seq gap 诊断;且 run 已无 live
+      // handle,继续聚合 / 落库都是无用功。run.status 由上面的 statusDecision
+      // 单独判定(它要区分 ignore 与合法的 apply)。
+      this.logger.warn("skip upstream event after terminal", {
+        runId,
+        seq,
+        type: message.type,
+        event: payloadTag(message.payload),
+      });
+      return;
     }
 
     const decision = this.seqGate.accept(runId, seq);
