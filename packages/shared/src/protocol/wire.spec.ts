@@ -16,6 +16,7 @@ describe("runtime wire decoders", () => {
       isHostTunnelClientMessage({
         type: "register",
         protocolVersion: 1,
+        processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
         },

@@ -5,8 +5,14 @@
   "exports": {
     ".": "./src/common/index.ts",
     "./protocol": "./src/protocol/index.ts",
-    "./protocol/rpc": "./src/protocol/rpc.ts",
-    "./protocol/wire": "./src/protocol/wire.ts",
+    "./protocol/rpc": {
+      "types": "./src/protocol/rpc.ts",
+      "default": "./dist/protocol/rpc.js"
+    },
+    "./protocol/wire": {
+      "types": "./src/protocol/wire.ts",
+      "default": "./dist/protocol/wire.js"
+    },
     "./api": "./src/api/index.ts",
     "./cli": "./src/cli/cli-resolver.ts",
     "./filesystem": "./src/filesystem/file-browser.ts",
@@ -15,6 +21,7 @@
     "./git": "./src/git.ts"
   },
   "scripts": {
+    "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

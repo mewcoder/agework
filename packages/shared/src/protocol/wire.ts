@@ -2,7 +2,7 @@ import type {
   RunConfig,
   WorkerRegisterRequest,
   WorkerRegisterResponse,
-} from "./channel.js";
+} from "./channel";
 import type {
   HostTunnelAllRpcRequest,
   HostTunnelClientMessage,
@@ -11,7 +11,7 @@ import type {
   HostTunnelRegisteredMessage,
   HostUpstreamEnvelope,
   HostUpstreamNotification,
-} from "./host-tunnel.js";
+} from "./host-tunnel";
 import {
   isRpcNotification,
   isRpcRequest,
