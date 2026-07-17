@@ -78,43 +78,38 @@ export class RunStatusService {
     try {
       const handle = this.liveRuns.get(runId);
 
-      // 终态完成后记录 completed，阻止延迟的 exit handler 覆盖。
-      // 必须在 saveRun/stream write 等可能抛异常的操作之前设置，
-      // 否则异常会跳过记录，导致终态 guard 失效。
-      if (terminal) {
-        this.finalization.markCompleted(runId);
-      }
-
       await this.applyRunPersistence(runId, payload, effect.persistenceAction);
       if (effect.savePartialMessage) {
         // requires_action needs the current assistant/tool part persisted even
         // though the run is not terminal yet.
-        handle?.saveRun(false);
+        await handle?.saveRun(false);
       }
 
       if (handle && payload.pendingAction !== undefined) {
-        await this.conversationService
-          .setConversationRunState(handle.conversationId, {
-            pendingUserAction: payload.pendingAction,
-          })
-          .catch(
-            swallow(
-              this.logger,
-              `set pending user action for conversation ${handle.conversationId}`
-            )
-          );
+        await this.conversationService.setConversationRunState(
+          handle.conversationId,
+          { pendingUserAction: payload.pendingAction }
+        );
       }
 
       if (terminal && handle) {
         await this.applyTerminalEffects(runId, payload, effect, handle);
       }
+
+      // 只有全部终态副作用成功后才记 completed。失败时保留 live handle 与
+      // per-run 状态，让未 ACK 的同一事件重放后可以继续完成收尾。
+      if (terminal) {
+        this.finalization.markCompleted(runId);
+      }
     } finally {
-      // 终态收敛的统一清理点:解除守卫 + 一次性遗忘全部 per-run 内存态。
+      // 终态失败只解除 finalizing，成功才遗忘全部 per-run 内存态。
       if (terminal) {
         this.finalization.endFinalizing(runId);
-        this.seqGate.forget(runId);
-        this.aguiEvents.clearRun(runId);
-        this.runEvents.forgetRun(runId);
+        if (this.finalization.isCompleted(runId)) {
+          this.seqGate.forget(runId);
+          this.aguiEvents.clearRun(runId);
+          this.runEvents.forgetRun(runId);
+        }
       }
     }
   }
@@ -172,29 +167,22 @@ export class RunStatusService {
   ): Promise<void> {
     switch (action) {
       case "markRunning":
-        await this.runRepository
-          .markRunning(runId)
-          .catch(swallow(this.logger, `mark run ${runId} running`));
+        await this.runRepository.markRunning(runId);
         break;
       case "markRequiresAction":
-        await this.runRepository
-          .markRequiresAction(runId)
-          .catch(swallow(this.logger, `mark run ${runId} requires_action`));
+        await this.runRepository.markRequiresAction(runId);
         break;
       case "markFinished":
-        await this.runRepository
-          .markFinished(runId)
-          .catch(swallow(this.logger, `mark run ${runId} finished`));
+        await this.runRepository.markFinished(runId);
         break;
       case "markError":
-        await this.runRepository
-          .markError(runId, payload.error ?? "unknown error")
-          .catch(swallow(this.logger, `mark run ${runId} error`));
+        await this.runRepository.markError(
+          runId,
+          payload.error ?? "unknown error"
+        );
         break;
       case "markCancelled":
-        await this.runRepository
-          .markCancelled(runId)
-          .catch(swallow(this.logger, `mark run ${runId} cancelled`));
+        await this.runRepository.markCancelled(runId);
         break;
       case undefined:
         break;
@@ -208,18 +196,15 @@ export class RunStatusService {
     handle: LiveRunHandle
   ): Promise<void> {
     await this.updateConversationTerminalStatus(runId, effect, handle);
-    try {
-      if (effect.terminalMessageComplete !== true) {
-        this.recordMessageFailed(runId, effect, handle);
-      }
-      handle.saveRun(
-        effect.terminalMessageComplete === true,
-        handle.stopReason ?? effect.terminalIncompleteReason
-      );
-      this.writeTerminalSse(runId, payload, effect, handle);
-    } finally {
-      this.liveRuns.unregister(runId);
+    if (effect.terminalMessageComplete !== true) {
+      this.recordMessageFailed(runId, effect, handle);
     }
+    await handle.saveRun(
+      effect.terminalMessageComplete === true,
+      handle.stopReason ?? effect.terminalIncompleteReason
+    );
+    this.writeTerminalSse(runId, payload, effect, handle);
+    this.liveRuns.unregister(runId);
   }
 
   /** run 终态但当前 assistant 消息未完成(error/cancelled)时,记录 message.failed。 */
@@ -250,34 +235,17 @@ export class RunStatusService {
   ): Promise<void> {
     if (!effect.terminalConversationStatus) return;
 
-    // 查询失败时返回 undefined（区别于查询成功但无活跃 run 的 null），跳过状态重置，
-    // 但不能让异常中断下面的 saveRun / SSE 收尾 / unregister。
-    const newerActiveRun = await this.runRepository
-      .findActiveByConversationId(handle.conversationId)
-      .catch((err: unknown) => {
-        swallow(
-          this.logger,
-          `find active run for conversation ${handle.conversationId}`
-        )(err);
-        return undefined;
-      });
-    if (
-      newerActiveRun === undefined ||
-      (newerActiveRun && newerActiveRun.id !== runId)
-    ) {
+    const newerActiveRun = await this.runRepository.findActiveByConversationId(
+      handle.conversationId
+    );
+    if (newerActiveRun && newerActiveRun.id !== runId) {
       return;
     }
 
-    await this.conversationService
-      .setConversationRunState(handle.conversationId, {
-        runStatus: effect.terminalConversationStatus,
-      })
-      .catch(
-        swallow(
-          this.logger,
-          `set active run status for conversation ${handle.conversationId}`
-        )
-      );
+    await this.conversationService.setConversationRunState(
+      handle.conversationId,
+      { runStatus: effect.terminalConversationStatus }
+    );
   }
 
   private writeTerminalSse(

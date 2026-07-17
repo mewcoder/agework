@@ -57,6 +57,7 @@ describe("HostUpstreamHandler", () => {
       markRequiresAction: vi.fn().mockResolvedValue(undefined),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
       recordUsage: vi.fn().mockResolvedValue(undefined),
+      recordContextUsage: vi.fn().mockResolvedValue(undefined),
     };
 
     mockConversations = {
@@ -98,10 +99,44 @@ describe("HostUpstreamHandler", () => {
       mockRuntimeHost as RuntimeHostExecution,
       mockRuntimeHost as RuntimeHostUpstreamBinding
     );
+    liveRuns.register("run-1", {
+      runtimeHandle: {
+        runId: "run-1",
+        runtimeHostId: "builtin",
+        runtimeType: "native",
+        conversationId: "conversation-1",
+      },
+      runId: "run-1",
+      conversationId: "conversation-1",
+      workspaceId: "ws-1",
+      agentType: "claude",
+      stream: makeStream(),
+      aggregator: new AssistantMessageAggregator(),
+      stopRequested: false,
+      saveRun: vi.fn().mockResolvedValue(undefined),
+    });
   });
 
   it("should be defined", () => {
     expect(workerEventsService).toBeDefined();
+  });
+
+  it("does not reanimate a recovered run when no live handle exists", async () => {
+    liveRuns.unregister("run-1");
+
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "run.status" as const,
+      payload: { status: "running" as const },
+      ts: new Date().toISOString(),
+    });
+    await workerEventsService.notifyRunFailed("run-1", "stale failure");
+    await workerEventsService.notifyRunCancelled("run-1");
+
+    expect(mockRunRepository.markRunning).not.toHaveBeenCalled();
+    expect(mockRunRepository.markError).not.toHaveBeenCalled();
+    expect(mockRunRepository.markCancelled).not.toHaveBeenCalled();
   });
 
   it("emit delegates to publish", async () => {
@@ -137,7 +172,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.emit("run-1", {
@@ -410,7 +445,11 @@ describe("HostUpstreamHandler", () => {
     expect(mockRunRepository.markRunning).toHaveBeenCalledWith("run-1");
   });
 
-  it("keeps the terminal guard when status application fails mid-finalization", async () => {
+  it("rolls back the seq and keeps the run retryable when terminal persistence fails", async () => {
+    const saveRun = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("save failed"))
+      .mockResolvedValue(undefined);
     liveRuns.register("run-1", {
       runtimeHandle: {
         runId: "run-1",
@@ -423,11 +462,9 @@ describe("HostUpstreamHandler", () => {
       workspaceId: "ws-1",
       agentType: "claude",
       stream: makeStream(),
-      aggregator: { handle: vi.fn(), build: vi.fn() } as any,
+      aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
-      saveRun: vi.fn(() => {
-        throw new Error("save failed");
-      }),
+      saveRun,
     });
 
     await expect(
@@ -440,13 +477,21 @@ describe("HostUpstreamHandler", () => {
       })
     ).rejects.toThrow("save failed");
 
-    // markCompleted 必须先于可能抛异常的收尾动作:守卫已生效,内存态已清理,
-    // 后续 force 不再重复终态
-    expect(workerEventsService.isTerminalOrFinalizing("run-1")).toBe(true);
-    expect(mockRunEvents.forgetRun).toHaveBeenCalledWith("run-1");
+    expect(workerEventsService.isTerminalOrFinalizing("run-1")).toBe(false);
+    expect(liveRuns.get("run-1")).toBeDefined();
+    expect(mockRunEvents.forgetRun).not.toHaveBeenCalled();
 
-    await workerEventsService.notifyRunFailed("run-1", "late crash");
-    expect(mockRunRepository.markError).not.toHaveBeenCalled();
+    await workerEventsService.publish({
+      runId: "run-1",
+      seq: 1,
+      type: "run.status" as const,
+      payload: { status: "finished" as const },
+      ts: new Date().toISOString(),
+    });
+
+    expect(saveRun).toHaveBeenCalledTimes(2);
+    expect(mockRunRepository.markFinished).toHaveBeenCalledTimes(2);
+    expect(liveRuns.get("run-1")).toBeUndefined();
   });
 
   it("continues AG-UI processing when run event recording fails", async () => {
@@ -466,7 +511,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await expect(
@@ -489,8 +534,8 @@ describe("HostUpstreamHandler", () => {
   });
 
   it("persists agent.sessionId only through the live run callback", async () => {
-    const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
+    const onAgentSessionId = vi.fn(async (sessionId: string) => {
+      await mockConversations.setAgentSessionId?.("conversation-1", sessionId);
     });
     liveRuns.register("run-1", {
       runtimeHandle: {
@@ -506,7 +551,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
       onAgentSessionId,
     });
 
@@ -532,8 +577,8 @@ describe("HostUpstreamHandler", () => {
   });
 
   it("persists system:init session_id only through the live run callback", async () => {
-    const onAgentSessionId = vi.fn((sessionId: string) => {
-      void mockConversations.setAgentSessionId?.("conversation-1", sessionId);
+    const onAgentSessionId = vi.fn(async (sessionId: string) => {
+      await mockConversations.setAgentSessionId?.("conversation-1", sessionId);
     });
     liveRuns.register("run-1", {
       runtimeHandle: {
@@ -549,7 +594,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
       onAgentSessionId,
     });
 
@@ -590,7 +635,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -620,7 +665,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(res),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -650,7 +695,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(res, "snapshots"),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     // RUN_STARTED + 文本开始 + 内容 + 结束
@@ -721,7 +766,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(res),
       aggregator: new AssistantMessageAggregator(),
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -754,7 +799,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -804,7 +849,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -856,7 +901,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: { handle: vi.fn() } as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     await workerEventsService.publish({
@@ -889,7 +934,7 @@ describe("HostUpstreamHandler", () => {
       stream: makeStream(),
       aggregator: aggregator as any,
       stopRequested: false,
-      saveRun: vi.fn(),
+      saveRun: vi.fn().mockResolvedValue(undefined),
     });
 
     const payload = {

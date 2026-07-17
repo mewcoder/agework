@@ -31,7 +31,7 @@ function makeHandle(runId = "run-1"): LiveRunHandle {
     workspaceId: "ws-1",
     agentType: "claude",
     stopRequested: false,
-    saveRun: () => {},
+    saveRun: async () => {},
   };
 }
 

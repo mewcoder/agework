@@ -29,8 +29,7 @@ export class RunFinalizationStore {
 
   /**
    * 终态完成后记录 completed，TTL 内阻止延迟的 exit handler 覆盖。
-   * 幂等：已记录则不重复设置定时器。必须在可能抛异常的落库操作之前调用，
-   * 否则异常会跳过本次记录，导致终态 guard 失效。
+   * 幂等：已记录则不重复设置定时器。仅在全部终态副作用成功后调用。
    */
   markCompleted(runId: string): void {
     if (this.completedRuns.has(runId)) return;
@@ -40,6 +39,10 @@ export class RunFinalizationStore {
     );
     timer.unref();
     this.completedRuns.set(runId, timer);
+  }
+
+  isCompleted(runId: string): boolean {
+    return this.completedRuns.has(runId);
   }
 
   /** 结束终态处理中标记（completed 记录仍按 TTL 保留）。 */

@@ -31,6 +31,19 @@ export class UpstreamSeqStore {
     return { action: "accept", lastSeq, gap };
   }
 
+  /**
+   * 下游处理失败时回滚刚接受的游标，使同一 seq 的重放仍可重新进入处理。
+   * 仅当当前游标仍等于失败 seq 时回滚，避免覆盖并行推进后的更新。
+   */
+  rollback(runId: string, seq: number, previousLastSeq: number): void {
+    if (this.lastSeqMap.get(runId) !== seq) return;
+    if (previousLastSeq === 0) {
+      this.lastSeqMap.delete(runId);
+      return;
+    }
+    this.lastSeqMap.set(runId, previousLastSeq);
+  }
+
   /** 终态 cleanup 时丢弃该 run 的游标。 */
   forget(runId: string): void {
     this.lastSeqMap.delete(runId);

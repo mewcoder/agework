@@ -48,7 +48,7 @@ function makeHandle(overrides: Partial<LiveRunHandle> = {}): LiveRunHandle {
     workspaceId: "ws-1",
     agentType: "claude",
     stopRequested: false,
-    saveRun: vi.fn(),
+    saveRun: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -209,14 +209,12 @@ describe("RunStatusService", () => {
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 
-  it("unregisters terminal runs even when final message saving fails", async () => {
+  it("keeps terminal runs registered when final message saving fails", async () => {
     const registry = new LiveRunRegistry(makeConfig());
     const unregister = vi.spyOn(registry, "unregister");
     const { handler } = makeSubject({ registry });
     const handle = makeHandle({
-      saveRun: vi.fn(() => {
-        throw new Error("save failed");
-      }),
+      saveRun: vi.fn().mockRejectedValue(new Error("save failed")),
     });
     registry.register("run-1", handle);
 
@@ -228,7 +226,9 @@ describe("RunStatusService", () => {
       })
     ).rejects.toThrow("save failed");
 
-    expect(unregister).toHaveBeenCalledWith("run-1");
+    expect(unregister).not.toHaveBeenCalled();
+    expect(registry.get("run-1")).toBe(handle);
+    expect(handler.isTerminalOrFinalizing("run-1")).toBe(false);
   });
 
   it("forgets all per-run in-memory state after a terminal apply", async () => {

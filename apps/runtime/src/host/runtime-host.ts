@@ -60,6 +60,7 @@ import {
   HostEnvironmentOperations,
   HostWorkspaceOperations,
 } from "./host-operations";
+import { WorkerEventRequestError } from "./worker-event-request.error";
 
 /**
  * RuntimeHost 的配置：由 server 侧（builtin 场景）或 daemon 侧（registered 场景）提供。
@@ -594,14 +595,16 @@ export class RuntimeHost implements RuntimeHostContract {
     body: unknown
   ): Promise<{ ok: boolean }> {
     if (!this.pool.ownsRun(workerId, runId)) {
-      throw new Error(`Worker ${workerId} does not own run ${runId}`);
+      throw new WorkerEventRequestError(
+        `Worker ${workerId} does not own run ${runId}`
+      );
     }
     const events = parseWorkerEventPostBody(body, runId);
     if (!events || events.length === 0) {
-      throw new Error("Invalid worker event body");
+      throw new WorkerEventRequestError("Invalid worker event body");
     }
     if (events.some((event) => event.runId !== runId)) {
-      throw new Error("Worker event runId mismatch");
+      throw new WorkerEventRequestError("Worker event runId mismatch");
     }
     // touch worker 心跳
     const entry = this.pool.getByRunId(runId);

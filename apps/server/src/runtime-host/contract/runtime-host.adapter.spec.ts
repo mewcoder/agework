@@ -247,6 +247,19 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
         expect.any(Number)
       );
     });
+
+    it("propagates tunnel command failures to recovery callers", async () => {
+      tunnelHandler.sendRequest.mockRejectedValueOnce(
+        new Error("host offline")
+      );
+
+      await expect(
+        adapter.command({
+          runtimeHostId: "rt-registered-1",
+          payload: cancel,
+        })
+      ).rejects.toThrow("host offline");
+    });
   });
 
   describe("releaseRun", () => {

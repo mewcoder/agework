@@ -37,7 +37,7 @@ import { RunStream } from "../streaming/run.stream";
 type SaveRun = (
   complete: boolean,
   incompleteReason?: IncompleteMessageReason
-) => void;
+) => Promise<void>;
 
 /**
  * 已有活跃 run 时如何让位：claimRun 在 user_steered 场景需要先停掉旧 run。
@@ -279,7 +279,8 @@ export class RunLauncher {
     let saveChain: Promise<void> = Promise.resolve();
 
     return (complete, incompleteReason) => {
-      saveChain = saveChain
+      const currentSave = saveChain
+        .catch(() => undefined)
         .then(() =>
           // 信封形状归 conversation 领域,这里只交快照本体。
           this.conversationService.saveAssistantMessage(
@@ -287,23 +288,17 @@ export class RunLauncher {
             runId,
             aggregator.build(complete, incompleteReason)
           )
-        )
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `persist assistant message for conversation ${conversationId}: ${err instanceof Error ? err.message : String(err)}`
-          );
-        });
+        );
+      saveChain = currentSave;
+      return currentSave;
     };
   }
 
-  private saveSession(conversationId: string): (sessionId: string) => void {
-    return (sessionId) => {
-      this.conversationService
-        .setAgentSessionId(conversationId, sessionId)
-        .catch(
-          swallow(this.logger, `persist agent session for ${conversationId}`)
-        );
-    };
+  private saveSession(
+    conversationId: string
+  ): (sessionId: string) => Promise<void> {
+    return (sessionId) =>
+      this.conversationService.setAgentSessionId(conversationId, sessionId);
   }
 
   private async createRun(input: {
@@ -478,7 +473,7 @@ export class RunLauncher {
     aggregator: AssistantMessageAggregator;
     agentType: string;
     saveRun: SaveRun;
-    onAgentSessionId: (sessionId: string) => void;
+    onAgentSessionId: (sessionId: string) => Promise<void>;
     res: Response;
   }): void {
     const {

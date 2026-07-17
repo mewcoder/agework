@@ -25,7 +25,7 @@ export class HostAgUiEventHandler {
     private readonly runEvents: RunEventService
   ) {}
 
-  handle(runId: string, event: unknown): void {
+  async handle(runId: string, event: unknown): Promise<void> {
     const handle = this.liveRuns.get(runId);
     if (!handle) {
       this.logger.warn("drop AG-UI event without live handle", { runId });
@@ -37,9 +37,9 @@ export class HostAgUiEventHandler {
     this.recordAgUi(runId, eventType, evt);
     handle.aggregator.handle(evt as { type: string; [key: string]: unknown });
 
-    this.saveAndSnapshotOnMessageBoundary(runId, evt, handle);
+    await this.saveAndSnapshotOnMessageBoundary(runId, evt, handle);
 
-    if (this.handleCustomEvent(evt, handle)) return;
+    if (await this.handleCustomEvent(evt, handle)) return;
 
     // MESSAGES_SNAPSHOT is only used for server-side aggregation/persistence;
     // forwarding it would duplicate messages already built incrementally on the client.
@@ -53,8 +53,8 @@ export class HostAgUiEventHandler {
       handle.stream.writeEvent(event);
     }
 
-    this.persistUsageFromRunFinished(runId, evt);
-    this.persistContextUsageFromRunFinished(runId, evt);
+    await this.persistUsageFromRunFinished(runId, evt);
+    await this.persistContextUsageFromRunFinished(runId, evt);
   }
 
   clearRun(runId: string): void {
@@ -83,11 +83,11 @@ export class HostAgUiEventHandler {
     this.runEvents.append(event).catch(swallow(this.logger, context));
   }
 
-  private saveAndSnapshotOnMessageBoundary(
+  private async saveAndSnapshotOnMessageBoundary(
     runId: string,
     evt: Record<string, unknown>,
     handle: LiveRunHandle
-  ): void {
+  ): Promise<void> {
     if (
       evt.type === "TEXT_MESSAGE_CONTENT" ||
       evt.type === "TEXT_MESSAGE_CHUNK"
@@ -95,7 +95,11 @@ export class HostAgUiEventHandler {
       const count = (this.chunkCounters.get(runId) ?? 0) + 1;
       this.chunkCounters.set(runId, count);
       if (count % CHUNK_SAVE_INTERVAL === 0) {
-        handle.saveRun(false);
+        await handle
+          .saveRun(false)
+          .catch(
+            swallow(this.logger, `persist streaming message for run ${runId}`)
+          );
         this.writeSnapshotToHandle(handle);
       }
     }
@@ -109,26 +113,30 @@ export class HostAgUiEventHandler {
       evt.type === "REASONING_MESSAGE_END"
     ) {
       this.chunkCounters.set(runId, 0);
-      handle.saveRun(false);
+      await handle
+        .saveRun(false)
+        .catch(
+          swallow(this.logger, `persist message boundary for run ${runId}`)
+        );
       this.writeSnapshotToHandle(handle);
     }
   }
 
-  private handleCustomEvent(
+  private async handleCustomEvent(
     evt: Record<string, unknown>,
     handle: LiveRunHandle
-  ): boolean {
+  ): Promise<boolean> {
     if (evt.type !== "CUSTOM" || !handle.conversationId) return false;
 
     if (evt.name === "agent.sessionId" && typeof evt.value === "string") {
-      handle.onAgentSessionId?.(evt.value);
+      await handle.onAgentSessionId?.(evt.value);
       return true;
     }
 
     if (evt.name === "system:init") {
       const value = evt.value as { session_id?: unknown } | undefined;
       if (typeof value?.session_id === "string") {
-        handle.onAgentSessionId?.(value.session_id);
+        await handle.onAgentSessionId?.(value.session_id);
       }
     }
 
@@ -144,32 +152,28 @@ export class HostAgUiEventHandler {
     handle.stream.writeSnapshot(snap);
   }
 
-  private persistUsageFromRunFinished(
+  private async persistUsageFromRunFinished(
     runId: string,
     evt: Record<string, unknown>
-  ): void {
+  ): Promise<void> {
     if (evt.type !== "RUN_FINISHED") return;
 
     const usage = normalizeRunUsage(evt.result);
     if (!usage) return;
 
-    this.runRepository
-      .recordUsage(runId, usage)
-      .catch(swallow(this.logger, `record usage for run ${runId}`));
+    await this.runRepository.recordUsage(runId, usage);
   }
 
-  private persistContextUsageFromRunFinished(
+  private async persistContextUsageFromRunFinished(
     runId: string,
     evt: Record<string, unknown>
-  ): void {
+  ): Promise<void> {
     if (evt.type !== "RUN_FINISHED") return;
 
     const contextUsage = normalizeContextUsage(evt.result);
     if (!contextUsage) return;
 
-    this.runRepository
-      .recordContextUsage(runId, contextUsage)
-      .catch(swallow(this.logger, `record context usage for run ${runId}`));
+    await this.runRepository.recordContextUsage(runId, contextUsage);
   }
 }
 

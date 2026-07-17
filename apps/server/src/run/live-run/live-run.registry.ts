@@ -28,8 +28,8 @@ export type LiveRunHandle = {
   saveRun: (
     complete: boolean,
     incompleteReason?: IncompleteMessageReason
-  ) => void;
-  onAgentSessionId?: (sessionId: string) => void;
+  ) => Promise<void>;
+  onAgentSessionId?: (sessionId: string) => Promise<void>;
 };
 
 @Injectable()

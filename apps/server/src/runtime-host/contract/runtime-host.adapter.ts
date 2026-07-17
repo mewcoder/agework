@@ -140,6 +140,7 @@ export class RuntimeHostAdapter
       this.logger.warn(
         `tunnel command failed for run ${runId}: ${String(err)}`
       );
+      throw err;
     });
   }
 

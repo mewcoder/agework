@@ -21,7 +21,7 @@ type BufferedEntry = {
  * 以 `host.upstream` JSON-RPC notification 发给 server。
  *
  * 可靠性(Phase 2 ACK 水位):每条通知带 Host 进程内单调递增 seq 入缓冲,
- * server 逐条回 `host.upstreamAck`(累计水位),收到后丢弃 ≤seq 的缓冲。
+ * server 成功处理连续前缀后回 `host.upstreamAck`(累计水位),收到后丢弃 ≤seq 的缓冲。
  * 断线期间只入缓冲不发送;重连完成注册(收到 registered + 新 epoch)后由
  * TunnelClient 调 `setSession` 接线,此时按原 seq 把缓冲全量补发。
  * server 重启丢失水位后的重复投递由 RunChannelMessage.seq 的 run 级幂等兜底。
@@ -49,10 +49,13 @@ export class TunnelUpstream implements RuntimeHostUpstream {
     this.ws = undefined;
   }
 
-  /** server 的累计 ACK 水位:≤seq 的通知已被接收,推进 head 越过对应前缀。
+  /** server 的累计 ACK 水位:≤seq 的通知已成功处理,推进 head 越过对应前缀。
    *  buffer 按 seq 严格升序(++seq 追加),故 ≤seq 的一定是最旧前缀。 */
   onAck(seq: number): void {
-    while (this.head < this.buffer.length && this.buffer[this.head]!.seq <= seq) {
+    while (
+      this.head < this.buffer.length &&
+      this.buffer[this.head]!.seq <= seq
+    ) {
       this.head++;
     }
     // head 累积过大时压实,避免已 ACK 前缀长期占内存。

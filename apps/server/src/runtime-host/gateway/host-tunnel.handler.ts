@@ -46,6 +46,20 @@ type PendingRequest = {
   timer: NodeJS.Timeout;
 };
 
+type UpstreamAckEntry = {
+  seq: number;
+  processed: boolean;
+};
+
+type HostSession = {
+  epoch: number;
+  ackEntries: UpstreamAckEntry[];
+  ackHead: number;
+  pendingAckSeq?: number;
+  ackScheduled: boolean;
+  failed: boolean;
+};
+
 /**
  * registered Runtime Host 控制隧道的 server 端:接受 agework-runtime daemon 的出站 WS,
  * 配对 token(sha256 比对)鉴权;register 握手校验通过后才把连接绑定为该 Host 的
@@ -61,24 +75,17 @@ export class HostTunnelHandler
   private readonly connections = new Map<string, WebSocket>();
   private readonly pending = new Map<RpcId, PendingRequest>();
   /** host.upstream 回流 Port(契约见 runtime-host.types.ts),由 RuntimeHostAdapter 实现接线。
-   *  处理按 run 串行 await(保 run 内事件顺序),ACK 在收到即回、与处理解耦。 */
+   *  处理按 run 串行 await(保 run 内事件顺序),成功处理后才推进累计 ACK。 */
   private hostUpstreamPort?: HostUpstreamPort;
   /** Host 终态收尾 Port,由 RuntimeHostAdapter 接线、run 上层实现;进程更替 /
    *  优雅关停时同步调用。 */
   private runReapPort?: HostRunReapPort;
   /** Phase 2: 每个 Runtime Host 的隧道会话状态。epoch 每次 register 递增,
    *  非当前 epoch 的上行信封丢弃(防脑裂)。 */
-  private readonly hostSessions = new Map<string, { epoch: number }>();
+  private readonly hostSessions = new Map<string, HostSession>();
   /** 上行处理按 runId 串行:同一 run 的事件保序,不同 run 并行——单个慢 run
    *  的落库不再队头阻塞同 Host 其它 run 的事件流。链排空后自删,不随 run 累积。 */
   private readonly runChains = new Map<string, Promise<void>>();
-  /** 累计 ACK 合流:同一 event-loop tick 内到达的多条上行合并成一条最高 seq
-   *  的 ACK(ACK 是累计水位,合并后语义等价),token 级高频流下把 server→Host
-   *  的 ACK 帧数从每事件一条降到每 tick 一条。map 有条目即表示已排 flush。 */
-  private readonly pendingAcks = new Map<
-    string,
-    { ws: WebSocket; seq: number }
-  >();
   private wss?: WebSocketServer;
   private httpServer?: {
     on: (event: string, listener: typeof this.onUpgrade) => void;
@@ -430,18 +437,23 @@ export class HostTunnelHandler
   private nextEpoch(runtimeHostId: string): number {
     const session = this.hostSessions.get(runtimeHostId);
     const epoch = (session?.epoch ?? 0) + 1;
-    this.hostSessions.set(runtimeHostId, { epoch });
+    this.hostSessions.set(runtimeHostId, {
+      epoch,
+      ackEntries: [],
+      ackHead: 0,
+      ackScheduled: false,
+      failed: false,
+    });
     return epoch;
   }
 
   /**
    * host.upstream 信封处理:
    * 1. 只认当前连接 + 当前 epoch(被顶掉的旧连接残留一律丢弃);
-   * 2. 收到即回累计 ACK 水位——ACK 只保证传输不丢,与处理成败无关(处理本就是
-   *    best-effort)。WS 保序投递使 seq 单调,立即 ACK 让 Host 未 ACK 缓冲随收随
-   *    排空,不被 server 端处理 / 落库速率钳制,避免缓冲逼近上限丢中间事件;
+   * 2. 只有上层处理成功后才推进累计 ACK;不同 run 虽并行处理,ACK 仍只跨过按
+   *    到达顺序连续成功的前缀,保证失败事件及其后继都能由 Host 重放;
    * 3. 处理按 runId 串行入链(保 run 内事件顺序),不同 run 并行,单个慢 run
-   *    不再队头阻塞同 Host 其它 run。处理失败记日志不中断。
+   *    不再队头阻塞同 Host 其它 run。处理失败立即断开当前会话,触发重连重放。
    */
   private onUpstreamEnvelope(
     runtimeHostId: string,
@@ -469,52 +481,91 @@ export class HostTunnelHandler
       );
       return;
     }
-    if (!session) return; // 未注册就发上行:异常客户端,丢弃
-    this.scheduleUpstreamAck(runtimeHostId, ws, envelope.seq);
-    this.enqueueUpstream(runtimeHostId, envelope.seq, envelope.notification);
+    if (!session || session.failed) return; // 未注册/已失败会话不再接收新上行
+    const ackEntry: UpstreamAckEntry = {
+      seq: envelope.seq,
+      processed: false,
+    };
+    session.ackEntries.push(ackEntry);
+    this.enqueueUpstream(
+      runtimeHostId,
+      ws,
+      session,
+      ackEntry,
+      envelope.notification
+    );
   }
 
-  /** 登记待回 ACK,合并本 tick 内的多条为一条最高 seq(累计水位,合并等价)。 */
-  private scheduleUpstreamAck(
+  /** 成功条目只推进连续到达前缀；同 tick 内的进展合并为一条累计 ACK。 */
+  private markUpstreamProcessed(
     runtimeHostId: string,
     ws: WebSocket,
-    seq: number
+    session: HostSession,
+    entry: UpstreamAckEntry
   ): void {
-    const pending = this.pendingAcks.get(runtimeHostId);
-    if (pending) {
-      pending.ws = ws;
-      if (seq > pending.seq) pending.seq = seq;
-      return; // 已排 flush,只更新水位
+    entry.processed = true;
+    if (session.failed || this.hostSessions.get(runtimeHostId) !== session) {
+      return;
     }
-    this.pendingAcks.set(runtimeHostId, { ws, seq });
-    setImmediate(() => this.flushUpstreamAck(runtimeHostId));
-  }
-
-  private flushUpstreamAck(runtimeHostId: string): void {
-    const pending = this.pendingAcks.get(runtimeHostId);
-    if (!pending) return;
-    this.pendingAcks.delete(runtimeHostId);
-    this.sendUpstreamAck(runtimeHostId, pending.ws, pending.seq);
+    let ackSeq: number | undefined;
+    while (
+      session.ackHead < session.ackEntries.length &&
+      session.ackEntries[session.ackHead]?.processed
+    ) {
+      ackSeq = session.ackEntries[session.ackHead].seq;
+      session.ackHead++;
+    }
+    if (ackSeq === undefined) return;
+    session.pendingAckSeq = ackSeq;
+    if (
+      session.ackHead > 1024 &&
+      session.ackHead * 2 > session.ackEntries.length
+    ) {
+      session.ackEntries = session.ackEntries.slice(session.ackHead);
+      session.ackHead = 0;
+    }
+    if (session.ackScheduled) return;
+    session.ackScheduled = true;
+    setImmediate(() => {
+      session.ackScheduled = false;
+      const seq = session.pendingAckSeq;
+      session.pendingAckSeq = undefined;
+      if (
+        seq === undefined ||
+        session.failed ||
+        this.hostSessions.get(runtimeHostId) !== session
+      ) {
+        return;
+      }
+      this.sendUpstreamAck(runtimeHostId, ws, seq);
+    });
   }
 
   /** 把一条上行通知投递进其 runId 的串行处理链;链排空且无新任务接续时自删。 */
   private enqueueUpstream(
     runtimeHostId: string,
-    seq: number,
+    ws: WebSocket,
+    session: HostSession,
+    ackEntry: UpstreamAckEntry,
     notification: HostUpstreamEnvelope["notification"]
   ): void {
     const { runId } = notification;
     const prev = this.runChains.get(runId) ?? Promise.resolve();
     const next = prev.then(async () => {
+      if (session.failed) return;
       try {
-        await this.hostUpstreamPort?.onHostUpstream(
-          runtimeHostId,
-          notification
-        );
+        const port = this.hostUpstreamPort;
+        if (!port) throw new Error("host upstream port is not connected");
+        await port.onHostUpstream(runtimeHostId, notification);
+        this.markUpstreamProcessed(runtimeHostId, ws, session, ackEntry);
       } catch (err) {
-        this.logger.warn(
-          `upstream handler failed for runtime host ${runtimeHostId} seq=${seq}: ${err instanceof Error ? err.message : String(err)}`
-        );
+        if (!session.failed) {
+          session.failed = true;
+          this.logger.warn(
+            `upstream handler failed for runtime host ${runtimeHostId} seq=${ackEntry.seq}: ${err instanceof Error ? err.message : String(err)}`
+          );
+          ws.terminate();
+        }
       }
     });
     this.runChains.set(runId, next);

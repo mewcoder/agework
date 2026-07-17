@@ -16,6 +16,7 @@ import { commandMessageToRpcRequest } from "@agework/shared/protocol/rpc";
 import { isWorkerRegisterRequest } from "@agework/shared/protocol/wire";
 import { AGEWORK_VERSION } from "@agework/shared";
 import type { RuntimeHost } from "./runtime-host.js";
+import { WorkerEventRequestError } from "./worker-event-request.error.js";
 
 /**
  * Runtime Host 自管的 worker HTTP 数据面服务器（builtin / registered 同构）。
@@ -198,7 +199,13 @@ export class WorkerHttpServer {
       const result = await this.host.postEvent(workerId, runId, body);
       this.sendJson(res, 200, result);
     } catch (err) {
-      this.sendError(res, 400, err);
+      // 请求格式/归属错误是永久失败；Server/DB 等下游处理失败返回 500，
+      // 让 worker 的 HTTP 重试策略保留并重投这批事件。
+      this.sendError(
+        res,
+        err instanceof WorkerEventRequestError ? 400 : 500,
+        err
+      );
     }
   }
 

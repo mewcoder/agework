@@ -121,7 +121,7 @@ export type HostUpstreamEnvelope = {
   notification: HostUpstreamNotification;
 };
 
-/** server → Host:host.upstream 的累计 ACK 水位(≤seq 的通知均已被 server 接收)。 */
+/** server → Host:host.upstream 的累计 ACK 水位(≤seq 的通知均已成功处理)。 */
 export type HostUpstreamAckParams = { seq: number };
 
 /** server → Host:run 已终结,Host 清理该 run 的状态(单向,best-effort)。 */

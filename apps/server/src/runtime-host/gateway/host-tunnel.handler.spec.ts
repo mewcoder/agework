@@ -393,7 +393,7 @@ describe("HostTunnelHandler", () => {
       ]);
     });
 
-    it("acks even when the handler throws (处理 best-effort,传输不丢)", async () => {
+    it("does not ack and closes the session when processing fails", async () => {
       handler.setHostUpstreamPort({
         onHostUpstream: () => {
           throw new Error("handler boom");
@@ -403,14 +403,19 @@ describe("HostTunnelHandler", () => {
       await once(ws, "open");
       const epoch = await register(ws);
 
+      const messages: unknown[] = [];
+      ws.on("message", (data: unknown) =>
+        messages.push(JSON.parse(String(data)))
+      );
       sendUpstream(ws, 3, epoch);
-      const ack = (await nextMessage(ws)) as { params: { seq: number } };
-      expect(ack.params.seq).toBe(3);
+      const [code] = (await once(ws, "close")) as [number];
+      expect(code).toBe(1006);
+      expect(messages).toEqual([]);
     });
 
-    it("acks immediately and processes runs in parallel (慢 run 不队头阻塞)", async () => {
-      // run-A 的处理挂起不 resolve;run-B 的处理立即完成。验证:两条都被立即
-      // ACK(ACK 与处理解耦),且 run-B 在 run-A 仍挂起时就被处理(per-run 并行)。
+    it("processes runs in parallel but only acks the contiguous arrival prefix", async () => {
+      // run-A 的处理挂起不 resolve;run-B 的处理立即完成。run-B 不被慢 run 阻塞，
+      // 但累计 ACK 不能跨过仍未成功的 seq=1。
       let releaseA: (() => void) | undefined;
       const processedB: string[] = [];
       handler.setHostUpstreamPort({
@@ -445,15 +450,14 @@ describe("HostTunnelHandler", () => {
       sendUpstream(ws, 1, epoch, "run-A");
       sendUpstream(ws, 2, epoch, "run-B");
 
-      // 累计 ACK 水位推进到 2(合流后可能只回一条 seq=2),即使 run-A 处理仍挂起
-      await vi.waitFor(() => {
-        expect(ackedSeqs.at(-1)).toBe(2);
-      });
-      // run-A 仍挂起(releaseA 未调用),run-B 已在其独立链上被处理完
       await vi.waitFor(() => {
         expect(processedB).toEqual(["run-B"]);
       });
+      expect(ackedSeqs).toEqual([]);
       releaseA?.();
+      await vi.waitFor(() => {
+        expect(ackedSeqs.at(-1)).toBe(2);
+      });
     });
 
     it("drops stale-epoch envelopes without acking", async () => {

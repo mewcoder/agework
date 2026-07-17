@@ -3,14 +3,23 @@ import type { Server } from "node:http";
 import { RUNTIME_WORKER_HTTP_PROTOCOL_VERSION } from "@agework/shared/protocol";
 import { WorkerHttpServer } from "./worker-http-server.js";
 import type { RuntimeHost } from "./runtime-host.js";
+import { WorkerEventRequestError } from "./worker-event-request.error.js";
 
 describe("WorkerHttpServer register protocol", () => {
-  let host: { registerWorker: ReturnType<typeof vi.fn> };
+  let host: {
+    registerWorker: ReturnType<typeof vi.fn>;
+    validateWorkerToken: ReturnType<typeof vi.fn>;
+    postEvent: ReturnType<typeof vi.fn>;
+  };
   let server: WorkerHttpServer;
   let baseUrl: string;
 
   beforeEach(async () => {
-    host = { registerWorker: vi.fn().mockReturnValue(true) };
+    host = {
+      registerWorker: vi.fn().mockReturnValue(true),
+      validateWorkerToken: vi.fn().mockReturnValue(true),
+      postEvent: vi.fn().mockResolvedValue({ ok: true }),
+    };
     server = new WorkerHttpServer(host as unknown as RuntimeHost, 0);
     await server.start();
     const address = (server as unknown as { server: Server }).server.address();
@@ -84,5 +93,45 @@ describe("WorkerHttpServer register protocol", () => {
       error: "invalid worker register request",
     });
     expect(host.registerWorker).not.toHaveBeenCalled();
+  });
+
+  it("returns 500 when downstream event processing fails so the worker retries", async () => {
+    host.postEvent.mockRejectedValueOnce(new Error("database unavailable"));
+
+    const response = await fetch(`${baseUrl}/worker/runs/run-1/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-agework-worker-id": "worker-1",
+        "x-agework-worker-token": "token-1",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "worker.event" }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "database unavailable",
+    });
+  });
+
+  it("returns 400 for a permanently invalid worker event request", async () => {
+    host.postEvent.mockRejectedValueOnce(
+      new WorkerEventRequestError("Invalid worker event body")
+    );
+
+    const response = await fetch(`${baseUrl}/worker/runs/run-1/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-agework-worker-id": "worker-1",
+        "x-agework-worker-token": "token-1",
+      },
+      body: "{}",
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Invalid worker event body",
+    });
   });
 });

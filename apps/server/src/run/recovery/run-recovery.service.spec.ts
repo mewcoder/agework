@@ -10,6 +10,7 @@ function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
 ): Partial<RuntimeHostContract> {
   return {
+    command: vi.fn().mockResolvedValue(undefined),
     releaseRun: vi.fn(),
     ...overrides,
   };
@@ -89,7 +90,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
   });
 
-  it("does not fail runs bound to a registered host (they resume via ACK 续传)", async () => {
+  it("fails registered-host runs and cancels their stale remote sessions", async () => {
     const deps = makeDeps([
       makeActiveRun({
         runtimeHostId: "rt-registered-1",
@@ -100,7 +101,59 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     await service.failInterruptedRuns();
 
-    expect(deps.runRepository.markError).not.toHaveBeenCalled();
+    expect(deps.runRepository.markError).toHaveBeenCalledWith(
+      "run-1",
+      "服务重启导致运行中断"
+    );
+    expect(runtimeHost.command).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      payload: expect.objectContaining({
+        type: "cancel",
+        runId: "run-1",
+        conversationId: "conversation-1",
+      }),
+    });
+    expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      runId: "run-1",
+    });
+  });
+
+  it("retries remote cleanup when the registered host reconnects", async () => {
+    const deps = makeDeps([
+      makeActiveRun({ runtimeHostId: "rt-registered-1" }),
+    ]);
+    const command = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined);
+    const runtimeHost = makeRuntimeHost({ command });
+    service = makeService(deps, runtimeHost);
+
+    await service.failInterruptedRuns();
+    expect(runtimeHost.releaseRun).not.toHaveBeenCalled();
+
+    await service.onRuntimeHostConnected({
+      runtimeHostId: "rt-registered-1",
+    });
+
+    expect(command).toHaveBeenCalledTimes(2);
+    expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      runId: "run-1",
+    });
+  });
+
+  it("rejects bootstrap recovery when the core run status write fails", async () => {
+    const deps = makeDeps([makeActiveRun({ runtimeHostId: "builtin" })]);
+    deps.runRepository.markError = vi
+      .fn()
+      .mockRejectedValue(new Error("database unavailable"));
+    service = makeService(deps, makeRuntimeHost());
+
+    await expect(service.failInterruptedRuns()).rejects.toThrow(
+      "database unavailable"
+    );
   });
 });
 

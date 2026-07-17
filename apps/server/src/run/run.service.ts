@@ -284,7 +284,7 @@ export class RunService implements OnApplicationBootstrap {
       },
     });
     if (options?.endResponse) {
-      handle.saveRun(false, options.reason);
+      await handle.saveRun(false, options.reason);
       handle.stream.end();
       handle.stream.detach();
     }

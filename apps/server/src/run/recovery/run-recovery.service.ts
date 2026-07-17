@@ -5,6 +5,8 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
+import { OnEvent } from "@nestjs/event-emitter";
+import { generateId } from "@agework/shared";
 import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
@@ -19,6 +21,10 @@ import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
+import {
+  RUNTIME_HOST_CONNECTED_EVENT,
+  type RuntimeHostConnectedEvent,
+} from "../../runtime-host/runtime-host.events";
 
 /** Host 终态收尾的日志措辞 + 写给用户的 run 失败原因,按触发场景取。 */
 const REAP_MESSAGES: Record<
@@ -38,9 +44,8 @@ const REAP_MESSAGES: Record<
 /**
  * 服务重启后恢复中断 run,按 Host 归属分流(Phase 2):
  * - builtin Host 与 server 同生共死,其上的 run 无法续接,启动时统一判死。
- * - registered Host 独立于 server 存活,其上进行中的 run **不判死**:Host 重连
- *   后按 ACK 水位补发事件流,run 自然续传。命令与清理由调用方携带
- *   `runtimeHostId + runId`,server 不重建物理实例索引。
+ * - registered Host 虽独立存活，但 server 重启后 LiveRunHandle、聚合器、SSE 与
+ *   timeout 都已丢失，不能假装透明续传；同样判死，并尽力取消远端旧 run。
  *
  * 兜底:registered Host 一直不回来时,run 不能永远挂着——定时 sweep 把
  * 「绑定的 registered Host 已 offline 且心跳静默超过 2× 判死窗口」的 active run
@@ -52,6 +57,10 @@ export class RunRecoveryService
 {
   private readonly logger = new Logger(RunRecoveryService.name);
   private sweepTimer?: NodeJS.Timeout;
+  private readonly pendingRemoteCleanup = new Map<
+    string,
+    Map<string, string>
+  >();
 
   constructor(
     private readonly runRepository: RunRepository,
@@ -74,39 +83,72 @@ export class RunRecoveryService
       clearInterval(this.sweepTimer);
       this.sweepTimer = undefined;
     }
+    this.pendingRemoteCleanup.clear();
   }
 
   async failInterruptedRuns(): Promise<void> {
-    try {
-      const activeRuns = await this.runRepository.listActive();
-      if (activeRuns.length === 0) {
-        this.logger.log("No interrupted active runs found.");
-      } else {
-        for (const run of activeRuns) {
-          const runtimeHostId = run.conversation.workspace.runtimeHostId;
-          if (!isBuiltinHostId(runtimeHostId)) {
-            // registered Host 上的 run 等 Host 重连按 ACK 水位续传,不判死;
-            // Host 一直不回来由 sweepAbandonedRuns 兜底。
-            this.logger.log(
-              `Run ${run.id} lives on registered host ${runtimeHostId} — waiting for reconnection instead of failing it`
-            );
-            continue;
-          }
+    const activeRuns = await this.runRepository.listActive();
+    if (activeRuns.length === 0) {
+      this.logger.log("No interrupted active runs found.");
+    } else {
+      for (const run of activeRuns) {
+        const runtimeHostId = run.conversation.workspace.runtimeHostId;
+        await this.failRun(run.id, run.conversationId, "服务重启导致运行中断");
+        this.logger.log(`Marked interrupted run ${run.id} as error`);
 
-          await this.failRun(
-            run.id,
-            run.conversationId,
-            "服务重启导致运行中断"
-          );
-          this.logger.log(`Marked interrupted run ${run.id} as error`);
+        if (!isBuiltinHostId(runtimeHostId)) {
+          this.rememberRemoteCleanup(runtimeHostId, run.id, run.conversationId);
+          await this.retryRemoteCleanup(runtimeHostId);
         }
       }
-    } catch (err) {
-      this.logger.error(
-        `Failed to cleanup interrupted runs: ${err instanceof Error ? err.message : String(err)}`
-      );
     }
     this.startAbandonedSweep();
+  }
+
+  /** registered Host 重连后重试启动时未送达的 cancel/release。 */
+  @OnEvent(RUNTIME_HOST_CONNECTED_EVENT, { async: true })
+  async onRuntimeHostConnected(
+    event: RuntimeHostConnectedEvent
+  ): Promise<void> {
+    await this.retryRemoteCleanup(event.runtimeHostId);
+  }
+
+  private rememberRemoteCleanup(
+    runtimeHostId: string,
+    runId: string,
+    conversationId: string
+  ): void {
+    let runs = this.pendingRemoteCleanup.get(runtimeHostId);
+    if (!runs) {
+      runs = new Map<string, string>();
+      this.pendingRemoteCleanup.set(runtimeHostId, runs);
+    }
+    runs.set(runId, conversationId);
+  }
+
+  private async retryRemoteCleanup(runtimeHostId: string): Promise<void> {
+    const runs = this.pendingRemoteCleanup.get(runtimeHostId);
+    if (!runs) return;
+    for (const [runId, conversationId] of runs) {
+      try {
+        await this.runtimeHost.command({
+          runtimeHostId,
+          payload: {
+            type: "cancel",
+            commandId: generateId(),
+            runId,
+            conversationId,
+          },
+        });
+        this.runtimeHost.releaseRun({ runtimeHostId, runId });
+        runs.delete(runId);
+      } catch (err) {
+        this.logger.warn(
+          `cleanup interrupted run ${runId} on runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }
+    if (runs.size === 0) this.pendingRemoteCleanup.delete(runtimeHostId);
   }
 
   /** 定时兜底:registered Host 离线超时后,其上的 active run 判死。 */

@@ -81,11 +81,7 @@ export class HostUpstreamHandler
     // 先取出 handle：终态处理会 unregister，之后就拿不到 runtimeType 了。
     const handle = this.liveRuns.get(runId);
 
-    await this.publish(message).catch((err) => {
-      this.logger.warn(
-        `HostUpstreamHandler.publish failed for runId=${runId}: ${String(err)}`
-      );
-    });
+    await this.publish(message);
 
     if (message.type === "run.status") {
       const { status } = message.payload as RunStatusPayload;
@@ -96,6 +92,7 @@ export class HostUpstreamHandler
   }
 
   async notifyRunFailed(runId: string, error: string): Promise<void> {
+    if (!this.liveRuns.get(runId)) return;
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceErrorStatus(runId, error);
   }
@@ -110,12 +107,21 @@ export class HostUpstreamHandler
   }
 
   async notifyRunCancelled(runId: string): Promise<void> {
+    if (!this.liveRuns.get(runId)) return;
     if (this.isTerminalOrFinalizing(runId)) return;
     await this.forceCancelledStatus(runId);
   }
 
   async publish(message: RunChannelMessage<unknown>): Promise<void> {
     const { runId, seq } = message;
+    if (!this.liveRuns.get(runId)) {
+      this.logger.warn("skip upstream event without live handle", {
+        runId,
+        seq,
+        type: message.type,
+      });
+      return;
+    }
     // run.status 的 apply/ignore 决策只算这一次,通过决策的直接传给 handleRunStatus。
     // 拦截必须发生在 seq 记账之前:终态清理已 forget 该 run 的 seq 状态,
     // 迟到的状态消息不能再把它重建出来。
@@ -183,29 +189,37 @@ export class HostUpstreamHandler
       event: payloadTag(message.payload),
     });
 
-    switch (message.type) {
-      case "run.status":
-        await this.handleRunStatus(
-          runId,
-          message.payload as RunStatusPayload,
-          statusDecision
-        );
-        break;
-      case "agui.event":
-        this.aguiEvents.handle(runId, message.payload);
-        break;
-      case "sdk.raw":
-        this.recordSdkRaw(runId, message.payload);
-        break;
-      case "command.trace":
-        this.recordCommandTrace(runId, message.payload as CommandTracePayload);
-        break;
-      case "command.result":
-        this.recordCommandResult(
-          runId,
-          message.payload as CommandResultPayload
-        );
-        break;
+    try {
+      switch (message.type) {
+        case "run.status":
+          await this.handleRunStatus(
+            runId,
+            message.payload as RunStatusPayload,
+            statusDecision
+          );
+          break;
+        case "agui.event":
+          await this.aguiEvents.handle(runId, message.payload);
+          break;
+        case "sdk.raw":
+          await this.recordSdkRaw(runId, message.payload);
+          break;
+        case "command.trace":
+          await this.recordCommandTrace(
+            runId,
+            message.payload as CommandTracePayload
+          );
+          break;
+        case "command.result":
+          await this.recordCommandResult(
+            runId,
+            message.payload as CommandResultPayload
+          );
+          break;
+      }
+    } catch (err) {
+      this.seqGate.rollback(runId, seq, decision.lastSeq);
+      throw err;
     }
   }
 
@@ -280,31 +294,29 @@ export class HostUpstreamHandler
     );
   }
 
-  private recordSdkRaw(runId: string, event: unknown): void {
-    this.recordRunEvent(
-      this.runEvents.fromSdkRawEvent(runId, event),
-      `record raw SDK error event for run ${runId}`
-    );
+  private async recordSdkRaw(runId: string, event: unknown): Promise<void> {
+    await this.appendRunEvent(this.runEvents.fromSdkRawEvent(runId, event));
   }
 
-  private recordCommandTrace(
+  private async recordCommandTrace(
     runId: string,
     payload: CommandTracePayload
-  ): void {
-    this.recordRunEvent(
-      this.runEvents.fromCommandTrace(runId, payload),
-      `record command trace for run ${runId}`
-    );
+  ): Promise<void> {
+    await this.appendRunEvent(this.runEvents.fromCommandTrace(runId, payload));
   }
 
-  private recordCommandResult(
+  private async recordCommandResult(
     runId: string,
     payload: CommandResultPayload
-  ): void {
-    this.recordRunEvent(
-      this.runEvents.fromCommandResult(runId, payload),
-      `record command result for run ${runId}`
-    );
+  ): Promise<void> {
+    await this.appendRunEvent(this.runEvents.fromCommandResult(runId, payload));
+  }
+
+  private async appendRunEvent(
+    event: RecordRunEventInput | undefined
+  ): Promise<void> {
+    if (!event) return;
+    await this.runEvents.append(event);
   }
 
   private recordRunEvent(
