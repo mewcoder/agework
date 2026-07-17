@@ -55,6 +55,7 @@ export async function makeRunConfig(
     claude: string | null;
     codex: string | null;
     opencode: string | null;
+    pi: string | null;
   } | null = null;
   if (placement.runtimeType === "native" && config.resolveCliPaths) {
     cliPaths = await config.resolveCliPaths();
@@ -82,6 +83,7 @@ export async function makeRunConfig(
     ...(cliPaths?.opencode
       ? { opencodeExecutablePath: cliPaths.opencode }
       : {}),
+    ...(cliPaths?.pi ? { piExecutablePath: cliPaths.pi } : {}),
   };
 }
 

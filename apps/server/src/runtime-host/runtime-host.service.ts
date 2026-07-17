@@ -442,6 +442,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     claude: string | null;
     codex: string | null;
     opencode: string | null;
+    pi: string | null;
   } | null> {
     const row = await this.repository.findById(runtimeHostId);
     if (!row) return null;
@@ -488,6 +489,11 @@ function computeEnvStatus(
     opencode: mergeAgent(
       detected.opencode,
       override?.opencode?.executablePath ?? null
+    ),
+    // 旧上报数据可能没有 pi 字段(类型升级前落库的 envConfig JSON),兜空。
+    pi: mergeAgent(
+      detected.pi ?? { executablePath: null, version: null },
+      override?.pi?.executablePath ?? null
     ),
     detectedAt: detected.detectedAt,
   };

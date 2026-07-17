@@ -1,5 +1,5 @@
 import { IsIn, IsNotEmpty, IsString } from "class-validator";
-import { AGENT_TYPES } from "@agework/shared";
+import { AGENT_TYPES, type AgentType } from "@agework/shared";
 
 /** admin 覆盖 Runtime Host envConfig 的请求 body：per-agent。 */
 export class UpdateEnvConfigOverrideDto {
@@ -8,7 +8,7 @@ export class UpdateEnvConfigOverrideDto {
   id!: string;
 
   @IsIn(AGENT_TYPES)
-  agentType!: "claude" | "codex";
+  agentType!: AgentType;
 
   /** 覆盖路径；空字符串 = 清除该 agent 的覆盖。 */
   @IsString()

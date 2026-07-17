@@ -100,6 +100,9 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
         opencode:
           resolveInstalledBinPath(cliInstallDir, "opencode") ??
           envConfig.opencode.executablePath,
+        pi:
+          resolveInstalledBinPath(cliInstallDir, "pi") ??
+          envConfig.pi.executablePath,
       };
     },
   };

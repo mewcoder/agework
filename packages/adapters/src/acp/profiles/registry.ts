@@ -1,8 +1,10 @@
 import type { AcpAgentProfile } from "./profile";
 import { openCodeAcpProfile } from "./opencode.profile";
+import { piAcpProfile } from "./pi.profile";
 
 const PROFILES: ReadonlyMap<string, AcpAgentProfile> = new Map([
   [openCodeAcpProfile.agentType, openCodeAcpProfile],
+  [piAcpProfile.agentType, piAcpProfile],
 ]);
 
 /** Look up the ACP profile for an agentType, or undefined if it is not ACP-backed. */

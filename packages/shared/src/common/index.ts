@@ -22,13 +22,14 @@ export function generateId(): string {
 }
 
 /** 支持的 agent 类型。 */
-export const AGENT_TYPES = ["claude", "codex", "opencode"] as const;
+export const AGENT_TYPES = ["claude", "codex", "opencode", "pi"] as const;
 export type AgentType = (typeof AGENT_TYPES)[number];
 
 export const AGENT_LABELS: Record<AgentType, string> = {
   claude: "Claude",
   codex: "Codex",
   opencode: "OpenCode",
+  pi: "Pi",
 };
 
 /** agent 在工作空间目录下的配置目录前缀，用于定位 skills 等资源。 */
@@ -36,6 +37,7 @@ export const AGENT_DIR_PREFIX: Record<AgentType, string> = {
   claude: ".claude",
   codex: ".codex",
   opencode: ".opencode",
+  pi: ".pi",
 };
 
 export function isAgentType(value: unknown): value is AgentType {
@@ -67,6 +69,8 @@ export const API_FORMAT_LABELS: Record<ApiFormat, string> = {
  * - codex 原生 Responses(技术上可走 wire_api="chat" 消费 openai-compatible,产品上未放开)。
  * - opencode 三种都支持:按格式选 @ai-sdk/openai-compatible / @ai-sdk/openai / @ai-sdk/anthropic
  *   (见 opencode providers 文档,profile 里做包选择)。
+ * - pi 三种都支持:models.json 的 api 枚举覆盖 anthropic-messages / openai-responses /
+ *   openai-completions(见 pi docs/models.md,profile 里做映射)。
  */
 export const AGENT_API_FORMAT_SUPPORT: Record<
   AgentType,
@@ -77,6 +81,10 @@ export const AGENT_API_FORMAT_SUPPORT: Record<
   opencode: {
     native: "openai-compatible",
     supported: ["openai-compatible", "openai-responses", "anthropic"],
+  },
+  pi: {
+    native: "anthropic",
+    supported: ["anthropic", "openai-responses", "openai-compatible"],
   },
 };
 
@@ -99,6 +107,7 @@ export const AGENT_NATIVE_API_FORMAT: Record<AgentType, ApiFormat> = {
   claude: AGENT_API_FORMAT_SUPPORT.claude.native,
   codex: AGENT_API_FORMAT_SUPPORT.codex.native,
   opencode: AGENT_API_FORMAT_SUPPORT.opencode.native,
+  pi: AGENT_API_FORMAT_SUPPORT.pi.native,
 };
 
 export function isApiFormat(value: unknown): value is ApiFormat {
@@ -125,6 +134,7 @@ export type RuntimeEnvConfig = {
   claude: AgentDetectedEnv;
   codex: AgentDetectedEnv;
   opencode: AgentDetectedEnv;
+  pi: AgentDetectedEnv;
   /** 检测时间戳（ISO 8601），供前端判断新鲜度。 */
   detectedAt: string;
 };

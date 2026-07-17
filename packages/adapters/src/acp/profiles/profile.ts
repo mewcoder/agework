@@ -30,4 +30,14 @@ export interface AcpAgentProfile {
   binaryName: string;
   /** Build the child environment for a run. */
   buildEnv(input: AcpProfileEnvInput): Record<string, string>;
+  /**
+   * 可选:由 resolved CLI 路径推导实际 spawn 目标。桥接型 agent(如 pi 经 pi-acp)
+   * 的 resolved 路径是 agent 本体而非要 spawn 的进程,profile 在此把它换成桥命令
+   * 并经 env 转交。缺省行为:spawn `executablePath ?? command`。
+   */
+  resolveLaunch?(executablePath?: string): {
+    command: string;
+    args: readonly string[];
+    env: Record<string, string>;
+  };
 }

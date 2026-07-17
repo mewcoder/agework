@@ -45,6 +45,7 @@ export function detectEnvConfig(): RuntimeEnvConfig {
     claude: detectAgent("claude"),
     codex: detectAgent("codex"),
     opencode: detectAgent("opencode"),
+    pi: detectAgent("pi"),
     detectedAt: new Date().toISOString(),
   };
 }
@@ -67,7 +68,9 @@ function resolveCliPath(agentType: AgentType): string | null {
       ? claudeKnownLocations()
       : agentType === "codex"
         ? codexKnownLocations()
-        : opencodeKnownLocations();
+        : agentType === "pi"
+          ? piKnownLocations()
+          : opencodeKnownLocations();
   return known[0] ?? null;
 }
 
@@ -303,6 +306,35 @@ function opencodeKnownLocations(): string[] {
   return paths.filter(isExistingFile);
 }
 
+/** Pi CLI 已知安装位置（npm/bun 全局安装,官方推荐 npm -g）。 */
+function piKnownLocations(): string[] {
+  const home = homedir();
+  const isWindows = process.platform === "win32";
+  const paths: string[] = [];
+
+  if (isWindows) {
+    if (process.env.APPDATA) {
+      paths.push(join(process.env.APPDATA, "npm", "pi.cmd"));
+      paths.push(join(process.env.APPDATA, "npm", "pi.exe"));
+    }
+    paths.push(join(home, "scoop", "shims", "pi.exe"));
+    paths.push(join(home, "scoop", "shims", "pi.cmd"));
+  }
+
+  paths.push(join(home, ".local", "bin", "pi"));
+  paths.push(join(home, ".bun", "bin", "pi"));
+  paths.push(join(home, ".volta", "bin", "pi"));
+  paths.push("/usr/local/bin/pi");
+  paths.push("/opt/homebrew/bin/pi");
+  paths.push(join(home, ".npm-global", "bin", "pi"));
+
+  if (process.env.npm_config_prefix) {
+    paths.push(join(process.env.npm_config_prefix, "bin", "pi"));
+  }
+
+  return paths.filter(isExistingFile);
+}
+
 /** 返回某个 agent 类型对应的、可通过 npm 安装的独立 CLI 包名
  *  （区别于内嵌调用用的 SDK 包，如 `@anthropic-ai/claude-agent-sdk`）。 */
 export function resolveCliPackageName(agentType: AgentType): string {
@@ -311,11 +343,19 @@ export function resolveCliPackageName(agentType: AgentType): string {
       return "@anthropic-ai/claude-code";
     case "opencode":
       return "opencode-ai";
+    case "pi":
+      return "@earendil-works/pi-coding-agent";
     case "codex":
     default:
       return "@openai/codex";
   }
 }
+
+/** pi 本体不会说 ACP,经 pi-acp 桥(ACP ⇄ `pi --mode rpc`)接入:
+ *  一键安装需把桥包装进同一 prefix(bin 同目录,worker 按 pi 路径的兄弟文件解析)。 */
+const COMPANION_CLI_PACKAGES: Partial<Record<AgentType, readonly string[]>> = {
+  pi: ["pi-acp"],
+};
 
 // ── agent CLI 一键安装 ────────────────────────────────────────────────
 //
@@ -333,7 +373,10 @@ export async function installCli(
   const dir = join(cliRootDir, agentType);
   mkdirSync(dir, { recursive: true });
 
-  await runNpmInstall(dir, resolveCliPackageName(agentType));
+  await runNpmInstall(dir, [
+    resolveCliPackageName(agentType),
+    ...(COMPANION_CLI_PACKAGES[agentType] ?? []),
+  ]);
 
   const binPath = resolveInstalledBinPath(cliRootDir, agentType);
   if (!binPath) {
@@ -352,12 +395,20 @@ export function resolveInstalledBinPath(
   return existsSync(binPath) ? binPath : null;
 }
 
-function runNpmInstall(cwd: string, packageName: string): Promise<void> {
+function runNpmInstall(
+  cwd: string,
+  packageNames: readonly string[]
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
     const child = spawn(
       npmCommand,
-      ["install", "--prefix", cwd, `${packageName}@latest`],
+      [
+        "install",
+        "--prefix",
+        cwd,
+        ...packageNames.map((packageName) => `${packageName}@latest`),
+      ],
       { timeout: NPM_INSTALL_TIMEOUT_MS, stdio: ["ignore", "pipe", "pipe"] }
     );
 

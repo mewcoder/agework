@@ -247,7 +247,7 @@ describe("RuntimeHost", () => {
       makeConfig({
         resolveCliPaths: async () => {
           await configGate;
-          return { claude: null, codex: null, opencode: null };
+          return { claude: null, codex: null, opencode: null, pi: null };
         },
       })
     );

@@ -53,11 +53,14 @@ export function createAcpAdapter(
     extraConfig: opts.extraConfig,
   });
 
+  // 桥接型 profile(如 pi 经 pi-acp)自定 spawn 目标;缺省 spawn resolved 路径或默认命令。
+  const launch = profile.resolveLaunch?.(opts.executablePath);
+
   return new AcpAgentAdapter({
-    command: opts.executablePath ?? profile.command,
-    args: [...profile.args],
+    command: launch?.command ?? opts.executablePath ?? profile.command,
+    args: launch ? [...launch.args] : [...profile.args],
     cwd: opts.cwd,
-    env,
+    env: launch ? { ...env, ...launch.env } : env,
     agentType: profile.agentType,
     trace: opts.trace,
     pendingActionSink: opts.pendingActionSink,

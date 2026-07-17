@@ -59,7 +59,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
         const row = await repository.findById(BUILTIN_HOST_ID);
         return row
           ? resolveRuntimeHostCliPaths(row)
-          : { claude: null, codex: null, opencode: null };
+          : { claude: null, codex: null, opencode: null, pi: null };
       },
       // 「命令已下发」是记账不是执行回流,直接落 run-event 账本(best-effort)
       onCommandDispatched: ({ runId, commandId, commandType }) => {

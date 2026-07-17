@@ -90,6 +90,7 @@ export interface RuntimeHostConfig {
     claude: string | null;
     codex: string | null;
     opencode: string | null;
+    pi: string | null;
   }>;
   /** 命令下发审计钩子(builtin 场景由 server 接到 run-event 账本;daemon 场景不设)。 */
   onCommandDispatched?: (info: {

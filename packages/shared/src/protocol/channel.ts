@@ -87,6 +87,8 @@ export type RunConfig = {
   codexExecutablePath?: string;
   /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
   opencodeExecutablePath?: string;
+  /** native runtime 从 envConfig 提取的 CLI 路径（override > detected）。container 不填。 */
+  piExecutablePath?: string;
 };
 
 /**

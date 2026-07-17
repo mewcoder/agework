@@ -26,6 +26,7 @@ export {
   getAcpProfile,
   isAcpAgent,
   openCodeAcpProfile,
+  piAcpProfile,
   type AcpAgentProfile,
   AcpError,
   type AcpErrorCode,

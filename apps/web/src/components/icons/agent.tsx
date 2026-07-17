@@ -71,6 +71,32 @@ function CodexIcon({ size, className }: { size: number; className: string }) {
   );
 }
 
+function PiIcon({ size, className }: { size: number; className: string }) {
+  return (
+    <svg
+      height={size}
+      width={size}
+      viewBox="0 0 24 24"
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ flex: "none", lineHeight: 1 }}
+      className={className}
+      aria-hidden
+    >
+      <rect width="24" height="24" rx="5" fill="#1A1A1A" />
+      <text
+        x="12"
+        y="17.5"
+        textAnchor="middle"
+        fontFamily="Georgia, 'Times New Roman', serif"
+        fontSize="15"
+        fill="#F5F0E8"
+      >
+        π
+      </text>
+    </svg>
+  );
+}
+
 export function AgentIcon({
   agent,
   size = 14,
@@ -82,6 +108,10 @@ export function AgentIcon({
 
   if (agent === "opencode") {
     return <OpenCode.Avatar size={size} className={className} />;
+  }
+
+  if (agent === "pi") {
+    return <PiIcon size={size} className={className} />;
   }
 
   return <ClaudeIcon size={size} className={className} />;

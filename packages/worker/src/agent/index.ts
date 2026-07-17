@@ -6,6 +6,7 @@ import {
   AcpAgentAdapter,
   createAcpAdapter,
   getAcpProfile,
+  isAcpAgent,
 } from "@agework/adapters";
 import type {
   AgentTraceSink,
@@ -46,6 +47,7 @@ type CliPaths = {
   claudeExecutablePath?: string;
   codexExecutablePath?: string;
   opencodeExecutablePath?: string;
+  piExecutablePath?: string;
 };
 
 class AdapterDriver implements AgentDriver {
@@ -95,6 +97,8 @@ export function createAgentDriver(
     config.codexExecutablePath ?? envCliPaths.codexExecutablePath;
   const opencodeExecutablePath =
     config.opencodeExecutablePath ?? envCliPaths.opencodeExecutablePath;
+  const piExecutablePath =
+    config.piExecutablePath ?? envCliPaths.piExecutablePath;
 
   const pendingActionSink = (event: {
     threadId: string;
@@ -146,11 +150,19 @@ export function createAgentDriver(
     );
   }
 
-  if (agentProviderConfig.agentType === "opencode") {
-    const profile = getAcpProfile("opencode");
+  // ACP profile agent 统一分发(opencode / pi / ...),不落进 codex 兜底(doc §15.1)。
+  if (isAcpAgent(agentProviderConfig.agentType)) {
+    const profile = getAcpProfile(agentProviderConfig.agentType);
     if (!profile) {
-      throw new Error("OpenCode ACP profile not registered");
+      throw new Error(
+        `ACP profile not registered: ${agentProviderConfig.agentType}`
+      );
     }
+    const acpExecutablePaths: Record<string, string | undefined> = {
+      opencode: opencodeExecutablePath,
+      pi: piExecutablePath,
+    };
+    const executablePath = acpExecutablePaths[agentProviderConfig.agentType];
     return new AdapterDriver(
       createAcpAdapter(profile, {
         source: agentProviderConfig.source,
@@ -159,9 +171,7 @@ export function createAgentDriver(
         ...credentials,
         trace,
         pendingActionSink,
-        ...(opencodeExecutablePath
-          ? { executablePath: opencodeExecutablePath }
-          : {}),
+        ...(executablePath ? { executablePath } : {}),
       })
     );
   }
@@ -211,5 +221,12 @@ export function resolveCliPaths(
   const opencodeExecutablePath =
     env.AGEWORK_OPENCODE_CLI_PATH?.trim() ||
     (findInPath("opencode") ?? undefined);
-  return { claudeExecutablePath, codexExecutablePath, opencodeExecutablePath };
+  const piExecutablePath =
+    env.AGEWORK_PI_CLI_PATH?.trim() || (findInPath("pi") ?? undefined);
+  return {
+    claudeExecutablePath,
+    codexExecutablePath,
+    opencodeExecutablePath,
+    piExecutablePath,
+  };
 }

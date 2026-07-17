@@ -8,6 +8,7 @@ export type ResolvedRuntimeHostCliPaths = {
   claude: string | null;
   codex: string | null;
   opencode: string | null;
+  pi: string | null;
 };
 
 /** 合并 RuntimeHost 的检测结果与管理员覆盖：override > detected > null。 */
@@ -27,5 +28,6 @@ export function resolveRuntimeHostCliPaths(
       override?.opencode?.executablePath ??
       detected?.opencode.executablePath ??
       null,
+    pi: override?.pi?.executablePath ?? detected?.pi?.executablePath ?? null,
   };
 }

@@ -14,6 +14,7 @@ export type RuntimeHostEnvConfigOverride = {
   claude?: { executablePath: string };
   codex?: { executablePath: string };
   opencode?: { executablePath: string };
+  pi?: { executablePath: string };
 };
 
 /** resolved CLI path 的来源标记，实时派生不持久化（见 ADR-0002）。 */
@@ -36,6 +37,7 @@ export type RuntimeHostEnvStatus = {
   claude: AgentEnvStatus;
   codex: AgentEnvStatus;
   opencode: AgentEnvStatus;
+  pi: AgentEnvStatus;
   /** 检测时间戳（ISO 8601）。 */
   detectedAt: string | null;
 };
