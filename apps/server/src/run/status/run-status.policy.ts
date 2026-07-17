@@ -28,6 +28,10 @@ export const ACTIVE_RUN_STATUSES: RunStatus[] = [
   "requires_action",
 ];
 
+export function isActiveRunStatus(status: string): boolean {
+  return (ACTIVE_RUN_STATUSES as string[]).includes(status);
+}
+
 export const RUNNING_MUTABLE_STATUSES: RunStatus[] = [
   "queued",
   "preparing",

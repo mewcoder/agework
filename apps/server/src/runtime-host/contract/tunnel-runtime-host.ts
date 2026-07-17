@@ -4,6 +4,7 @@ import type {
   CreateDirectoryInput,
   DirectoryListing,
   HostCapabilityStatus,
+  HostListRunsRpcResult,
   HostListWorkersRpcResult,
   InstallCliInput,
   InstallCliResult,
@@ -283,6 +284,21 @@ export class TunnelRuntimeHost implements RoutedRuntimeHost {
       })
     );
     return perHost.flat();
+  }
+
+  /** 单个 registered Host 的完整 run 会话清单（包含 acquiring）。 */
+  async listRunIdsOn(runtimeHostId: string): Promise<string[]> {
+    const result = await this.tunnelHandler.sendRequest<HostListRunsRpcResult>(
+      runtimeHostId,
+      {
+        jsonrpc: "2.0",
+        id: generateId(),
+        method: "host.listRuns",
+        params: {},
+      },
+      this.timeoutMs
+    );
+    return result.runIds;
   }
 
   /** 单个 registered Host 的现场查询;快照的 runtimeHostId 按路由来源盖章。 */

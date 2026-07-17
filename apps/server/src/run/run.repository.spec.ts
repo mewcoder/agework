@@ -237,6 +237,22 @@ describe("RunRepository", () => {
     expect(await service.findConversationId("missing")).toBeNull();
   });
 
+  it("reads Host run rows in one query for restart reconciliation", async () => {
+    const rows = [
+      { id: "run-1", conversationId: "conversation-1", status: "error" },
+    ];
+    const findMany = vi.fn().mockResolvedValue(rows);
+    const service = new RunRepository({ run: { findMany } } as never);
+
+    await expect(
+      service.findRuntimeReconciliationRows(["run-1", "run-missing"])
+    ).resolves.toEqual(rows);
+    expect(findMany).toHaveBeenCalledWith({
+      where: { id: { in: ["run-1", "run-missing"] } },
+      select: { id: true, conversationId: true, status: true },
+    });
+  });
+
   it("lists active run conversation ids for a workspace (deduped)", async () => {
     const findMany = vi
       .fn()

@@ -39,6 +39,7 @@ import {
   type RuntimeHostConnectivity,
   type RuntimeHostOwnerReconciliation,
   type RuntimeHostOwnerRef,
+  type RuntimeHostRunReconciliation,
 } from "../runtime-host.types";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
@@ -66,6 +67,7 @@ export class RuntimeHostAdapter
   implements
     RuntimeHostContract,
     RuntimeHostOwnerReconciliation,
+    RuntimeHostRunReconciliation,
     RuntimeHostConnectivity,
     HostRunReapBinding
 {
@@ -254,6 +256,13 @@ export class RuntimeHostAdapter
       refs.set(`${ref.runtimeHostId}\0${ref.owner}`, ref);
     }
     return [...refs.values()];
+  }
+
+  /** Server 重启恢复只对账 runId，不把 admin Worker 诊断形状泄漏给 run 模块。 */
+  async listRunIds(runtimeHostId: string): Promise<string[]> {
+    return isBuiltinHostId(runtimeHostId)
+      ? this.builtinHost.listRunIds()
+      : this.tunnelHost.listRunIdsOn(runtimeHostId);
   }
 
   private listWorkersOn(runtimeHostId: string): Promise<WorkerSnapshot[]> {

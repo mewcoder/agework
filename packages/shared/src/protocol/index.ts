@@ -234,6 +234,7 @@ export type {
   HostTunnelHostNotification,
   HostTunnelAllRpcRequest,
   HostTunnelAllRpcResponse,
+  HostListRunsRpcResult,
   HostListWorkersRpcResult,
 } from "./host-tunnel";
 
@@ -242,7 +243,7 @@ export type {
 export const RUNTIME_TUNNEL_CLOSE_GONE = 4410;
 
 /** RuntimeHost 控制隧道线协议版本。独立于 AGEWORK_VERSION，应用版本变化不等于协议破坏。 */
-export const RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION = 1;
+export const RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION = 2;
 
 /** Host ↔ Worker HTTP 数据面线协议版本。 */
 export const RUNTIME_WORKER_HTTP_PROTOCOL_VERSION = 1;

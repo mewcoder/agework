@@ -300,6 +300,11 @@ export class RuntimeHost implements RuntimeHostContract {
 
   // ── 观测 ────────────────────────────────────────────────────────────
 
+  /** 恢复对账清单包含尚未绑定 Worker 的 acquiring run。 */
+  async listRunIds(): Promise<string[]> {
+    return this.sessions.listRunIds();
+  }
+
   async listWorkers(): Promise<WorkerSnapshot[]> {
     // 内存池条目(WorkerEntry)的直投影;runtimeHostId 由 server 路由层盖章
     return this.pool.list().map((w) => {

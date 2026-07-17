@@ -5,6 +5,7 @@ import type { RunRepository } from "../run.repository";
 import type { ConversationService } from "../../conversation/conversation.service";
 import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
+import type { RuntimeHostRunReconciliation } from "../../runtime-host/runtime-host.types";
 
 function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
@@ -30,6 +31,7 @@ function makeDeps(activeRuns: unknown[]) {
   const runRepository: Partial<RunRepository> = {
     listActive: vi.fn().mockResolvedValue(activeRuns),
     markError: vi.fn().mockResolvedValue(undefined),
+    findRuntimeReconciliationRows: vi.fn().mockResolvedValue([]),
   };
   const conversationService: Partial<ConversationService> = {
     setConversationRunState: vi.fn().mockResolvedValue(undefined),
@@ -53,7 +55,10 @@ function makeDeps(activeRuns: unknown[]) {
 
 function makeService(
   deps: ReturnType<typeof makeDeps>,
-  runtimeHost: Partial<RuntimeHostContract>
+  runtimeHost: Partial<RuntimeHostContract>,
+  runReconciliation: Partial<RuntimeHostRunReconciliation> = {
+    listRunIds: vi.fn().mockResolvedValue([]),
+  }
 ) {
   return new RunRecoveryService(
     deps.runRepository as RunRepository,
@@ -61,6 +66,7 @@ function makeService(
     deps.runtimeHostService as RuntimeHostService,
     deps.configService as ConfigService,
     runtimeHost as RuntimeHostContract,
+    runReconciliation as RuntimeHostRunReconciliation,
     { setRunReapPort: vi.fn() }
   );
 }
@@ -128,7 +134,18 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       .mockRejectedValueOnce(new Error("offline"))
       .mockResolvedValue(undefined);
     const runtimeHost = makeRuntimeHost({ command });
-    service = makeService(deps, runtimeHost);
+    deps.runRepository.findRuntimeReconciliationRows = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "run-1",
+          conversationId: "conversation-1",
+          status: "error",
+        },
+      ]);
+    service = makeService(deps, runtimeHost, {
+      listRunIds: vi.fn().mockResolvedValue(["run-1"]),
+    });
 
     await service.failInterruptedRuns();
     expect(runtimeHost.releaseRun).not.toHaveBeenCalled();
@@ -142,6 +159,64 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       runtimeHostId: "rt-registered-1",
       runId: "run-1",
     });
+  });
+
+  it("reconciles a terminal Host run after another Server restart lost cleanup memory", async () => {
+    const deps = makeDeps([]);
+    deps.runRepository.findRuntimeReconciliationRows = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "run-stale",
+          conversationId: "conversation-stale",
+          status: "error",
+        },
+      ]);
+    const runtimeHost = makeRuntimeHost();
+    service = makeService(deps, runtimeHost, {
+      listRunIds: vi.fn().mockResolvedValue(["run-stale"]),
+    });
+
+    await service.onRuntimeHostConnected({
+      runtimeHostId: "rt-registered-1",
+    });
+
+    expect(runtimeHost.command).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      payload: expect.objectContaining({
+        type: "cancel",
+        runId: "run-stale",
+        conversationId: "conversation-stale",
+      }),
+    });
+    expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
+      runtimeHostId: "rt-registered-1",
+      runId: "run-stale",
+    });
+  });
+
+  it("leaves a Host run alone while its database row is still active", async () => {
+    const deps = makeDeps([]);
+    deps.runRepository.findRuntimeReconciliationRows = vi
+      .fn()
+      .mockResolvedValue([
+        {
+          id: "run-active",
+          conversationId: "conversation-active",
+          status: "running",
+        },
+      ]);
+    const runtimeHost = makeRuntimeHost();
+    service = makeService(deps, runtimeHost, {
+      listRunIds: vi.fn().mockResolvedValue(["run-active"]),
+    });
+
+    await service.onRuntimeHostConnected({
+      runtimeHostId: "rt-registered-1",
+    });
+
+    expect(runtimeHost.command).not.toHaveBeenCalled();
+    expect(runtimeHost.releaseRun).not.toHaveBeenCalled();
   });
 
   it("rejects bootstrap recovery when the core run status write fails", async () => {

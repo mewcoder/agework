@@ -7,6 +7,7 @@ import {
   type HostTunnelRegisterMessage,
   type HostTunnelAllRpcRequest,
   type RuntimeHostContract,
+  type HostListRunsRpcResult,
   type HostListWorkersRpcResult,
   type InstallCliResult,
   type RuntimeCapabilities,
@@ -74,7 +75,9 @@ export interface TunnelClientOptions {
    *  未提供时按 config.runtimeTypes 全部可用构建(测试便利)。 */
   capabilities?: RuntimeCapabilities;
   /** Host 控制面契约；所有 RPC 都委托给它。 */
-  hostContract: RuntimeHostContract;
+  hostContract: RuntimeHostContract & {
+    listRunIds(): Promise<string[]>;
+  };
   /** Phase 2: Host 上行通知的隧道实现,连接建立/断开时由 TunnelClient 接线。 */
   tunnelUpstream?: TunnelUpstream;
   /** Runtime Host 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
@@ -247,6 +250,7 @@ export class TunnelClient {
     | WorkspaceFileSearchResponse
     | WorkspaceChangedFilesResponse
     | WorkspaceFileDiffResponse
+    | HostListRunsRpcResult
     | HostListWorkersRpcResult
     | HostCapabilityStatus
     | DirectoryListing
@@ -281,6 +285,8 @@ export class TunnelClient {
         return hostContract.searchFiles(request.params);
       case "host.listChangedFiles":
         return hostContract.listChangedFiles(request.params);
+      case "host.listRuns":
+        return { runIds: await hostContract.listRunIds() };
       case "host.listWorkers":
         const workers = await hostContract.listWorkers();
         return { workers };

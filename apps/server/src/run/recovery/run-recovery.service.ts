@@ -11,10 +11,12 @@ import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
   RUNTIME_HOST_EXECUTION,
+  RUNTIME_HOST_RUN_RECONCILIATION,
   RUNTIME_HOST_RUN_REAP_BINDING,
   type HostReapReason,
   type HostRunReapBinding,
   type HostRunReapPort,
+  type RuntimeHostRunReconciliation,
 } from "../../runtime-host/runtime-host.types";
 import { ConversationService } from "../../conversation/conversation.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
@@ -25,6 +27,7 @@ import {
   RUNTIME_HOST_CONNECTED_EVENT,
   type RuntimeHostConnectedEvent,
 } from "../../runtime-host/runtime-host.events";
+import { isActiveRunStatus } from "../status/run-status.policy";
 
 /** Host 终态收尾的日志措辞 + 写给用户的 run 失败原因,按触发场景取。 */
 const REAP_MESSAGES: Record<
@@ -57,10 +60,7 @@ export class RunRecoveryService
 {
   private readonly logger = new Logger(RunRecoveryService.name);
   private sweepTimer?: NodeJS.Timeout;
-  private readonly pendingRemoteCleanup = new Map<
-    string,
-    Map<string, string>
-  >();
+  private readonly pendingHostReconciliations = new Set<string>();
 
   constructor(
     private readonly runRepository: RunRepository,
@@ -69,6 +69,8 @@ export class RunRecoveryService
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
+    @Inject(RUNTIME_HOST_RUN_RECONCILIATION)
+    private readonly runReconciliation: RuntimeHostRunReconciliation,
     @Inject(RUNTIME_HOST_RUN_REAP_BINDING)
     private readonly runReapBinding: HostRunReapBinding
   ) {}
@@ -83,7 +85,7 @@ export class RunRecoveryService
       clearInterval(this.sweepTimer);
       this.sweepTimer = undefined;
     }
-    this.pendingRemoteCleanup.clear();
+    this.pendingHostReconciliations.clear();
   }
 
   async failInterruptedRuns(): Promise<void> {
@@ -96,59 +98,93 @@ export class RunRecoveryService
         await this.failRun(run.id, run.conversationId, "服务重启导致运行中断");
         this.logger.log(`Marked interrupted run ${run.id} as error`);
 
-        if (!isBuiltinHostId(runtimeHostId)) {
-          this.rememberRemoteCleanup(runtimeHostId, run.id, run.conversationId);
-          await this.retryRemoteCleanup(runtimeHostId);
-        }
+        if (isBuiltinHostId(runtimeHostId)) continue;
+        await this.cleanupRemoteRun(
+          runtimeHostId,
+          run.id,
+          run.conversationId
+        ).catch((err: unknown) => {
+          this.pendingHostReconciliations.add(runtimeHostId);
+          this.logCleanupFailure(runtimeHostId, run.id, err);
+        });
       }
     }
     this.startAbandonedSweep();
   }
 
-  /** registered Host 重连后重试启动时未送达的 cancel/release。 */
+  /** registered Host 重连后，以 Host 现场与数据库状态重新对账，不依赖本进程内存。 */
   @OnEvent(RUNTIME_HOST_CONNECTED_EVENT, { async: true })
   async onRuntimeHostConnected(
     event: RuntimeHostConnectedEvent
   ): Promise<void> {
-    await this.retryRemoteCleanup(event.runtimeHostId);
+    this.pendingHostReconciliations.add(event.runtimeHostId);
+    await this.retryHostReconciliation(event.runtimeHostId);
   }
 
-  private rememberRemoteCleanup(
+  private async retryHostReconciliation(runtimeHostId: string): Promise<void> {
+    try {
+      await this.reconcileHostRuns(runtimeHostId);
+      this.pendingHostReconciliations.delete(runtimeHostId);
+    } catch (err) {
+      this.pendingHostReconciliations.add(runtimeHostId);
+      this.logger.warn(
+        `reconcile runs on runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
+
+  private async reconcileHostRuns(runtimeHostId: string): Promise<void> {
+    const runIds = await this.runReconciliation.listRunIds(runtimeHostId);
+    const rows = await this.runRepository.findRuntimeReconciliationRows(runIds);
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    let firstFailure: Error | undefined;
+
+    for (const runId of runIds) {
+      const row = rowById.get(runId);
+      if (row && isActiveRunStatus(row.status)) continue;
+      if (!row) {
+        this.logger.warn(
+          `releasing unknown run ${runId} from runtime host ${runtimeHostId}`
+        );
+        this.runtimeHost.releaseRun({ runtimeHostId, runId });
+        continue;
+      }
+      try {
+        await this.cleanupRemoteRun(runtimeHostId, runId, row.conversationId);
+      } catch (err) {
+        firstFailure ??= err instanceof Error ? err : new Error(String(err));
+        this.logCleanupFailure(runtimeHostId, runId, err);
+      }
+    }
+
+    if (firstFailure) throw firstFailure;
+  }
+
+  private async cleanupRemoteRun(
     runtimeHostId: string,
     runId: string,
     conversationId: string
-  ): void {
-    let runs = this.pendingRemoteCleanup.get(runtimeHostId);
-    if (!runs) {
-      runs = new Map<string, string>();
-      this.pendingRemoteCleanup.set(runtimeHostId, runs);
-    }
-    runs.set(runId, conversationId);
+  ): Promise<void> {
+    await this.runtimeHost.command({
+      runtimeHostId,
+      payload: {
+        type: "cancel",
+        commandId: generateId(),
+        runId,
+        conversationId,
+      },
+    });
+    this.runtimeHost.releaseRun({ runtimeHostId, runId });
   }
 
-  private async retryRemoteCleanup(runtimeHostId: string): Promise<void> {
-    const runs = this.pendingRemoteCleanup.get(runtimeHostId);
-    if (!runs) return;
-    for (const [runId, conversationId] of runs) {
-      try {
-        await this.runtimeHost.command({
-          runtimeHostId,
-          payload: {
-            type: "cancel",
-            commandId: generateId(),
-            runId,
-            conversationId,
-          },
-        });
-        this.runtimeHost.releaseRun({ runtimeHostId, runId });
-        runs.delete(runId);
-      } catch (err) {
-        this.logger.warn(
-          `cleanup interrupted run ${runId} on runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
-        );
-      }
-    }
-    if (runs.size === 0) this.pendingRemoteCleanup.delete(runtimeHostId);
+  private logCleanupFailure(
+    runtimeHostId: string,
+    runId: string,
+    err: unknown
+  ): void {
+    this.logger.warn(
+      `cleanup interrupted run ${runId} on runtime host ${runtimeHostId} failed: ${err instanceof Error ? err.message : String(err)}`
+    );
   }
 
   /** 定时兜底:registered Host 离线超时后,其上的 active run 判死。 */
@@ -165,6 +201,11 @@ export class RunRecoveryService
   }
 
   private async sweepAbandonedRuns(): Promise<void> {
+    await Promise.all(
+      [...this.pendingHostReconciliations].map((runtimeHostId) =>
+        this.retryHostReconciliation(runtimeHostId)
+      )
+    );
     const activeRuns = await this.runRepository.listActive();
     if (activeRuns.length === 0) return;
     const graceMs = this.configService.getHeartbeatTimeoutSeconds() * 2 * 1000;

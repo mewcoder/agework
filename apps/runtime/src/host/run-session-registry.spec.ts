@@ -8,6 +8,7 @@ describe("RunSessionRegistry", () => {
     sessions.setConfig("run-1", { runId: "run-1" } as never);
 
     expect(sessions.has("run-1")).toBe(true);
+    expect(sessions.listRunIds()).toEqual(["run-1"]);
     expect(sessions.isReady("run-1")).toBe(false);
     expect(sessions.getConfig("run-1")).toMatchObject({ runId: "run-1" });
 
@@ -18,6 +19,7 @@ describe("RunSessionRegistry", () => {
 
     sessions.delete("run-1");
     expect(sessions.has("run-1")).toBe(false);
+    expect(sessions.listRunIds()).toEqual([]);
     expect(sessions.getConfig("run-1")).toBeUndefined();
   });
 

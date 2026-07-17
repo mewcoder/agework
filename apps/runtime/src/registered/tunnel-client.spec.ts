@@ -77,6 +77,7 @@ describe("TunnelClient", () => {
     };
     const hostContract = {
       releaseRun: vi.fn(),
+      listRunIds: vi.fn().mockResolvedValue(["run-ready", "run-acquiring"]),
       listFiles: vi.fn().mockResolvedValue({
         path: "src",
         list: [{ name: "a.ts", type: "file", size: 10 }],
@@ -270,6 +271,27 @@ describe("TunnelClient", () => {
         rootPath: "/workspace",
         path: "src",
       });
+    });
+
+    it("returns the complete Host run inventory", async () => {
+      const { hostContract } = makeClient();
+      const conn = await connectAndDrainRegister();
+
+      conn.ws.send(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: "req-runs",
+          method: "host.listRuns",
+          params: {},
+        })
+      );
+
+      await expect(conn.nextMessage()).resolves.toEqual({
+        jsonrpc: "2.0",
+        id: "req-runs",
+        result: { runIds: ["run-ready", "run-acquiring"] },
+      });
+      expect(hostContract.listRunIds).toHaveBeenCalledOnce();
     });
 
     it("forwards a run-scoped release notification without local routing state", async () => {

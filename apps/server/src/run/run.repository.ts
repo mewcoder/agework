@@ -96,7 +96,7 @@ export class RunRepository {
   async listActive() {
     return this.prisma.run.findMany({
       where: { status: { in: ACTIVE_RUN_STATUSES } },
-      // 恢复路径需要知道 run 落在哪台 Host 上(registered 不判死、走 ACK 续传)
+      // 恢复路径需要知道 run 落在哪台 Host 上，以便判死后清理远端会话。
       include: {
         conversation: {
           select: {
@@ -104,6 +104,15 @@ export class RunRepository {
           },
         },
       },
+    });
+  }
+
+  /** Host 重连对账：批量读取其现场 run 的数据库状态与取消命令所需会话 id。 */
+  async findRuntimeReconciliationRows(runIds: string[]) {
+    if (runIds.length === 0) return [];
+    return this.prisma.run.findMany({
+      where: { id: { in: runIds } },
+      select: { id: true, conversationId: true, status: true },
     });
   }
 

@@ -80,6 +80,7 @@ export function isHostTunnelHostRpcRequest(
     case "host.searchFiles":
     case "host.listChangedFiles":
       return isRuntimeHostId(params) && isString(params.rootPath);
+    case "host.listRuns":
     case "host.listWorkers":
       return true;
     case "host.stopWorker":

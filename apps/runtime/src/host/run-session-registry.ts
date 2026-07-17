@@ -16,6 +16,10 @@ export class RunSessionRegistry {
     return this.states.has(runId);
   }
 
+  listRunIds(): string[] {
+    return [...this.states.keys()];
+  }
+
   reserve(runId: string): void {
     this.states.set(runId, {
       workerId: "",

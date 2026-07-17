@@ -70,6 +70,11 @@ export interface RuntimeHostOwnerReconciliation extends RuntimeHostOwnerLifecycl
   listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]>;
 }
 
+/** Run 恢复对账只需要 Host 上仍被占用的 runId，不向业务模块暴露 Worker 快照。 */
+export interface RuntimeHostRunReconciliation {
+  listRunIds(runtimeHostId: string): Promise<string[]>;
+}
+
 /** Server 侧查询 Host 控制面是否可达；builtin 永远可达，registered 取决于隧道。 */
 export interface RuntimeHostConnectivity {
   isConnected(runtimeHostId: string): boolean;
@@ -94,6 +99,9 @@ export const RUNTIME_HOST_WORKSPACE_DATA = Symbol("RuntimeHostWorkspaceData");
 export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");
 export const RUNTIME_HOST_OWNER_RECONCILIATION = Symbol(
   "RuntimeHostOwnerReconciliation"
+);
+export const RUNTIME_HOST_RUN_RECONCILIATION = Symbol(
+  "RuntimeHostRunReconciliation"
 );
 export const RUNTIME_HOST_RUN_REAP_BINDING = Symbol(
   "RuntimeHostRunReapBinding"

@@ -32,6 +32,7 @@ function makeBuiltinHost() {
     searchFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
     listChangedFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
     listWorkers: vi.fn().mockResolvedValue([]),
+    listRunIds: vi.fn().mockResolvedValue([]),
     stopWorker: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -357,6 +358,22 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
   });
 
   describe("观测与 owner 级动作", () => {
+    it("listRunIds uses the dedicated Host run inventory including acquiring sessions", async () => {
+      tunnelHandler.sendRequest.mockResolvedValue({
+        runIds: ["run-ready", "run-acquiring"],
+      });
+
+      await expect(adapter.listRunIds("rt-registered-1")).resolves.toEqual([
+        "run-ready",
+        "run-acquiring",
+      ]);
+      expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
+        "rt-registered-1",
+        expect.objectContaining({ method: "host.listRuns" }),
+        expect.any(Number)
+      );
+    });
+
     it("listWorkers merges hosts and stamps each snapshot with its runtimeHostId", async () => {
       builtinHost.listWorkers.mockResolvedValue([
         { workerId: "w-local", runtimeHostId: "" },

@@ -139,12 +139,16 @@ export type HostTunnelHostRpcRequest =
   | RpcRequest<"host.readFileDiff", ReadFileDiffInput>
   | RpcRequest<"host.searchFiles", SearchFilesInput>
   | RpcRequest<"host.listChangedFiles", ListChangedFilesInput>
+  | RpcRequest<"host.listRuns", Record<string, never>>
   | RpcRequest<"host.listWorkers", Record<string, never>>
   | RpcRequest<"host.stopWorker", StopWorkerInput>
   | RpcRequest<"host.installCli", InstallCliInput>;
 
 /** host.listWorkers 响应：本 Host 的 worker 快照列表。 */
 export type HostListWorkersRpcResult = { workers: WorkerSnapshot[] };
+
+/** host.listRuns 响应：包含 acquiring 状态在内的 Host run 会话清单。 */
+export type HostListRunsRpcResult = { runIds: string[] };
 
 export type HostTunnelHostRpcResponse =
   | RpcResponse<HostCapabilityStatus>
@@ -154,6 +158,7 @@ export type HostTunnelHostRpcResponse =
   | RpcResponse<WorkspaceFileDiffResponse>
   | RpcResponse<WorkspaceFileSearchResponse>
   | RpcResponse<WorkspaceChangedFilesResponse>
+  | RpcResponse<HostListRunsRpcResult>
   | RpcResponse<HostListWorkersRpcResult>
   | RpcResponse<InstallCliResult>
   | RpcResponse<null>;
