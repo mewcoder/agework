@@ -23,6 +23,7 @@ import {
 import { ToolGroup, ProcessBlock, type ToolGroupItem } from "./process-block";
 import { MessageError } from "./message-error";
 import { AssistantActionBar, RunDuration } from "./action-bar";
+import { DotMatrix, type DotMatrixState } from "@/components/assistant-ui/dot-matrix";
 
 const ToolFallbackFC = ToolFallback as unknown as FC<ToolCallPart>;
 
@@ -50,6 +51,12 @@ const STAGE_LABEL: Record<AssistantStage, string> = {
   thinking: "思考中",
   executing: "执行中",
   replying: "回复中",
+};
+
+const STAGE_DOT_MATRIX_STATE: Record<AssistantStage, DotMatrixState> = {
+  thinking: "thinking",
+  executing: "loading",
+  replying: "streaming",
 };
 
 export const AssistantMessage = memo(function AssistantMessage() {
@@ -244,9 +251,11 @@ export const AssistantMessage = memo(function AssistantMessage() {
       >
         <div className="flex items-center gap-1.5">
           {stage ? (
-            <span className="shimmer text-[13px] text-muted-foreground motion-reduce:animate-none">
-              {STAGE_LABEL[stage]}
-            </span>
+            <DotMatrix
+              state={STAGE_DOT_MATRIX_STATE[stage]}
+              label={STAGE_LABEL[stage]}
+              className="size-4 text-muted-foreground"
+            />
           ) : (
             <>
               <BranchPicker />

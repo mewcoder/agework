@@ -126,9 +126,14 @@ export function ProcessBlock({
     >
       <CollapsibleTrigger
         title={title}
-        className="group/trigger flex w-full items-center gap-2 py-1 text-[15px] text-muted-foreground transition-colors hover:text-foreground"
+        className="group/trigger flex w-full items-center gap-2 py-1 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        <span className="shrink-0 font-medium">
+        <span
+          className={cn(
+            "shrink-0 font-normal",
+            active && "shimmer motion-reduce:animate-none",
+          )}
+        >
           {title}
         </span>
         <ChevronDownIcon className="size-3.5 shrink-0 transition-transform duration-200 -rotate-90 group-data-[panel-open]/trigger:rotate-0" />

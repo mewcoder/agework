@@ -107,22 +107,16 @@ function ReasoningTrigger({
       />
       <span
         data-slot="reasoning-trigger-label"
-        className="aui-reasoning-trigger-label-wrapper relative min-w-0 text-start"
+        className="aui-reasoning-trigger-label-wrapper min-w-0 text-start"
       >
-        <span className="block truncate font-medium text-foreground/70 transition-colors group-hover/trigger:text-foreground">
+        <span
+          className={cn(
+            "block truncate font-medium text-foreground/70 transition-colors group-hover/trigger:text-foreground",
+            active && "shimmer motion-reduce:animate-none",
+          )}
+        >
           Thinking{durationText}
         </span>
-        {active ? (
-          <span
-            aria-hidden
-            data-slot="reasoning-trigger-shimmer"
-            className="aui-reasoning-trigger-shimmer pointer-events-none absolute inset-0 shimmer motion-reduce:animate-none"
-          >
-            <span className="block truncate font-medium text-foreground/70 transition-colors group-hover/trigger:text-foreground">
-              Thinking{durationText}
-            </span>
-          </span>
-        ) : null}
       </span>
       <ChevronDownIcon
         data-slot="reasoning-trigger-chevron"
