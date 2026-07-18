@@ -5,7 +5,12 @@ import {
   NotFoundException,
   Optional,
 } from "@nestjs/common";
-import { generateId, isAgentType, type AgentType } from "@agework/shared";
+import {
+  generateId,
+  isAgentType,
+  type AgentModeState,
+  type AgentType,
+} from "@agework/shared";
 import type {
   ConversationPendingUserAction,
   ConversationResponse,
@@ -72,6 +77,7 @@ export class ConversationService {
     workspaceId: string;
     agentType: string;
     agentSessionId: string | null;
+    agentModes?: unknown;
     createdAt: Date;
     updatedAt: Date;
   }): ConversationResponse {
@@ -84,6 +90,7 @@ export class ConversationService {
       workspaceId: c.workspaceId,
       agentType: c.agentType as AgentType,
       ...(c.agentSessionId ? { agentSessionId: c.agentSessionId } : {}),
+      ...(c.agentModes ? { agentModes: c.agentModes as AgentModeState } : {}),
       createdAt: c.createdAt.toISOString(),
       updatedAt: c.updatedAt.toISOString(),
     };
@@ -283,6 +290,14 @@ export class ConversationService {
    */
   async setAgentSessionId(conversationId: string, agentSessionId: string) {
     await this.repo.setAgentSessionId(conversationId, agentSessionId);
+  }
+
+  /**
+   * 回写 ACP agent 上报的 session modes(当前模式 + 可选模式列表)。
+   * 调用方:`RunLauncher`(run 内 agent.modes 事件回流)。
+   */
+  async setAgentModes(conversationId: string, agentModes: AgentModeState) {
+    await this.repo.setAgentModes(conversationId, agentModes);
   }
 
   private async generateLLMTitle(input: {

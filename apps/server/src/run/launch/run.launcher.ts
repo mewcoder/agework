@@ -6,6 +6,7 @@ import {
   ConflictException,
 } from "@nestjs/common";
 import type { Response } from "express";
+import type { AgentModeState } from "@agework/shared";
 import {
   parseOwnerKey,
   userOwnerKey,
@@ -109,6 +110,7 @@ export class RunLauncher {
     const aggregator = new AssistantMessageAggregator();
     const saveRun = this.makeSaveRun({ conversationId, runId, aggregator });
     const onAgentSessionId = this.saveSession(conversationId);
+    const onAgentModes = this.saveAgentModes(conversationId);
 
     this.logger.log("run starting", {
       runId,
@@ -148,6 +150,7 @@ export class RunLauncher {
       agentType,
       saveRun,
       onAgentSessionId,
+      onAgentModes,
       res,
     });
 
@@ -299,6 +302,13 @@ export class RunLauncher {
   ): (sessionId: string) => Promise<void> {
     return (sessionId) =>
       this.conversationService.setAgentSessionId(conversationId, sessionId);
+  }
+
+  private saveAgentModes(
+    conversationId: string
+  ): (modes: AgentModeState) => Promise<void> {
+    return (modes) =>
+      this.conversationService.setAgentModes(conversationId, modes);
   }
 
   private async createRun(input: {
@@ -474,6 +484,7 @@ export class RunLauncher {
     agentType: string;
     saveRun: SaveRun;
     onAgentSessionId: (sessionId: string) => Promise<void>;
+    onAgentModes: (modes: AgentModeState) => Promise<void>;
     res: Response;
   }): void {
     const {
@@ -486,6 +497,7 @@ export class RunLauncher {
       agentType,
       saveRun,
       onAgentSessionId,
+      onAgentModes,
       res,
     } = input;
 
@@ -500,6 +512,7 @@ export class RunLauncher {
       stopRequested: false,
       saveRun,
       onAgentSessionId,
+      onAgentModes,
     });
 
     // SSE disconnect: detach the response (don't cancel the run)

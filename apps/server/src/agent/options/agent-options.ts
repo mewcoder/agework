@@ -82,8 +82,33 @@ export function getAgentOptionsByType(): AgentOptionsByType {
         ],
       },
     },
-    // OpenCode / Pi 权限在运行时由 ACP 提供，第一阶段无可配置项。
-    opencode: {},
+    // OpenCode:官方两个内置模式(build/plan,经 ACP session mode 切换)+
+    // 一档完全访问(经 OPENCODE_CONFIG_CONTENT 注入 permission 全 allow)。
+    // build/plan 不注入任何权限配置,完全尊重 opencode 自身/用户配置的默认
+    // (官方默认不询问;若其配置了 ask,则经 session/request_permission → 审批卡片)。
+    opencode: {
+      permissionMode: {
+        defaultValue: "build",
+        options: [
+          {
+            value: "build",
+            label: "构建模式",
+            description: "opencode 默认模式，按其自身权限配置执行",
+          },
+          {
+            value: "plan",
+            label: "计划模式",
+            description: "只读探索并提出方案，不编辑文件",
+          },
+          {
+            value: "full-access",
+            label: "完全访问",
+            description: "忽略 opencode 权限配置，自动批准所有操作",
+          },
+        ],
+      },
+    },
+    // Pi 没有权限系统(官方 security.md:无内建 sandbox,工具全权执行),无可配置项。
     pi: {},
   };
 }

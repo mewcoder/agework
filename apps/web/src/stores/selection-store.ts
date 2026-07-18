@@ -5,12 +5,14 @@ import { AGENT_TYPES } from '@agework/shared';
 import type {
   ClaudePermissionMode,
   CodexPermissionMode,
+  OpenCodePermissionMode,
 } from '@agework/shared/api';
 
 export type { AgentType };
 export type {
   ClaudePermissionMode,
   CodexPermissionMode,
+  OpenCodePermissionMode,
 } from '@agework/shared/api';
 export type ConversationId = string;
 export type ModelReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
@@ -67,6 +69,7 @@ interface SelectionStore {
   claudeThinkingMode: ClaudeThinkingMode;
   claudePermissionMode: ClaudePermissionMode;
   codexPermissionMode: CodexPermissionMode;
+  opencodePermissionMode: OpenCodePermissionMode;
   newConversationFocusToken: number;
   startNewConversation: (workspaceId?: string, agent?: AgentType) => void;
   selectConversation: (conversationId: ConversationId, agentType?: AgentType, workspaceId?: string) => void;
@@ -79,6 +82,7 @@ interface SelectionStore {
   setClaudeThinkingMode: (mode: ClaudeThinkingMode) => void;
   setClaudePermissionMode: (mode: ClaudePermissionMode) => void;
   setCodexPermissionMode: (mode: CodexPermissionMode) => void;
+  setOpencodePermissionMode: (mode: OpenCodePermissionMode) => void;
 }
 
 // 从旧键读取的初始值（仅首次 hydrate 前生效）
@@ -107,6 +111,7 @@ const initialCodexPermissionMode = loadInitial(
   (v) => VALID_CODEX_PERMISSION_MODES.includes(v as CodexPermissionMode) ? v as CodexPermissionMode : null,
   'auto-review' as CodexPermissionMode,
 );
+const initialOpencodePermissionMode = 'build' as OpenCodePermissionMode;
 const initialModelProviders: Partial<Record<AgentType, string>> = {};
 for (const agent of AGENT_TYPES) {
   try {
@@ -147,6 +152,7 @@ export const useSelectionStore = create<SelectionStore>()(
       claudeThinkingMode: initialThinkingMode,
       claudePermissionMode: initialClaudePermissionMode,
       codexPermissionMode: initialCodexPermissionMode,
+      opencodePermissionMode: initialOpencodePermissionMode,
 
       // ── Actions ──
       startNewConversation: (workspaceId, agentType) =>
@@ -188,6 +194,7 @@ export const useSelectionStore = create<SelectionStore>()(
       setClaudeThinkingMode: (mode) => set({ claudeThinkingMode: mode }),
       setClaudePermissionMode: (mode) => set({ claudePermissionMode: mode }),
       setCodexPermissionMode: (mode) => set({ codexPermissionMode: mode }),
+      setOpencodePermissionMode: (mode) => set({ opencodePermissionMode: mode }),
     }),
     {
       name: 'agework-selection',
@@ -199,6 +206,7 @@ export const useSelectionStore = create<SelectionStore>()(
         claudeThinkingMode: state.claudeThinkingMode,
         claudePermissionMode: state.claudePermissionMode,
         codexPermissionMode: state.codexPermissionMode,
+        opencodePermissionMode: state.opencodePermissionMode,
       }),
       onRehydrateStorage: () => () => {
         // hydrate 完成后清理旧键

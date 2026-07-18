@@ -1,4 +1,9 @@
-import type { AgentType, PendingAction, ListResponse } from "../common";
+import type {
+  AgentModeState,
+  AgentType,
+  PendingAction,
+  ListResponse,
+} from "../common";
 import type { AgentContextUsage } from "../protocol";
 
 export type ConversationStatus = "regular" | "archived";
@@ -15,6 +20,8 @@ export type ConversationResponse = {
   workspaceId: string;
   agentType: AgentType;
   agentSessionId?: string;
+  /** ACP agent 上报的 session modes;非 ACP agent 或首次 run 前为空。 */
+  agentModes?: AgentModeState;
   /** ISO 8601 */
   createdAt: string;
   /** ISO 8601 */

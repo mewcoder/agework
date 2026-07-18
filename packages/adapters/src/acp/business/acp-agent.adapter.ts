@@ -190,11 +190,42 @@ export class AcpAgentAdapter extends AbstractAgent {
         (fp.agentSessionId as string | undefined) ??
         this.sessions.get(threadId);
 
+      // Session modes(opencode 的 build/plan 等):随 new/load/resume 响应
+      // 上报;emitModes 把最新状态经 CUSTOM 事件回流给 server 落到 conversation。
+      const emitModes = () => {
+        const modes = handle.session?.modes;
+        if (!modes) return;
+        emit({
+          type: EventType.CUSTOM,
+          name: "agent.modes",
+          value: modes,
+        } as never);
+      };
+
       const session = await AcpSession.start({
         connection,
         cwd: this.config.cwd,
         existingSessionId,
-        onUpdate: (u) => mapper.handle(u),
+        onUpdate: (u) => {
+          // 模式变化的两种通知形态:原生 current_mode_update,或 config option
+          // 全量刷新(opencode)。同步本地状态并回流,不进消息映射。
+          if (u.sessionUpdate === "current_mode_update") {
+            handle.session?.noteCurrentMode(u.currentModeId);
+            emitModes();
+            return;
+          }
+          if (u.sessionUpdate === "config_option_update") {
+            const modeOption = u.configOptions.find(
+              (option) => option.category === "mode" && option.type === "select"
+            );
+            if (modeOption && modeOption.type === "select") {
+              handle.session?.noteCurrentMode(modeOption.currentValue);
+              emitModes();
+            }
+            return;
+          }
+          mapper.handle(u);
+        },
         onReplayUpdate: (u) => trace("sdk.acp.replay", u),
       });
       handle.session = session;
@@ -207,6 +238,18 @@ export class AcpAgentAdapter extends AbstractAgent {
           value: session.sessionId,
         } as never);
       }
+
+      const desiredModeId =
+        typeof fp.acpModeId === "string" ? fp.acpModeId : undefined;
+      if (
+        desiredModeId &&
+        session.modes &&
+        desiredModeId !== session.modes.currentModeId &&
+        session.modes.availableModes.some((mode) => mode.id === desiredModeId)
+      ) {
+        await session.setMode(desiredModeId);
+      }
+      emitModes();
 
       const blocks = extractPromptBlocks(input);
       if (blocks.length === 0) {

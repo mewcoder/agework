@@ -32,12 +32,39 @@ export const AGENT_LABELS: Record<AgentType, string> = {
   pi: "Pi",
 };
 
+/** agent 的接入协议形态:claude 内嵌 Agent SDK、codex 走 app-server、其余经 ACP。 */
+export const AGENT_PROTOCOLS: Record<
+  AgentType,
+  "sdk" | "app-server" | "acp"
+> = {
+  claude: "sdk",
+  codex: "app-server",
+  opencode: "acp",
+  pi: "acp",
+};
+
+export const AGENT_PROTOCOL_LABELS: Record<
+  (typeof AGENT_PROTOCOLS)[AgentType],
+  string
+> = {
+  sdk: "SDK",
+  "app-server": "App Server",
+  acp: "ACP",
+};
+
 /** agent 在工作空间目录下的 skills 目录;null = 该 agent 无 skills 约定,不扫描。 */
 export const AGENT_SKILLS_DIR: Record<AgentType, string | null> = {
   claude: ".claude/skills",
   codex: null,
   opencode: null,
   pi: null,
+};
+
+/** ACP session mode(agent 运行时上报的可切换模式,语义由 agent 自定义:
+ *  opencode 是 build/plan,pi 是 thinking level)。字段名与 ACP SessionModeState 对齐。 */
+export type AgentModeState = {
+  currentModeId: string;
+  availableModes: { id: string; name: string; description?: string | null }[];
 };
 
 export function isAgentType(value: unknown): value is AgentType {

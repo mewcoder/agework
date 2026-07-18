@@ -163,12 +163,21 @@ export function createAgentDriver(
       pi: piExecutablePath,
     };
     const executablePath = acpExecutablePaths[agentProviderConfig.agentType];
+    // 权限预设随 run input 下发,profile 在 spawn 前映射成 agent 自己的配置注入。
+    const forwardedProps = (
+      config.input as { forwardedProps?: Record<string, unknown> } | undefined
+    )?.forwardedProps;
+    const permissionMode =
+      typeof forwardedProps?.permissionMode === "string"
+        ? forwardedProps.permissionMode
+        : undefined;
     return new AdapterDriver(
       createAcpAdapter(profile, {
         source: agentProviderConfig.source,
         cwd: runtimePath,
         apiFormat,
         ...credentials,
+        ...(permissionMode ? { permissionMode } : {}),
         trace,
         pendingActionSink,
         ...(executablePath ? { executablePath } : {}),

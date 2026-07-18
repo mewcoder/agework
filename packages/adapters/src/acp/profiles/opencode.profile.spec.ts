@@ -8,15 +8,50 @@ describe("openCodeAcpProfile", () => {
   it("launches via `opencode acp`", () => {
     expect(openCodeAcpProfile.command).toBe("opencode");
     expect(openCodeAcpProfile.args).toEqual(["acp"]);
-    expect(openCodeAcpProfile.npmPackage).toBe("opencode-ai");
   });
 
-  it("system mode uses the agent's own config and does not inject a provider", () => {
+  it("system mode uses the agent's own config; only full-access injects a permission block", () => {
     const env = openCodeAcpProfile.buildEnv({ source: "system", baseEnv });
     expect(env.OPENCODE_DISABLE_AUTOUPDATE).toBe("true");
     expect(env.OPENCODE_CONFIG_CONTENT).toBeUndefined();
     expect(env.AGEWORK_OPENCODE_API_KEY).toBeUndefined();
     expect(env.PATH).toBe("/usr/bin");
+
+    const fullAccess = openCodeAcpProfile.buildEnv({
+      source: "system",
+      baseEnv,
+      permissionMode: "full-access",
+    });
+    const config = JSON.parse(fullAccess.OPENCODE_CONFIG_CONTENT!);
+    expect(config.provider).toBeUndefined();
+    expect(config.permission).toEqual({
+      edit: "allow",
+      bash: "allow",
+      webfetch: "allow",
+    });
+  });
+
+  it("build/plan leave opencode's own permission config untouched in custom mode", () => {
+    const configOf = (permissionMode?: string) =>
+      JSON.parse(
+        openCodeAcpProfile.buildEnv({
+          source: "custom",
+          baseEnv,
+          baseUrl: "u",
+          model: "m",
+          ...(permissionMode ? { permissionMode } : {}),
+        }).OPENCODE_CONFIG_CONTENT!
+      );
+
+    expect(configOf("build").permission).toBeUndefined();
+    // plan 的只读约束由 session mode 承担,同样不注权限块。
+    expect(configOf("plan").permission).toBeUndefined();
+    expect(configOf(undefined).permission).toBeUndefined();
+    expect(configOf("full-access").permission).toEqual({
+      edit: "allow",
+      bash: "allow",
+      webfetch: "allow",
+    });
   });
 
   it("custom mode injects an ephemeral provider config via env (never on disk)", () => {

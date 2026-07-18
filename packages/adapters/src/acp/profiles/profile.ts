@@ -11,6 +11,8 @@ export type AcpProfileEnvInput = {
   apiFormat?: string;
   /** Whitelisted per-profile overrides (never spread raw). */
   extraConfig?: Record<string, string>;
+  /** 本次 run 的权限预设(agent-options 声明的 value);profile 自行映射,无声明的 agent 忽略。 */
+  permissionMode?: string;
 };
 
 /**
@@ -25,9 +27,6 @@ export interface AcpAgentProfile {
   /** Default command (overridden by a resolved executable path at launch). */
   command: string;
   args: readonly string[];
-  /** npm package that provides the CLI (for runtime install). */
-  npmPackage?: string;
-  binaryName: string;
   /** Build the child environment for a run. */
   buildEnv(input: AcpProfileEnvInput): Record<string, string>;
   /**

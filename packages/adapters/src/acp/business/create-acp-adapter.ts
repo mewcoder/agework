@@ -14,6 +14,8 @@ export type CreateAcpAdapterOptions = {
   /** ModelProvider 的 API 协议格式,透传给 profile 选接入方式。 */
   apiFormat?: string;
   extraConfig?: Record<string, string>;
+  /** 本次 run 的权限预设(agent-options 声明的 value),profile 自行映射。 */
+  permissionMode?: string;
   /** Resolved agent CLI path (overrides the profile's default command). */
   executablePath?: string;
   trace?: AgentTraceSink;
@@ -51,6 +53,7 @@ export function createAcpAdapter(
     model: opts.model,
     apiFormat: opts.apiFormat,
     extraConfig: opts.extraConfig,
+    permissionMode: opts.permissionMode,
   });
 
   // 桥接型 profile(如 pi 经 pi-acp)自定 spawn 目标;缺省 spawn resolved 路径或默认命令。

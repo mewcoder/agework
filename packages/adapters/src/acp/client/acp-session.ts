@@ -2,7 +2,10 @@ import type {
   ContentBlock,
   McpServer,
   PromptResponse,
+  SessionConfigOption,
+  SessionModeState,
 } from "@agentclientprotocol/sdk";
+import type { AgentModeState } from "@agework/shared";
 import { AcpConnection, type AcpSessionUpdate } from "./acp-client";
 import { AcpError } from "../protocol/types";
 
@@ -19,6 +22,15 @@ export type AcpSessionStartOptions = {
   onReplayUpdate?: (update: AcpSessionUpdate) => void;
 };
 
+/** Fields shared by new/load/resume responses that can carry mode state. */
+type SessionOpenResponse = {
+  modes?: SessionModeState | null;
+  configOptions?: SessionConfigOption[] | null;
+};
+
+/** 模式的暴露机制:ACP 原生 modes 字段,或 config option(如 opencode 的 "mode")。 */
+type ModeMechanism = { kind: "modes" } | { kind: "configOption"; configId: string };
+
 /**
  * Owns the lifecycle of a single ACP session. Chooses create vs resume vs load
  * from advertised capabilities, suppresses replayed history during `session/load`
@@ -29,6 +41,8 @@ export class AcpSession {
   private replayPhase = false;
   private unregister?: () => void;
   private createdFresh = false;
+  private modesValue: AgentModeState | null = null;
+  private modeMechanism: ModeMechanism | null = null;
 
   private constructor(private readonly opts: AcpSessionStartOptions) {}
 
@@ -42,6 +56,15 @@ export class AcpSession {
     return this.createdFresh;
   }
 
+  /**
+   * Session modes reported in the new/load/resume response — either the native
+   * ACP `modes` field or a `category: "mode"` config option (opencode). Null =
+   * the agent exposes no modes.
+   */
+  get modes(): AgentModeState | null {
+    return this.modesValue;
+  }
+
   static async start(opts: AcpSessionStartOptions): Promise<AcpSession> {
     const session = new AcpSession(opts);
     const mcpServers = opts.mcpServers ?? [];
@@ -50,6 +73,7 @@ export class AcpSession {
       const res = await opts.connection.newSession({ cwd: opts.cwd, mcpServers });
       session.bind(res.sessionId, false);
       session.createdFresh = true;
+      session.captureModes(res);
       return session;
     }
 
@@ -61,18 +85,20 @@ export class AcpSession {
     // closes in prompt().
     if (caps.resumeSession) {
       session.bind(opts.existingSessionId, true);
-      await opts.connection.resumeSession({
+      const res = await opts.connection.resumeSession({
         sessionId: opts.existingSessionId,
         cwd: opts.cwd,
         mcpServers,
       });
+      session.captureModes(res);
     } else if (caps.loadSession) {
       session.bind(opts.existingSessionId, true);
-      await opts.connection.loadSession({
+      const res = await opts.connection.loadSession({
         sessionId: opts.existingSessionId,
         cwd: opts.cwd,
         mcpServers,
       });
+      session.captureModes(res);
     } else {
       throw new AcpError(
         "ACP_SESSION_RESUME_UNSUPPORTED",
@@ -80,6 +106,29 @@ export class AcpSession {
       );
     }
     return session;
+  }
+
+  /** Switch mode via whichever mechanism the agent advertised. */
+  async setMode(modeId: string): Promise<void> {
+    if (!this.modeMechanism || !this.modesValue) {
+      throw new AcpError("ACP_SET_MODE_FAILED", "agent reported no modes");
+    }
+    if (this.modeMechanism.kind === "modes") {
+      await this.opts.connection.setMode(this.sessionIdValue, modeId);
+    } else {
+      await this.opts.connection.setConfigOption(
+        this.sessionIdValue,
+        this.modeMechanism.configId,
+        modeId
+      );
+    }
+    this.modesValue = { ...this.modesValue, currentModeId: modeId };
+  }
+
+  /** 外部观察到模式变化(current_mode_update / config_option_update)时同步本地状态。 */
+  noteCurrentMode(modeId: string): void {
+    if (!this.modesValue) return;
+    this.modesValue = { ...this.modesValue, currentModeId: modeId };
   }
 
   prompt(prompt: ContentBlock[]): Promise<PromptResponse> {
@@ -112,5 +161,41 @@ export class AcpSession {
         else this.opts.onUpdate(update);
       }
     );
+  }
+
+  private captureModes(res: SessionOpenResponse): void {
+    if (res.modes && res.modes.availableModes.length > 0) {
+      this.modeMechanism = { kind: "modes" };
+      this.modesValue = {
+        currentModeId: res.modes.currentModeId,
+        availableModes: res.modes.availableModes.map((mode) => ({
+          id: mode.id,
+          name: mode.name,
+          ...(mode.description != null ? { description: mode.description } : {}),
+        })),
+      };
+      return;
+    }
+
+    const modeOption = res.configOptions?.find(
+      (option) => option.category === "mode" && option.type === "select"
+    );
+    if (!modeOption || modeOption.type !== "select") return;
+    // options 可能按组嵌套(SessionConfigSelectGroup),统一摊平。
+    const flat = modeOption.options.flatMap((entry) =>
+      "options" in entry ? entry.options : [entry]
+    );
+    if (flat.length === 0) return;
+    this.modeMechanism = { kind: "configOption", configId: modeOption.id };
+    this.modesValue = {
+      currentModeId: modeOption.currentValue,
+      availableModes: flat.map((option) => ({
+        id: option.value,
+        name: option.name,
+        ...(option.description != null
+          ? { description: option.description }
+          : {}),
+      })),
+    };
   }
 }

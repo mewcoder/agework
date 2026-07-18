@@ -7,6 +7,8 @@
 //   FAKE_ACP_REPLY=<text>      assistant text reply (default "hello from fake acp")
 //   FAKE_ACP_EMIT_THOUGHT=1    emit an agent_thought_chunk before the reply
 //   FAKE_ACP_REQUEST_PERMISSION=1  request permission during the prompt turn
+//   FAKE_ACP_MODES=1           advertise session modes (build/plan) and accept session/set_mode
+//   FAKE_ACP_MODES_CONFIG_OPTION=1  advertise modes as a config option (opencode style) and accept session/set_config_option
 //   FAKE_ACP_STDERR=<line>     write a line to stderr on startup
 //   FAKE_ACP_POLLUTE_STDOUT=1  write non-JSON garbage to stdout (protocol error)
 //   FAKE_ACP_HANG=1            never respond to prompt (used for cancel/timeout)
@@ -41,9 +43,41 @@ const app = agent()
   }))
   .onRequest(methods.agent.session.new, async () => ({
     sessionId: "fake-session-1",
+    ...(env.FAKE_ACP_MODES === "1"
+      ? {
+          modes: {
+            currentModeId: "build",
+            availableModes: [
+              { id: "build", name: "Build" },
+              { id: "plan", name: "Plan", description: "read-only planning" },
+            ],
+          },
+        }
+      : {}),
+    ...(env.FAKE_ACP_MODES_CONFIG_OPTION === "1"
+      ? {
+          configOptions: [
+            {
+              id: "mode",
+              name: "Session Mode",
+              category: "mode",
+              type: "select",
+              currentValue: "build",
+              options: [
+                { value: "build", name: "build" },
+                { value: "plan", name: "plan", description: "read-only" },
+              ],
+            },
+          ],
+        }
+      : {}),
   }))
   .onRequest(methods.agent.session.load, async () => ({}))
   .onRequest(methods.agent.session.resume, async () => ({}))
+  .onRequest(methods.agent.session.setMode, async () => ({}))
+  .onRequest(methods.agent.session.setConfigOption, async () => ({
+    configOptions: [],
+  }))
   .onRequest(methods.agent.session.prompt, async (ctx) => {
     const { sessionId } = ctx.params;
     if (env.FAKE_ACP_HANG === "1") {

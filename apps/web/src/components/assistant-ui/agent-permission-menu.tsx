@@ -22,6 +22,7 @@ import {
   useSelectionStore,
   type ClaudePermissionMode,
   type CodexPermissionMode,
+  type OpenCodePermissionMode,
 } from "@/stores/selection-store";
 import { useAgentOptions } from "@/hooks/use-agent-options";
 import { cn } from "@/lib/utils";
@@ -45,6 +46,9 @@ const OPTION_ICONS: Record<string, LucideIcon> = {
   "auto-review": ShieldCheckIcon,
   "full-access": ShieldAlertIcon,
 };
+
+/** 高权限档位(触发警示配色)。 */
+const HIGH_ACCESS_MODES = new Set(["bypassPermissions", "full-access"]);
 
 function SelectedMenuCheck() {
   return (
@@ -81,72 +85,78 @@ export function AgentPermissionMenu() {
   const selectedAgentType = useSelectionStore((s) => s.selectedAgentType);
   const claudePermissionMode = useSelectionStore((s) => s.claudePermissionMode);
   const codexPermissionMode = useSelectionStore((s) => s.codexPermissionMode);
+  const opencodePermissionMode = useSelectionStore(
+    (s) => s.opencodePermissionMode,
+  );
   const setClaudePermissionMode = useSelectionStore(
     (s) => s.setClaudePermissionMode,
   );
   const setCodexPermissionMode = useSelectionStore(
     (s) => s.setCodexPermissionMode,
   );
+  const setOpencodePermissionMode = useSelectionStore(
+    (s) => s.setOpencodePermissionMode,
+  );
 
-  const claudePermission = agentOptions?.list.find(
-    (agent) => agent.id === "claude",
-  )?.options.permissionMode;
-  const codexPermission = agentOptions?.list.find(
-    (agent) => agent.id === "codex",
-  )?.options.permissionMode;
-  const claudeOptions = claudePermission?.options ?? [];
-  const codexOptions = codexPermission?.options ?? [];
-  useEffect(() => {
-    if (!claudePermission || !codexPermission) return;
-    if (
-      !claudePermission.options.some(
-        (option) => option.value === claudePermissionMode,
-      )
-    ) {
-      setClaudePermissionMode(claudePermission.defaultValue);
-    }
-    if (
-      !codexPermission.options.some(
-        (option) => option.value === codexPermissionMode,
-      )
-    ) {
-      setCodexPermissionMode(codexPermission.defaultValue);
-    }
-  }, [
-    claudePermissionMode,
-    claudePermission,
-    codexPermissionMode,
-    codexPermission,
-    setClaudePermissionMode,
-    setCodexPermissionMode,
-  ]);
-
-  const activeClaudeOption =
-    claudeOptions.find(
-      (option) => option.value === claudePermissionMode,
-    ) ?? {
+  // 每个声明了 permissionMode 的 agent 一条:store 里的当前值 + setter。
+  // 没在这里登记的 agent(如 pi,无权限系统)不渲染菜单。
+  const selectionByAgent: Partial<
+    Record<string, { value: string; set: (value: string) => void }>
+  > = {
+    claude: {
       value: claudePermissionMode,
-      label: claudePermissionMode,
-      description: "操作权限",
-    };
-  const activeCodexOption =
-    codexOptions.find((option) => option.value === codexPermissionMode) ?? {
+      set: (v) => setClaudePermissionMode(v as ClaudePermissionMode),
+    },
+    codex: {
       value: codexPermissionMode,
-      label: codexPermissionMode,
-      description: "操作权限",
-    };
-  const activeOption =
-    selectedAgentType === "claude" ? activeClaudeOption : activeCodexOption;
-  const ActiveIcon = OPTION_ICONS[activeOption.value] ?? ShieldIcon;
-  const isHighAccess =
-    (selectedAgentType === "claude" &&
-      claudePermissionMode === "bypassPermissions") ||
-    (selectedAgentType === "codex" && codexPermissionMode === "full-access");
+      set: (v) => setCodexPermissionMode(v as CodexPermissionMode),
+    },
+    opencode: {
+      value: opencodePermissionMode,
+      set: (v) => setOpencodePermissionMode(v as OpenCodePermissionMode),
+    },
+  };
 
-  // OpenCode(及其它 ACP agent)没有可配置的权限模式,不渲染该菜单。
-  if (selectedAgentType !== "claude" && selectedAgentType !== "codex") {
-    return null;
+  const permissionByAgent = new Map<
+    string,
+    { defaultValue: string; options: ReadonlyArray<AgentPermissionOption> }
+  >();
+  for (const agent of agentOptions?.list ?? []) {
+    const permissionMode = (
+      agent.options as {
+        permissionMode?: {
+          defaultValue: string;
+          options: ReadonlyArray<AgentPermissionOption>;
+        };
+      }
+    ).permissionMode;
+    if (permissionMode) permissionByAgent.set(agent.id, permissionMode);
   }
+
+  // 存储值不在声明选项里(声明变更/脏数据)时回落到该 agent 的默认档。
+  useEffect(() => {
+    for (const [agentId, permission] of permissionByAgent) {
+      const selection = selectionByAgent[agentId];
+      if (!selection) continue;
+      if (!permission.options.some((o) => o.value === selection.value)) {
+        selection.set(permission.defaultValue);
+      }
+    }
+  });
+
+  const permission = permissionByAgent.get(selectedAgentType);
+  const selection = selectionByAgent[selectedAgentType];
+  if (!permission || !selection) return null;
+
+  const activeOption = permission.options.find(
+    (option) => option.value === selection.value,
+  ) ?? {
+    value: selection.value,
+    label: selection.value,
+    description: "操作权限",
+  };
+  const ActiveIcon = OPTION_ICONS[activeOption.value] ?? ShieldIcon;
+  const isHighAccess = HIGH_ACCESS_MODES.has(selection.value);
 
   return (
     <DropdownMenu modal={false}>
@@ -180,39 +190,17 @@ export function AgentPermissionMenu() {
         sideOffset={8}
         className="w-80 rounded-xl p-2 text-xs"
       >
-        {selectedAgentType === "claude" ? (
-          <>
-            <DropdownMenuRadioGroup
-              value={claudePermissionMode}
-              onValueChange={(value) =>
-                setClaudePermissionMode(value as ClaudePermissionMode)
-              }
-            >
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-normal text-muted-foreground">
-                操作权限
-              </DropdownMenuLabel>
-              {claudeOptions.map((option) => (
-                <PermissionRadioItem key={option.value} option={option} />
-              ))}
-            </DropdownMenuRadioGroup>
-          </>
-        ) : (
-          <>
-            <DropdownMenuRadioGroup
-              value={codexPermissionMode}
-              onValueChange={(value) =>
-                setCodexPermissionMode(value as CodexPermissionMode)
-              }
-            >
-              <DropdownMenuLabel className="px-2 py-1.5 text-xs font-normal text-muted-foreground">
-                操作权限
-              </DropdownMenuLabel>
-              {codexOptions.map((option) => (
-                <PermissionRadioItem key={option.value} option={option} />
-              ))}
-            </DropdownMenuRadioGroup>
-          </>
-        )}
+        <DropdownMenuRadioGroup
+          value={selection.value}
+          onValueChange={selection.set}
+        >
+          <DropdownMenuLabel className="px-2 py-1.5 text-xs font-normal text-muted-foreground">
+            操作权限
+          </DropdownMenuLabel>
+          {permission.options.map((option) => (
+            <PermissionRadioItem key={option.value} option={option} />
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

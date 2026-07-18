@@ -193,6 +193,41 @@ export class AcpConnection {
     }
   }
 
+  async setMode(sessionId: string, modeId: string): Promise<void> {
+    try {
+      await this.conn.agent.request(this.sdk.methods.agent.session.setMode, {
+        sessionId,
+        modeId,
+      });
+    } catch (err) {
+      throw new AcpError(
+        "ACP_SET_MODE_FAILED",
+        `session/set_mode failed for mode ${modeId}`,
+        err
+      );
+    }
+  }
+
+  /** 部分 agent(如 opencode)不用 modes 字段,把模式暴露为 config option。 */
+  async setConfigOption(
+    sessionId: string,
+    configId: string,
+    value: string
+  ): Promise<void> {
+    try {
+      await this.conn.agent.request(
+        this.sdk.methods.agent.session.setConfigOption,
+        { sessionId, configId, value }
+      );
+    } catch (err) {
+      throw new AcpError(
+        "ACP_SET_MODE_FAILED",
+        `session/set_config_option failed for ${configId}=${value}`,
+        err
+      );
+    }
+  }
+
   async cancel(sessionId: string): Promise<void> {
     await this.conn.agent.notify(this.sdk.methods.agent.session.cancel, {
       sessionId,

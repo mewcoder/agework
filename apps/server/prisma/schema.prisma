@@ -111,6 +111,7 @@ model Conversation {
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
   agentType         String    @default("claude")
   agentSessionId    String?
+  agentModes        Json?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?

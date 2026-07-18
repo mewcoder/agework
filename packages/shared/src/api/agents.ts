@@ -52,8 +52,14 @@ export type CodexAgentOptions = {
   };
 };
 
-/** OpenCode 第一阶段无可配置权限模式；权限在运行时由 ACP options 提供。 */
-export type OpenCodeAgentOptions = Record<string, never>;
+export type OpenCodePermissionMode = "build" | "plan" | "full-access";
+
+export type OpenCodeAgentOptions = {
+  permissionMode: {
+    defaultValue: OpenCodePermissionMode;
+    options: AgentPermissionOption<OpenCodePermissionMode>[];
+  };
+};
 
 /** Pi 同 OpenCode:无可配置权限模式,权限在运行时由 ACP options 提供。 */
 export type PiAgentOptions = Record<string, never>;

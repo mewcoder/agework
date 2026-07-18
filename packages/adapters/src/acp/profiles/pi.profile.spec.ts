@@ -29,7 +29,6 @@ describe("piAcpProfile", () => {
   it("launches via the pi-acp bridge, not pi itself", () => {
     expect(piAcpProfile.command).toBe("pi-acp");
     expect(piAcpProfile.args).toEqual([]);
-    expect(piAcpProfile.binaryName).toBe("pi");
   });
 
   it("resolveLaunch hands the resolved pi path to the bridge via env", () => {

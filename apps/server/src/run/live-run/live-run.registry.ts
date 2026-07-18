@@ -1,4 +1,5 @@
 import { Injectable, Logger, OnApplicationShutdown } from "@nestjs/common";
+import type { AgentModeState } from "@agework/shared";
 import type { RunExecutionHandle } from "@agework/shared/protocol";
 import type {
   IncompleteMessageReason,
@@ -30,6 +31,7 @@ export type LiveRunHandle = {
     incompleteReason?: IncompleteMessageReason
   ) => Promise<void>;
   onAgentSessionId?: (sessionId: string) => Promise<void>;
+  onAgentModes?: (modes: AgentModeState) => Promise<void>;
 };
 
 @Injectable()

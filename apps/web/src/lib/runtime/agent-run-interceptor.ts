@@ -11,33 +11,50 @@ import { isPlainObject } from "lodash-es";
 
 type SelectionStoreSnapshot = ReturnType<typeof useSelectionStore.getState>;
 
-function permissionForwardedProps(agentType: AgentType, state: SelectionStoreSnapshot) {
+function permissionForwardedProps(
+  agentType: AgentType,
+  state: SelectionStoreSnapshot,
+) {
   if (agentType === "claude") {
     return { permissionMode: state.claudePermissionMode };
   }
 
-  if (state.codexPermissionMode === "full-access") {
-    return {
-      sandboxMode: "danger-full-access",
-      approvalPolicy: "never",
-      approvalsReviewer: "user",
-      networkAccessEnabled: true,
-    };
-  }
-  if (state.codexPermissionMode === "default") {
+  if (agentType === "codex") {
+    if (state.codexPermissionMode === "full-access") {
+      return {
+        sandboxMode: "danger-full-access",
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        networkAccessEnabled: true,
+      };
+    }
+    if (state.codexPermissionMode === "default") {
+      return {
+        sandboxMode: "workspace-write",
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        networkAccessEnabled: false,
+      };
+    }
     return {
       sandboxMode: "workspace-write",
       approvalPolicy: "on-request",
-      approvalsReviewer: "user",
+      approvalsReviewer: "auto_review",
       networkAccessEnabled: false,
     };
   }
-  return {
-    sandboxMode: "workspace-write",
-    approvalPolicy: "on-request",
-    approvalsReviewer: "auto_review",
-    networkAccessEnabled: false,
-  };
+
+  if (agentType === "opencode") {
+    // permissionMode → opencode profile 的 permission 配置注入;
+    // 计划模式经 ACP session mode 切换(acpModeId),其余档位钉回 build。
+    return {
+      permissionMode: state.opencodePermissionMode,
+      acpModeId: state.opencodePermissionMode === "plan" ? "plan" : "build",
+    };
+  }
+
+  // 其余 ACP agent(如 pi)无权限面,不注入权限相关 props。
+  return {};
 }
 
 export function extractRunMessageText(content: unknown): string {

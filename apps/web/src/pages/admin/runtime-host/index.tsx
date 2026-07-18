@@ -36,7 +36,12 @@ import {
   type RuntimeHost,
 } from "@/hooks/use-runtime-host";
 import type { AgentEnvStatus } from "@agework/shared/api";
-import { AGENT_TYPES, type AgentType } from "@agework/shared";
+import {
+  AGENT_PROTOCOL_LABELS,
+  AGENT_PROTOCOLS,
+  AGENT_TYPES,
+  type AgentType,
+} from "@agework/shared";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/utils/format";
 import { errorMessage } from "@/utils/error";
@@ -87,6 +92,9 @@ function AgentEnvItem({
         <div className="flex min-w-0 items-center gap-2">
           <AgentIcon agent={agentType} size={14} />
           <span className="font-medium">{agentType}</span>
+          <Badge variant="outline" className="shrink-0 text-muted-foreground">
+            {AGENT_PROTOCOL_LABELS[AGENT_PROTOCOLS[agentType]]}
+          </Badge>
         </div>
       }
       description={

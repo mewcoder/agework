@@ -78,6 +78,52 @@ describe("AcpAgentAdapter", () => {
     expect(text).toBe("hi from opencode");
   });
 
+  it("emits reported session modes and applies forwardedProps.acpModeId via set_mode", async () => {
+    const runOnce = async (
+      forwardedProps?: Record<string, unknown>,
+      scenario: Record<string, string> = { FAKE_ACP_MODES: "1" }
+    ) => {
+      const adapter = makeAdapter(scenario);
+      const events: BaseEvent[] = [];
+      await new Promise<void>((resolve, reject) => {
+        adapter
+          .run({
+            ...input(`t-modes-${forwardedProps ? "set" : "default"}`, "r1"),
+            ...(forwardedProps ? { forwardedProps } : {}),
+          } as RunAgentInput)
+          .subscribe({ next: (e) => events.push(e), complete: resolve, error: reject });
+      });
+      return events.find(
+        (e) =>
+          e.type === EventType.CUSTOM &&
+          (e as unknown as { name: string }).name === "agent.modes"
+      ) as unknown as { value: { currentModeId: string; availableModes: { id: string }[] } };
+    };
+
+    const reported = await runOnce();
+    expect(reported.value.currentModeId).toBe("build");
+    expect(reported.value.availableModes.map((m) => m.id)).toEqual(["build", "plan"]);
+
+    const switched = await runOnce({ acpModeId: "plan" });
+    expect(switched.value.currentModeId).toBe("plan");
+
+    // opencode 形态:modes 经 config option(category "mode")暴露,
+    // 切换走 session/set_config_option。
+    const configOptionScenario = { FAKE_ACP_MODES_CONFIG_OPTION: "1" };
+    const reportedViaConfig = await runOnce(undefined, configOptionScenario);
+    expect(reportedViaConfig.value.currentModeId).toBe("build");
+    expect(reportedViaConfig.value.availableModes.map((m) => m.id)).toEqual([
+      "build",
+      "plan",
+    ]);
+
+    const switchedViaConfig = await runOnce(
+      { acpModeId: "plan" },
+      configOptionScenario
+    );
+    expect(switchedViaConfig.value.currentModeId).toBe("plan");
+  });
+
   it("surfaces a permission request as an interrupt and resumes on approval", async () => {
     const pendingActions: (string | null)[] = [];
     const adapter = makeAdapter(

@@ -20,15 +20,31 @@ function resolveBaseUrl(input: AcpProfileEnvInput): string | undefined {
 }
 
 /**
+ * 权限档位 → opencode config 的 permission 块。只有「完全访问」注入(强制全
+ * 放行,覆盖用户自己的 opencode 配置);build/plan 不注入,尊重 opencode
+ * 自身/用户配置的默认,其 "ask" 经 ACP session/request_permission 走审批卡片。
+ */
+function resolvePermissionConfig(
+  permissionMode?: string
+): Record<string, string> | undefined {
+  if (permissionMode === "full-access") {
+    return { edit: "allow", bash: "allow", webfetch: "allow" };
+  }
+  return undefined;
+}
+
+/**
  * Build the `OPENCODE_CONFIG_CONTENT` for AgeWork's custom OpenAI-compatible
  * provider. The API key is referenced via `{env:...}` so it never appears inline
  * in the config JSON (and is redacted in traces).
  */
 function buildCustomConfig(input: AcpProfileEnvInput): string {
   const model = input.model ?? "";
+  const permission = resolvePermissionConfig(input.permissionMode);
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
     model: `${OPENCODE_PROVIDER}/${model}`,
+    ...(permission ? { permission } : {}),
     provider: {
       [OPENCODE_PROVIDER]: {
         npm: resolveProviderNpm(input.apiFormat),
@@ -49,8 +65,6 @@ export const openCodeAcpProfile: AcpAgentProfile = {
   displayName: "OpenCode",
   command: "opencode",
   args: ["acp"],
-  npmPackage: "opencode-ai",
-  binaryName: "opencode",
   buildEnv(input) {
     const env: Record<string, string> = {
       ...input.baseEnv,
@@ -58,8 +72,18 @@ export const openCodeAcpProfile: AcpAgentProfile = {
       OPENCODE_DISABLE_AUTOUPDATE: "true",
     };
 
-    // System mode: let OpenCode use its own auth.json / global / project config.
-    if (input.source === "system") return env;
+    // System mode: OpenCode 用自己的 auth/全局配置;仅「完全访问」档叠加
+    // 权限块(OPENCODE_CONFIG_CONTENT 与全局/项目配置合并,优先级最高)。
+    if (input.source === "system") {
+      const permission = resolvePermissionConfig(input.permissionMode);
+      if (permission) {
+        env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          permission,
+        });
+      }
+      return env;
+    }
 
     // Custom mode: inject an ephemeral provider config (never written to disk).
     if (input.baseUrl && input.model) {

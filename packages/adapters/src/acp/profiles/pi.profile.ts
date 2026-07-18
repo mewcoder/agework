@@ -65,8 +65,6 @@ export const piAcpProfile: AcpAgentProfile = {
   displayName: "Pi",
   command: "pi-acp",
   args: [],
-  npmPackage: "pi-acp",
-  binaryName: "pi",
   buildEnv(input) {
     const env: Record<string, string> = {
       ...input.baseEnv,

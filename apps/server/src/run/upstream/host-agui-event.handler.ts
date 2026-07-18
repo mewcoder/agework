@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import type { AgentModeState } from "@agework/shared";
 import type {
   AgentContextUsage,
   RecordRunEventInput,
@@ -130,6 +131,11 @@ export class HostAgUiEventHandler {
 
     if (evt.name === "agent.sessionId" && typeof evt.value === "string") {
       await handle.onAgentSessionId?.(evt.value);
+      return true;
+    }
+
+    if (evt.name === "agent.modes" && isAgentModeState(evt.value)) {
+      await handle.onAgentModes?.(evt.value);
       return true;
     }
 
@@ -265,4 +271,21 @@ function num(value: unknown): number {
 /** 取可空数值：非有限数返回 null（用于 cost 这类「有就有、没有就空」的字段）。 */
 function nullableNum(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+/** agent.modes 事件值的形状校验(worker 回流数据,落库前不信任)。 */
+function isAgentModeState(value: unknown): value is AgentModeState {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.currentModeId === "string" &&
+    Array.isArray(v.availableModes) &&
+    v.availableModes.every(
+      (mode: unknown) =>
+        typeof mode === "object" &&
+        mode !== null &&
+        typeof (mode as Record<string, unknown>).id === "string" &&
+        typeof (mode as Record<string, unknown>).name === "string"
+    )
+  );
 }
