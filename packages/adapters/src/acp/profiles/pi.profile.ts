@@ -34,7 +34,13 @@ function writeCustomAgentDir(input: AcpProfileEnvInput): string {
       },
     },
   };
-  const settingsJson = { defaultProvider: PI_PROVIDER, defaultModel: model };
+  // quietStartup:关掉 pi-acp 在 session/new 后推送的 startup 横幅
+  // (pi 版本 / Context / Skills 列表),它会以 agent_message_chunk 混进首条助手消息。
+  const settingsJson = {
+    defaultProvider: PI_PROVIDER,
+    defaultModel: model,
+    quietStartup: true,
+  };
   const hash = createHash("sha256")
     .update(JSON.stringify([modelsJson, settingsJson]))
     .digest("hex")

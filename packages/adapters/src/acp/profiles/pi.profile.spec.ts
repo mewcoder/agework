@@ -78,6 +78,7 @@ describe("piAcpProfile", () => {
     expect(settings).toEqual({
       defaultProvider: "_agework",
       defaultModel: "gpt-4o",
+      quietStartup: true,
     });
   });
 
