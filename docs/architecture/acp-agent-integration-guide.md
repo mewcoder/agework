@@ -10,11 +10,14 @@ opencode / pi 两个已接入 agent 为参照,列出接一个新 ACP agent 的�
 1. **它会不会说 ACP?** 直接冒烟:spawn 它的 ACP 入口,走一遍
    `initialize` → `session/new`,确认 protocolVersion=1 握手成功。参考脚本模式:
    起子进程 + stdin/stdout NDJSON JSON-RPC(本仓接 opencode/pi 时的冒烟即此形态)。
-2. **本体不说 ACP?找桥。** 先查 [ACP registry](https://agentclientprotocol.com) 与
-   Zed extensions:codex 用 `@zed-industries/codex-acp`、pi 用 `pi-acp`
-   (ACP ⇄ `pi --mode rpc`)。注意 open-hands 踩过的坑:`npx -y @openai/codex acp`
-   看着合理但 codex 没有 acp 子命令,会因 "stdin is not a terminal" 静默死锁握手——
-   **必须实际握手验证,不要按包名猜**。
+2. **本体不说 ACP?找桥。** 先查 [ACP registry](https://agentclientprotocol.com/get-started/registry) 与
+   Zed extensions 有没有现成桥:本仓的 pi 即经社区桥 `pi-acp`(ACP ⇄
+   `pi --mode rpc`)接入。注意:桥的存在不代表该走 ACP——codex 生态虽有
+   `@zed-industries/codex-acp` 桥,但本仓 codex 走 app-server 原生协议
+   (`AGENT_PROTOCOLS` 里 codex = `app-server`,为拿用户级审批,见
+   codex app-server 迁移文档),不经 ACP。另一个 open-hands 踩过的坑:
+   `npx -y @openai/codex acp` 看着合理但 codex 没有 acp 子命令,会因
+   "stdin is not a terminal" 静默死锁握手——**必须实际握手验证,不要按包名猜**。
 3. **摸清三件事**(决定 profile 怎么写):
    - 自定义模型/凭证怎么注入?(env 直通配置如 `OPENCODE_CONFIG_CONTENT`?
      配置目录如 pi 的 `PI_CODING_AGENT_DIR`?)
