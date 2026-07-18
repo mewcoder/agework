@@ -62,16 +62,8 @@ function resolveCliPath(agentType: AgentType): string | null {
   const pathResult = findInPath(agentType);
   if (pathResult) return pathResult;
 
-  // 2. 已知位置搜索
-  const known =
-    agentType === "claude"
-      ? claudeKnownLocations()
-      : agentType === "codex"
-        ? codexKnownLocations()
-        : agentType === "pi"
-          ? piKnownLocations()
-          : opencodeKnownLocations();
-  return known[0] ?? null;
+  // 2. 已知位置搜索（agent 特有位置优先,通用安装位置兜底）
+  return knownLocations(agentType)[0] ?? null;
 }
 
 /** PATH 查找。Windows: `.exe` 优先，回退 `.cmd`/`.bat`（npm shim）。Unix: `which`。 */
@@ -176,186 +168,137 @@ function isExistingFile(filePath: string): boolean {
   return false;
 }
 
-/** Claude CLI 已知安装位置（不含 PATH 查找，由调用方先用 which/where 查 PATH）。 */
-function claudeKnownLocations(): string[] {
+// ── Agent CLI 目录表 ──────────────────────────────────────────────
+//
+// 预定义闭集:每个 agent 的可安装包名 / 伴生包 / 特有安装位置在此登记一行,
+// 不开放用户自填命令。通用安装位置(npm 全局、homebrew、volta、scoop 等)由
+// commonKnownLocations 统一探测,表里只写该 agent 独有的路径。
+
+type AgentCliSpec = {
+  /** 可通过 npm 安装的独立 CLI 包名(区别于内嵌调用用的 SDK 包)。 */
+  npmPackage: string;
+  /** 必须与主包装进同一 prefix 的伴生包(如 ACP 桥,bin 落同一目录)。 */
+  companionPackages?: readonly string[];
+  /** 该 agent 特有的安装位置(优先于通用位置探测)。 */
+  extraKnownLocations?: () => string[];
+};
+
+const AGENT_CLI_SPECS: Record<AgentType, AgentCliSpec> = {
+  claude: {
+    npmPackage: "@anthropic-ai/claude-code",
+    extraKnownLocations: () => {
+      const home = homedir();
+      const paths: string[] = [];
+      if (process.platform === "win32") {
+        paths.push(join(home, ".claude", "local", "claude.exe"));
+        paths.push(join(home, "AppData", "Local", "Claude", "claude.exe"));
+        paths.push(
+          join(
+            process.env.ProgramFiles || "C:\\Program Files",
+            "Claude",
+            "claude.exe"
+          )
+        );
+        paths.push(
+          join(
+            process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+            "Claude",
+            "claude.exe"
+          )
+        );
+        // npm 全局安装的 JS 入口(无 .exe 时经 `node cli.js` 执行)
+        if (process.env.APPDATA) {
+          paths.push(
+            join(
+              process.env.APPDATA,
+              "npm",
+              "node_modules",
+              "@anthropic-ai",
+              "claude-code",
+              "cli.js"
+            )
+          );
+        }
+      }
+      paths.push(join(home, ".claude", "local", "claude"));
+      paths.push(join(home, ".asdf", "shims", "claude"));
+      paths.push(join(home, ".asdf", "bin", "claude"));
+      paths.push(join(home, "bin", "claude"));
+      return paths;
+    },
+  },
+  codex: {
+    npmPackage: "@openai/codex",
+  },
+  opencode: {
+    npmPackage: "opencode-ai",
+    // opencode 官方安装脚本默认落到 ~/.opencode/bin。
+    extraKnownLocations: () => {
+      const home = homedir();
+      const paths = [join(home, ".opencode", "bin", "opencode")];
+      if (process.platform === "win32") {
+        paths.unshift(join(home, ".opencode", "bin", "opencode.exe"));
+      }
+      return paths;
+    },
+  },
+  pi: {
+    // pi 本体不会说 ACP,经 pi-acp 桥(ACP ⇄ `pi --mode rpc`)接入:
+    // 一键安装需把桥包装进同一 prefix(bin 同目录,worker 按 pi 路径的兄弟文件解析)。
+    npmPackage: "@earendil-works/pi-coding-agent",
+    companionPackages: ["pi-acp"],
+    // bun 全局安装(官方也推荐 npm -g,通用位置已覆盖)。
+    extraKnownLocations: () => [join(homedir(), ".bun", "bin", "pi")],
+  },
+};
+
+/** 各 agent 通用的安装位置(npm 全局 / homebrew / volta / scoop / chocolatey 等)。 */
+function commonKnownLocations(binName: string): string[] {
   const home = homedir();
-  const isWindows = process.platform === "win32";
   const paths: string[] = [];
 
-  if (isWindows) {
-    paths.push(join(home, ".claude", "local", "claude.exe"));
-    paths.push(join(home, "AppData", "Local", "Claude", "claude.exe"));
-    paths.push(
-      join(
-        process.env.ProgramFiles || "C:\\Program Files",
-        "Claude",
-        "claude.exe"
-      )
-    );
-    paths.push(
-      join(
-        process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
-        "Claude",
-        "claude.exe"
-      )
-    );
-    paths.push(join(home, ".local", "bin", "claude.exe"));
+  if (process.platform === "win32") {
+    paths.push(join(home, ".local", "bin", `${binName}.exe`));
+    paths.push(join(home, ".local", "bin", `${binName}.cmd`));
     // npm global（Windows 上 npm 全局安装只产出 .cmd shim，无 .exe）
     if (process.env.APPDATA) {
-      paths.push(join(process.env.APPDATA, "npm", "claude.cmd"));
-      paths.push(join(process.env.APPDATA, "npm", "claude.exe"));
-      paths.push(
-        join(
-          process.env.APPDATA,
-          "npm",
-          "node_modules",
-          "@anthropic-ai",
-          "claude-code",
-          "cli.js"
-        )
-      );
+      paths.push(join(process.env.APPDATA, "npm", `${binName}.cmd`));
+      paths.push(join(process.env.APPDATA, "npm", `${binName}.exe`));
     }
-    // chocolatey
-    paths.push(join("C:\\ProgramData", "chocolatey", "bin", "claude.exe"));
-    // scoop
-    paths.push(join(home, "scoop", "shims", "claude.exe"));
-    paths.push(join(home, "scoop", "shims", "claude.cmd"));
+    paths.push(join("C:\\ProgramData", "chocolatey", "bin", `${binName}.exe`));
+    paths.push(join(home, "scoop", "shims", `${binName}.exe`));
+    paths.push(join(home, "scoop", "shims", `${binName}.cmd`));
   }
 
   // Unix (macOS + Linux)
-  paths.push(join(home, ".claude", "local", "claude"));
-  paths.push(join(home, ".local", "bin", "claude"));
-  paths.push(join(home, ".volta", "bin", "claude"));
-  paths.push(join(home, ".asdf", "shims", "claude"));
-  paths.push(join(home, ".asdf", "bin", "claude"));
-  paths.push("/usr/local/bin/claude");
-  paths.push("/opt/homebrew/bin/claude");
-  paths.push(join(home, "bin", "claude"));
-  paths.push(join(home, ".npm-global", "bin", "claude"));
+  paths.push(join(home, ".local", "bin", binName));
+  paths.push(join(home, ".volta", "bin", binName));
+  paths.push(`/usr/local/bin/${binName}`);
+  paths.push(`/opt/homebrew/bin/${binName}`);
+  paths.push(join(home, ".npm-global", "bin", binName));
 
   // npm global prefix
   if (process.env.npm_config_prefix) {
-    paths.push(join(process.env.npm_config_prefix, "bin", "claude"));
+    paths.push(join(process.env.npm_config_prefix, "bin", binName));
   }
 
-  return paths.filter(isExistingFile);
+  return paths;
 }
 
-/** Codex CLI 已知安装位置。 */
-function codexKnownLocations(): string[] {
-  const home = homedir();
-  const isWindows = process.platform === "win32";
-  const paths: string[] = [];
-
-  if (isWindows) {
-    paths.push(join(home, ".local", "bin", "codex.exe"));
-    paths.push(join(home, ".local", "bin", "codex.cmd"));
-    // npm global（Windows 上 npm 全局安装只产出 .cmd shim，无 .exe）
-    if (process.env.APPDATA) {
-      paths.push(join(process.env.APPDATA, "npm", "codex.cmd"));
-      paths.push(join(process.env.APPDATA, "npm", "codex.exe"));
-    }
-    paths.push(join("C:\\ProgramData", "chocolatey", "bin", "codex.exe"));
-    paths.push(join(home, "scoop", "shims", "codex.exe"));
-    paths.push(join(home, "scoop", "shims", "codex.cmd"));
-  }
-
-  paths.push(join(home, ".local", "bin", "codex"));
-  paths.push(join(home, ".volta", "bin", "codex"));
-  paths.push("/usr/local/bin/codex");
-  paths.push("/opt/homebrew/bin/codex");
-  paths.push(join(home, ".npm-global", "bin", "codex"));
-
-  if (process.env.npm_config_prefix) {
-    paths.push(join(process.env.npm_config_prefix, "bin", "codex"));
-  }
-
-  return paths.filter(isExistingFile);
-}
-
-/** OpenCode CLI 已知安装位置。 */
-function opencodeKnownLocations(): string[] {
-  const home = homedir();
-  const isWindows = process.platform === "win32";
-  const paths: string[] = [];
-
-  if (isWindows) {
-    paths.push(join(home, ".opencode", "bin", "opencode.exe"));
-    paths.push(join(home, ".local", "bin", "opencode.exe"));
-    if (process.env.APPDATA) {
-      paths.push(join(process.env.APPDATA, "npm", "opencode.cmd"));
-      paths.push(join(process.env.APPDATA, "npm", "opencode.exe"));
-    }
-    paths.push(join("C:\\ProgramData", "chocolatey", "bin", "opencode.exe"));
-    paths.push(join(home, "scoop", "shims", "opencode.exe"));
-    paths.push(join(home, "scoop", "shims", "opencode.cmd"));
-  }
-
-  // opencode 官方安装脚本默认落到 ~/.opencode/bin。
-  paths.push(join(home, ".opencode", "bin", "opencode"));
-  paths.push(join(home, ".local", "bin", "opencode"));
-  paths.push(join(home, ".volta", "bin", "opencode"));
-  paths.push("/usr/local/bin/opencode");
-  paths.push("/opt/homebrew/bin/opencode");
-  paths.push(join(home, ".npm-global", "bin", "opencode"));
-
-  if (process.env.npm_config_prefix) {
-    paths.push(join(process.env.npm_config_prefix, "bin", "opencode"));
-  }
-
-  return paths.filter(isExistingFile);
-}
-
-/** Pi CLI 已知安装位置（npm/bun 全局安装,官方推荐 npm -g）。 */
-function piKnownLocations(): string[] {
-  const home = homedir();
-  const isWindows = process.platform === "win32";
-  const paths: string[] = [];
-
-  if (isWindows) {
-    if (process.env.APPDATA) {
-      paths.push(join(process.env.APPDATA, "npm", "pi.cmd"));
-      paths.push(join(process.env.APPDATA, "npm", "pi.exe"));
-    }
-    paths.push(join(home, "scoop", "shims", "pi.exe"));
-    paths.push(join(home, "scoop", "shims", "pi.cmd"));
-  }
-
-  paths.push(join(home, ".local", "bin", "pi"));
-  paths.push(join(home, ".bun", "bin", "pi"));
-  paths.push(join(home, ".volta", "bin", "pi"));
-  paths.push("/usr/local/bin/pi");
-  paths.push("/opt/homebrew/bin/pi");
-  paths.push(join(home, ".npm-global", "bin", "pi"));
-
-  if (process.env.npm_config_prefix) {
-    paths.push(join(process.env.npm_config_prefix, "bin", "pi"));
-  }
-
-  return paths.filter(isExistingFile);
+/** 已知安装位置搜索(不含 PATH 查找):agent 特有位置优先,通用位置兜底。 */
+function knownLocations(agentType: AgentType): string[] {
+  const spec = AGENT_CLI_SPECS[agentType];
+  return [
+    ...(spec.extraKnownLocations?.() ?? []),
+    ...commonKnownLocations(agentType),
+  ].filter(isExistingFile);
 }
 
 /** 返回某个 agent 类型对应的、可通过 npm 安装的独立 CLI 包名
  *  （区别于内嵌调用用的 SDK 包，如 `@anthropic-ai/claude-agent-sdk`）。 */
 export function resolveCliPackageName(agentType: AgentType): string {
-  switch (agentType) {
-    case "claude":
-      return "@anthropic-ai/claude-code";
-    case "opencode":
-      return "opencode-ai";
-    case "pi":
-      return "@earendil-works/pi-coding-agent";
-    case "codex":
-    default:
-      return "@openai/codex";
-  }
+  return AGENT_CLI_SPECS[agentType].npmPackage;
 }
-
-/** pi 本体不会说 ACP,经 pi-acp 桥(ACP ⇄ `pi --mode rpc`)接入:
- *  一键安装需把桥包装进同一 prefix(bin 同目录,worker 按 pi 路径的兄弟文件解析)。 */
-const COMPANION_CLI_PACKAGES: Partial<Record<AgentType, readonly string[]>> = {
-  pi: ["pi-acp"],
-};
 
 // ── agent CLI 一键安装 ────────────────────────────────────────────────
 //
@@ -375,7 +318,7 @@ export async function installCli(
 
   await runNpmInstall(dir, [
     resolveCliPackageName(agentType),
-    ...(COMPANION_CLI_PACKAGES[agentType] ?? []),
+    ...(AGENT_CLI_SPECS[agentType].companionPackages ?? []),
   ]);
 
   const binPath = resolveInstalledBinPath(cliRootDir, agentType);
