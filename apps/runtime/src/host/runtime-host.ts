@@ -8,7 +8,6 @@ import type {
   InstallCliResult,
   ListChangedFilesInput,
   ListDirectoryInput,
-  OwnerKey,
   ReadFileDiffInput,
   ReadFileInput,
   ReleaseOwnerInput,
@@ -27,7 +26,11 @@ import type {
   WorkspaceFileQuery,
 } from "@agework/shared/protocol";
 import { generateId } from "@agework/shared";
-import { parseOwnerKey, workerKey } from "@agework/shared/protocol";
+import {
+  parseOwnerKey,
+  parseWorkerKey,
+  workerKey,
+} from "@agework/shared/protocol";
 import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
@@ -51,6 +54,7 @@ import {
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
 export { WorkerHttpServer } from "./worker-http-server.js";
+export { probeDockerDaemon } from "./capability-probe.js";
 import { WorkerPool, type WorkerEntry } from "./worker-pool";
 import { buildWorkerEnv, makeRunConfig, resolveSpec } from "./run-config";
 import { CommandMailbox } from "./command-mailbox";
@@ -78,8 +82,16 @@ export interface RuntimeHostConfig {
   agentEventTrace: { enabled: boolean; maxFileMb: number };
   /** agent CLI 一键安装的根目录(per-agent 一个子目录,不占系统全局 npm)。 */
   cliInstallDir: string;
-  /** 这台 Host 支持的 runtimeType 能力矩阵。 */
+  /** 这台 Host 支持的 runtimeType 能力矩阵(启动时快照;可经 refreshCapabilities 刷新)。 */
   capabilities: HostCapabilityStatus;
+  /**
+   * 能力矩阵动态刷新钩子:返回最新矩阵(如重探 docker daemon)。提供后 Host
+   * 定期刷新,放置准入按当前矩阵判断——依赖的 daemon 中途挂掉只拦新 run。
+   * 刷新失败保留上一次矩阵(best-effort)。
+   */
+  refreshCapabilities?: () => Promise<HostCapabilityStatus>;
+  /** 能力矩阵刷新间隔(ms),默认 60s。 */
+  capabilityRefreshMs?: number;
   /** Runtime provider 配置（包含 Worker 回连地址，传给 @agework/providers）。 */
   providerConfig: RuntimeConfig;
   /**
@@ -130,23 +142,47 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly workspaceOperations = new HostWorkspaceOperations();
   private readonly environmentOperations: HostEnvironmentOperations;
   private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly capabilityTimer: ReturnType<typeof setInterval> | undefined;
   private upstream!: RuntimeHostUpstream;
   private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
   // 不用 constructor parameter property:server dev 以 Node strip-only TS
   // 直接加载本文件,strip-only 不支持 parameter property 语法。
   private readonly config: RuntimeHostConfig;
+  /** 当前能力矩阵:启动为配置快照,提供刷新钩子时定期覆盖。放置准入读这里。 */
+  private capabilities: HostCapabilityStatus;
 
   constructor(config: RuntimeHostConfig) {
     this.config = config;
+    this.capabilities = config.capabilities;
     this.resolveProvider = createRuntimeResolver(config.providerConfig);
     this.environmentOperations = new HostEnvironmentOperations(
-      config.capabilities,
+      () => this.capabilities,
       config.cliInstallDir
     );
     // 心跳判死定时器：定期扫描 pool，超时未见心跳即判死。
     const interval = Math.max(1000, Math.floor(config.heartbeatTimeoutMs / 3));
     this.fenceTimer = setInterval(() => this.sweepFence(), interval);
     this.fenceTimer.unref?.();
+    // 能力矩阵刷新：依赖的 daemon(如 docker)中途挂掉/恢复要反映到放置准入。
+    const refresh = config.refreshCapabilities;
+    if (refresh) {
+      this.capabilityTimer = setInterval(() => {
+        refresh().then(
+          (next) => {
+            this.capabilities = next;
+          },
+          () => {
+            // 刷新失败保留上一次矩阵(best-effort)
+          }
+        );
+      }, config.capabilityRefreshMs ?? 60_000);
+      this.capabilityTimer.unref?.();
+    }
+  }
+
+  /** 当前能力矩阵(register 上报 / 观测用)。 */
+  getCapabilities(): HostCapabilityStatus {
+    return this.capabilities;
   }
 
   setUpstream(upstream: RuntimeHostUpstream): void {
@@ -222,7 +258,7 @@ export class RuntimeHost implements RuntimeHostContract {
   private assertPlacementSupported(
     placement: SubmitRunInput["placement"]
   ): void {
-    const capability = this.config.capabilities[placement.runtimeType];
+    const capability = this.capabilities[placement.runtimeType];
     if (!capability?.available) {
       const reason = capability?.reason ? `: ${capability.reason}` : "";
       throw new Error(
@@ -308,12 +344,13 @@ export class RuntimeHost implements RuntimeHostContract {
   async listWorkers(): Promise<WorkerSnapshot[]> {
     // 内存池条目(WorkerEntry)的直投影;runtimeHostId 由 server 路由层盖章
     return this.pool.list().map((w) => {
-      const owner = parseOwnerKey(w.key.split("#")[0] as OwnerKey);
+      const { owner: ownerKey, runtimeType } = parseWorkerKey(w.key);
+      const owner = parseOwnerKey(ownerKey);
       return {
         runtimeHostId: "",
         workerId: w.workerId,
         workerKey: w.key,
-        runtimeType: w.key.split("#")[1] ?? "unknown",
+        runtimeType,
         scope: owner.scope,
         ownerId: owner.id,
         runIds: [...w.activeRuns],
@@ -349,7 +386,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
     if (mode === "exited" || !entry.runtimeInstanceId) return;
 
-    const runtimeType = key.split("#")[1] ?? "native";
+    const { runtimeType } = parseWorkerKey(key);
     if (!isRuntimeType(runtimeType)) return;
     const ref = this.makeRuntimeInstanceRef(key, entry, runtimeType);
     try {
@@ -636,7 +673,7 @@ export class RuntimeHost implements RuntimeHostContract {
     entry: WorkerEntry,
     runtimeType: RuntimeType
   ): RuntimeInstanceRef {
-    const owner = parseOwnerKey(key.split("#")[0] as OwnerKey);
+    const owner = parseOwnerKey(parseWorkerKey(key).owner);
     return {
       runtimeType,
       ownerId: owner.id,
@@ -690,6 +727,7 @@ export class RuntimeHost implements RuntimeHostContract {
   drain(): void {
     this.mailbox.drain();
     if (this.fenceTimer) clearInterval(this.fenceTimer);
+    if (this.capabilityTimer) clearInterval(this.capabilityTimer);
   }
 
   /**

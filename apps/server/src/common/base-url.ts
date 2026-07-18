@@ -8,7 +8,9 @@ export function normalizeBaseUrl(baseUrl?: string): string | undefined {
   if (!baseUrl) return undefined;
   const trimmed = baseUrl.trim().replace(/\/$/, "");
   if (trimmed && !/^(https?:\/\/|mock:)/i.test(trimmed)) {
-    throw new Error(`Base URL 必须以 http:// 或 https:// 开头: ${trimmed}`);
+    throw new Error(
+      `Base URL 必须以 http:// / https:// (或内部测试 scheme mock:) 开头: ${trimmed}`
+    );
   }
   return trimmed;
 }

@@ -67,7 +67,11 @@ describe("TunnelClient", () => {
     wss.close();
   });
 
-  function makeClient(onGone = vi.fn(), onIncompatible = vi.fn()) {
+  function makeClient(
+    onGone = vi.fn(),
+    onIncompatible = vi.fn(),
+    extra: Partial<ConstructorParameters<typeof TunnelClient>[0]> = {}
+  ) {
     const config: RegisteredRuntimeHostConfig = {
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       token: "pair-token",
@@ -90,6 +94,7 @@ describe("TunnelClient", () => {
       onGone,
       onIncompatible,
       reconnectBaseDelayMs: 20,
+      ...extra,
     });
     return { client, onGone, onIncompatible, hostContract };
   }
@@ -126,6 +131,31 @@ describe("TunnelClient", () => {
     await expect(connections[0].nextMessage()).resolves.toEqual({
       type: "heartbeat",
     });
+  });
+
+  it("evaluates a capabilities getter at each register (重连上报当前矩阵)", async () => {
+    let available = true;
+    makeClient(vi.fn(), vi.fn(), {
+      capabilities: () => ({
+        docker: { available, scopes: ["user", "workspace"] },
+      }),
+    });
+    client!.start();
+
+    await vi.waitFor(() => expect(connections).toHaveLength(1));
+    const first = (await connections[0].nextMessage()) as {
+      capabilities: { docker: { available: boolean } };
+    };
+    expect(first.capabilities.docker.available).toBe(true);
+
+    // 矩阵刷新后断线重连:register 必须带当前矩阵而非启动快照
+    available = false;
+    connections[0].ws.close();
+    await vi.waitFor(() => expect(connections).toHaveLength(2));
+    const second = (await connections[1].nextMessage()) as {
+      capabilities: { docker: { available: boolean } };
+    };
+    expect(second.capabilities.docker.available).toBe(false);
   });
 
   it("stops reconnecting when the server declares an incompatible protocol", async () => {

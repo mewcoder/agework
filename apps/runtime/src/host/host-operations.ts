@@ -36,18 +36,22 @@ import { listChangedFiles, readFileDiff } from "@agework/shared/git";
 
 /** Host 本机环境与 CLI 能力。 */
 export class HostEnvironmentOperations {
-  private readonly capabilities: HostCapabilityStatus;
+  /** 读 Host 的当前能力矩阵(矩阵可动态刷新,不持有快照)。 */
+  private readonly getCapabilities: () => HostCapabilityStatus;
   private readonly cliInstallDir: string;
 
-  constructor(capabilities: HostCapabilityStatus, cliInstallDir: string) {
-    this.capabilities = capabilities;
+  constructor(
+    getCapabilities: () => HostCapabilityStatus,
+    cliInstallDir: string
+  ) {
+    this.getCapabilities = getCapabilities;
     this.cliInstallDir = cliInstallDir;
   }
 
   detectEnv(): HostCapabilityStatus {
     const envConfig = detectEnvConfig();
     return Object.fromEntries(
-      Object.entries(this.capabilities).map(([runtimeType, status]) => [
+      Object.entries(this.getCapabilities()).map(([runtimeType, status]) => [
         runtimeType,
         {
           ...status,

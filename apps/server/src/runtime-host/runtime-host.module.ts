@@ -35,7 +35,8 @@ import {
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
  * - owner 生命周期清理不在本模块:workspace / user 模块各自监听事件后
- *   向下调 owner reconciliation token；业务模块不消费 Worker diagnostics。
+ *   向下调 owner reconciliation token；diagnostics 供上层根 Service 编排
+ *   admin 观测用例(如 run 模块的 admin 详情)。
  */
 @Module({
   imports: [RunEventModule],
@@ -75,8 +76,7 @@ import {
     RuntimeHostService,
     RUNTIME_HOST_EXECUTION,
     RUNTIME_HOST_UPSTREAM_BINDING,
-    RUNTIME_HOST_ENVIRONMENT,
-    RUNTIME_HOST_WORKSPACE_DATA,
+    // environment / workspace-data 仅本模块 RuntimeHostService 消费,不对外导出
     RUNTIME_HOST_DIAGNOSTICS,
     RUNTIME_HOST_OWNER_RECONCILIATION,
     RUNTIME_HOST_RUN_RECONCILIATION,

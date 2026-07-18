@@ -197,6 +197,22 @@ export function parseOwnerKey(
   }
   return { scope, id };
 }
+
+/** 拆 worker 键。仅接受 workerKey() 构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
+export function parseWorkerKey(key: `${"workspace" | "user"}:${string}#${string}`): {
+  owner: `workspace:${string}` | `user:${string}`;
+  runtimeType: string;
+} {
+  const sep = key.lastIndexOf("#");
+  const runtimeType = key.slice(sep + 1);
+  if (sep < 0 || !runtimeType) {
+    throw new Error(`invalid worker key: ${String(key)}`);
+  }
+  return {
+    owner: key.slice(0, sep) as `workspace:${string}` | `user:${string}`,
+    runtimeType,
+  };
+}
 export type {
   RpcBatch,
   RpcError,

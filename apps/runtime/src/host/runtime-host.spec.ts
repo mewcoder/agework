@@ -148,6 +148,60 @@ describe("RuntimeHost", () => {
     expect(start).not.toHaveBeenCalled();
   });
 
+  it("admits by the refreshed capability matrix, not the startup snapshot", async () => {
+    vi.useFakeTimers();
+    try {
+      const refreshed = {
+        native: {
+          available: false,
+          reason: "probe says down",
+          scopes: ["workspace"],
+        },
+      };
+      const refreshedHost = new RuntimeHost(
+        makeConfig({
+          refreshCapabilities: vi.fn().mockResolvedValue(refreshed),
+          capabilityRefreshMs: 1_000,
+        })
+      );
+      refreshedHost.setUpstream(makeUpstream());
+      try {
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        expect(refreshedHost.getCapabilities()).toEqual(refreshed);
+        await expect(
+          refreshedHost.submitRun(makeSubmitInput("run-refresh"))
+        ).rejects.toThrow(
+          "runtimeType native is not available on this Host: probe says down"
+        );
+      } finally {
+        refreshedHost.drain();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the last capability matrix when a refresh probe fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const config = makeConfig({
+        refreshCapabilities: vi.fn().mockRejectedValue(new Error("probe io")),
+        capabilityRefreshMs: 1_000,
+      });
+      const refreshedHost = new RuntimeHost(config);
+      try {
+        await vi.advanceTimersByTimeAsync(2_000);
+
+        expect(refreshedHost.getCapabilities()).toEqual(config.capabilities);
+      } finally {
+        refreshedHost.drain();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("launches a worker, handshakes, then dispatches the first user_message", async () => {
     injectProvider(
       host,

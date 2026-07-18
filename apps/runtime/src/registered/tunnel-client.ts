@@ -71,13 +71,12 @@ export function log(message: string, level: "info" | "error" = "info"): void {
 
 export interface TunnelClientOptions {
   config: RegisteredRuntimeHostConfig;
-  /** register 上报的能力矩阵(每种 runtimeType 的可用性 + scope);
+  /** register 上报的能力矩阵(每种 runtimeType 的可用性 + scope)。传 getter 时
+   *  每次 register(含重连)取当前矩阵——矩阵可动态刷新,重连上报最新现场。
    *  未提供时按 config.runtimeTypes 全部可用构建(测试便利)。 */
-  capabilities?: RuntimeCapabilities;
+  capabilities?: RuntimeCapabilities | (() => RuntimeCapabilities);
   /** Host 控制面契约；所有 RPC 都委托给它。 */
-  hostContract: RuntimeHostContract & {
-    listRunIds(): Promise<string[]>;
-  };
+  hostContract: RuntimeHostContract;
   /** Phase 2: Host 上行通知的隧道实现,连接建立/断开时由 TunnelClient 接线。 */
   tunnelUpstream?: TunnelUpstream;
   /** Runtime Host 已被 server 删除(收到 4410):调用方应退出进程,不再重连。 */
@@ -94,6 +93,8 @@ export interface TunnelClientOptions {
  */
 export class TunnelClient {
   private ws?: WebSocket;
+  /** server 在 registered 回执里分配的 host id；注册前为空串。 */
+  private runtimeHostId = "";
   private heartbeatTimer?: NodeJS.Timeout;
   private reconnectTimer?: NodeJS.Timeout;
   private readonly baseDelayMs: number;
@@ -143,7 +144,9 @@ export class TunnelClient {
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         processInstanceId: this.processInstanceId,
         capabilities:
-          this.options.capabilities ??
+          (typeof this.options.capabilities === "function"
+            ? this.options.capabilities()
+            : this.options.capabilities) ??
           buildCapabilities(this.options.config.runtimeTypes, () => ({
             available: true,
           })),
@@ -208,6 +211,7 @@ export class TunnelClient {
         ws.close(1008, "invalid registered handshake");
         return;
       }
+      this.runtimeHostId = parsed.runtimeHostId;
       log(
         `registered as runtime host ${parsed.runtimeHostId} (${this.options.config.runtimeTypes.join(",")})`
       );
@@ -286,7 +290,7 @@ export class TunnelClient {
       case "host.listChangedFiles":
         return hostContract.listChangedFiles(request.params);
       case "host.listRuns":
-        return { runIds: await hostContract.listRunIds() };
+        return { runIds: await hostContract.listRunIds(this.runtimeHostId) };
       case "host.listWorkers":
         const workers = await hostContract.listWorkers();
         return { workers };

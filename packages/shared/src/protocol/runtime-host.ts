@@ -310,6 +310,9 @@ export interface RuntimeHostDiagnostics {
   /** 现场查询 Host 上的 worker 快照列表（不入库）。 */
   listWorkers(): Promise<WorkerSnapshot[]>;
 
+  /** Host 现场 run 会话清单（含尚未绑定 Worker 的 acquiring），恢复对账用。 */
+  listRunIds(runtimeHostId: string): Promise<string[]>;
+
   /** 按 runtimeHostId 定向停止目标 Host 上的一个 worker（admin 诊断入口）。 */
   stopWorker(input: StopWorkerInput): Promise<void>;
 }

@@ -9,14 +9,8 @@ import { PrismaService } from "../prisma/prisma.service";
 import { RuntimeHostService } from "./runtime-host.service";
 import { RuntimeHostModule } from "./runtime-host.module";
 import { BUILTIN_RUNTIME_HOST } from "./contract/builtin-runtime-host";
-import type {
-  RuntimeHostEnvironment,
-  RuntimeHostWorkspaceData,
-} from "@agework/shared/protocol";
 import {
-  RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_OWNER_RECONCILIATION,
-  RUNTIME_HOST_WORKSPACE_DATA,
   type RuntimeHostOwnerReconciliation,
 } from "./runtime-host.types";
 
@@ -25,11 +19,7 @@ class DownstreamRuntimeConsumer {
   constructor(
     readonly runtimeHostService: RuntimeHostService,
     @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
-    readonly ownerReconciliation: RuntimeHostOwnerReconciliation,
-    @Inject(RUNTIME_HOST_ENVIRONMENT)
-    readonly environment: RuntimeHostEnvironment,
-    @Inject(RUNTIME_HOST_WORKSPACE_DATA)
-    readonly workspaceData: RuntimeHostWorkspaceData
+    readonly ownerReconciliation: RuntimeHostOwnerReconciliation
   ) {}
 }
 
@@ -66,8 +56,6 @@ describe("RuntimeHostModule wiring", () => {
       testingModule.get(RuntimeHostService)
     );
     expect(consumer.ownerReconciliation).toBeDefined();
-    expect(consumer.environment).toBeDefined();
-    expect(consumer.workspaceData).toBeDefined();
   });
 });
 

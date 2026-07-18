@@ -131,6 +131,7 @@ describe("RuntimeHostService", () => {
     };
     diagnostics = {
       listWorkers: vi.fn().mockResolvedValue([]),
+      listRunIds: vi.fn().mockResolvedValue([]),
       stopWorker: vi.fn().mockResolvedValue(undefined),
     };
     service = new RuntimeHostService(

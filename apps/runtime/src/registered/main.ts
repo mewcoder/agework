@@ -1,8 +1,8 @@
-import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { detectEnvConfig, resolveInstalledBinPath } from "@agework/shared/cli";
+import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import {
   resolveRegisteredRuntimeHostConfig,
   type RuntimeType,
@@ -10,32 +10,45 @@ import {
 import { TunnelClient, buildCapabilities, log } from "./tunnel-client.js";
 import { TunnelUpstream } from "./tunnel-upstream.js";
 import { RuntimeHost, type RuntimeHostConfig } from "../host/runtime-host.js";
+import {
+  probeDockerDaemon,
+  type CapabilityAvailability,
+} from "../host/capability-probe.js";
 import { WorkerHttpServer } from "../host/worker-http-server.js";
 
 /**
- * 启动时探测一种 runtimeType 在本机的真实可用性:
+ * 探测一种 runtimeType 在本机的当前可用性(启动 + 定期刷新共用):
  * - native:Host 进程能跑就可用;
  * - docker:`docker info` 探测 daemon 是否可达;
  * - opensandbox:registered daemon 尚无 sandbox 接入配置,恒不可用。
  */
-function detectRuntimeTypeAvailability(runtimeType: RuntimeType): {
-  available: boolean;
-  reason?: string;
-} {
+async function detectRuntimeTypeAvailability(
+  runtimeType: RuntimeType
+): Promise<CapabilityAvailability> {
   if (runtimeType === "native") return { available: true };
-  if (runtimeType === "docker") {
-    const result = spawnSync("docker", ["info"], {
-      stdio: "ignore",
-      timeout: 10_000,
-    });
-    return result.status === 0
-      ? { available: true }
-      : { available: false, reason: "docker daemon not reachable" };
-  }
+  if (runtimeType === "docker") return probeDockerDaemon();
   return {
     available: false,
     reason: "opensandbox is not configured on this host",
   };
+}
+
+/** 全类型探测一轮,拼出当前能力矩阵。 */
+async function detectCapabilities(
+  runtimeTypes: RuntimeType[]
+): Promise<HostCapabilityStatus> {
+  const availability = new Map(
+    await Promise.all(
+      runtimeTypes.map(
+        async (runtimeType) =>
+          [runtimeType, await detectRuntimeTypeAvailability(runtimeType)] as const
+      )
+    )
+  );
+  return buildCapabilities(
+    runtimeTypes,
+    (runtimeType) => availability.get(runtimeType)!
+  );
 }
 
 /** registered host 常驻入口:解析配置、装配 RuntimeHost + worker HTTP + 隧道。 */
@@ -50,11 +63,8 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
   // 与 builtin Host 的约定一致:~/.agework/cli/<agent>/
   const cliInstallDir = join(homedir(), ".agework", "cli");
-  // 启动时按类型探测一次真实可用性,register 上报 + Host 能力矩阵共用
-  const capabilities = buildCapabilities(
-    config.runtimeTypes,
-    detectRuntimeTypeAvailability
-  );
+  // 启动探测一次真实可用性;Host 用同一探测定期刷新,register(含重连)上报当前矩阵
+  const capabilities = await detectCapabilities(config.runtimeTypes);
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
   // providerConfig.workerApiBaseUrl 指向 Host 的 worker HTTP 端点——
@@ -72,6 +82,8 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     agentEventTrace: { enabled: false, maxFileMb: 50 },
     cliInstallDir,
     capabilities,
+    // docker daemon 中途挂掉/恢复要反映到放置准入,只拦新 run 不动存量
+    refreshCapabilities: () => detectCapabilities(config.runtimeTypes),
     providerConfig: {
       workerImage: config.workerImage ?? "",
       runtimeLogHostPath: config.runtimeLogHostPath,
@@ -118,7 +130,8 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
 
   const client = new TunnelClient({
     config,
-    capabilities,
+    // 每次 register(含重连)上报 Host 的当前矩阵,不用启动快照
+    capabilities: () => runtimeHost.getCapabilities(),
     hostContract: runtimeHost,
     tunnelUpstream,
     onGone: () => process.exit(0),

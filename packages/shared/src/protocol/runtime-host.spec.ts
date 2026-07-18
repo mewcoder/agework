@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseOwnerKey,
+  parseWorkerKey,
   userOwnerKey,
   workerKey,
   workspaceOwnerKey,
@@ -20,6 +21,25 @@ describe("owner/worker key builders", () => {
     expect(workerKey(workspaceOwnerKey("ws-1"), "native")).toBe(
       "workspace:ws-1#native"
     );
+  });
+
+  it("parses worker key back to owner and runtimeType", () => {
+    expect(parseWorkerKey(workerKey(userOwnerKey("u-1"), "docker"))).toEqual({
+      owner: "user:u-1",
+      runtimeType: "docker",
+    });
+    expect(
+      parseWorkerKey(workerKey(workspaceOwnerKey("ws-1"), "native"))
+    ).toEqual({ owner: "workspace:ws-1", runtimeType: "native" });
+  });
+
+  it("throws on worker key missing the runtimeType segment", () => {
+    expect(() =>
+      parseWorkerKey("user:u-1" as `user:${string}#${string}`)
+    ).toThrow("invalid worker key");
+    expect(() =>
+      parseWorkerKey("user:u-1#" as `user:${string}#${string}`)
+    ).toThrow("invalid worker key");
   });
 
   it("parses owner key back to scope and id", () => {

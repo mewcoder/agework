@@ -1,6 +1,10 @@
 import { Logger } from "@nestjs/common";
 import type { FactoryProvider } from "@nestjs/common";
-import { RuntimeHost, WorkerHttpServer } from "@agework/runtime/host";
+import {
+  RuntimeHost,
+  WorkerHttpServer,
+  probeDockerDaemon,
+} from "@agework/runtime/host";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -35,16 +39,24 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
     const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
-    const capabilities = Object.fromEntries(
-      configService.getAllowedRuntimeTypes().map((runtimeType) => [
-        runtimeType,
-        {
-          available: true,
-          scopes:
-            runtimeType === "native" ? ["workspace"] : ["user", "workspace"],
-        },
-      ])
-    ) as HostCapabilityStatus;
+    // 当前可用性:native 进程内恒可用;docker 探测本机 daemon;opensandbox 是
+    // 外部服务,由部署配置决定接入,这里不做健康探测。
+    const detectCapabilities = async (): Promise<HostCapabilityStatus> => {
+      const entries = await Promise.all(
+        configService.getAllowedRuntimeTypes().map(async (runtimeType) => [
+          runtimeType,
+          {
+            ...(runtimeType === "docker"
+              ? await probeDockerDaemon()
+              : { available: true }),
+            scopes:
+              runtimeType === "native" ? ["workspace"] : ["user", "workspace"],
+          },
+        ])
+      );
+      return Object.fromEntries(entries) as HostCapabilityStatus;
+    };
+    const capabilities = await detectCapabilities();
 
     const host = new RuntimeHost({
       runtimeLogDir: configService.getRuntimeLogDir(),
@@ -54,6 +66,8 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       agentEventTrace: configService.getAgentEventTraceConfig(),
       cliInstallDir: configService.getHostCliDir(),
       capabilities,
+      // docker daemon 中途挂掉/恢复反映到放置准入,只拦新 run
+      refreshCapabilities: detectCapabilities,
       providerConfig,
       resolveCliPaths: async () => {
         const row = await repository.findById(BUILTIN_HOST_ID);
