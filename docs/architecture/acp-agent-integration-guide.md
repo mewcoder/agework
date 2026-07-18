@@ -10,10 +10,14 @@ opencode / pi 两个已接入 agent 为参照,列出接一个新 ACP agent 的�
 1. **它会不会说 ACP?** 直接冒烟:spawn 它的 ACP 入口,走一遍
    `initialize` → `session/new`,确认 protocolVersion=1 握手成功。参考脚本模式:
    起子进程 + stdin/stdout NDJSON JSON-RPC(本仓接 opencode/pi 时的冒烟即此形态)。
-2. **本体不说 ACP?找桥。** 先查 [ACP registry](https://agentclientprotocol.com/get-started/registry) 与
-   Zed extensions 有没有现成桥。本仓走 ACP 的是 opencode(原生 `opencode acp`)
-   和 pi(经社区桥 `pi-acp`,ACP ⇄ `pi --mode rpc`)。桥包不要按包名猜,
-   **必须实际握手验证**——有的 CLI 没有对应子命令,spawn 后会静默死锁握手。
+2. **本体不说 ACP?找桥。** 权威数据源是官方 registry 的机器可读清单:
+   <https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json>
+   (网页版 [get-started/registry](https://agentclientprotocol.com/get-started/registry))。
+   每个条目带 `distribution`(npx 包名@钉死版本 + args,或平台二进制下载),
+   即 spawn 所需的全部情报。本仓走 ACP 的是 opencode(原生 `opencode acp`)
+   和 pi(经社区桥 `pi-acp`,ACP ⇄ `pi --mode rpc`,registry id 即 `pi-acp`)。
+   桥包不要按包名猜,**必须实际握手验证**——有的 CLI 没有对应子命令,
+   spawn 后会静默死锁握手。
 3. **摸清三件事**(决定 profile 怎么写):
    - 自定义模型/凭证怎么注入?(env 直通配置如 `OPENCODE_CONFIG_CONTENT`?
      配置目录如 pi 的 `PI_CODING_AGENT_DIR`?)
