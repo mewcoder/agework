@@ -16,13 +16,15 @@ import { cn } from "@/lib/utils";
  * `knownFiles` enables the existence check (SPEC §4): `@path` is only
  * highlighted when the path is in this Set. Omit to highlight all
  * boundary-matched `@path` tokens (used in message rendering).
+ * `knownCommands` does the same for `/command` tokens (e.g. an absolute path
+ * like `/Users/...` would otherwise match its first segment as a command).
  */
 export const ComposerDirectiveOverlay = forwardRef<
   HTMLDivElement,
-  { className?: string; knownFiles?: Set<string> }
->(({ className, knownFiles }, ref) => {
+  { className?: string; knownFiles?: Set<string>; knownCommands?: Set<string> }
+>(({ className, knownFiles, knownCommands }, ref) => {
   const text = useAuiState((s) => s.composer.text);
-  const segments = parseDirectives(text, knownFiles);
+  const segments = parseDirectives(text, knownFiles, knownCommands);
 
   return (
     <div

@@ -14,13 +14,19 @@ export type DirectiveSegment =
 /**
  * Combined regex: matches either `/command` or `@file-path` tokens.
  *
- * - `/([\w-]+)` — slash commands (no boundary rule, matches anywhere)
+ * - `^\/([^\s]+)` — slash commands: `/` must be the very first character of
+ *   the whole message, not just line/whitespace start — anywhere else `/` is
+ *   far more likely to be part of a file path (e.g. `/Users/mew/...`).
+ *   Captures the full non-whitespace run after `/`; the caller further
+ *   requires it to be a bare `[\w-]+` word (no embedded `/`) before treating
+ *   it as a real command, so a leading `/Users/mew/...` is ignored entirely
+ *   rather than highlighting just the `/Users` segment.
  * - `(?:^|\s)@([^\s@]+)` — file mentions: `@` must be at line start or after
  *   whitespace (kills `foo@bar.com`), followed by non-space non-@ chars.
  *
- * Group 1 = slash command label, Group 2 = file path.
+ * Group 1 = file path, Group 2 = raw slash-command candidate.
  */
-const directiveRe = /(?:^|\s)@([^\s@]+)|\/([\w-]+)/g;
+const directiveRe = /(?:^|\s)@([^\s@]+)|^\/([^\s]+)/g;
 
 /**
  * Parse text into segments: plain text, `/command` mentions, and `@file` mentions.
@@ -29,10 +35,15 @@ const directiveRe = /(?:^|\s)@([^\s@]+)|\/([\w-]+)/g;
  *   the path exists in this set (existence check per SPEC §4). If omitted, all
  *   boundary-matched `@path` tokens are treated as mentions (used in message
  *   rendering where paths were already validated at compose time).
+ * @param knownCommands — if provided, `/label` is only treated as a slash
+ *   command when it's in this set (e.g. an absolute path like `/Users/...`
+ *   would otherwise match the first segment). Omit to skip the check (used in
+ *   message rendering where commands were already validated at compose time).
  */
 export function parseDirectives(
   text: string,
   knownFiles?: Set<string>,
+  knownCommands?: Set<string>,
 ): DirectiveSegment[] {
   const segments: DirectiveSegment[] = [];
   let lastIndex = 0;
@@ -55,7 +66,17 @@ export function parseDirectives(
       segments.push({ kind: "mention", type: "file", label: path, id: path });
       lastIndex = atPos + 1 + path.length;
     } else if (isCommand) {
-      const label = match[2]!;
+      const raw = match[2]!;
+      // A bare command is a single `[\w-]+` word. Anything else (most
+      // notably a further `/` — i.e. a path) means this isn't a command at
+      // all; skip it entirely rather than highlighting a truncated prefix.
+      if (!/^[\w-]+$/.test(raw)) continue;
+      const label = raw;
+      // Existence check: if knownCommands is provided, only highlight real commands
+      if (knownCommands && !knownCommands.has(label)) continue;
+
+      // `^` anchors the match at index 0, so there's no leading whitespace to
+      // strip (unlike the `@file` branch).
       if (match.index! > lastIndex) {
         segments.push({ kind: "text", text: text.slice(lastIndex, match.index) });
       }

@@ -322,7 +322,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
 
   // ── Slash command (skill) picker ────────────────────────────────────────
   const { data: skillsData } = useAgentSkills(targetWorkspaceId, selectedAgentType);
-  const skills = skillsData?.list ?? [];
+  const skills = useMemo(() => skillsData?.list ?? [], [skillsData]);
   const slash = unstable_useSlashCommandAdapter({
     commands: skills.map((skill) => ({
       id: skill.name,
@@ -331,6 +331,16 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
       execute: () => {},
     })),
   });
+  const knownCommands = useMemo(
+    () => new Set(skills.map((skill) => skill.name)),
+    [skills],
+  );
+  // 库内置的 trigger 检测只看"/ 前面是不是行首/空白",消息中间某个词前面加个空格再打
+  // "/",或者光标停在一段本地路径末尾(比如粘贴 "/Users/mew/.agework")都会命中,弹出
+  // 空的 "No matching items"。这里额外收紧成跟 directive-text.tsx 的高亮规则一致:
+  // 只有 "/" 是整条消息的第一个字符、且到目前为止只有一段(不含空白、不含第二个 "/")
+  // 才允许触发,其余一律不给 adapter,popover 直接不弹。
+  const isValidSlashCommandTrigger = /^\/[^\s/]*$/.test(composerText);
 
   // ── File mention (@) picker ─────────────────────────────────────────────
   const fileMention = useFileMentionAdapter(targetWorkspaceId);
@@ -562,7 +572,7 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
               <div className="relative">
                 <ComposerTriggerPopover
                   char="/"
-                  adapter={slash.adapter}
+                  adapter={isValidSlashCommandTrigger ? slash.adapter : undefined}
                   directive={{ formatter: slashFormatter, onInserted: closeSlashPopover }}
                   fallbackIcon={slash.fallbackIcon}
                 />
@@ -572,7 +582,11 @@ export function Composer({ onTextareaResize }: { onTextareaResize?: () => void }
                   directive={{ formatter: mentionFormatter, onInserted: closeMentionPopover }}
                   fallbackIcon={fileMention.fallbackIcon}
                 />
-                <ComposerDirectiveOverlay ref={overlayRef} knownFiles={knownFiles} />
+                <ComposerDirectiveOverlay
+                  ref={overlayRef}
+                  knownFiles={knownFiles}
+                  knownCommands={knownCommands}
+                />
                 <ComposerPrimitive.Input
                   ref={inputRef}
                   placeholder={labels.composer.placeholder}
