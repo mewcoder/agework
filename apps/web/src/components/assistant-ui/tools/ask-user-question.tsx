@@ -300,6 +300,48 @@ function SubmittedView({
   );
 }
 
+/** 审批提交后的一行结果:允许=绿勾,拒绝=红叉。三个审批 UI 共用。 */
+function DecisionSubmittedRow({
+  accepted,
+  label,
+}: {
+  accepted: boolean;
+  label: string;
+}) {
+  return (
+    <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
+      <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
+        {accepted ? (
+          <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <XIcon className="size-3.5 shrink-0 text-destructive" />
+        )}
+        <span className="truncate">{label}</span>
+      </div>
+    </div>
+  );
+}
+
+/** 待审批卡片外壳(amber 主题):左侧内容 + 右侧操作按钮。 */
+function ApprovalCard({
+  children,
+  actions,
+}: {
+  children: React.ReactNode;
+  actions: React.ReactNode;
+}) {
+  return (
+    <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
+      <div className="flex items-start gap-2 px-3 py-2.5">
+        <div className="min-w-0 flex-1">{children}</div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+          {actions}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Confirmation approval (Codex command/file) ──────────────────────────────
 // Codex app-server 的命令执行/文件变更审批,走与 PermissionPromptUI 相同的
 // 单行样式,但从 interrupt.metadata 读取命令/文件信息,提交 payload 是
@@ -356,40 +398,17 @@ export function ConfirmationApprovalUI({
   if (submitted) {
     const isAccepted = submitted === "accept";
     return (
-      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
-        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
-          {isAccepted ? (
-            <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <XIcon className="size-3.5 shrink-0 text-destructive" />
-          )}
-          <span className="truncate">{isAccepted ? "已允许" : "已拒绝"}</span>
-        </div>
-      </div>
+      <DecisionSubmittedRow
+        accepted={isAccepted}
+        label={isAccepted ? "已允许" : "已拒绝"}
+      />
     );
   }
 
   return (
-    <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
-      <div className="flex items-start gap-2 px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium leading-5 text-foreground">{title}</p>
-          {commandText ? (
-            <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted/60 px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">
-              <code className="break-all whitespace-pre-wrap">{commandText}</code>
-            </pre>
-          ) : reasonText ? (
-            <p className="mt-0.5 truncate text-[12px] leading-5 text-muted-foreground">
-              {reasonText}
-            </p>
-          ) : null}
-          {cwd && (
-            <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/70">
-              {cwd}
-            </p>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+    <ApprovalCard
+      actions={
+        <>
           {canAccept && (
             <Button
               size="sm"
@@ -416,9 +435,25 @@ export function ConfirmationApprovalUI({
               {PERMISSION_DENY_LABEL}
             </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      <p className="text-[13px] font-medium leading-5 text-foreground">{title}</p>
+      {commandText ? (
+        <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted/60 px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">
+          <code className="break-all whitespace-pre-wrap">{commandText}</code>
+        </pre>
+      ) : reasonText ? (
+        <p className="mt-0.5 truncate text-[12px] leading-5 text-muted-foreground">
+          {reasonText}
+        </p>
+      ) : null}
+      {cwd && (
+        <p className="mt-0.5 truncate text-[11px] leading-4 text-muted-foreground/70">
+          {cwd}
+        </p>
+      )}
+    </ApprovalCard>
   );
 }
 
@@ -471,43 +506,31 @@ export function AcpPermissionUI({
   };
 
   if (submitted) {
-    return (
-      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
-        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
-          <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <span className="truncate">{submitted}</span>
-        </div>
-      </div>
-    );
+    return <DecisionSubmittedRow accepted label={submitted} />;
   }
 
   return (
-    <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
-      <div className="flex items-start gap-2 px-3 py-2.5">
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-medium leading-5 text-foreground">
-            {title}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
-          {options.map((option) => {
-            const isReject = option.kind?.startsWith("reject");
-            return (
-              <Button
-                key={option.optionId}
-                size="sm"
-                variant={isReject ? "outline" : "default"}
-                onClick={() => void handleSubmit(option.optionId, option.name)}
-                disabled={submitting}
-                className="h-7 px-3 text-xs"
-              >
-                {option.name}
-              </Button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <ApprovalCard
+      actions={options.map((option) => {
+        const isReject = option.kind?.startsWith("reject");
+        return (
+          <Button
+            key={option.optionId}
+            size="sm"
+            variant={isReject ? "outline" : "default"}
+            onClick={() => void handleSubmit(option.optionId, option.name)}
+            disabled={submitting}
+            className="h-7 px-3 text-xs"
+          >
+            {option.name}
+          </Button>
+        );
+      })}
+    >
+      <p className="text-[13px] font-medium leading-5 text-foreground">
+        {title}
+      </p>
+    </ApprovalCard>
   );
 }
 
@@ -562,18 +585,7 @@ function PermissionPromptUI({
     const isAllowed =
       submitted === PERMISSION_ALLOW_LABEL ||
       submitted === PERMISSION_ALWAYS_ALLOW_LABEL;
-    return (
-      <div className="my-1 overflow-hidden rounded-lg border border-border/60 bg-background">
-        <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] text-muted-foreground">
-          {isAllowed ? (
-            <CheckIcon className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <XIcon className="size-3.5 shrink-0 text-destructive" />
-          )}
-          <span className="truncate">{submitted}</span>
-        </div>
-      </div>
-    );
+    return <DecisionSubmittedRow accepted={isAllowed} label={submitted} />;
   }
 
   return (
