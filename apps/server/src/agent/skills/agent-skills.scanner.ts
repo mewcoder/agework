@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import matter from "gray-matter";
 import { join } from "node:path";
-import { AGENT_DIR_PREFIX, isAgentType, type AgentType } from "@agework/shared";
+import { AGENT_SKILLS_DIR, isAgentType } from "@agework/shared";
 import type { SlashCommandItem } from "@agework/shared/api";
 import { WorkspaceService } from "../../workspace/workspace.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
@@ -10,7 +10,7 @@ import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
  * 扫描工作空间目录下的 skill SKILL.md 文件，解析 frontmatter 得到
  * SlashCommandItem 列表。不经过 agent，不需要 run。
  *
- * 路径：{AGENT_DIR_PREFIX[agentType]}/skills/<skill-name>/SKILL.md
+ * 路径：{AGENT_SKILLS_DIR[agentType]}/<skill-name>/SKILL.md
  * builtin Host 直读本机硬盘；registered Host 经隧道 RPC。
  */
 @Injectable()
@@ -28,13 +28,13 @@ export class AgentSkillsScanner {
     agentType: string
   ): Promise<SlashCommandItem[]> {
     if (!isAgentType(agentType)) return [];
-    if (agentType !== "claude") return [];
+    const skillsDir = AGENT_SKILLS_DIR[agentType];
+    if (!skillsDir) return [];
 
     const owned = await this.workspaceService.getOwnedId(userId, workspaceId);
     if (!owned) return [];
 
     const ctx = await this.workspaceService.getRunContext(workspaceId);
-    const skillsDir = join(AGENT_DIR_PREFIX[agentType as AgentType], "skills");
 
     let dirEntries: { name: string; type: string }[];
     try {

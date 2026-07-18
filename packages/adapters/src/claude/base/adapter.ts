@@ -548,11 +548,16 @@ export class ClaudeAgentAdapter extends AbstractAgent {
 
     // Apply forwardedProps as per-run overrides
     if (hasState(input.forwardedProps)) {
-      applyForwardedProps(
-        input.forwardedProps as Record<string, unknown>,
-        merged,
-        ALLOWED_FORWARDED_PROPS,
-      );
+      const forwardedProps = input.forwardedProps as Record<string, unknown>;
+      // agentSessionId 是跨 agent 的通用续接字段;Claude SDK 的续接语义是
+      // resume(持久载体里 session 数据保留)。显式 forwardedProps.resume 优先。
+      if (
+        typeof forwardedProps.agentSessionId === "string" &&
+        forwardedProps.resume == null
+      ) {
+        merged.resume = forwardedProps.agentSessionId;
+      }
+      applyForwardedProps(forwardedProps, merged, ALLOWED_FORWARDED_PROPS);
     }
 
     // Add dynamic tools from input.tools and state management

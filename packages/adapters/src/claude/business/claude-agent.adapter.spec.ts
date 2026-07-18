@@ -110,6 +110,28 @@ describe("ClaudeAgentAdapter 权限请求事件", () => {
     });
   });
 
+  it("maps forwardedProps.agentSessionId to SDK resume; explicit resume wins", () => {
+    const adapter = new ClaudeAgentAdapter({});
+
+    expect(
+      adapter.buildOptions({
+        threadId: "t-resume",
+        runId: "r-resume",
+        messages: [],
+        forwardedProps: { agentSessionId: "session-1" },
+      } as never)
+    ).toMatchObject({ resume: "session-1" });
+
+    expect(
+      adapter.buildOptions({
+        threadId: "t-resume",
+        runId: "r-resume",
+        messages: [],
+        forwardedProps: { agentSessionId: "session-1", resume: "session-2" },
+      } as never)
+    ).toMatchObject({ resume: "session-2" });
+  });
+
   it("合成工具调用名是 AskUserPermission，不是 AskUserQuestion（避免跟模型真实调用的 AskUserQuestion 混淆）", async () => {
     const threadId = `t-name-${Math.random().toString(36).slice(2)}`;
     const adapter = makeAdapter();

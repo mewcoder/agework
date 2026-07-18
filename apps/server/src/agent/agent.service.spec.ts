@@ -211,7 +211,7 @@ describe("AgentService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("passes resume props when the conversation has an agentSessionId", async () => {
+  it("passes agentSessionId through without per-agent resume mapping", async () => {
     mockConversationService.findById = vi.fn().mockResolvedValue({
       agentType: "claude",
       agentSessionId: "session-1",
@@ -225,7 +225,8 @@ describe("AgentService", () => {
     const startArgs = (mockRunService.start as ReturnType<typeof vi.fn>).mock
       .calls[0][0];
     expect(startArgs.input.forwardedProps.agentSessionId).toBe("session-1");
-    expect(startArgs.input.forwardedProps.resume).toBe("session-1");
+    // 续接语义(claude 的 resume 等)由各 adapter 自己从 agentSessionId 派生
+    expect(startArgs.input.forwardedProps.resume).toBeUndefined();
     expect(startArgs.input.messages).toEqual(body.messages?.slice(-1));
   });
 

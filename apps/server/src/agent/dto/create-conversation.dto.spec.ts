@@ -22,11 +22,10 @@ describe("CreateConversationDto", () => {
     expect(result.workspaceId).toBe("proj-1");
   });
 
-  it("accepts a payload with only the required workspaceId", async () => {
-    const result = await transformBody(CreateConversationDto, {
-      workspaceId: "proj-1",
-    });
-    expect(result.workspaceId).toBe("proj-1");
+  it("rejects a payload missing the required agentType", async () => {
+    await expect(
+      transformBody(CreateConversationDto, { workspaceId: "proj-1" })
+    ).rejects.toThrow(BadRequestException);
   });
 
   it("rejects a payload missing the required workspaceId", async () => {

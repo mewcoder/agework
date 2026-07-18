@@ -218,8 +218,8 @@ export class ConversationService {
    */
   async create(
     workspaceId: string,
+    agentType: string,
     firstMessage?: string,
-    agentType?: string,
     title?: string
   ) {
     const resolvedAgentType = this.resolveAgentType(agentType);
@@ -233,14 +233,11 @@ export class ConversationService {
     return this.toConversationDto(conversation);
   }
 
-  private resolveAgentType(agentType?: string): AgentType {
-    const resolvedAgentType = agentType ?? "claude";
-    if (!isAgentType(resolvedAgentType)) {
-      throw new BadRequestException(
-        `不支持的 agent 类型: ${resolvedAgentType}`
-      );
+  private resolveAgentType(agentType: string): AgentType {
+    if (!isAgentType(agentType)) {
+      throw new BadRequestException(`不支持的 agent 类型: ${agentType}`);
     }
-    return resolvedAgentType;
+    return agentType;
   }
 
   /**

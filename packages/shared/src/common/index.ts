@@ -32,12 +32,12 @@ export const AGENT_LABELS: Record<AgentType, string> = {
   pi: "Pi",
 };
 
-/** agent 在工作空间目录下的配置目录前缀，用于定位 skills 等资源。 */
-export const AGENT_DIR_PREFIX: Record<AgentType, string> = {
-  claude: ".claude",
-  codex: ".codex",
-  opencode: ".opencode",
-  pi: ".pi",
+/** agent 在工作空间目录下的 skills 目录;null = 该 agent 无 skills 约定,不扫描。 */
+export const AGENT_SKILLS_DIR: Record<AgentType, string | null> = {
+  claude: ".claude/skills",
+  codex: null,
+  opencode: null,
+  pi: null,
 };
 
 export function isAgentType(value: unknown): value is AgentType {

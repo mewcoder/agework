@@ -66,8 +66,8 @@ export class AgentService {
     }
     return this.conversationService.create(
       input.workspaceId,
-      input.firstMessage,
       input.agentType,
+      input.firstMessage,
       input.title
     );
   }
@@ -150,10 +150,6 @@ export class AgentService {
 
     if (agentSessionId) {
       forwardedProps.agentSessionId = agentSessionId;
-      // 持久容器模式下 session 数据在容器内持久化，可以 resume
-      if (agentType === "claude") {
-        forwardedProps.resume = agentSessionId;
-      }
     }
 
     const runInput = {
@@ -252,8 +248,13 @@ export class AgentService {
     agentType: AgentType,
     forwardedProps: Record<string, unknown>
   ) {
-    if (agentType !== "claude") return;
-    const permissionOptions = getAgentOptionsByType().claude.permissionMode;
+    // 声明了 permissionMode 选项的 agent 才归一化;没声明的(权限由运行时
+    // 协议自带)直接透传,server 不做 per-agent 特判。
+    const permissionOptions = getAgentOptionsByType()[agentType]
+      .permissionMode as
+      | { defaultValue: string; options: ReadonlyArray<{ value: string }> }
+      | undefined;
+    if (!permissionOptions) return;
     const allowed = new Set<string>(
       permissionOptions.options.map((option) => option.value)
     );

@@ -48,7 +48,7 @@ export type StoredMessageListResponse = ListResponse<StoredMessage>;
 export type CreateConversationRequest = {
   workspaceId: string;
   firstMessage?: string;
-  agentType?: AgentType;
+  agentType: AgentType;
   title?: string;
 };
 

@@ -11,10 +11,9 @@ export class CreateConversationDto implements CreateConversationRequest {
   @IsString()
   firstMessage?: string;
 
-  @IsOptional()
   @IsString()
   @IsIn(AGENT_TYPES)
-  agentType?: AgentType;
+  agentType!: AgentType;
 
   @IsOptional()
   @IsString()
