@@ -83,9 +83,8 @@ export function getAgentOptionsByType(): AgentOptionsByType {
       },
     },
     // OpenCode:官方两个内置模式(build/plan,经 ACP session mode 切换)+
-    // 一档完全访问(经 OPENCODE_CONFIG_CONTENT 注入 permission 全 allow)。
-    // build/plan 不注入任何权限配置,完全尊重 opencode 自身/用户配置的默认
-    // (官方默认不询问;若其配置了 ask,则经 session/request_permission → 审批卡片)。
+    // 一档完全访问。build/plan 使用 AgeWork 的权限策略,
+    // full-access 经 OPENCODE_CONFIG_CONTENT 强制覆盖全局和对应 agent 权限。
     opencode: {
       permissionMode: {
         defaultValue: "build",
@@ -93,7 +92,7 @@ export function getAgentOptionsByType(): AgentOptionsByType {
           {
             value: "build",
             label: "构建模式",
-            description: "opencode 默认模式，按其自身权限配置执行",
+            description: "普通操作自动允许，访问外部目录或敏感文件时询问",
           },
           {
             value: "plan",

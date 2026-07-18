@@ -120,7 +120,22 @@ export class AcpPermissionBridge {
         reason: "approval_required",
         message: req.toolCall.title ?? "Agent requires permission",
         ...(toolCallId ? { toolCallId } : {}),
-        metadata: { protocol: "acp", sessionId: req.sessionId, options },
+        metadata: {
+          protocol: "acp",
+          sessionId: req.sessionId,
+          options,
+          // 审批卡片要能说清「批准的是什么」:title 是 agent 的真实工具名
+          // (kind=search / title=glob),rawInput 才带得出 pattern、command
+          // 这类关键参数。只显 title 的话用户看不到具体操作对象。
+          toolCall: {
+            ...(req.toolCall.title ? { title: req.toolCall.title } : {}),
+            ...(req.toolCall.kind ? { kind: req.toolCall.kind } : {}),
+            ...(req.toolCall.rawInput !== undefined &&
+            req.toolCall.rawInput !== null
+              ? { rawInput: req.toolCall.rawInput }
+              : {}),
+          },
+        },
       });
       this.opts.emitPendingAction?.("question");
 

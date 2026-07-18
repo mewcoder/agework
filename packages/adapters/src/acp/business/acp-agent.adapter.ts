@@ -164,6 +164,7 @@ export class AcpAgentAdapter extends AbstractAgent {
         currentRunId = resumeRunId;
         mapper.setRunId(resumeRunId);
         emit({ type: EventType.RUN_STARTED, threadId, runId: resumeRunId });
+        mapper.resume();
       },
       emitPendingAction: (pendingAction) =>
         this.config.pendingActionSink?.({ threadId, pendingAction }),

@@ -62,7 +62,28 @@ export type AcpContextUsage = {
   cost?: unknown;
 };
 
-type ToolEntry = { started: boolean; argsSent: boolean; ended: boolean };
+type ToolEntry = {
+  started: boolean;
+  argsSent: boolean;
+  ended: boolean;
+  /** Stable AG-UI id; an interrupted tool keeps it across resumed runs. */
+  aguiToolCallId?: string;
+  /** The interrupt closed this tool; resume should only append its result. */
+  closedForInterrupt?: boolean;
+  title?: string | null;
+  kind?: string | null;
+  eligibleToStart?: boolean;
+  pendingArgs?: {
+    title?: string | null;
+    kind?: string | null;
+    rawInput?: unknown;
+  };
+  pendingCompletion?: {
+    status: "completed" | "failed";
+    content: ToolCallContent[] | null | undefined;
+    rawOutput: unknown;
+  };
+};
 
 /**
  * Pure translation layer: ACP `session/update` notifications → AG-UI events. It
@@ -79,12 +100,16 @@ export class AcpToAguiMapper {
   private openText?: string;
   private openTextAcpId?: string;
   private textBuffer = "";
+  /** Number of text segments seen for each ACP message id. */
+  private readonly textSegmentCounts = new Map<string, number>();
   private openReasoning?: string;
   private msgCounter = 0;
   private reasonCounter = 0;
   private readonly tools = new Map<string, ToolEntry>();
   private readonly runMessages: Message[] = [];
   private contextUsage?: AcpContextUsage;
+  /** New tool starts arriving after RUN_FINISHED(interrupt) wait for resume. */
+  private deferToolStarts = false;
 
   constructor(opts: AcpMapperOptions) {
     this.threadId = opts.threadId;
@@ -101,6 +126,31 @@ export class AcpToAguiMapper {
   /** Re-point subsequent events at a new runId (after an interrupt/resume). */
   setRunId(runId: string): void {
     this.runId = runId;
+  }
+
+  /** Resume deferred tool lifecycle events after RUN_STARTED has been emitted. */
+  resume(): void {
+    this.deferToolStarts = false;
+    for (const [acpId, entry] of this.tools) {
+      if (!entry.started && entry.eligibleToStart) {
+        this.startTool(acpId, entry);
+        if (entry.pendingArgs) {
+          this.maybeSendArgs(acpId, entry, entry.pendingArgs);
+          entry.pendingArgs = undefined;
+        }
+      }
+      if (entry.pendingCompletion && entry.started && !entry.ended) {
+        const completion = entry.pendingCompletion;
+        entry.pendingCompletion = undefined;
+        this.maybeCompleteTool(
+          acpId,
+          entry,
+          completion.status,
+          completion.content,
+          completion.rawOutput
+        );
+      }
+    }
   }
 
   /** Latest context-window usage seen, if any. */
@@ -169,8 +219,20 @@ export class AcpToAguiMapper {
    * tool calls open to resume.
    */
   closeMessages(): void {
+    this.deferToolStarts = true;
     this.closeText();
     this.closeReasoning();
+    for (const entry of this.tools.values()) {
+      if (entry.started && !entry.ended && !entry.closedForInterrupt) {
+        this.emit({
+          type: EventType.TOOL_CALL_END,
+          threadId: this.threadId,
+          runId: this.runId,
+          toolCallId: entry.aguiToolCallId!,
+        });
+        entry.closedForInterrupt = true;
+      }
+    }
   }
 
   /** Close any open message/tool state at the end of a prompt turn. */
@@ -178,12 +240,12 @@ export class AcpToAguiMapper {
     this.closeText();
     this.closeReasoning();
     for (const [acpId, entry] of this.tools) {
-      if (entry.started && !entry.ended) {
+      if (entry.started && !entry.ended && !entry.closedForInterrupt) {
         this.emit({
           type: EventType.TOOL_CALL_END,
           threadId: this.threadId,
           runId: this.runId,
-          toolCallId: `${this.runId}-${acpId}`,
+          toolCallId: this.toolCallId(acpId, entry),
         });
         entry.ended = true;
         this.trace?.("sdk.acp.tool_incomplete", { toolCallId: acpId });
@@ -211,7 +273,7 @@ export class AcpToAguiMapper {
     }
 
     if (!this.openText) {
-      this.openText = `${this.runId}-${acpId ?? `msg-${++this.msgCounter}`}`;
+      this.openText = this.nextTextMessageId(acpId);
       this.openTextAcpId = acpId;
       this.emit({
         type: EventType.TEXT_MESSAGE_START,
@@ -233,6 +295,17 @@ export class AcpToAguiMapper {
         delta,
       });
     }
+  }
+
+  private nextTextMessageId(acpId?: string): string {
+    if (acpId === undefined) {
+      return `${this.runId}-msg-${++this.msgCounter}`;
+    }
+    const segment = (this.textSegmentCounts.get(acpId) ?? 0) + 1;
+    this.textSegmentCounts.set(acpId, segment);
+    return segment === 1
+      ? `${this.runId}-${acpId}`
+      : `${this.runId}-${acpId}-part-${segment}`;
   }
 
   private closeText(): void {
@@ -295,9 +368,9 @@ export class AcpToAguiMapper {
   // ── Tool calls ──────────────────────────────────────────────────────────────
 
   private handleToolCall(tc: ToolCall): void {
-    const entry = this.ensureTool(tc.toolCallId, tc.kind);
+    const entry = this.ensureTool(tc.toolCallId, tc.kind, tc.status, tc.title);
     this.maybeSendArgs(tc.toolCallId, entry, {
-      title: tc.title,
+      title: tc.title ?? entry.title,
       kind: tc.kind,
       rawInput: tc.rawInput,
     });
@@ -305,31 +378,36 @@ export class AcpToAguiMapper {
   }
 
   private handleToolCallUpdate(tu: ToolCallUpdate): void {
-    const entry = this.ensureTool(tu.toolCallId, tu.kind);
+    const entry = this.ensureTool(tu.toolCallId, tu.kind, tu.status, tu.title);
     this.maybeSendArgs(tu.toolCallId, entry, {
-      title: tu.title,
+      title: tu.title ?? entry.title,
       kind: tu.kind,
       rawInput: tu.rawInput,
     });
     this.maybeCompleteTool(tu.toolCallId, entry, tu.status, tu.content, tu.rawOutput);
   }
 
-  private ensureTool(acpId: string, kind?: string | null): ToolEntry {
+  private ensureTool(
+    acpId: string,
+    kind?: string | null,
+    status?: ToolCallStatus | null,
+    title?: string | null,
+  ): ToolEntry {
     let entry = this.tools.get(acpId);
     if (!entry) {
       entry = { started: false, argsSent: false, ended: false };
       this.tools.set(acpId, entry);
     }
+    if (title !== undefined) entry.title = title;
+    if (kind !== undefined) entry.kind = kind;
+    // pending = agent 还没真正执行这个工具,ACP 的 session/request_permission
+    // 正好发生在这一刻。此时不能开 TOOL_CALL_START:AG-UI 禁止在有活跃 tool
+    // call 时发 RUN_FINISHED,而权限中断要发的正是它。等 in_progress/completed
+    // 再开,语义(未开始执行)和 AG-UI 约束一并满足。
+    if (status === "pending") return entry;
+    entry.eligibleToStart = true;
     if (!entry.started) {
-      this.emit({
-        type: EventType.TOOL_CALL_START,
-        threadId: this.threadId,
-        runId: this.runId,
-        toolCallId: `${this.runId}-${acpId}`,
-        toolCallName: acpToolName(kind as never),
-        ...(this.openText ? { parentMessageId: this.openText } : {}),
-      });
-      entry.started = true;
+      if (!this.deferToolStarts) this.startTool(acpId, entry);
     }
     return entry;
   }
@@ -339,6 +417,12 @@ export class AcpToAguiMapper {
     entry: ToolEntry,
     input: { title?: string | null; kind?: string | null; rawInput?: unknown }
   ): void {
+    // START 未发时不能发 ARGS(AG-UI 要求 START→ARGS 顺序);pending 阶段的
+    // 参数由后续 tool_call_update 带回,届时 START 已开。
+    if (!entry.started) {
+      entry.pendingArgs = input;
+      return;
+    }
     if (entry.argsSent) return;
     const hasArgs =
       input.rawInput !== undefined || input.title != null || input.kind != null;
@@ -347,7 +431,7 @@ export class AcpToAguiMapper {
       type: EventType.TOOL_CALL_ARGS,
       threadId: this.threadId,
       runId: this.runId,
-      toolCallId: `${this.runId}-${acpId}`,
+      toolCallId: this.toolCallId(acpId, entry),
       delta: toolArgs(input as never),
     });
     entry.argsSent = true;
@@ -363,7 +447,16 @@ export class AcpToAguiMapper {
     if (entry.ended) return;
     if (status !== "completed" && status !== "failed") return;
 
-    const toolCallId = `${this.runId}-${acpId}`;
+    if (!entry.started) {
+      entry.pendingCompletion = { status, content, rawOutput };
+      return;
+    }
+    if (entry.closedForInterrupt && this.deferToolStarts) {
+      entry.pendingCompletion = { status, content, rawOutput };
+      return;
+    }
+
+    const toolCallId = this.toolCallId(acpId, entry);
     const resultMsgId = `${toolCallId}-result`;
     const result =
       status === "failed"
@@ -379,12 +472,14 @@ export class AcpToAguiMapper {
       content: result,
       role: "tool",
     });
-    this.emit({
-      type: EventType.TOOL_CALL_END,
-      threadId: this.threadId,
-      runId: this.runId,
-      toolCallId,
-    });
+    if (!entry.closedForInterrupt) {
+      this.emit({
+        type: EventType.TOOL_CALL_END,
+        threadId: this.threadId,
+        runId: this.runId,
+        toolCallId,
+      });
+    }
     this.runMessages.push({
       id: resultMsgId,
       role: "tool",
@@ -392,6 +487,31 @@ export class AcpToAguiMapper {
       toolCallId,
     });
     entry.ended = true;
+  }
+
+  private startTool(acpId: string, entry: ToolEntry): void {
+    if (entry.started) return;
+    entry.aguiToolCallId = `${this.runId}-${acpId}`;
+    // ACP implementations such as pi may reuse one messageId for the
+    // pre-tool narration and the final answer. Close the current text before
+    // opening the tool so the next agent_message_chunk becomes a new part.
+    // Keep the old id as parentMessageId so the UI can still group the
+    // pre-tool narration into the processing block.
+    const parentMessageId = this.openText;
+    if (parentMessageId) this.closeText();
+    this.emit({
+      type: EventType.TOOL_CALL_START,
+      threadId: this.threadId,
+      runId: this.runId,
+      toolCallId: entry.aguiToolCallId,
+      toolCallName: acpToolName(entry.kind as never),
+      ...(parentMessageId ? { parentMessageId } : {}),
+    });
+    entry.started = true;
+  }
+
+  private toolCallId(acpId: string, entry: ToolEntry): string {
+    return entry.aguiToolCallId ?? `${this.runId}-${acpId}`;
   }
 
   // ── Custom passthrough (plan / commands / config / mode) ─────────────────────

@@ -4,6 +4,60 @@ import { getAcpProfile, isAcpAgent } from "./registry";
 
 const baseEnv = { PATH: "/usr/bin", HOME: "/home/x" };
 
+/**
+ * 「完全访问」注入的权限块。逐键列出而非只写 "*",因为 opencode 内置默认里
+ * read(*.env)、external_directory、doom_loop 是 ask,更具体的键压过通配。
+ */
+const FULL_ACCESS_PERMISSION = {
+  "*": "allow",
+  edit: "allow",
+  bash: "allow",
+  webfetch: "allow",
+  read: "allow",
+  external_directory: "allow",
+  doom_loop: "allow",
+};
+
+const BUILD_PERMISSION = {
+  "*": "allow",
+  edit: "allow",
+  bash: "allow",
+  webfetch: "allow",
+  glob: "allow",
+  grep: "allow",
+  task: "allow",
+  skill: "allow",
+  lsp: "allow",
+  websearch: "allow",
+  external_directory: "ask",
+  doom_loop: "ask",
+  read: {
+    "*": "allow",
+    "*.env": "deny",
+    "*.env.*": "deny",
+    "*.env.example": "allow",
+  },
+};
+
+const PLAN_PERMISSION = {
+  "*": "deny",
+  read: {
+    "*": "allow",
+    "*.env": "deny",
+    "*.env.*": "deny",
+    "*.env.example": "allow",
+  },
+  glob: "allow",
+  grep: "allow",
+  lsp: "allow",
+  webfetch: "allow",
+  task: "allow",
+  skill: "allow",
+  bash: "ask",
+  external_directory: "ask",
+  edit: "deny",
+};
+
 describe("openCodeAcpProfile", () => {
   it("launches via `opencode acp`", () => {
     expect(openCodeAcpProfile.command).toBe("opencode");
@@ -24,14 +78,11 @@ describe("openCodeAcpProfile", () => {
     });
     const config = JSON.parse(fullAccess.OPENCODE_CONFIG_CONTENT!);
     expect(config.provider).toBeUndefined();
-    expect(config.permission).toEqual({
-      edit: "allow",
-      bash: "allow",
-      webfetch: "allow",
-    });
+    expect(config.permission).toEqual(FULL_ACCESS_PERMISSION);
+    expect(config.agent.build.permission).toEqual(FULL_ACCESS_PERMISSION);
   });
 
-  it("build/plan leave opencode's own permission config untouched in custom mode", () => {
+  it("build and plan inject AgeWork permission policies", () => {
     const configOf = (permissionMode?: string) =>
       JSON.parse(
         openCodeAcpProfile.buildEnv({
@@ -43,15 +94,31 @@ describe("openCodeAcpProfile", () => {
         }).OPENCODE_CONFIG_CONTENT!
       );
 
-    expect(configOf("build").permission).toBeUndefined();
-    // plan 的只读约束由 session mode 承担,同样不注权限块。
-    expect(configOf("plan").permission).toBeUndefined();
+    expect(configOf("build").permission).toEqual(BUILD_PERMISSION);
+    expect(configOf("build").agent.build.permission).toEqual(BUILD_PERMISSION);
+    expect(configOf("plan").permission).toEqual(PLAN_PERMISSION);
+    expect(configOf("plan").agent.plan.permission).toEqual(PLAN_PERMISSION);
     expect(configOf(undefined).permission).toBeUndefined();
-    expect(configOf("full-access").permission).toEqual({
-      edit: "allow",
-      bash: "allow",
-      webfetch: "allow",
-    });
+    expect(configOf("full-access").permission).toEqual(FULL_ACCESS_PERMISSION);
+    expect(configOf("full-access").agent.build.permission).toEqual(
+      FULL_ACCESS_PERMISSION
+    );
+  });
+
+  it("full-access 覆盖 opencode 内置默认为 ask 的权限键", () => {
+    const permission = JSON.parse(
+      openCodeAcpProfile.buildEnv({
+        source: "system",
+        baseEnv,
+        permissionMode: "full-access",
+      }).OPENCODE_CONFIG_CONTENT!
+    ).permission;
+
+    // 回归防线:历史上只注入 edit/bash/webfetch,导致「完全访问」下读项目外
+    // 文件、读 .env、重复调用检测仍会弹审批卡片,与档位描述不符。
+    for (const key of ["external_directory", "doom_loop", "read"]) {
+      expect(permission[key]).toBe("allow");
+    }
   });
 
   it("custom mode injects an ephemeral provider config via env (never on disk)", () => {

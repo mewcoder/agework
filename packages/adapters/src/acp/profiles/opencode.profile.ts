@@ -20,15 +20,72 @@ function resolveBaseUrl(input: AcpProfileEnvInput): string | undefined {
 }
 
 /**
- * 权限档位 → opencode config 的 permission 块。只有「完全访问」注入(强制全
- * 放行,覆盖用户自己的 opencode 配置);build/plan 不注入,尊重 opencode
- * 自身/用户配置的默认,其 "ask" 经 ACP session/request_permission 走审批卡片。
+ * 权限档位 → opencode config 的 permission 块。build/plan 都使用 AgeWork
+ * 定义的策略,不受用户本地 permission:{"*":"ask"} 覆盖;full-access 则强制
+ * 全部放行。
+ *
+ * OpenCode 文档规定 agent 权限优先于全局 permission,因此完全访问还要覆盖
+ * 当前 ACP 使用的 build agent,否则本地 agent.build.permission 仍可能保留 ask。
  */
 function resolvePermissionConfig(
   permissionMode?: string
-): Record<string, string> | undefined {
+): Record<string, unknown> | undefined {
+  if (permissionMode === "plan") {
+    return {
+      "*": "deny",
+      read: {
+        "*": "allow",
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
+      glob: "allow",
+      grep: "allow",
+      lsp: "allow",
+      webfetch: "allow",
+      task: "allow",
+      skill: "allow",
+      bash: "ask",
+      external_directory: "ask",
+      edit: "deny",
+    };
+  }
+  if (permissionMode === "build") {
+    return {
+      "*": "allow",
+      edit: "allow",
+      bash: "allow",
+      webfetch: "allow",
+      glob: "allow",
+      grep: "allow",
+      task: "allow",
+      skill: "allow",
+      lsp: "allow",
+      websearch: "allow",
+      external_directory: "ask",
+      doom_loop: "ask",
+      read: {
+        "*": "allow",
+        "*.env": "deny",
+        "*.env.*": "deny",
+        "*.env.example": "allow",
+      },
+    };
+  }
   if (permissionMode === "full-access") {
-    return { edit: "allow", bash: "allow", webfetch: "allow" };
+    return {
+      // 通配只兜住 opencode 未来新增的权限键;它盖不住更具体的键,所以内置
+      // 默认为 "ask" 的那几项必须逐个列出,否则「完全访问」仍会弹审批卡片。
+      "*": "allow",
+      edit: "allow",
+      bash: "allow",
+      webfetch: "allow",
+      // 内置默认:read 对 *.env / *.env.* 是 ask。
+      read: "allow",
+      // 内置默认:这两项整体就是 ask。
+      external_directory: "allow",
+      doom_loop: "allow",
+    };
   }
   return undefined;
 }
@@ -41,10 +98,12 @@ function resolvePermissionConfig(
 function buildCustomConfig(input: AcpProfileEnvInput): string {
   const model = input.model ?? "";
   const permission = resolvePermissionConfig(input.permissionMode);
+  const permissionAgent = input.permissionMode === "plan" ? "plan" : "build";
   return JSON.stringify({
     $schema: "https://opencode.ai/config.json",
     model: `${OPENCODE_PROVIDER}/${model}`,
     ...(permission ? { permission } : {}),
+    ...(permission ? { agent: { [permissionAgent]: { permission } } } : {}),
     provider: {
       [OPENCODE_PROVIDER]: {
         npm: resolveProviderNpm(input.apiFormat),
@@ -77,9 +136,11 @@ export const openCodeAcpProfile: AcpAgentProfile = {
     if (input.source === "system") {
       const permission = resolvePermissionConfig(input.permissionMode);
       if (permission) {
+        const permissionAgent = input.permissionMode === "plan" ? "plan" : "build";
         env.OPENCODE_CONFIG_CONTENT = JSON.stringify({
           $schema: "https://opencode.ai/config.json",
           permission,
+          agent: { [permissionAgent]: { permission } },
         });
       }
       return env;
