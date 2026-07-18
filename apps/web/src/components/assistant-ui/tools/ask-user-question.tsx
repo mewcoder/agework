@@ -1,7 +1,13 @@
 "use client";
 
 import { useState, useMemo, useRef, useId } from "react";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon, XIcon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  MinusIcon,
+  XIcon,
+} from "lucide-react";
 import type { ToolCallMessagePartStatus } from "@assistant-ui/react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -332,9 +338,9 @@ function ApprovalCard({
 }) {
   return (
     <div className="my-1 overflow-hidden rounded-lg border border-amber-500/30 bg-amber-50/50 dark:bg-amber-950/20">
-      <div className="flex items-start gap-2 px-3 py-2.5">
-        <div className="min-w-0 flex-1">{children}</div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+      <div className="flex flex-col gap-3 px-3 py-2.5 sm:grid sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:gap-4">
+        <div className="min-w-0">{children}</div>
+        <div className="flex w-full flex-wrap items-center justify-end gap-1.5 sm:w-auto">
           {actions}
         </div>
       </div>
@@ -457,6 +463,40 @@ export function ConfirmationApprovalUI({
   );
 }
 
+/**
+ * 审批卡片上「批准的到底是什么」那行:从 ACP toolCall.rawInput 里挑最能代表
+ * 操作对象的字段(glob 的 pattern、bash 的 command…)。没有已知字段时回落到
+ * 紧凑 JSON,总比只显一个工具名强;完全空则不显示。
+ */
+function acpPermissionDetail(rawInput: unknown): string | undefined {
+  if (!rawInput || typeof rawInput !== "object") return undefined;
+  const input = rawInput as Record<string, unknown>;
+  const pick = (key: string) =>
+    typeof input[key] === "string" && input[key] ? (input[key] as string) : undefined;
+  const known =
+    pick("pattern") ??
+    pick("command") ??
+    pick("url") ??
+    pick("query") ??
+    pick("filePath") ??
+    pick("file_path") ??
+    pick("path");
+  if (known) return known;
+  const json = JSON.stringify(input);
+  return json && json !== "{}" ? json : undefined;
+}
+
+/**
+ * 选项按钮文案:优先按 ACP 的稳定 `kind` 本地化,未知 kind 回落 agent 给的
+ * `name`。只本地化显示,提交仍用原始 optionId,选项也不做合并(见文档 §17.3)。
+ */
+const ACP_OPTION_LABELS: Record<string, string> = {
+  allow_once: "允许一次",
+  allow_always: "始终允许",
+  reject_once: "拒绝",
+  reject_always: "始终拒绝",
+};
+
 // ── ACP permission (generic ACP agent, e.g. OpenCode) ───────────────────────
 // ACP 的 session/request_permission 中断:按 Agent 提供的原始 options 渲染,
 // 按钮文字用 option.name,提交值用 option.optionId(走与 confirmation 相同的
@@ -472,6 +512,16 @@ export function AcpPermissionUI({
   const [submitted, setSubmitted] = useState<string | null>(null);
 
   const metadata = (pending.interrupt.metadata ?? {}) as Record<string, unknown>;
+  const toolCall = (
+    metadata.toolCall && typeof metadata.toolCall === "object"
+      ? metadata.toolCall
+      : {}
+  ) as Record<string, unknown>;
+  const toolTitle =
+    typeof toolCall.title === "string" && toolCall.title
+      ? toolCall.title
+      : undefined;
+  const detailText = acpPermissionDetail(toolCall.rawInput);
   const rawOptions = Array.isArray(metadata.options) ? metadata.options : [];
   const options = rawOptions
     .map((o) => (o && typeof o === "object" ? (o as Record<string, unknown>) : null))
@@ -484,11 +534,6 @@ export function AcpPermissionUI({
       name: o.name as string,
       kind: typeof o.kind === "string" ? (o.kind as string) : undefined,
     }));
-
-  const title =
-    typeof pending.interrupt.message === "string" && pending.interrupt.message
-      ? pending.interrupt.message
-      : "Agent 请求权限";
 
   const handleSubmit = async (optionId: string, label: string) => {
     if (!conversationId || submitting) return;
@@ -513,23 +558,34 @@ export function AcpPermissionUI({
     <ApprovalCard
       actions={options.map((option) => {
         const isReject = option.kind?.startsWith("reject");
+        const label =
+          (option.kind ? ACP_OPTION_LABELS[option.kind] : undefined) ??
+          option.name;
         return (
           <Button
             key={option.optionId}
             size="sm"
             variant={isReject ? "outline" : "default"}
-            onClick={() => void handleSubmit(option.optionId, option.name)}
+            onClick={() => void handleSubmit(option.optionId, label)}
             disabled={submitting}
             className="h-7 px-3 text-xs"
           >
-            {option.name}
+            {label}
           </Button>
         );
       })}
     >
-      <p className="text-[13px] font-medium leading-5 text-foreground">
-        {title}
-      </p>
+      <div className="flex items-baseline gap-2">
+        <p className="text-[13px] font-medium leading-5 text-foreground">权限请求</p>
+        {toolTitle && (
+          <span className="truncate text-[12px] leading-5 text-muted-foreground">{toolTitle}</span>
+        )}
+      </div>
+      {detailText && (
+        <pre className="mt-1 max-h-32 overflow-auto rounded bg-muted/60 px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">
+          <code className="break-all whitespace-pre-wrap">{detailText}</code>
+        </pre>
+      )}
     </ApprovalCard>
   );
 }

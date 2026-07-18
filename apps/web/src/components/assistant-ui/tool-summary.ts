@@ -9,7 +9,7 @@
  * `undefined`（不显示摘要，等 args 填上再显示），不崩、不空白。
  */
 
-const MAX_LEN = 60;
+const MAX_LEN = 96;
 
 function truncate(text: string): string {
   const collapsed = text.replace(/\s+/g, " ").trim();
@@ -23,6 +23,23 @@ function basename(path: string): string {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/**
+ * ACP `other` is a protocol fallback kind. When the agent supplies a title
+ * (Pi uses `title: "bash"`), show that real tool name in the UI instead of the
+ * placeholder kind.
+ */
+export function getToolDisplayName(
+  toolName: string,
+  args: Record<string, unknown> | undefined,
+): string {
+  // Pi uses `kind: "other"` for its command tool. Other ACP agents (notably
+  // OpenCode) use kind as the visible capability category, e.g. search/glob.
+  if (toolName === "other" && asString(args?.title)) {
+    return asString(args?.title) ?? toolName;
+  }
+  return toolName;
 }
 
 /**
@@ -122,6 +139,34 @@ export function getToolSummary(
 
     case "codex_error":
       return asString(a.message) ? truncate(a.message as string) : undefined;
+
+    // ── ACP 工具（OpenCode 等）─────────────────────────────────────────
+    // ACP 的协议名是稳定的 kind（search/read/…），agent 给的真实工具名在
+    // args.title（如 kind=search 的 title=glob）。标题位已显 kind，这里补
+    // title + 最能代表意图的参数，两者都能看到。
+    case "read":
+    case "edit":
+    case "delete":
+    case "move":
+    case "search":
+    case "execute":
+    case "think":
+    case "fetch":
+    case "switch_mode":
+    case "other":
+    case "acp_tool": {
+      const title = asString(a.title);
+      const detail =
+        asString(a.pattern) ??
+        asString(a.command) ??
+        asString(a.url) ??
+        asString(a.query) ??
+        asString(a.filePath) ??
+        asString(a.file_path) ??
+        asString(a.path);
+      if (title && detail) return truncate(`${title} · ${detail}`);
+      return title ? truncate(title) : detail ? truncate(detail) : undefined;
+    }
 
     // ── 后端合成 / 专属 UI 不走 ToolFallback 标题 ──────────────────────
     case "AskUserQuestion":

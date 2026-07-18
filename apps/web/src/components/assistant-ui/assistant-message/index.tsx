@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type FC } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, type FC, type ReactNode } from "react";
 import { MessagePrimitive, useAuiState } from "@assistant-ui/react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { Reasoning, ReasoningText } from "@/components/assistant-ui/reasoning";
@@ -20,11 +20,31 @@ import {
   isAwaitingAnswerStatus,
   isToolCallPart,
 } from "@/components/assistant-ui/thread-utils";
-import { ToolGroup, ProcessBlock } from "./process-block";
+import { ToolGroup, ProcessBlock, type ToolGroupItem } from "./process-block";
 import { MessageError } from "./message-error";
 import { AssistantActionBar, RunDuration } from "./action-bar";
 
 const ToolFallbackFC = ToolFallback as unknown as FC<ToolCallPart>;
+
+function renderToolCallPart(part: ToolCallPart): ReactNode {
+  if (
+    part.toolName === "AskUserQuestion" ||
+    part.toolName === "AskUserPermission"
+  ) {
+    const status = part.status as { type?: string } | undefined;
+    if (part.result === undefined && isAwaitingAnswerStatus(status)) {
+      return <AskUserQuestionCompact part={part} />;
+    }
+    return <AskUserQuestionUI part={part} />;
+  }
+
+  if (part.toolUI) {
+    const ToolUI = part.toolUI;
+    return <ToolUI {...part} />;
+  }
+
+  return <ToolFallbackFC {...part} />;
+}
 
 const STAGE_LABEL: Record<AssistantStage, string> = {
   thinking: "思考中",
@@ -89,6 +109,8 @@ export const AssistantMessage = memo(function AssistantMessage() {
       (everRanRef.current && conversationCancelled));
 
   const showAsActive = isRunning;
+  const keepProcessOpen =
+    messageStatus?.type === "requires-action" && messageStatus.reason === "interrupt";
 
   // parentId 存在 = 工具调用在对应文本 MESSAGE_END 之前触发（文本包裹了工具）
   // 只有带 parentId 的工具才会把之前暂存的 text 提升为工具组标题。
@@ -138,6 +160,7 @@ export const AssistantMessage = memo(function AssistantMessage() {
                 return (
                   <ProcessBlock
                     active={showAsActive}
+                    keepOpen={keepProcessOpen}
                     cancelled={isCancelled}
                     userSteered={isMessageUserSteered || isUserSteered}
                   >
@@ -158,39 +181,29 @@ export const AssistantMessage = memo(function AssistantMessage() {
                   </Reasoning.Root>
                 );
               case "group-tool": {
-                // 平铺渲染：每个工具调用独立一张卡片，各显各自的摘要。
-                // 不做同名聚合——同一条 message 里的多个工具（含并行调用）
-                // 意图各异，合并成 × N 会吞掉各自的描述。与 Claude Code 行为一致。
+                const toolItems = part.indices.reduce<ToolGroupItem[]>((items, idx) => {
+                  const toolPart = messageParts[idx];
+                  if (!toolPart || !isToolCallPart(toolPart)) return items;
+                  items.push({
+                    key: idx,
+                    status: toolPart.status,
+                    children: renderToolCallPart(toolPart),
+                  });
+                  return items;
+                }, []);
+                const lastToolIndex = part.indices.at(-1);
+                const nextPart =
+                  lastToolIndex === undefined
+                    ? undefined
+                    : messageParts[lastToolIndex + 1];
+                const collapseCompleted =
+                  !showAsActive ||
+                  (nextPart !== undefined && nextPart.type !== "tool-call");
                 return (
-                  <ToolGroup>
-                    {part.indices.map((idx, i) => {
-                      const toolPart = messageParts[idx];
-                      if (!toolPart || !isToolCallPart(toolPart)) return null;
-
-                      if (
-                        toolPart.toolName === "AskUserQuestion" ||
-                        toolPart.toolName === "AskUserPermission"
-                      ) {
-                        // 待答的 AskUserQuestion 交互卡片由 composer 上方的
-                        // PendingQuestionPanel 接管，正文里只显示折叠简化态。
-                        const status = toolPart.status as { type?: string } | undefined;
-                        if (
-                          toolPart.result === undefined &&
-                          isAwaitingAnswerStatus(status)
-                        ) {
-                          return <AskUserQuestionCompact key={i} part={toolPart} />;
-                        }
-                        return <AskUserQuestionUI key={i} part={toolPart} />;
-                      }
-
-                      if (toolPart.toolUI) {
-                        const ToolUI = toolPart.toolUI;
-                        return <ToolUI key={i} {...toolPart} />;
-                      }
-
-                      return <ToolFallbackFC key={i} {...toolPart} />;
-                    })}
-                  </ToolGroup>
+                  <ToolGroup
+                    items={toolItems}
+                    collapseCompleted={collapseCompleted}
+                  />
                 );
               }
               case "group-process-text":

@@ -153,12 +153,7 @@ export const ConversationListItem = memo(function ConversationListItem({
         </TooltipContent>
       </Tooltip>
       <span
-        className={cn(
-          "pointer-events-none absolute left-4 top-1/2 flex size-3 -translate-y-1/2 items-center justify-center transition-opacity",
-          isActive
-            ? "opacity-100"
-            : "opacity-0 group-focus-within/subitem:opacity-100 group-hover/subitem:opacity-100",
-        )}
+        className="pointer-events-none absolute left-4 top-1/2 flex size-3 -translate-y-1/2 items-center justify-center"
       >
         <AgentIcon agent={conversation.agentType} size={12} />
       </span>

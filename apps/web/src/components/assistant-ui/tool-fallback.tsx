@@ -14,7 +14,10 @@ import {
 import { cn } from "@/lib/utils";
 import { useCollapsibleOpen } from "@/hooks/use-collapsible-open";
 import { hasToolContent } from "@/components/assistant-ui/thread-utils";
-import { getToolSummary } from "@/components/assistant-ui/tool-summary";
+import {
+  getToolDisplayName,
+  getToolSummary,
+} from "@/components/assistant-ui/tool-summary";
 import { StatusDot, type DotStatus } from "@/components/assistant-ui/status-dot";
 
 export type ToolFallbackRootProps = Omit<
@@ -128,7 +131,7 @@ function ToolFallbackTrigger({
           />
         )}
         {summary && (
-          <span className="max-w-[40ch] truncate text-muted-foreground">
+          <span className="max-w-[72ch] truncate text-muted-foreground">
             {summary}
           </span>
         )}
@@ -270,10 +273,18 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
   const isCancelled =
     status?.type === "incomplete" && status.reason === "cancelled";
   const locked = !hasToolContent({ argsText, result, status });
+  const toolArgs = args as Record<string, unknown> | undefined;
+  const displayToolName = getToolDisplayName(toolName, toolArgs);
   const summary = getToolSummary(
     toolName,
-    args as Record<string, unknown> | undefined,
+    toolArgs,
   );
+  // `other`'s summary includes its title for context. Once the title is
+  // promoted to the visible tool name, avoid rendering it twice.
+  const displaySummary =
+    displayToolName !== toolName && summary?.startsWith(`${displayToolName} · `)
+      ? summary.slice(displayToolName.length + 3)
+      : summary;
 
   return (
     <ToolFallbackRoot
@@ -285,8 +296,8 @@ const ToolFallbackImpl: ToolCallMessagePartComponent = ({
       )}
     >
       <ToolFallbackTrigger
-        toolName={toolName}
-        summary={summary}
+        toolName={displayToolName}
+        summary={displaySummary}
         status={status}
         disabled={locked}
       />

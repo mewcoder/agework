@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import {
+  AcpPermissionUI,
   AskUserQuestionUI,
   PERMISSION_ALLOW_LABEL,
   PERMISSION_DENY_LABEL,
@@ -126,6 +127,29 @@ describe("AskUserQuestionUI 渲染分流", () => {
     render(<AskUserQuestionUI part={part} pending={openPending(part)} />);
 
     expect(screen.getByText(/Path is outside allowed working directories/)).toBeTruthy();
+  });
+
+  it("ACP 权限请求使用固定标题并显示工具名", () => {
+    const part = makePermissionPart({ questions: [permissionQuestion] });
+    const pending = {
+      ...openPending(part),
+      acpPermission: true,
+      interrupt: {
+        id: "int-1",
+        reason: "approval_required",
+        message: "bash",
+        metadata: {
+          options: [
+            { optionId: "once", name: "Allow once", kind: "allow_once" },
+          ],
+          toolCall: { title: "bash", rawInput: { command: "pwd" } },
+        },
+      },
+    } as never;
+    render(<AcpPermissionUI pending={pending} />);
+
+    expect(screen.getByText("权限请求")).toBeTruthy();
+    expect(screen.getByText("bash")).toBeTruthy();
   });
 });
 
@@ -328,5 +352,214 @@ describe("AskUserQuestionUI 始终允许按钮", () => {
         },
       ]);
     });
+  });
+});
+
+// ── ACP 权限卡片 ─────────────────────────────────────────────────────────────
+// session/request_permission 的中断:无 tool part,选项全在 interrupt.metadata,
+// 按 Agent 给的原始 options 渲染,提交 { decision: optionId }（不是 answers）。
+
+type AcpPending = Extract<PendingQuestion, { acpPermission: true }>;
+
+function acpPending(
+  metadata: Record<string, unknown>,
+  interrupt: Record<string, unknown> = { message: "Run a command" },
+): AcpPending {
+  return {
+    phase: "open",
+    part: null,
+    acpPermission: true,
+    interrupt: {
+      id: "int-acp",
+      reason: "approval_required",
+      ...interrupt,
+      metadata: { protocol: "acp", sessionId: "s-1", ...metadata },
+    },
+  } as unknown as AcpPending;
+}
+
+const acpOptions = [
+  { optionId: "allow-once", name: "Allow once", kind: "allow_once" },
+  { optionId: "reject-once", name: "Reject", kind: "reject_once" },
+];
+
+describe("AcpPermissionUI 渲染", () => {
+  it("按 ACP kind 本地化按钮文案", () => {
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    expect(screen.getByRole("button", { name: "允许一次" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeTruthy();
+  });
+
+  it("kind 未知时回落到 agent 给的 name(不臆造选项)", () => {
+    render(
+      <AcpPermissionUI
+        pending={acpPending({
+          options: [{ optionId: "weird", name: "Do the thing", kind: "custom_kind" }],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Do the thing" })).toBeTruthy();
+  });
+
+  it("展示 rawInput 里的操作对象,而不只是工具名", () => {
+    render(
+      <AcpPermissionUI
+        pending={acpPending({
+          options: acpOptions,
+          toolCall: { title: "glob", kind: "search", rawInput: { pattern: ".agework/.env*" } },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(".agework/.env*")).toBeTruthy();
+  });
+
+  it("rawInput 无已知字段时回落紧凑 JSON,全空则不显示", () => {
+    const { unmount } = render(
+      <AcpPermissionUI
+        pending={acpPending({
+          options: acpOptions,
+          toolCall: { rawInput: { weird: "value" } },
+        })}
+      />,
+    );
+    expect(screen.getByText(/"weird":"value"/)).toBeTruthy();
+    unmount();
+
+    render(
+      <AcpPermissionUI
+        pending={acpPending({ options: acpOptions, toolCall: { rawInput: {} } })}
+      />,
+    );
+    expect(screen.queryByText(/\{/)).toBeNull();
+  });
+
+  it("使用固定权限标题,工具名作为次级信息显示", () => {
+    const { unmount } = render(
+      <AcpPermissionUI
+        pending={acpPending({
+          options: acpOptions,
+          toolCall: { title: "bash" },
+        })}
+      />,
+    );
+    expect(screen.getByText("权限请求")).toBeTruthy();
+    expect(screen.getByText("bash")).toBeTruthy();
+    unmount();
+
+    // interrupt 完全不带 message 字段时仍保持固定标题。
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions }, {})} />);
+    expect(screen.getByText("权限请求")).toBeTruthy();
+  });
+
+  it("kind 以 reject 开头的选项用 outline 样式区分", () => {
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    const allow = screen.getByRole("button", { name: "允许一次" });
+    const reject = screen.getByRole("button", { name: "拒绝" });
+    expect(reject.className).not.toBe(allow.className);
+    expect(reject.className).toContain("border");
+  });
+});
+
+// options 是 Agent 隔着 ACP 传来的原始数据,前端只做结构过滤,畸形不能炸组件。
+describe("AcpPermissionUI options 容错", () => {
+  it("丢弃缺 optionId / name 或非对象的条目", () => {
+    render(
+      <AcpPermissionUI
+        pending={acpPending({
+          options: [
+            { optionId: "ok", name: "Keep me" },
+            { optionId: "no-name" },
+            { name: "no-id" },
+            "not-an-object",
+            null,
+            { optionId: 42, name: 7 },
+          ],
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Keep me" })).toBeTruthy();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("options 缺失或不是数组时渲染标题但无按钮", () => {
+    const { unmount } = render(<AcpPermissionUI pending={acpPending({})} />);
+    expect(screen.getByText("权限请求")).toBeTruthy();
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    unmount();
+
+    render(<AcpPermissionUI pending={acpPending({ options: "nope" })} />);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+  });
+});
+
+describe("AcpPermissionUI 提交", () => {
+  it("提交 { decision: optionId } 而非 answers", async () => {
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+
+    await waitFor(() => {
+      expect(mockSubmitInterruptResponses).toHaveBeenCalledWith([
+        {
+          interruptId: "int-acp",
+          status: "resolved",
+          payload: { decision: "allow-once" },
+        },
+      ]);
+    });
+  });
+
+  it("拒绝分支同样提交自己的 optionId", async () => {
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }));
+
+    await waitFor(() => {
+      expect(mockSubmitInterruptResponses).toHaveBeenCalledWith([
+        {
+          interruptId: "int-acp",
+          status: "resolved",
+          payload: { decision: "reject-once" },
+        },
+      ]);
+    });
+  });
+
+  it("提交后按钮消失,显示已选项", async () => {
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "拒绝" })).toBeNull();
+    });
+    // 回显的是按钮上那个本地化文案，不是协议里的英文 name
+    expect(screen.getByText(/允许一次/)).toBeTruthy();
+  });
+
+  it("提交失败经 toast 反馈,按钮保持可点以便重试", async () => {
+    mockSubmitInterruptResponses.mockRejectedValueOnce(new Error("boom"));
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+
+    await waitFor(() => {
+      expect(mockToastError).toHaveBeenCalled();
+    });
+    expect(screen.getByRole("button", { name: "允许一次" })).toBeTruthy();
+  });
+
+  it("没有选中会话时不提交", () => {
+    mockSelectedConversationId.mockReturnValue("");
+    render(<AcpPermissionUI pending={acpPending({ options: acpOptions })} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "允许一次" }));
+
+    expect(mockSubmitInterruptResponses).not.toHaveBeenCalled();
   });
 });

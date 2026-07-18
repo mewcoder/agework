@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getToolSummary, __test } from "./tool-summary";
+import { getToolDisplayName, getToolSummary, __test } from "./tool-summary";
 
 const { truncate, basename, MAX_LEN } = __test;
 
@@ -126,6 +126,51 @@ describe("getToolSummary — Codex 工具", () => {
     expect(
       getToolSummary("codex_error", { message: "boom" }),
     ).toBe("boom");
+  });
+});
+
+// ACP 的协议名是 kind（标题位已显示），agent 的真实工具名在 args.title —
+// 摘要要把 title 和关键参数都带出来，否则 UI 上只剩一个 "search"。
+describe("getToolSummary — ACP 工具", () => {
+  it("other kind uses the ACP title as the visible tool name", () => {
+    expect(getToolDisplayName("other", { title: "bash" })).toBe("bash");
+    expect(getToolDisplayName("other", {})).toBe("other");
+  });
+
+  it("title + 参数一起显示", () => {
+    expect(
+      getToolSummary("search", { title: "glob", kind: "search", pattern: ".agework/.env*" }),
+    ).toBe("glob · .agework/.env*");
+  });
+
+  it("按工具取各自的关键参数", () => {
+    expect(
+      getToolSummary("execute", { title: "bash", command: "ls -la" }),
+    ).toBe("bash · ls -la");
+    expect(
+      getToolSummary("fetch", { title: "webfetch", url: "https://example.com" }),
+    ).toBe("webfetch · https://example.com");
+    expect(
+      getToolSummary("read", { title: "read", filePath: "/tmp/a.ts" }),
+    ).toBe("read · /tmp/a.ts");
+  });
+
+  it("只有 title 时单显 title（pending 阶段 rawInput 常为空）", () => {
+    expect(getToolSummary("search", { title: "glob", kind: "search" })).toBe("glob");
+  });
+
+  it("只有参数没有 title 时单显参数", () => {
+    expect(getToolSummary("search", { pattern: "*.ts" })).toBe("*.ts");
+  });
+
+  it("kind 未知时走 acp_tool，规则一致", () => {
+    expect(getToolSummary("acp_tool", { title: "custom", command: "x" })).toBe(
+      "custom · x",
+    );
+  });
+
+  it("title/参数都没有时返回 undefined（不显示空摘要）", () => {
+    expect(getToolSummary("search", { kind: "search" })).toBeUndefined();
   });
 });
 
