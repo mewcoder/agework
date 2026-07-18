@@ -222,19 +222,29 @@ ipcMain.handle("agework:select-directory", async () => {
   return result.filePaths[0];
 });
 
-ipcMain.handle("agework:open-path", async (_event, path: unknown) => {
-  const targetPath = typeof path === "string" ? path.trim() : "";
-  if (!targetPath) {
-    return { ok: false, error: "路径为空" };
-  }
+ipcMain.handle(
+  "agework:open-path",
+  async (_event, path: unknown, relativePath: unknown) => {
+    const rootPath = typeof path === "string" ? path.trim() : "";
+    if (!rootPath) {
+      return { ok: false, error: "路径为空" };
+    }
 
-  if (!existsSync(targetPath)) {
-    return { ok: false, error: "路径不存在或当前客户端无法访问" };
-  }
+    // relativePath 用 node:path join 而非渲染进程拼字符串,避免 Windows 下 "/" 与
+    // "\" 混用。
+    const targetPath =
+      typeof relativePath === "string" && relativePath.trim()
+        ? join(rootPath, relativePath.trim())
+        : rootPath;
 
-  const error = await shell.openPath(targetPath);
-  return error ? { ok: false, error } : { ok: true };
-});
+    if (!existsSync(targetPath)) {
+      return { ok: false, error: "路径不存在或当前客户端无法访问" };
+    }
+
+    const error = await shell.openPath(targetPath);
+    return error ? { ok: false, error } : { ok: true };
+  }
+);
 
 async function startBackendWithPortRetries(
   resources: ResourcePaths,

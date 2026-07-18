@@ -7,6 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileTreeNode } from "@/components/workspace-file-panel/workspace-file-tree";
 import { WorkspaceFilePreview } from "@/components/workspace-file-panel/workspace-file-preview";
 import { useWorkspaceFiles, useWorkspaces } from "@/hooks/use-workspace";
+import { isLocalWorkspace } from "@/lib/open-in-file-manager";
 import { useChatSidePanelStore } from "@/stores/chat-side-panel-store";
 
 export type FilePanelContentProps = {
@@ -21,6 +22,8 @@ export function FilePanelContent({ workspaceId }: FilePanelContentProps) {
   const { data: workspaces = [] } = useWorkspaces();
   const workspace = workspaces.find((w) => w.id === workspaceId);
   const workspaceName = workspace?.name;
+  const workspaceRootPath =
+    workspace && isLocalWorkspace(workspace) ? workspace.rootPath : undefined;
 
   // 根目录列表(面板打开时立即加载)
   const { error: rootError } = useWorkspaceFiles(workspaceId, "", true);
@@ -68,6 +71,7 @@ export function FilePanelContent({ workspaceId }: FilePanelContentProps) {
                 onSelect={handleSelectFile}
                 rootLabel={workspaceName}
                 defaultOpen
+                workspaceRootPath={workspaceRootPath}
               />
             </div>
           </ScrollArea>

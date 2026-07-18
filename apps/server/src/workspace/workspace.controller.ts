@@ -55,6 +55,14 @@ export class WorkspaceController {
     return this.workspaceService.delete(user.userId, body.id);
   }
 
+  @Post("open-in-file-manager")
+  openInFileManager(
+    @Body() body: WorkspaceIdDto,
+    @CurrentUser() user: JwtUser
+  ) {
+    return this.workspaceService.openInFileManager(user.userId, body.id);
+  }
+
   // ── 文件预览(只读,经 worker 代理读) ──
 
   @Get("files/list")

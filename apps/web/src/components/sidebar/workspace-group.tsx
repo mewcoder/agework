@@ -1,5 +1,6 @@
 import { memo, useMemo, useState } from "react";
 import {
+  ExternalLink,
   Folder,
   FolderDot,
   FolderGit2,
@@ -13,6 +14,8 @@ import {
 import { WorkspaceDialog } from "@/components/workspace-dialog";
 import { ConfirmDeleteDialog } from "@/components/confirm-delete-dialog";
 import { useConfirmDelete } from "@/hooks/use-confirm-delete";
+import { useNativeClient } from "@/hooks/use-native-client";
+import { isLocalWorkspace, openInFileManager } from "@/lib/open-in-file-manager";
 import {
   Tooltip,
   TooltipContent,
@@ -38,6 +41,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
+import { useOpenWorkspaceInFileManager } from "@/hooks/use-workspace";
 import type { Workspace } from "@/hooks/use-workspace";
 import type { Conversation, ConversationSortKey } from "@/hooks/use-conversation";
 import { getRegularConversations } from "@/hooks/use-conversation";
@@ -75,6 +79,17 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
   const [showAllConversations, setShowAllConversations] = useState(false);
   const deleteDialog = useConfirmDelete<DeleteTarget>();
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const nativeClient = useNativeClient();
+  const openWorkspaceInFileManager = useOpenWorkspaceInFileManager();
+  const canOpenInFileManager = isLocalWorkspace(workspace);
+
+  function handleOpenInFileManager() {
+    if (nativeClient) {
+      openInFileManager(workspace.rootPath);
+    } else {
+      openWorkspaceInFileManager.mutate(workspace.id);
+    }
+  }
 
   // 归档会话不在侧边栏显示，统一在「设置 → 已归档对话」管理
   const regularConversations = useMemo(
@@ -140,7 +155,7 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
                 <MoreHorizontal className="size-4" />
               </SidebarMenuAction>
             } />
-            <DropdownMenuContent side="bottom" align="start">
+            <DropdownMenuContent side="bottom" align="start" className="w-44">
               <DropdownMenuGroup>
                 <DropdownMenuItem
                   className="text-sm"
@@ -148,6 +163,14 @@ export const WorkspaceGroup = memo(function WorkspaceGroup({
                 >
                   <Pencil /> 编辑
                 </DropdownMenuItem>
+                {canOpenInFileManager && (
+                  <DropdownMenuItem
+                    className="text-sm"
+                    onClick={handleOpenInFileManager}
+                  >
+                    <ExternalLink /> 在文件管理器打开
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>

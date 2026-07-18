@@ -245,6 +245,18 @@ export class WorkspaceService {
   }
 
   /**
+   * 用系统文件管理器打开工作空间根目录。仅 builtin Runtime Host 支持(rootPath 保证是
+   * 运行 server 进程的这台机器上的真实路径);registered(远程)Host 直接拒绝。
+   */
+  async openInFileManager(userId: string, workspaceId: string): Promise<void> {
+    const ctx = await this.resolveFileContext(userId, workspaceId);
+    if (!this.runtimeHostService.isBuiltinHost(ctx.runtimeHostId)) {
+      throw new BadRequestException("仅本机工作空间支持在文件管理器中打开");
+    }
+    await this.directoryHandler.openInFileManager(ctx.workspaceRootPath);
+  }
+
+  /**
    * 属主校验 + 解析运行上下文。builtin 和 registered 分支共用。
    */
   private async resolveFileContext(

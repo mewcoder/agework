@@ -63,6 +63,13 @@ export function useDeleteWorkspace() {
   });
 }
 
+/** 纯浏览器场景下,让 server(和浏览器同一台机器时)用系统文件管理器打开工作空间根目录。 */
+export function useOpenWorkspaceInFileManager() {
+  return useMutation({
+    mutationFn: (id: string) => workspacesApi.openInFileManager(id),
+  });
+}
+
 // ── 文件预览 ──
 
 /** 列出一层目录(懒加载,展开时 enabled 才为 true)。 */

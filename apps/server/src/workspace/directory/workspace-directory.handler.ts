@@ -270,4 +270,34 @@ export class WorkspaceDirectoryHandler {
     }
     return username;
   }
+
+  /**
+   * 用系统文件管理器打开本机路径(仅 builtin Runtime Host 的 workspace 调用；
+   * 调用方需自行确认 rootPath 确实是运行 server 进程的这台机器上的真实路径)。
+   * 用 spawn + detached 而非 execFile 等退出码,因为 Windows explorer.exe 成功打开
+   * 时也可能返回非 0 退出码,只要进程能 spawn 起来就视为成功。
+   */
+  openInFileManager(rootPath: string): Promise<void> {
+    const command =
+      process.platform === "darwin"
+        ? "open"
+        : process.platform === "win32"
+          ? "explorer"
+          : "xdg-open";
+    return new Promise((resolve, reject) => {
+      const proc = spawn(command, [rootPath], {
+        stdio: "ignore",
+        detached: true,
+      });
+      proc.once("error", (err) => {
+        reject(
+          new InternalServerErrorException(`打开文件管理器失败: ${err.message}`)
+        );
+      });
+      proc.once("spawn", () => {
+        proc.unref();
+        resolve();
+      });
+    });
+  }
 }

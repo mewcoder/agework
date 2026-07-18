@@ -47,6 +47,9 @@ export const workspacesApi = {
   delete: (id: string) =>
     apiPost('/api/v1/workspaces/remove', { id }),
 
+  openInFileManager: (id: string) =>
+    apiPost('/api/v1/workspaces/open-in-file-manager', { id }),
+
   listFiles: (id: string, path: string) => {
     const params = new URLSearchParams({ id });
     if (path) params.set('path', path);

@@ -31,8 +31,8 @@ contextBridge.exposeInMainWorld("agework", {
     const selected = await invoke("agework:select-directory");
     return typeof selected === "string" && selected.trim() ? selected : undefined;
   },
-  openPath: async (path: string) => {
-    return invoke("agework:open-path", path);
+  openPath: async (path: string, relativePath?: string) => {
+    return invoke("agework:open-path", path, relativePath);
   },
   subscribe,
 });
