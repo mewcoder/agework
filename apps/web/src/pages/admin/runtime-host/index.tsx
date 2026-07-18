@@ -36,7 +36,7 @@ import {
   type RuntimeHost,
 } from "@/hooks/use-runtime-host";
 import type { AgentEnvStatus } from "@agework/shared/api";
-import type { AgentType } from "@agework/shared";
+import { AGENT_TYPES, type AgentType } from "@agework/shared";
 import { cn } from "@/lib/utils";
 import { formatDateTime } from "@/utils/format";
 import { errorMessage } from "@/utils/error";
@@ -232,8 +232,7 @@ function OverrideEditor({
 // 结构：
 //   SettingsSection（卡片容器）
 //     ├─ 自定义 header div（名称 + Badge | 右侧：时间 + 操作按钮）
-//     ├─ AgentEnvItem（claude 行）
-//     └─ AgentEnvItem（codex 行）
+//     └─ AgentEnvItem × 4（claude / codex / opencode / pi 行）
 //
 function RuntimeSection({
   runtime,
@@ -314,18 +313,17 @@ function RuntimeSection({
       {/* CLI 环境行 */}
       {hasNative ? (
         <>
-          <AgentEnvItem
-            agentType="claude"
-            status={env?.claude ?? null}
-            runtimeHostId={runtime.id}
-            overridePath={runtime.envConfigOverride?.claude?.executablePath}
-          />
-          <AgentEnvItem
-            agentType="codex"
-            status={env?.codex ?? null}
-            runtimeHostId={runtime.id}
-            overridePath={runtime.envConfigOverride?.codex?.executablePath}
-          />
+          {AGENT_TYPES.map((agentType) => (
+            <AgentEnvItem
+              key={agentType}
+              agentType={agentType}
+              status={env?.[agentType] ?? null}
+              runtimeHostId={runtime.id}
+              overridePath={
+                runtime.envConfigOverride?.[agentType]?.executablePath
+              }
+            />
+          ))}
         </>
       ) : null}
     </SettingsSection>

@@ -5,7 +5,7 @@ import {
 } from "@/components/settings/settings-section";
 import { useRuntimeHosts, type RuntimeHost } from "@/hooks/use-runtime-host";
 import type { AgentEnvStatus } from "@agework/shared/api";
-import type { AgentType } from "@agework/shared";
+import { AGENT_TYPES, type AgentType } from "@agework/shared";
 import { formatDateTime } from "@/utils/format";
 
 function runtimeTypeLabel(runtimeType: string | null) {
@@ -96,8 +96,13 @@ function ReadOnlyRuntimeSection({ runtime }: { runtime: RuntimeHost }) {
           ) : undefined
         }
       />
-      <ReadOnlyAgentItem agentType="claude" status={env?.claude ?? null} />
-      <ReadOnlyAgentItem agentType="codex" status={env?.codex ?? null} />
+      {AGENT_TYPES.map((agentType) => (
+        <ReadOnlyAgentItem
+          key={agentType}
+          agentType={agentType}
+          status={env?.[agentType] ?? null}
+        />
+      ))}
     </SettingsSection>
   );
 }
