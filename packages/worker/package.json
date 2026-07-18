@@ -9,8 +9,9 @@
   },
   "scripts": {
     "prepare:codex-types": "node ../adapters/scripts/generate-codex-types.mjs",
+    "prepare:test": "pnpm prepare:codex-types && pnpm --filter @agework/shared build",
     "typecheck": "pnpm prepare:codex-types && tsc --noEmit",
-    "test": "pnpm prepare:codex-types && vitest run"
+    "test": "pnpm prepare:test && vitest run"
   },
   "dependencies": {
     "@agework/adapters": "workspace:*",
