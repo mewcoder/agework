@@ -46,7 +46,6 @@ AgeWork 的目标就是把这些能力组织成一个可以长期运行的工作
 | 项目化工作区 | 以 workspace 组织代码目录、会话历史、任务输入和执行记录。 |
 | 会话与运行历史 | 保留 conversation、run history、工具调用、状态变化和诊断信息。 |
 | Local / Sandbox Runtime | 支持本机运行，也可以接入 sandbox runtime 执行高隔离任务。 |
-| OpenSandbox 支持 | 可启动本地 OpenSandbox Server，并使用 AgeWork worker 镜像执行 Agent 任务。 |
 | 本地优先数据控制 | 默认使用本地 SQLite，数据、配置和日志由当前 AgeWork 实例管理。 |
 | 可选登录验证 | 开发模式可免登录；生产部署默认启用登录验证，并在首次访问时设置固定 `admin` 管理员密码。 |
 | Web + API + Worker + Desktop | 同一仓库维护 React Web、NestJS API、Agent Worker 和 Electron 桌面壳。 |
@@ -57,7 +56,7 @@ AgeWork 的目标就是把这些能力组织成一个可以长期运行的工作
 
 - Node.js `>=22`
 - pnpm `10.33.4`
-- Docker：仅在使用 sandbox、OpenSandbox 或构建 worker 镜像时需要
+- Docker：仅在使用 Docker sandbox、实验性 OpenSandbox 或构建 worker 镜像时需要
 
 ### Start with the interactive guide
 
@@ -138,26 +137,31 @@ Web UI
 ```text
 .
 ├── apps
-│   ├── api       # NestJS API、Prisma schema、服务端模块
+│   ├── server    # NestJS API、Prisma schema、服务端模块
+│   ├── runtime   # @agework/runtime-host，可部署 Host 与内建 Runtime
 │   ├── web       # React + Vite 前端
-│   ├── worker    # Agent worker
 │   └── desktop   # Electron 桌面壳
 ├── packages
 │   ├── adapters  # Claude、Codex 等 Agent adapter
+│   ├── runtime-sdk # Runtime 插件公共 SDK
+│   ├── runtime-opensandbox # 实验性 OpenSandbox 插件
+│   ├── worker    # Agent worker
 │   ├── shared    # 前后端共享类型、协议类型、API 类型
 │   └── react-ag-ui
 ├── e2e           # Playwright E2E 测试
-├── infra         # OpenSandbox 等基础设施配置
+├── infra         # 可选运行时等基础设施配置
 └── scripts       # 初始化、端口清理、worker 构建等脚本
 ```
 
 ## Documentation
 
-- [使用与部署指南](docs/usage.md)：启动、开发、部署、配置、Runtime / Sandbox、OpenSandbox、桌面端。
+- [使用与部署指南](docs/usage.md)：启动、开发、部署、配置、Runtime / Sandbox、桌面端。
 - [配置管理](docs/config.md)：环境变量、DB 系统设置、模型 Provider 配置。
-- [OpenSandbox 本地开发环境](docs/opensandbox-setup.md)：OpenSandbox 启动、排错和常用命令。
 - [AG-UI 接入说明](docs/ag-ui.md)：前后端 Agent 事件协议和项目内使用方式。
 - [产品定位与方向](docs/product-positioning-and-direction.md)：AgeWork 的定位、边界和阶段性路线。
+
+OpenSandbox provider 以独立插件包作为按需启用、非主要维护方向的实验能力保留，见
+[实验性 OpenSandbox](docs/experimental/opensandbox.md)。
 
 ## Roadmap
 
@@ -165,7 +169,7 @@ AgeWork 仍处于快速开发阶段。当前优先级：
 
 - 稳定 local workspace、conversation、run history 和事件流体验。
 - 打磨 Claude / Codex 等核心 Agent 的深度接入，而不是浅层堆叠大量 Agent。
-- 完善 sandbox runtime、OpenSandbox 集成和 worker 镜像构建链路。
+- 稳定面向个人与团队部署的 Native / Docker runtime 和 worker 镜像构建链路。
 - 强化团队部署所需的权限、审计、配置治理和 API-first 能力。
 - 持续演进 Web、API、Worker、Desktop 的统一部署体验。
 

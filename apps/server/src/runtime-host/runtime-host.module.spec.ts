@@ -90,13 +90,6 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getDefaultWorkerScope: vi.fn().mockReturnValue("workspace"),
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
-    getOpenSandboxConfig: vi.fn().mockReturnValue({
-      domain: "opensandbox.test",
-      protocol: "https",
-      apiKey: "test-key",
-      image: "agework-worker:test",
-      timeoutSeconds: 300,
-      useServerProxy: false,
-    }),
+    getRuntimePluginPackages: vi.fn().mockReturnValue([]),
   };
 }

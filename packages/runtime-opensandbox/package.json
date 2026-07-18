@@ -1,0 +1,33 @@
+{
+  "name": "@agework/runtime-opensandbox",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@alibaba-group/opensandbox": "^0.1.8",
+    "@nestjs/common": "^11.0.1"
+  },
+  "peerDependencies": {
+    "@agework/runtime-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@agework/runtime-sdk": "workspace:*",
+    "@swc/core": "^1.15.40",
+    "@types/node": "^24.0.0",
+    "typescript": "catalog:",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.8"
+  }
+}

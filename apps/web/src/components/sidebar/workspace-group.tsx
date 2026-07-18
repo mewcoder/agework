@@ -332,5 +332,7 @@ function runtimeLabel(workspace: Workspace) {
       return "Docker";
     case "opensandbox":
       return "OpenSandbox";
+    default:
+      return workspace.runtimeType;
   }
 }

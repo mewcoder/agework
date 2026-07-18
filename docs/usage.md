@@ -108,7 +108,7 @@ pnpm app:deploy
 | `--ctx <path>`                              | 设置部署子路径，例如 `/agent`                                |
 | `--name <name>`                             | 设置应用名称                                                 |
 | `--port <port>`                             | 设置后端端口                                                 |
-| `--runtime <native\|docker\|opensandbox>`   | 设置允许创建的工作空间运行方式（可逗号组合）                 |
+| `--runtime <native\|docker>`               | 设置核心支持的工作空间运行方式（可逗号组合）                   |
 | `--scope <user\|workspace\|user,workspace>` | 设置允许创建的沙箱运行范围                                   |
 
 示例：
@@ -116,7 +116,7 @@ pnpm app:deploy
 ```bash
 pnpm init:dev --name AgeWork --port 3001
 pnpm init:prod --ctx /agent
-pnpm init:dev --runtime native,opensandbox --scope workspace
+pnpm init:dev --runtime native,docker --scope workspace
 ```
 
 ## 5. 环境变量
@@ -138,6 +138,7 @@ pnpm init:dev --runtime native,opensandbox --scope workspace
 | `AGEWORK_DEV_AUTH_DISABLED`      | 是否禁用登录验证              | dev 为 `true`，prod 为 `false` |
 | `AGEWORK_CONTEXT`                | 后端上下文路径，例如 `/agent` | 根路径                         |
 | `AGEWORK_RUNTIME_ALLOWED_TYPES`  | 允许的 runtimeType            | `native`                       |
+| `AGEWORK_RUNTIME_PLUGINS`        | 显式加载的 runtime 插件包     | 空                             |
 | `AGEWORK_RUNTIME_ALLOWED_SCOPES` | 允许的 sandbox 运行范围       | `user`                         |
 | `AGEWORK_DATA_DIR`               | AgeWork 本机数据根目录        | `~/.agework`                   |
 
@@ -156,7 +157,7 @@ AgeWork 的工作空间运行方式由 `AGEWORK_RUNTIME_ALLOWED_TYPES` 控制：
 
 - `native`：在 Runtime Host 本机进程中运行 Agent。
 - `docker`：在本机 Docker 容器中运行 Agent。
-- `opensandbox`：在 OpenSandbox 沙箱中运行 Agent。
+- `opensandbox`：在 OpenSandbox 沙箱中运行 Agent；实验性、默认关闭，仅建议已有明确需求时启用。
 - 可逗号组合（如 `native,docker`）：创建工作空间时可选择运行方式。
 
 Sandbox 运行范围由 `AGEWORK_RUNTIME_ALLOWED_SCOPES` 控制：
@@ -167,19 +168,31 @@ Sandbox 运行范围由 `AGEWORK_RUNTIME_ALLOWED_SCOPES` 控制：
 
 如果 sandbox 工作空间指定用户自定义本地目录，需要允许并选择 `workspace` 范围。
 
-## 7. OpenSandbox
+## 7. 实验性 OpenSandbox
 
-使用 OpenSandbox 引擎时，可以通过初始化命令一次完成配置与启动：
+OpenSandbox provider 保留给需要额外沙箱管理能力的个人或团队按需使用，但不属于当前主要维护方向。
+默认配置不会启用它，也不承诺每次主线改动都同步验证。启用和排错前请先阅读
+[`experimental/opensandbox.md`](experimental/opensandbox.md)。
+
+OpenSandbox 不进入通用 `pnpm boot` / `pnpm init:*` 初始化选项。需要时先显式启动插件依赖的
+OpenSandbox Server：
 
 ```bash
-pnpm init:dev --runtime opensandbox
+pnpm opensandbox:up
+```
+
+然后在 `apps/server/.env` 中设置：
+
+```dotenv
+AGEWORK_RUNTIME_PLUGINS=@agework/runtime-opensandbox
+AGEWORK_RUNTIME_ALLOWED_TYPES=opensandbox
 ```
 
 也可以单独管理 OpenSandbox Server：
 
 | 命令                      | 说明                                         |
 | ------------------------- | -------------------------------------------- |
-| `pnpm opensandbox:up`     | 启动本地 OpenSandbox Server，默认监听 `8080` |
+| `pnpm opensandbox:up`     | 准备 worker 镜像并启动本地 OpenSandbox Server，默认监听 `8080` |
 | `pnpm opensandbox:down`   | 停止 OpenSandbox Server                      |
 | `pnpm opensandbox:health` | 检查健康状态                                 |
 | `pnpm opensandbox:logs`   | 查看日志                                     |

@@ -1,0 +1,192 @@
+import {
+  ConnectionConfig,
+  Sandbox,
+  SandboxManager,
+} from "@alibaba-group/opensandbox";
+import type { OpenSandboxConnectionConfig } from "./types";
+
+/**
+ * OpenSandbox SDK 适配边界:定义内部接口,runtime 插件不依赖真实 SDK 的完整类型。
+ * 真实 SDK 的 import 只出现在此文件中,单测 provider 时 mock OpenSandboxClientLike 即可。
+ */
+
+export interface OpenSandboxCreateInput {
+  image: string;
+  env?: Record<string, string>;
+  timeoutSeconds: number | null;
+  workspaceHostPath?: string;
+  workspaceMountPath: string;
+  runtimeLogHostPath?: string;
+  runtimeLogMountPath?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface OpenSandboxCommandOptions {
+  envs?: Record<string, string>;
+  background?: boolean;
+  workingDirectory?: string;
+}
+
+export interface OpenSandboxSandboxLike {
+  id: string;
+  runCommand(
+    command: string,
+    options?: OpenSandboxCommandOptions
+  ): Promise<unknown>;
+  pause(): Promise<void>;
+  resume(): Promise<OpenSandboxSandboxLike>;
+  kill(): Promise<void>;
+  close(): Promise<void>;
+  renew(timeoutSeconds: number): Promise<void>;
+  isHealthy(): Promise<boolean>;
+  getEndpointUrl(port: number): Promise<string>;
+}
+
+export interface OpenSandboxClientLike {
+  createSandbox(input: OpenSandboxCreateInput): Promise<OpenSandboxSandboxLike>;
+  getSandbox(id: string): Promise<OpenSandboxSandboxLike | null>;
+  pauseSandbox(id: string): Promise<void>;
+  deleteSandbox(id: string): Promise<void>;
+}
+
+/** 真实 SDK 的 OpenSandboxClient 实现。连接配置由 config 传入。 */
+export class OpenSandboxClient implements OpenSandboxClientLike {
+  private readonly connectionConfig: ConnectionConfig;
+
+  constructor(config: OpenSandboxConnectionConfig) {
+    this.connectionConfig = new ConnectionConfig({
+      domain: config.domain,
+      protocol: config.protocol,
+      apiKey: config.apiKey,
+      useServerProxy: config.useServerProxy,
+    });
+  }
+
+  async createSandbox(
+    input: OpenSandboxCreateInput
+  ): Promise<OpenSandboxSandboxLike> {
+    const sandbox = await Sandbox.create({
+      connectionConfig: this.connectionConfig.withTransportIfMissing(),
+      image: input.image,
+      env: input.env,
+      timeoutSeconds: input.timeoutSeconds,
+      metadata: input.metadata,
+      volumes: buildVolumes(input),
+      skipHealthCheck: false,
+    });
+    return new OpenSandboxSandboxAdapter(sandbox);
+  }
+
+  async getSandbox(id: string): Promise<OpenSandboxSandboxLike | null> {
+    try {
+      const sandbox = await Sandbox.connect({
+        connectionConfig: this.connectionConfig.withTransportIfMissing(),
+        sandboxId: id,
+        skipHealthCheck: true,
+      });
+      const info = await sandbox.getInfo();
+      if (String(info.status?.state).toLowerCase() !== "running") {
+        await sandbox.close().catch(() => {});
+        return null;
+      }
+      return new OpenSandboxSandboxAdapter(sandbox);
+    } catch {
+      return null;
+    }
+  }
+
+  async pauseSandbox(id: string): Promise<void> {
+    await this.withManager((manager) => manager.pauseSandbox(id as any));
+  }
+
+  async deleteSandbox(id: string): Promise<void> {
+    try {
+      await this.withManager((manager) => manager.killSandbox(id as any));
+    } catch {
+      // sandbox 不存在时静默忽略
+    }
+  }
+
+  private async withManager<T>(
+    fn: (manager: SandboxManager) => Promise<T>
+  ): Promise<T> {
+    const manager = SandboxManager.create({
+      connectionConfig: this.connectionConfig,
+    });
+    try {
+      return await fn(manager);
+    } finally {
+      await manager.close().catch(() => {});
+    }
+  }
+}
+
+/** 将真实 Sandbox 实例适配为 OpenSandboxSandboxLike 接口。 */
+export class OpenSandboxSandboxAdapter implements OpenSandboxSandboxLike {
+  constructor(private readonly sandbox: Sandbox) {}
+
+  get id(): string {
+    return this.sandbox.id;
+  }
+
+  async runCommand(
+    command: string,
+    options?: OpenSandboxCommandOptions
+  ): Promise<unknown> {
+    return this.sandbox.commands.run(command, {
+      envs: options?.envs,
+      background: options?.background,
+      workingDirectory: options?.workingDirectory,
+    });
+  }
+
+  async pause(): Promise<void> {
+    await this.sandbox.pause();
+  }
+
+  async resume(): Promise<OpenSandboxSandboxLike> {
+    const resumed = await this.sandbox.resume();
+    await this.sandbox.close().catch(() => {});
+    return new OpenSandboxSandboxAdapter(resumed);
+  }
+
+  async kill(): Promise<void> {
+    await this.sandbox.kill();
+    await this.sandbox.close();
+  }
+
+  async close(): Promise<void> {
+    await this.sandbox.close();
+  }
+
+  async renew(timeoutSeconds: number): Promise<void> {
+    await this.sandbox.renew(timeoutSeconds);
+  }
+
+  async isHealthy(): Promise<boolean> {
+    return this.sandbox.isHealthy();
+  }
+
+  async getEndpointUrl(port: number): Promise<string> {
+    return this.sandbox.getEndpointUrl(port);
+  }
+}
+
+function buildVolumes(input: OpenSandboxCreateInput) {
+  const volumes = [];
+  if (input.workspaceHostPath) {
+    volumes.push({
+      name: "workspace",
+      mountPath: input.workspaceMountPath,
+      host: { path: input.workspaceHostPath },
+    });
+  }
+  if (input.runtimeLogHostPath && input.runtimeLogMountPath) {
+    volumes.push({
+      name: "runtime-logs",
+      mountPath: input.runtimeLogMountPath,
+      host: { path: input.runtimeLogHostPath },
+    });
+  }
+  return volumes.length ? volumes : undefined;
+}

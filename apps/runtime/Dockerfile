@@ -1,5 +1,5 @@
 # Build context must be the monorepo root:
-#   pnpm --filter @agework/runtime build
+#   pnpm --filter @agework/runtime-host build
 #   docker build -t agework/runtime:latest -f apps/runtime/Dockerfile .
 # (runtime bundles workspace packages @agework/{worker,shared,adapters} into
 # dist/main.js + dist/runner.js via esbuild; this must be built locally before

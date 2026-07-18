@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { detectEnvConfig, resolveInstalledBinPath } from "@agework/shared/cli";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
+import type { RuntimeProviderPlugin } from "@agework/runtime-sdk";
 import {
   resolveRegisteredRuntimeHostConfig,
   type RuntimeType,
@@ -15,39 +16,46 @@ import {
   type CapabilityAvailability,
 } from "../host/capability-probe.js";
 import { WorkerHttpServer } from "../host/worker-http-server.js";
+import { loadRuntimePlugins } from "../plugins/runtime-plugin-loader.js";
 
 /**
  * 探测一种 runtimeType 在本机的当前可用性(启动 + 定期刷新共用):
  * - native:Host 进程能跑就可用;
  * - docker:`docker info` 探测 daemon 是否可达;
- * - opensandbox:registered daemon 尚无 sandbox 接入配置,恒不可用。
+ * - plugin:插件已成功装配即声明可用，进一步连接错误由 provider 启动时暴露。
  */
 async function detectRuntimeTypeAvailability(
-  runtimeType: RuntimeType
+  runtimeType: RuntimeType,
+  pluginsByType: ReadonlyMap<RuntimeType, RuntimeProviderPlugin>
 ): Promise<CapabilityAvailability> {
   if (runtimeType === "native") return { available: true };
   if (runtimeType === "docker") return probeDockerDaemon();
-  return {
-    available: false,
-    reason: "opensandbox is not configured on this host",
-  };
+  const plugin = pluginsByType.get(runtimeType);
+  if (plugin?.probe) return plugin.probe();
+  return { available: true };
 }
 
 /** 全类型探测一轮,拼出当前能力矩阵。 */
 async function detectCapabilities(
-  runtimeTypes: RuntimeType[]
+  runtimeTypes: RuntimeType[],
+  pluginsByType: ReadonlyMap<RuntimeType, RuntimeProviderPlugin>
 ): Promise<HostCapabilityStatus> {
   const availability = new Map(
     await Promise.all(
       runtimeTypes.map(
         async (runtimeType) =>
-          [runtimeType, await detectRuntimeTypeAvailability(runtimeType)] as const
+          [
+            runtimeType,
+            await detectRuntimeTypeAvailability(runtimeType, pluginsByType),
+          ] as const
       )
     )
   );
   return buildCapabilities(
     runtimeTypes,
-    (runtimeType) => availability.get(runtimeType)!
+    (runtimeType) => availability.get(runtimeType)!,
+    (runtimeType) => pluginsByType.get(runtimeType)?.scopes,
+    (runtimeType) => pluginsByType.get(runtimeType)?.displayName
   );
 }
 
@@ -63,8 +71,15 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
   // 与 builtin Host 的约定一致:~/.agework/cli/<agent>/
   const cliInstallDir = join(homedir(), ".agework", "cli");
+  const providerPlugins = await loadRuntimePlugins(config.pluginPackages);
+  const pluginsByType = new Map(
+    providerPlugins.map((plugin) => [plugin.type, plugin])
+  );
   // 启动探测一次真实可用性;Host 用同一探测定期刷新,register(含重连)上报当前矩阵
-  const capabilities = await detectCapabilities(config.runtimeTypes);
+  const capabilities = await detectCapabilities(
+    config.runtimeTypes,
+    pluginsByType
+  );
 
   // Phase 2: RuntimeHost 管理 worker 池、命令信箱、握手、fence。
   // providerConfig.workerApiBaseUrl 指向 Host 的 worker HTTP 端点——
@@ -83,7 +98,8 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     cliInstallDir,
     capabilities,
     // docker daemon 中途挂掉/恢复要反映到放置准入,只拦新 run 不动存量
-    refreshCapabilities: () => detectCapabilities(config.runtimeTypes),
+    refreshCapabilities: () =>
+      detectCapabilities(config.runtimeTypes, pluginsByType),
     providerConfig: {
       workerImage: config.workerImage ?? "",
       runtimeLogHostPath: config.runtimeLogHostPath,
@@ -91,13 +107,8 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
       native: {
         runtimeEntryPath: config.runtimeEntryPath ?? process.argv[1] ?? "",
       },
-      openSandbox: {
-        domain: "",
-        protocol: "https",
-        apiKey: undefined,
-        useServerProxy: false,
-      },
     },
+    providerPlugins,
     // native runtimeType 的 CLI 路径:Host 就是执行机器本机——
     // 一键安装目录优先(host.installCli 装的),否则按本机 PATH 检测结果
     resolveCliPaths: async () => {

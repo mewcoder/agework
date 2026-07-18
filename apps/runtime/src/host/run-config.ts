@@ -7,7 +7,7 @@ import type {
   SubmitRunInput,
 } from "@agework/shared/protocol";
 import { parseOwnerKey } from "@agework/shared/protocol";
-import { isRuntimeType, resolveRuntimeSpec } from "@agework/providers";
+import { isRuntimeType, resolveRuntimeSpec } from "@agework/runtime-sdk";
 import type { RuntimeHostConfig } from "./runtime-host.js";
 
 /**

@@ -1,4 +1,4 @@
-> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host` 的 RuntimeHost 库。
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime-host`。
 
 # Runtime 载体收尾分 stop(留)与 destroy(删),RuntimeProvider 扁平化为 start/stop/destroy
 

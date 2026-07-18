@@ -37,27 +37,35 @@ import type {
 } from "@agework/shared/api";
 import { TunnelUpstream } from "./tunnel-upstream.js";
 
-/** 每种运行方式支持的 worker scope（注册时上报的能力矩阵）。 */
-const RUNTIME_TYPE_SCOPES: Record<RuntimeType, WorkerScope[]> = {
-  native: ["workspace"],
-  docker: ["user", "workspace"],
-  opensandbox: ["user", "workspace"],
-};
-
 /** 按 runtimeTypes 构建能力矩阵条目(scope 表 + 各类型的可用性)。 */
 export function buildCapabilities(
   runtimeTypes: RuntimeType[],
   availabilityOf: (runtimeType: RuntimeType) => {
     available: boolean;
     reason?: string;
-  }
+  },
+  pluginScopesOf: (
+    runtimeType: RuntimeType
+  ) => readonly WorkerScope[] | undefined = () => undefined,
+  displayNameOf: (runtimeType: RuntimeType) => string | undefined = () =>
+    undefined
 ): RuntimeCapabilities {
   return Object.fromEntries(
     runtimeTypes.map((runtimeType) => [
       runtimeType,
       {
         ...availabilityOf(runtimeType),
-        scopes: RUNTIME_TYPE_SCOPES[runtimeType],
+        displayName:
+          displayNameOf(runtimeType) ??
+          (runtimeType === "native"
+            ? "Native"
+            : runtimeType === "docker"
+              ? "Docker"
+              : runtimeType),
+        scopes:
+          runtimeType === "native"
+            ? ["workspace"]
+            : [...(pluginScopesOf(runtimeType) ?? ["user", "workspace"])],
       },
     ])
   );

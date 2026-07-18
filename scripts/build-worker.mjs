@@ -14,10 +14,10 @@ export const WORKER_IMAGE_TAG = "agework/runtime:latest";
 export const WORKER_DOCKERFILE = "apps/runtime/Dockerfile";
 
 export function buildWorkerBundle() {
-  console.log("pnpm --filter @agework/runtime build");
+  console.log("pnpm --filter @agework/runtime-host build");
   const result = spawnSync(
     "pnpm",
-    ["--filter", "@agework/runtime", "build"],
+    ["--filter", "@agework/runtime-host", "build"],
     { cwd: repoRoot, stdio: "inherit" }
   );
 

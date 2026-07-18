@@ -277,13 +277,14 @@ admin 资源列表）都是 server 亲自管协议才需要的；协议下沉后
 
 ### 4.4 物理落点
 
-Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime`），暴露两个入口：
+Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime-host`），公共插件契约位于
+`packages/runtime-sdk`（`@agework/runtime-sdk`），Host 暴露两个入口：
 
 - **库入口**：builtin 场景，server 进程内直接 `new` 出 `RuntimeHostContract` 实现（进程内调用）。
 - **daemon 入口**：registered 场景，远程机器跑同一套代码，主动外连 server 建隧道
   （远程部署只要求 Host → server 单向可达，容器内 worker 永不要求直连 server）。
 
-同一实现、两种宿主。`packages/providers` 维持现状（隔离实现扩展点），
+同一实现、两种宿主。`@agework/runtime-sdk` 提供插件契约，Native/Docker 内建实现留在 Host，
 `packages/worker` 维持现状（只改连接对端）。
 不新建 `packages/runtime-core` 之类的包（"core" 是禁用词，且没有第三个消费者）。
 

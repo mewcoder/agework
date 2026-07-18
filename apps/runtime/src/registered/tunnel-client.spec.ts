@@ -77,6 +77,7 @@ describe("TunnelClient", () => {
       token: "pair-token",
       runtimeTypes: ["docker"],
       runtimeLogHostPath: "/logs",
+      pluginPackages: [],
       workerImage: "agework/runtime:latest",
     };
     const hostContract = {

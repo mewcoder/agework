@@ -47,15 +47,14 @@ interface WorkspaceDialogProps {
 
 const PROJECT_NAME_MAX_LENGTH = 20;
 const PROJECT_DESCRIPTION_MAX_LENGTH = 60;
-const RUNTIME_TYPES = ["native", "docker", "opensandbox"] as const;
 const SCOPES = ["user", "workspace"] as const;
 const PLACEMENT_MODES = ["builtin", "registered"] as const;
 type PlacementMode = (typeof PLACEMENT_MODES)[number];
 
 function supportedRuntimeTypes(runtime: RuntimeHost): WorkspaceRuntimeType[] {
-  return RUNTIME_TYPES.filter(
-    (runtimeType) => runtime.capabilities?.[runtimeType]?.available
-  );
+  return Object.entries(runtime.capabilities ?? {})
+    .filter(([, status]) => status.available)
+    .map(([runtimeType]) => runtimeType);
 }
 
 function supportedWorkerScopes(
@@ -104,7 +103,9 @@ const workspaceDialogFormSchema = z
       .optional(),
     useGit: z.boolean(),
     placementMode: z.enum(PLACEMENT_MODES),
-    runtimeType: z.enum(RUNTIME_TYPES),
+    runtimeType: z
+      .string()
+      .regex(/^[a-z][a-z0-9-]*$/, "运行环境标识格式无效"),
     scope: z.enum(SCOPES),
     gitUrl: z.string().optional(),
     gitBranch: z.string().optional(),
@@ -902,7 +903,7 @@ function WorkspaceDialogForm({
 }
 
 function isWorkspaceRuntimeType(value: string): value is WorkspaceRuntimeType {
-  return RUNTIME_TYPES.includes(value as WorkspaceRuntimeType);
+  return /^[a-z][a-z0-9-]*$/.test(value);
 }
 
 function isPlacementMode(value: string): value is PlacementMode {
@@ -915,8 +916,8 @@ function runtimeTypeLabel(type: WorkspaceRuntimeType) {
       return "本地";
     case "docker":
       return "Docker";
-    case "opensandbox":
-      return "OpenSandbox";
+    default:
+      return type;
   }
 }
 

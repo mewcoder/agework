@@ -2,7 +2,8 @@
 
 本文用大白话解释项目里和 Docker、OpenSandbox、worker 镜像相关的文件分别是干什么的，
 面向不熟悉 Docker 的读者。涉及的运行时（runtime provider）实现细节见
-`apps/server/src/runtime/`，更深入的设计文档见 `docs/opensandbox-setup.md` 和
+`apps/server/src/runtime/`，实验性 OpenSandbox 的操作文档见
+`docs/experimental/opensandbox.md`，更深入的历史设计见
 `docs/archive/superpowers/specs/`。
 
 ## 1. 为什么要用 Docker
@@ -21,7 +22,7 @@
 |---|---|---|
 | **local** | 不隔离，直接在主机上跑 agent。开发图省事用，桌面客户端默认用这种 | 不需要 |
 | **docker** | 在容器里跑 agent，直接调用 Docker API 造盒子、管理盒子生命周期 | 需要 |
-| **opensandbox** | 在容器里跑 agent，用阿里的 OpenSandbox 套件更安全地造盒子、管理盒子生命周期 | 需要 |
+| **opensandbox**（实验性） | 在容器里跑 agent，用阿里的 OpenSandbox 套件造盒子、管理盒子生命周期；默认关闭、按需维护 | 需要 |
 
 `docker` 和 `opensandbox` 都需要一个"装好了 agent 运行环境的镜像"——这就是 `agework/worker`。
 

@@ -136,6 +136,9 @@ export function normalizeRuntimeCapabilities(
       ...(typeof rawStatus.reason === "string"
         ? { reason: rawStatus.reason }
         : {}),
+      ...(typeof rawStatus.displayName === "string"
+        ? { displayName: rawStatus.displayName }
+        : {}),
       ...(isRecord(rawStatus.cli)
         ? { cli: rawStatus.cli as RuntimeCapabilities[string]["cli"] }
         : {}),

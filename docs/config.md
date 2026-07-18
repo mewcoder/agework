@@ -44,13 +44,12 @@ AgeWork 配置按边界分为四类：
 
 | 变量                                           | 默认值                  | 建议     | 说明                                                                                                                                          |
 | ---------------------------------------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AGEWORK_RUNTIME_ALLOWED_TYPES`                | `native`                | 保留 ENV | 当前部署允许创建的 workspace runtimeType，可选 `native`、`docker`、`opensandbox`（可逗号组合）。非法值启动失败。                              |
+| `AGEWORK_RUNTIME_ALLOWED_TYPES`                | `native`                | 保留 ENV | 当前部署允许创建的 runtime type（可逗号组合）；Native/Docker 为内建类型，其余类型必须由已加载插件提供。                                      |
+| `AGEWORK_RUNTIME_PLUGINS`                      | 空                      | 保留 ENV | 显式加载的 runtime 插件包名（逗号分隔），例如 `@agework/runtime-opensandbox`；不会自动发现依赖。                                               |
 | `AGEWORK_RUNTIME_ALLOWED_SCOPES`               | `user`                  | 保留 ENV | 当前部署允许创建的 sandbox 运行范围，可选 `user`、`workspace` 或 `user,workspace`；第一项作为默认值。沙箱指定本地目录时必须使用 `workspace`。 |
 | `AGEWORK_SANDBOX_OPENSANDBOX_DOMAIN`           | `localhost:8080`        | 保留 ENV | OpenSandbox 服务地址，格式为 host:port。仅 `AGEWORK_RUNTIME_ALLOWED_TYPES` 包含 `opensandbox` 时需要关注。                                    |
 | `AGEWORK_SANDBOX_OPENSANDBOX_PROTOCOL`         | `http`                  | 保留 ENV | 可选 `http`、`https`。                                                                                                                        |
 | `AGEWORK_PRIVATE_OPENSANDBOX_API_KEY`          | 空                      | 保留 ENV | OpenSandbox API key，属于部署密钥。                                                                                                           |
-| `AGEWORK_SANDBOX_OPENSANDBOX_IMAGE`            | `agework/worker:latest` | 保留 ENV | OpenSandbox 创建 sandbox 使用的镜像。                                                                                                         |
-| `AGEWORK_SANDBOX_OPENSANDBOX_TIMEOUT_SECONDS`  | `3600`                  | 保留 ENV | sandbox 生命周期超时秒数。                                                                                                                    |
 | `AGEWORK_SANDBOX_OPENSANDBOX_USE_SERVER_PROXY` | `false`                 | 保留 ENV | 是否通过 OpenSandbox 服务代理访问。                                                                                                           |
 
 ### 诊断与日志

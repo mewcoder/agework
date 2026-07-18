@@ -230,15 +230,15 @@ export type SandboxPlacementInfo = {
  * 一次 run 已解析的 runtime 规格：workspace 怎么挂进运行环境（host/容器侧路径 + 挂载点）
  * + ownerId（容器归属/复用键）。启动前纯计算,provider 照此挂卷/起容器。
  *
- * 判别联合，discriminant 为 `runtimeType`：container（docker|opensandbox）分支带 `sandbox`
- * 对象，native 分支不带。`runtimePath` 跨 native/container 都有意义（worker 在执行环境内看到的
+ * `sandbox` 是否存在决定 placement 形态；runtimeType 是插件开放标识，不再承担封闭联合判别。
+ * `runtimePath` 跨 native/container 都有意义（worker 在执行环境内看到的
  * workspace 路径），留顶层。container-only 逻辑可直接以 `SandboxRuntimeSpec` 为入参。
  *
  * ownerId：user scope → userId，workspace scope / native → workspaceId。一个 ownerId 对应一个可复用
  * 容器（同 owner 多 run 共用），承担容器命名/队列分区等，须早于 runtimeInstanceId 稳定。
  */
-export type NativeRuntimeSpec = {
-  runtimeType: "native";
+type RuntimeSpecBase = {
+  runtimeType: string;
   userId: string;
   workspaceId: string;
   hostPath: string;
@@ -248,19 +248,18 @@ export type NativeRuntimeSpec = {
   ownerId: string;
 };
 
-export type SandboxRuntimeSpec = {
-  runtimeType: "docker" | "opensandbox";
-  userId: string;
-  workspaceId: string;
-  hostPath: string;
-  runtimePath: string;
-  /** 日志目录在执行环境内的路径(sandbox 下为容器内挂载点)。 */
-  runtimeLogDir: string;
-  sandbox: SandboxPlacementInfo;
-  ownerId: string;
+export type NativeRuntimeSpec = RuntimeSpecBase & {
+  runtimeType: "native";
+  sandbox?: never;
 };
 
-export type RuntimeSpec = NativeRuntimeSpec | SandboxRuntimeSpec;
+export type SandboxRuntimeSpec = RuntimeSpecBase & {
+  sandbox: SandboxPlacementInfo;
+};
+
+export type RuntimeSpec = RuntimeSpecBase & {
+  sandbox?: SandboxPlacementInfo;
+};
 
 // ── RunExecutionHandle ────────────────────────────────────────────
 

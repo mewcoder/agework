@@ -16,7 +16,7 @@ import type {
 // 设计定案见 docs/design/server-runtime-worker-target-architecture.md §4.2。
 // run、环境、文件和观测能力统一经此契约进入目标 Host。
 
-/** native / docker / opensandbox，providers 扩展点决定取值。 */
+/** Runtime SDK 插件声明的开放标识，如 native / docker / opensandbox。 */
 export type RuntimeType = string;
 
 /** worker 复用的 owner 键：workspace-scope 用 workspaceId，user-scope 用 userId。 */
@@ -122,6 +122,8 @@ export type HostCapabilityStatus = Record<
   RuntimeType,
   {
     available: boolean;
+    /** Runtime Host 或插件 manifest 提供的展示名。 */
+    displayName?: string;
     /** 不可用原因，如 "docker daemon not running"。 */
     reason?: string;
     scopes: Array<WorkerScope>;

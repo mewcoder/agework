@@ -409,7 +409,7 @@ capability 开关 + `turn/steer` + `tool/requestUserInput` + MCP elicitation + �
 - **集成**（真 codex，可在无凭证 CI 跳过 + 单独 secret job）：initialize / 新建 Thread / 简单 Prompt / Resume / Interrupt / Command Approval / app-server 崩溃。
 - **E2E**：选 Codex → 提交改文件任务 → 看 Reasoning/Plan/Command → 处理 Approval → 看 Diff → 完成 → 刷新一致 → 追问 resume 同 Thread。
 - **Runtime 矩阵（第一阶段必测）**：Managed Native macOS / Managed Native Linux / Managed Docker Linux。后续：Registered Native（Beta）、OpenSandbox（不阻塞首版）。
-- CI 扩展：`pnpm --filter @agework/adapters typecheck|test`、`@agework/worker test`、`@agework/runtime test`、`server test`、`web test`、`pnpm build`、**Codex Schema drift check**（§9）。真实模型 smoke 独立触发/nightly，不卡普通 PR。
+- CI 扩展：`pnpm --filter @agework/adapters typecheck|test`、`@agework/worker test`、`@agework/runtime-host test`、`server test`、`web test`、`pnpm build`、**Codex Schema drift check**（§9）。真实模型 smoke 独立触发/nightly，不卡普通 PR。
 
 ---
 

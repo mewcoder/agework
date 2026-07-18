@@ -3,7 +3,7 @@ import {
   Injectable,
   InternalServerErrorException,
 } from "@nestjs/common";
-import type { RuntimeType } from "@agework/providers";
+import type { RuntimeType } from "@agework/runtime-sdk";
 import type { WorkerScope } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 

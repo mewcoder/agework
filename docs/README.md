@@ -9,7 +9,6 @@
 |---|---|
 | [usage.md](usage.md) | 安装、启动、日常使用 |
 | [config.md](config.md) | 环境变量与四类配置边界 |
-| [opensandbox-setup.md](opensandbox-setup.md) | OpenSandbox 运行时本地开发环境搭建与排查 |
 | [desktop-electron-commands.md](desktop-electron-commands.md) | 桌面客户端（Electron）构建/运行命令 |
 
 ## 架构参考（当前）
@@ -24,9 +23,12 @@
 | [architecture/agent-event-logging-guide.md](architecture/agent-event-logging-guide.md) | Agent 事件 / 日志排查实操指南 |
 | [architecture/acp-agent-integration-guide.md](architecture/acp-agent-integration-guide.md) | 新增 ACP agent 的接入触点、权限接法与验证清单 |
 
+Runtime 插件开发见 [`../packages/runtime-sdk/README.md`](../packages/runtime-sdk/README.md)；
+OpenSandbox 是参考实现，见 [`../packages/runtime-opensandbox/README.md`](../packages/runtime-opensandbox/README.md)。
+
 > 更贴近代码的模块级决策记录（ADR）随代码就近存放，见各模块 `docs/adr/`，如
 > `apps/server/src/runtime/docs/adr/`、`apps/server/src/runtime-host/docs/adr/`、
-> `packages/providers/docs/adr/`、`packages/worker/docs/adr/`、`apps/runtime/docs/adr/`。
+> `packages/runtime-sdk/docs/adr/`、`packages/worker/docs/adr/`、`apps/runtime/docs/adr/`。
 > 后端架构与命名规则见 [`.claude/rules/`](../.claude/rules/)。
 
 ## 设计定案
@@ -62,6 +64,15 @@
 | [research/openhands-architecture-deep-analysis.md](research/openhands-architecture-deep-analysis.md) | OpenHands 源码架构剖析 |
 | [research/openhands-upgrade-priority-roadmap.md](research/openhands-upgrade-priority-roadmap.md) | 借鉴 OpenHands 的升级优先级路线 |
 | [research/queue-send-immediately-research.md](research/queue-send-immediately-research.md) | 运行中"立即发送"能力研究 |
+
+## 实验性能力
+
+`experimental/` 存放仍可按需启用、但不属于当前主要维护方向的能力。它们默认关闭，
+不承诺随主线持续验证兼容性。
+
+| 文档 | 内容 |
+|---|---|
+| [experimental/opensandbox.md](experimental/opensandbox.md) | OpenSandbox provider 插件的状态、启用方式与排错说明 |
 
 ## 归档
 

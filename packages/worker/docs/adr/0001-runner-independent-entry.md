@@ -16,7 +16,7 @@ worker 通信,从不直连 server。
 fork 的 agent CLI 子进程使用)+ runner 真正读取的少数 `AGEWORK_WORKER_*` 变量,明确排除
 worker 自己的 server 认证凭据。
 
-manager→worker 这一层(`packages/providers` 的 local provider 里同样整份 spread
+manager→worker 这一层（Runtime Host 的 native provider 里同样整份 spread
 `process.env`)与本决定是同一类问题,但不在这次范围内,留作后续单独决定,不在这里一并处理。
 
 ## Consequences

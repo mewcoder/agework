@@ -1,7 +1,8 @@
 import type { ListResponse, PaginatedListResponse } from "../common";
 import type { WorkerScope } from "../protocol/channel";
 
-export type WorkspaceRuntimeType = "native" | "docker" | "opensandbox";
+/** Runtime plugin 声明的开放标识；可选项由 Host capabilities 动态提供。 */
+export type WorkspaceRuntimeType = string;
 export type WorkspaceScope = WorkerScope;
 export type WorkspaceDirectorySource = "managed" | "external" | "remote";
 

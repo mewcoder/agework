@@ -9,7 +9,7 @@ import { execFileSync, spawn } from "child_process";
 import { mkdirSync, realpathSync, rmSync, statSync } from "fs";
 import { homedir } from "os";
 import { isAbsolute, join, relative, resolve } from "path";
-import type { RuntimeType } from "@agework/providers";
+import type { RuntimeType } from "@agework/runtime-sdk";
 import type { WorkerScope } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { WorkspaceRepository } from "../workspace.repository";

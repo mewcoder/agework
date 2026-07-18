@@ -23,7 +23,7 @@ import {
 } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeHostService } from "../runtime-host/runtime-host.service";
-import type { RuntimeType } from "@agework/providers";
+import type { RuntimeType } from "@agework/runtime-sdk";
 import type { WorkerScope } from "@agework/shared/protocol";
 import type {
   WorkspaceFileListResponse,

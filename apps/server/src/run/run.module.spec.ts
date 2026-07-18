@@ -162,13 +162,7 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getRuntimeLogDir: () => "/tmp/agework-logs/runtime",
     getAgentEventTraceConfig: () => ({ enabled: false, maxFileMb: 5 }),
     getBuiltinWorkerHttpPort: () => 7101,
-    getOpenSandboxConfig: () => ({
-      domain: "localhost",
-      protocol: "http",
-      image: "test",
-      timeoutSeconds: 30,
-      useServerProxy: false,
-    }),
+    getRuntimePluginPackages: () => [],
     getHostCliDir: () => "/tmp/agework-host-test/cli",
   };
 }

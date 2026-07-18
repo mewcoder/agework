@@ -1,4 +1,10 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString } from "class-validator";
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+} from "class-validator";
 import type { CreateWorkspaceRequest } from "@agework/shared/api";
 
 export class CreateWorkspaceDto implements CreateWorkspaceRequest {
@@ -23,8 +29,8 @@ export class CreateWorkspaceDto implements CreateWorkspaceRequest {
   rootPath?: string;
 
   @IsOptional()
-  @IsIn(["native", "docker", "opensandbox"])
-  runtimeType?: "native" | "docker" | "opensandbox";
+  @Matches(/^[a-z][a-z0-9-]*$/)
+  runtimeType?: string;
 
   @IsOptional()
   @IsIn(["user", "workspace"])

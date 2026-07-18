@@ -23,7 +23,7 @@ Contexts in this repo:
 | `apps/runtime` | `apps/runtime/docs/adr/` |
 | `apps/server` runtime module | `apps/server/src/runtime/docs/adr/` |
 | `apps/server` runtime-host module | `apps/server/src/runtime-host/docs/adr/` |
-| `packages/providers` | `packages/providers/docs/adr/` |
+| `packages/runtime-sdk` | `packages/runtime-sdk/docs/adr/` |
 | `packages/worker` | `packages/worker/docs/adr/` |
 
 If a context has its own `CONTEXT.md` (per-context glossary), read it before working in that context. Most contexts currently have only `docs/adr/`, no `CONTEXT.md` yet — that's fine, `/domain-modeling` creates them lazily.
@@ -37,7 +37,7 @@ If a context has its own `CONTEXT.md` (per-context glossary), read it before wor
     apps/runtime/docs/adr/
     apps/server/src/runtime/docs/adr/
     apps/server/src/runtime-host/docs/adr/
-    packages/providers/docs/adr/
+    packages/runtime-sdk/docs/adr/
     packages/worker/docs/adr/
 ```
 

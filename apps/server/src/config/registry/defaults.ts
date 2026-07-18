@@ -1,6 +1,6 @@
 import { homedir } from "os";
 import { join } from "path";
-import type { RuntimeType } from "@agework/providers";
+import type { RuntimeType } from "@agework/runtime-sdk";
 import type { WorkerScope } from "@agework/shared/protocol";
 import { EnvKey } from "./env-key";
 
@@ -22,7 +22,7 @@ export const DEFAULT_ALLOWED_RUNTIME_TYPES = [
 export const DEFAULT_ALLOWED_SCOPES = [
   "user",
 ] as const satisfies readonly WorkerScope[];
-/** builtin Host 的 docker/opensandbox 运行实例镜像：统一为 agework-runtime 产物镜像
+/** builtin Host 的非 native 运行实例默认镜像：统一为 agework-runtime 产物镜像
  *  (worker 内置其中,以 AGEWORK_WORKER_ROLE=worker 角色启动),与 Registered
  *  远程 manager 用的是同一个产物/镜像。:latest 的版本正确性靠 register 握手兜底。 */
 export const DEFAULT_RUNTIME_IMAGE = "agework/runtime:latest";
@@ -34,12 +34,6 @@ export const DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS = 20;
 export const DEFAULT_AGENT_EVENT_TRACE_MAX_FILE_MB = 50;
 /** Builtin Host 的 worker HTTP 服务器端口（Phase 3：worker 数据面切到 Host 自管）。 */
 export const DEFAULT_BUILTIN_WORKER_HTTP_PORT = 7101;
-
-export const DEFAULT_OPENSANDBOX_DOMAIN = "localhost:8080";
-export const DEFAULT_OPENSANDBOX_PROTOCOL = "http";
-export const DEFAULT_OPENSANDBOX_IMAGE = DEFAULT_RUNTIME_IMAGE;
-export const DEFAULT_OPENSANDBOX_TIMEOUT_SECONDS = 3600;
-export const DEFAULT_OPENSANDBOX_USE_SERVER_PROXY = false;
 
 export const AGEWORK_HOST_DATA_DIR =
   process.env[EnvKey.DATA_DIR]?.trim() || join(homedir(), ".agework");

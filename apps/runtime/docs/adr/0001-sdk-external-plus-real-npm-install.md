@@ -40,7 +40,7 @@ Docker 镜像不适用这个"符链接复用"模式——它跑在容器里,平�
 不需要手动装任何东西,正常跑构建命令即可,这一步会自动触发:
 
 - 日常开发:`pnpm dev` / `pnpm dev:server`——turbo 的 `^build` 会先构建
-  `@agework/runtime`,内含这次真实 `npm install`,装一次留在
+  `@agework/runtime-host`,内含这次真实 `npm install`,装一次留在
   `apps/runtime/dist/node_modules`(首次约 15s、~460MB 磁盘,只发生这一处)。
 - 构建 server:`pnpm build` / `pnpm --filter server build`——`embed-runtime.mjs`
   只建符链接,不重复装。

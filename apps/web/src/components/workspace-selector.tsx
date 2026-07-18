@@ -33,7 +33,7 @@ interface WorkspaceSelectorProps {
 type WorkspaceItem = {
   value: string;
   label: string;
-  runtimeType?: "native" | "docker" | "opensandbox";
+  runtimeType?: string;
 };
 
 export function WorkspaceSelector({ attentionToken = 0 }: WorkspaceSelectorProps) {

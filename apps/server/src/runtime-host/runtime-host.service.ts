@@ -34,7 +34,7 @@ import type {
   WorkspaceFileDiffResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
-import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/providers";
+import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/runtime-sdk";
 import { RuntimeHostRepository } from "./runtime-host.repository";
 import {
   BUILTIN_HOST_ID,
@@ -214,7 +214,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
   }
 
   /**
-   * 管理员一键安装 Runtime Host 的独立 CLI(仅支持 native 类型;docker/opensandbox
+   * 管理员一键安装 Runtime Host 的独立 CLI(仅支持 native 类型;容器/插件 runtime
    * 走镜像固定路径,装不装不影响实际执行,不支持此操作)。
    * 安装成功后自动写入 override 并重新检测刷新展示状态。
    */

@@ -14,7 +14,7 @@ design.md §1 定调混合方案:managed native 留 server 进程内(直读 fs/g
 managed docker/opensandbox + registered 起独立 runtime 进程(经隧道 RPC)。
 
 Ticket 04 之前,所有 managed runtime(native/docker/opensandbox)都留在 server
-进程内,由 `LocalRuntime` 经 `@agework/providers` 的 provider resolver 统一分发。
+进程内,由 `LocalRuntime` 经 Runtime Host 内建的 provider resolver 统一分发。
 docker/opensandbox 的 start/stop/destroy 在 server 进程内直接调 provider,
 文件/git 能力也由 `LocalRuntime` 越权代理(直读本机硬盘)。
 

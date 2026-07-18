@@ -80,7 +80,7 @@ permission 全 allow。**注意实测教训**:opencode 官方默认不询问(bas
 4. **平台全链**:运行节点管理页一键安装 → 新建会话选该 agent → 发消息 →
    流式输出/审批卡片/多轮 resume(`agentSessionId` 续接)各过一遍。
 5. 惯例:`pnpm --filter @agework/adapters test` + 各端 typecheck + eslint;
-   dev 环境改了 adapters 记得 `pnpm --filter @agework/runtime build`。
+   dev 环境改了 adapters 记得 `pnpm --filter @agework/runtime-host build`。
 
 ## 4. 已知坑速查
 

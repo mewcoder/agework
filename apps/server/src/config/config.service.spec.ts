@@ -79,6 +79,7 @@ describe("getJwtSecret", () => {
 describe("runtime capability config", () => {
   const originalAllowedTypes = process.env.AGEWORK_RUNTIME_ALLOWED_TYPES;
   const originalAllowedScopes = process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
+  const originalRuntimePlugins = process.env.AGEWORK_RUNTIME_PLUGINS;
 
   afterEach(() => {
     if (originalAllowedTypes === undefined) {
@@ -90,6 +91,11 @@ describe("runtime capability config", () => {
       delete process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
     } else {
       process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES = originalAllowedScopes;
+    }
+    if (originalRuntimePlugins === undefined) {
+      delete process.env.AGEWORK_RUNTIME_PLUGINS;
+    } else {
+      process.env.AGEWORK_RUNTIME_PLUGINS = originalRuntimePlugins;
     }
   });
 
@@ -110,24 +116,35 @@ describe("runtime capability config", () => {
     expect(service.isRuntimeTypeAllowed("native")).toBe(true);
   });
 
-  it("accepts all three runtime types (native, docker, opensandbox)", async () => {
-    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "native,docker,opensandbox";
+  it("accepts built-in and plugin runtime identifiers", async () => {
+    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "native,docker,firecracker";
     const { service } = createService([]);
 
     expect(service.getAllowedRuntimeTypes()).toEqual([
       "native",
       "docker",
-      "opensandbox",
+      "firecracker",
     ]);
   });
 
   it("fails fast on invalid runtime capability values", async () => {
-    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "native,bogus";
+    process.env.AGEWORK_RUNTIME_ALLOWED_TYPES = "native,bad_type";
     const { service } = createService([]);
 
     expect(() => service.getAllowedRuntimeTypes()).toThrow(
-      'AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "native", "docker", "opensandbox"'
+      "AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated runtime identifiers"
     );
+  });
+
+  it("parses and deduplicates explicit runtime plugin packages", () => {
+    process.env.AGEWORK_RUNTIME_PLUGINS =
+      "@agework/runtime-opensandbox, @agework/runtime-opensandbox,@acme/runtime-example";
+    const { service } = createService([]);
+
+    expect(service.getRuntimePluginPackages()).toEqual([
+      "@agework/runtime-opensandbox",
+      "@acme/runtime-example",
+    ]);
   });
 
   it("defaults to user scope when AGEWORK_RUNTIME_ALLOWED_SCOPES is unset", async () => {

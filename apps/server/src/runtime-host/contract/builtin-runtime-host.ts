@@ -1,10 +1,11 @@
 import { Logger } from "@nestjs/common";
 import type { FactoryProvider } from "@nestjs/common";
 import {
+  loadRuntimePlugins,
   RuntimeHost,
   WorkerHttpServer,
   probeDockerDaemon,
-} from "@agework/runtime/host";
+} from "@agework/runtime-host";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -18,7 +19,7 @@ import { resolveRuntimeHostCliPaths } from "../environment/runtime-host-environm
  *
  * Phase 3 清尾:builtin Host 自管 worker HTTP 服务器(WorkerHttpServer),
  * worker 数据面对端从 server 旧 /worker/* 端点切到 Host——与 registered
- * daemon 同构。native/docker/opensandbox 都由这一个 Host 按 runtimeType 分派 provider。
+ * daemon 同构。所有内建或插件 runtime 都由这一个 Host 按 runtimeType 分派 provider。
  *
  * runtime-host 内部 provider：不 export、不进入其他 module。
  */
@@ -39,20 +40,40 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
     const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
-    // 当前可用性:native 进程内恒可用;docker 探测本机 daemon;opensandbox 是
-    // 外部服务,由部署配置决定接入,这里不做健康探测。
+    const providerPlugins = await loadRuntimePlugins(
+      configService.getRuntimePluginPackages()
+    );
+    const pluginsByType = new Map(
+      providerPlugins.map((plugin) => [plugin.type, plugin])
+    );
+    // native 进程内恒可用；docker 探测 daemon；插件的进一步健康探测由其启动阶段暴露。
     const detectCapabilities = async (): Promise<HostCapabilityStatus> => {
       const entries = await Promise.all(
-        configService.getAllowedRuntimeTypes().map(async (runtimeType) => [
-          runtimeType,
-          {
-            ...(runtimeType === "docker"
+        configService.getAllowedRuntimeTypes().map(async (runtimeType) => {
+          const plugin = pluginsByType.get(runtimeType);
+          const availability =
+            runtimeType === "docker"
               ? await probeDockerDaemon()
-              : { available: true }),
-            scopes:
-              runtimeType === "native" ? ["workspace"] : ["user", "workspace"],
-          },
-        ])
+              : plugin?.probe
+                ? await plugin.probe()
+                : { available: true };
+          return [
+            runtimeType,
+            {
+              ...availability,
+              displayName:
+                runtimeType === "native"
+                  ? "Native"
+                  : runtimeType === "docker"
+                    ? "Docker"
+                    : plugin?.displayName ?? runtimeType,
+              scopes:
+                runtimeType === "native"
+                  ? ["workspace"]
+                  : plugin?.scopes ?? ["user", "workspace"],
+            },
+          ] as const;
+        })
       );
       return Object.fromEntries(entries) as HostCapabilityStatus;
     };
@@ -69,6 +90,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       // docker daemon 中途挂掉/恢复反映到放置准入,只拦新 run
       refreshCapabilities: detectCapabilities,
       providerConfig,
+      providerPlugins,
       resolveCliPaths: async () => {
         const row = await repository.findById(BUILTIN_HOST_ID);
         return row

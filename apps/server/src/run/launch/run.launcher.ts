@@ -18,7 +18,7 @@ import {
   type RunExecutionHandle,
   type WorkerScope,
 } from "@agework/shared/protocol";
-import { isRuntimeType } from "@agework/providers";
+import { isRuntimeType } from "@agework/runtime-sdk";
 import { RunRepository } from "../run.repository";
 import { LiveRunRegistry } from "../live-run/live-run.registry";
 import { RUNTIME_HOST_EXECUTION } from "../../runtime-host/runtime-host.types";

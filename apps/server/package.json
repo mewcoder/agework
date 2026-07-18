@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "build": "pnpm db:generate && pnpm --filter @agework/providers build && pnpm --filter @agework/runtime build && nest build && node scripts/embed-runtime.mjs",
+    "build": "pnpm db:generate && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-host build && nest build && node scripts/embed-runtime.mjs",
     "dev": "nest start --watch",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
@@ -17,7 +17,7 @@
     "db:push": "prisma db push",
     "db:reset": "prisma db push --force-reset",
     "db:studio": "prisma studio",
-    "prepare:test": "pnpm db:generate && pnpm --filter @agework/providers build && pnpm --filter @agework/runtime build:host",
+    "prepare:test": "pnpm db:generate && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-host build:host",
     "test": "pnpm prepare:test && vitest run",
     "test:watch": "pnpm prepare:test && vitest",
     "test:cov": "pnpm prepare:test && vitest run --coverage"
@@ -26,7 +26,7 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@agework/adapters": "workspace:*",
-    "@agework/providers": "workspace:*",
+    "@agework/runtime-sdk": "workspace:*",
     "@agework/shared": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.86",
     "@ai-sdk/openai": "^3.0.67",
@@ -55,7 +55,7 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@agework/runtime": "workspace:*",
+    "@agework/runtime-host": "workspace:*",
     "@eslint/eslintrc": "^3.2.0",
     "@eslint/js": "^9.18.0",
     "@nestjs/cli": "^11.0.0",

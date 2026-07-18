@@ -4,12 +4,7 @@ import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
-import {
-  ensureWorkerImage,
-  pullRuntimeImages,
-  composeUp,
-  waitForHealth,
-} from "./opensandbox.mjs";
+import { ensureWorkerImage } from "./worker-image.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const apiEnv = resolve(repoRoot, "apps/server/.env");
@@ -180,10 +175,10 @@ function normalizeRuntimeTypes(rawValue) {
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 
-  const allowed = ["native", "docker", "opensandbox"];
+  const allowed = ["native", "docker"];
   if (values.length === 0 || values.some((value) => !allowed.includes(value))) {
     throw new Error(
-      '--runtime expects comma-separated values from "native", "docker", "opensandbox"'
+      '--runtime expects comma-separated values from "native", "docker"'
     );
   }
 
@@ -593,7 +588,7 @@ async function main() {
     console.log("  --name <name>    Set AGEWORK_APP_NAME in apps/server/.env");
     console.log("  --port <port>    Set backend PORT in apps/server/.env");
     console.log(
-      "  --runtime <native|docker|opensandbox>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)"
+      "  --runtime <native|docker>  Set AGEWORK_RUNTIME_ALLOWED_TYPES in apps/server/.env (comma-separated)"
     );
     console.log(
       "  --scope <user|workspace|user,workspace>  Set AGEWORK_RUNTIME_ALLOWED_SCOPES in apps/server/.env"
@@ -637,10 +632,6 @@ async function main() {
       options: [
         { value: "native", label: "native（只允许本机进程）" },
         { value: "docker", label: "docker（本机 Docker 容器）" },
-        {
-          value: "opensandbox",
-          label: "opensandbox（OpenSandbox Server + worker 镜像）",
-        },
       ],
       initialValues: ["native"],
       required: true,
@@ -649,10 +640,7 @@ async function main() {
     runtimeTypes = [...new Set(result)].join(",");
   }
   const runtimeTypeList = runtimeTypes?.split(",") ?? [];
-  const allowsOpenSandbox = runtimeTypeList.includes("opensandbox");
-  // docker / opensandbox 都跑在容器里,需要 worker 镜像与运行范围设置。
-  const allowsContainer =
-    allowsOpenSandbox || runtimeTypeList.includes("docker");
+  const allowsContainer = runtimeTypeList.includes("docker");
   if (allowsContainer && scopes === undefined && interactive) {
     const result = await p.multiselect({
       message: "允许的沙箱运行范围（可多选）",
@@ -692,15 +680,8 @@ async function main() {
   if (scopes) {
     apiUpdates.AGEWORK_RUNTIME_ALLOWED_SCOPES = scopes;
   }
-  // Docker / OpenSandbox 都依赖同一个 worker 镜像。
   if (allowsContainer) {
     await ensureWorkerImage({ interactive, shouldReset, promptYesNo });
-  }
-  if (allowsOpenSandbox) {
-    console.log("🚀 启动 OpenSandbox Server...");
-    pullRuntimeImages();
-    composeUp();
-    await waitForHealth();
   }
   if (ctxPath) {
     apiUpdates.AGEWORK_CONTEXT = ctxPath;

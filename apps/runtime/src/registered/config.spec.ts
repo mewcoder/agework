@@ -23,6 +23,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       token: "t1",
       runtimeTypes: ["docker"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
+      pluginPackages: [],
       workerImage: "agework/runtime:latest",
     });
   });
@@ -42,6 +43,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       token: "flag-token",
       runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
+      pluginPackages: [],
       runtimeEntryPath: "/path/flag.js",
     });
   });
@@ -56,6 +58,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       token: "t",
       runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
+      pluginPackages: [],
     });
   });
 
@@ -96,16 +99,23 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
     ).toThrow("missing pairing token");
   });
 
-  it("rejects unknown runtime type", () => {
+  it("rejects an invalid runtime identifier", () => {
     expect(() =>
       resolveRegisteredRuntimeHostConfig(
-        ["--server", "http://h/api/v1", "--token", "t", "--runtime", "vm"],
+        [
+          "--server",
+          "http://h/api/v1",
+          "--token",
+          "t",
+          "--runtime",
+          "bad_type",
+        ],
         {}
       )
     ).toThrow("invalid runtime type");
   });
 
-  it("rejects docker/opensandbox without a worker image", () => {
+  it("rejects docker without a worker image", () => {
     expect(() =>
       resolveRegisteredRuntimeHostConfig(
         ["--server", "http://h/api/v1", "--token", "t", "--runtime", "docker"],
@@ -139,6 +149,29 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
     expect(config.runtimeTypes).toEqual(["native", "docker"]);
   });
 
+  it("parses runtime plugin package names for a registered Host", () => {
+    const config = resolveRegisteredRuntimeHostConfig(
+      [
+        "--server",
+        "http://h/api/v1",
+        "--token",
+        "t",
+        "--runtime",
+        "opensandbox",
+        "--worker-image",
+        "img",
+        "--plugins",
+        "@agework/runtime-opensandbox,@acme/runtime-firecracker",
+      ],
+      {}
+    );
+
+    expect(config.pluginPackages).toEqual([
+      "@agework/runtime-opensandbox",
+      "@acme/runtime-firecracker",
+    ]);
+  });
+
   it("prefers AGEWORK_RUNTIME_TYPES over the singular alias", () => {
     const config = resolveRegisteredRuntimeHostConfig([], {
       AGEWORK_SERVER_BASE_URL: "http://h/api/v1",
@@ -150,7 +183,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
     expect(config.runtimeTypes).toEqual(["native", "docker"]);
   });
 
-  it("rejects a list containing an unknown runtime type", () => {
+  it("rejects a list containing an invalid runtime identifier", () => {
     expect(() =>
       resolveRegisteredRuntimeHostConfig(
         [
@@ -159,7 +192,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
           "--token",
           "t",
           "--runtime",
-          "native,vm",
+          "native,bad_type",
         ],
         {}
       )

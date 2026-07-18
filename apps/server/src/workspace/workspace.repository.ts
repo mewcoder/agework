@@ -31,7 +31,7 @@ export type WorkspaceCreateInput = {
   description: string | null;
   userId: string;
   scope: string;
-  /** 执行方式(native/docker/opensandbox),创建时快照写入(Phase 2 expand 列)。 */
+  /** Runtime SDK 标识的执行方式，创建时从 Host capabilities 校验并快照写入。 */
   runtimeType: string;
   rootPath: string;
   directorySource: string;

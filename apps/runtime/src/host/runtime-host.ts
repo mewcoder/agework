@@ -39,14 +39,15 @@ import type {
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
 import {
-  createRuntimeResolver,
   isRuntimeType,
-  type RuntimeConfig,
   type RuntimeInstanceRef,
   type RuntimeLaunchContext,
   type RuntimeProvider,
+  type RuntimeProviderPlugin,
   type RuntimeType,
-} from "@agework/providers";
+} from "@agework/runtime-sdk";
+import { createRuntimeResolver } from "../providers/registry";
+import type { RuntimeHostProviderConfig } from "../providers/types";
 import {
   isWorkerCommandResultRpcResponse,
   isWorkerEventRpcNotification,
@@ -55,6 +56,7 @@ import {
 } from "@agework/shared/protocol/rpc";
 export { WorkerHttpServer } from "./worker-http-server.js";
 export { probeDockerDaemon } from "./capability-probe.js";
+export { loadRuntimePlugins } from "../plugins/runtime-plugin-loader.js";
 import { WorkerPool, type WorkerEntry } from "./worker-pool";
 import { buildWorkerEnv, makeRunConfig, resolveSpec } from "./run-config";
 import { CommandMailbox } from "./command-mailbox";
@@ -92,8 +94,10 @@ export interface RuntimeHostConfig {
   refreshCapabilities?: () => Promise<HostCapabilityStatus>;
   /** 能力矩阵刷新间隔(ms),默认 60s。 */
   capabilityRefreshMs?: number;
-  /** Runtime provider 配置（包含 Worker 回连地址，传给 @agework/providers）。 */
-  providerConfig: RuntimeConfig;
+  /** Runtime Host 的内建 provider 配置；插件只接收其中的通用部分。 */
+  providerConfig: RuntimeHostProviderConfig;
+  /** 按需装配的外部 runtime provider；Native/Docker 由核心包内建。 */
+  providerPlugins?: RuntimeProviderPlugin[];
   /**
    * native runtimeType 的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
    * 由宿主注入:builtin 用 server 的 RuntimeService 解析,daemon 用本机 detectEnvConfig。
@@ -112,6 +116,8 @@ export interface RuntimeHostConfig {
     commandType: string;
   }) => void;
 }
+
+export type { RuntimeHostProviderConfig } from "../providers/types";
 
 type WorkerRemovalMode = "release" | "exited";
 
@@ -154,7 +160,11 @@ export class RuntimeHost implements RuntimeHostContract {
   constructor(config: RuntimeHostConfig) {
     this.config = config;
     this.capabilities = config.capabilities;
-    this.resolveProvider = createRuntimeResolver(config.providerConfig);
+    this.resolveProvider = createRuntimeResolver(
+      config.providerConfig,
+      config.providerPlugins,
+      Object.keys(config.capabilities)
+    );
     this.environmentOperations = new HostEnvironmentOperations(
       () => this.capabilities,
       config.cliInstallDir

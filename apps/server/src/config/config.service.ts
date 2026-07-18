@@ -6,7 +6,7 @@ import {
 } from "@nestjs/common";
 import { mkdirSync } from "fs";
 import { join } from "path";
-import { isRuntimeType, type RuntimeType } from "@agework/providers";
+import { isRuntimeType, type RuntimeType } from "@agework/runtime-sdk";
 import type { WorkerScope } from "@agework/shared/protocol";
 import { SystemSettingRepository } from "./system-setting.repository";
 import { resolveApiBasePath } from "../common/api-path";
@@ -23,11 +23,6 @@ import {
   DEFAULT_HEARTBEAT_TIMEOUT_SECONDS,
   DEFAULT_HEARTBEAT_CHECK_INTERVAL_SECONDS,
   DEV_JWT_SECRET,
-  DEFAULT_OPENSANDBOX_DOMAIN,
-  DEFAULT_OPENSANDBOX_IMAGE,
-  DEFAULT_OPENSANDBOX_PROTOCOL,
-  DEFAULT_OPENSANDBOX_TIMEOUT_SECONDS,
-  DEFAULT_OPENSANDBOX_USE_SERVER_PROXY,
   DEFAULT_ALLOWED_RUNTIME_TYPES,
   DEFAULT_ALLOWED_SCOPES,
   DEFAULT_PORT,
@@ -222,11 +217,27 @@ export class ConfigService implements OnModuleInit {
 
     if (values.length === 0 || values.some((value) => !isRuntimeType(value))) {
       throw new Error(
-        `AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated values from "native", "docker", "opensandbox", got: ${raw ?? values.join(",")}`
+        `AGEWORK_RUNTIME_ALLOWED_TYPES expects comma-separated runtime identifiers, got: ${raw ?? values.join(",")}`
       );
     }
 
     return Array.from(new Set(values)) as RuntimeType[];
+  }
+
+  /** builtin Host 显式允许加载的 runtime 插件包；不做隐式发现。 */
+  getRuntimePluginPackages(): string[] {
+    const raw = this.getEnv(EnvKey.RUNTIME_PLUGINS);
+    if (!raw) return [];
+    const packages = raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (packages.some((value) => /\s/.test(value))) {
+      throw new Error(
+        `AGEWORK_RUNTIME_PLUGINS expects comma-separated package names, got: ${raw}`
+      );
+    }
+    return Array.from(new Set(packages));
   }
 
   getDefaultRuntimeType(): RuntimeType {
@@ -276,7 +287,7 @@ export class ConfigService implements OnModuleInit {
     return AGEWORK_HOST_CLI_DIR;
   }
 
-  /** builtin Host docker/opensandbox 起 worker 运行实例用的镜像。 */
+  /** builtin Host 的非 native provider 起 worker 运行实例用的默认镜像。 */
   getWorkerImage(): string {
     return DEFAULT_RUNTIME_IMAGE;
   }
@@ -357,41 +368,6 @@ export class ConfigService implements OnModuleInit {
     const raw = this.getSetting(SettingKey.SYSTEM_ENV_ENABLED);
     if (raw === undefined) return true;
     return raw === "true";
-  }
-
-  getOpenSandboxConfig(): {
-    domain: string;
-    protocol: "http" | "https";
-    apiKey?: string;
-    image: string;
-    timeoutSeconds: number;
-    useServerProxy: boolean;
-  } {
-    const useServerProxy = this.getEnv(
-      EnvKey.SANDBOX_OPENSANDBOX_USE_SERVER_PROXY
-    );
-    return {
-      domain:
-        this.getEnv(EnvKey.SANDBOX_OPENSANDBOX_DOMAIN) ||
-        DEFAULT_OPENSANDBOX_DOMAIN,
-      protocol:
-        this.getEnv(EnvKey.SANDBOX_OPENSANDBOX_PROTOCOL) === "https"
-          ? "https"
-          : DEFAULT_OPENSANDBOX_PROTOCOL,
-      apiKey: this.getEnv(EnvKey.PRIVATE_OPENSANDBOX_API_KEY) || undefined,
-      image:
-        this.getEnv(EnvKey.SANDBOX_OPENSANDBOX_IMAGE) ||
-        DEFAULT_OPENSANDBOX_IMAGE,
-      timeoutSeconds: parseInt(
-        this.getEnv(EnvKey.SANDBOX_OPENSANDBOX_TIMEOUT_SECONDS) ||
-          String(DEFAULT_OPENSANDBOX_TIMEOUT_SECONDS),
-        10
-      ),
-      useServerProxy:
-        useServerProxy === undefined
-          ? DEFAULT_OPENSANDBOX_USE_SERVER_PROXY
-          : useServerProxy === "true",
-    };
   }
 
   listSettings(): SettingListItem[] {

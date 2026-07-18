@@ -8,7 +8,7 @@
 // 的 runner 文件名(见 packages/worker/docs/adr/0001),不靠单独配置。
 //
 // 产物是 ESM,落地成 `.mjs` 让 node 无视 server 的 CommonJS package 直接当 ESM 跑。
-// 依赖 turbo `^build`:@agework/runtime 是 server 的 devDependency,先于 server 构建。
+// 依赖 turbo `^build`:@agework/runtime-host 是 server 的 devDependency,先于 server 构建。
 //
 // @anthropic-ai/claude-agent-sdk / @openai/codex-sdk 是 --external,不在 bundle 里
 // (见 apps/runtime/docs/adr/0001)——它们的真实二进制(每个平台几百 MB)通过
@@ -40,7 +40,7 @@ for (const name of ["main", "runner"]) {
   if (!existsSync(source)) {
     throw new Error(
       `agework-runtime bundle not found at ${source}. Build it first ` +
-        `(pnpm --filter @agework/runtime build); turbo ^build normally handles this.`
+        `(pnpm --filter @agework/runtime-host build); turbo ^build normally handles this.`
     );
   }
 
