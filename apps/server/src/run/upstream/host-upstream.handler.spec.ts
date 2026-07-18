@@ -210,6 +210,23 @@ describe("HostUpstreamHandler", () => {
     expect(forceErrorStatus).toHaveBeenCalledWith("run-1", "crashed");
   });
 
+  it("notifyWorkerLost finalizes as cancelled when a stop was already requested", async () => {
+    const handle = liveRuns.get("run-1");
+    if (!handle) throw new Error("expected registered live handle");
+    handle.stopRequested = true;
+    const notifyRunCancelled = vi
+      .spyOn(workerEventsService, "notifyRunCancelled")
+      .mockResolvedValue(undefined);
+    const notifyRunFailed = vi
+      .spyOn(workerEventsService, "notifyRunFailed")
+      .mockResolvedValue(undefined);
+
+    await workerEventsService.notifyWorkerLost("run-1", "owner released");
+
+    expect(notifyRunCancelled).toHaveBeenCalledWith("run-1");
+    expect(notifyRunFailed).not.toHaveBeenCalled();
+  });
+
   it("notifyWorkerLost delegates to notifyRunFailed (fence terminates via the same terminal-status path)", async () => {
     const notifyRunFailed = vi
       .spyOn(workerEventsService, "notifyRunFailed")

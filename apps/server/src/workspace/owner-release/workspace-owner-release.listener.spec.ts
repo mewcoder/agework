@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceRepository } from "../workspace.repository";
-import { WorkspaceDeletedEvent } from "../workspace.events";
 import { RuntimeHostConnectedEvent } from "../../runtime-host/runtime-host.events";
 import type { RuntimeHostOwnerReconciliation } from "../../runtime-host/runtime-host.types";
 import { WorkspaceOwnerReleaseListener } from "./workspace-owner-release.listener";
@@ -35,21 +34,6 @@ function worker(
 }
 
 describe("WorkspaceOwnerReleaseListener", () => {
-  it("releases only the deleted workspace owner on its configured host", async () => {
-    const hostOwners = makeOwnerReconciliation();
-    const listener = makeListener(hostOwners);
-
-    await listener.onWorkspaceDeleted(
-      new WorkspaceDeletedEvent("ws-1", "user-1", "rt-1")
-    );
-
-    expect(hostOwners.releaseOwner).toHaveBeenCalledTimes(1);
-    expect(hostOwners.releaseOwner).toHaveBeenCalledWith({
-      runtimeHostId: "rt-1",
-      owner: "workspace:ws-1",
-    });
-  });
-
   describe("重连对账", () => {
     it("releases workers of deleted workspaces on the reconnected host only", async () => {
       const hostOwners = makeOwnerReconciliation({

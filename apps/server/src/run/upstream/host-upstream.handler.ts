@@ -103,6 +103,12 @@ export class HostUpstreamHandler
       this.runEvents.workerStatusChanged({ runId, status: "lost", reason }),
       `record worker lost for run ${runId}`
     );
+    // 已请求取消的 run,worker 消亡是取消的实施路径(cancel 下发后 worker 被
+    // 回收/退出),按 cancelled 收场,不误判 error。
+    if (this.liveRuns.get(runId)?.stopRequested) {
+      await this.notifyRunCancelled(runId);
+      return;
+    }
     await this.notifyRunFailed(runId, reason);
   }
 
