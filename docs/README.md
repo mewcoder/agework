@@ -22,6 +22,7 @@
 | [architecture/docker-runtime-explained.md](architecture/docker-runtime-explained.md) | Docker / OpenSandbox / worker 镜像入门讲解 |
 | [architecture/rbac-matrix.md](architecture/rbac-matrix.md) | 权限归属矩阵与实现锚点 |
 | [architecture/agent-event-logging-guide.md](architecture/agent-event-logging-guide.md) | Agent 事件 / 日志排查实操指南 |
+| [architecture/acp-agent-integration-guide.md](architecture/acp-agent-integration-guide.md) | 新增 ACP agent 的接入触点、权限接法与验证清单 |
 
 > 更贴近代码的模块级决策记录（ADR）随代码就近存放，见各模块 `docs/adr/`，如
 > `apps/server/src/runtime/docs/adr/`、`apps/server/src/runtime-host/docs/adr/`、
