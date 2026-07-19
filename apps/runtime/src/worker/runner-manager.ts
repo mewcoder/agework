@@ -608,7 +608,7 @@ function resolveRunnerEntryPath(workerEntryPath: string): string {
 
 // runner 全程只经 IPC 跟 worker 通信、从不直连 server,不需要 worker 自己的
 // AGEWORK_WORKER_API_BASE / AGEWORK_WORKER_START_TOKEN 等认证信息,也不该继承
-// server/worker 进程的其余环境变量——见 packages/worker/docs/adr/0001。
+// server/worker 进程的其余环境变量——见 apps/runtime/docs/adr/0002。
 const RUNNER_ENV_PASSTHROUGH_KEYS = [
   "PATH",
   "HOME",

@@ -241,7 +241,7 @@ Server/Web 消费。完整目标契约见
 ```bash
 pnpm --filter @agework/agent-acp typecheck
 pnpm --filter @agework/agent-acp test
-pnpm --filter @agework/worker typecheck
+pnpm --filter @agework/runtime-host typecheck
 ```
 
 按项目约定决定是否执行完整 Runtime 构建和平台端到端测试。

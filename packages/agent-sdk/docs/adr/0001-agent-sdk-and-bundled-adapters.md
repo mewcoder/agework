@@ -3,7 +3,7 @@
 ## Decision
 
 - `@agework/agent-sdk` 只提供稳定、轻量的 `AgentDriver` / `AgentPlugin` 契约。
-- `@agework/worker` 是插件宿主，负责显式加载、注册、按 `agentType` 选择实现。
+- Runtime 内部 Worker 是插件宿主，负责显式加载、注册、按 `agentType` 选择实现。
 - Claude、Codex 继续聚合在 `@agework/adapters/plugin`。
 - 通用 ACP Driver 与 profiles 抽到 `@agework/agent-acp`，作为官方插件示例。
 - 两个官方包都由 Worker 默认注册，但和外部包使用同一 `AgentPlugin` 契约。

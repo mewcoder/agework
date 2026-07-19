@@ -6,7 +6,7 @@
 
 - **触发问题**：启动/运行时 `WorkerEventService` 逐条 AG-UI 事件打 DEBUG（`worker event received` + `publish message`，每事件 2 行 ×几千 seq），终端刷屏；一旦 prod 开 debug 会导致日志膨胀。
 - **根因**：dev 默认日志级别就含 `debug`；逐事件日志挂在 `debug` 档且过滤不全（`isHighFrequencyStreamingEvent` 只挡了 text chunk）。
-- **已有事实**：每条原始事件其实已由 worker 侧 `TraceLogWriter` 全量落进 `<conversationId>.agui.jsonl` / `.raw.jsonl`（`packages/worker/src/logging/trace.ts`），并通过 admin「原始事件」tab（`GET /api/v1/admin/runs/raw-events/list`）可查。`agentEventTrace.enabled` 默认 `true`（`apps/server/src/config/config.service.ts` `getAgentEventTraceConfig`）。所以 console 逐事件日志是**冗余**的。
+- **已有事实**：每条原始事件其实已由 worker 侧 `TraceLogWriter` 全量落进 `<conversationId>.agui.jsonl` / `.raw.jsonl`（`apps/runtime/src/worker/logging/trace.ts`），并通过 admin「原始事件」tab（`GET /api/v1/admin/runs/raw-events/list`）可查。`agentEventTrace.enabled` 默认 `true`（`apps/server/src/config/config.service.ts` `getAgentEventTraceConfig`）。所以 console 逐事件日志是**冗余**的。
 - **目标**：
   1. 清晰的五档级别（含默认 info），启动不再刷屏。
   2. 采用 Nest 11 内置 `ConsoleLogger` 配置化：prod 结构化 JSON、dev 彩色文本（**无需引入 pino/winston**）。

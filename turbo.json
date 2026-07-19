@@ -4,9 +4,42 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "env": ["VITE_APP_BASE_PATH", "VITE_APP_API_CONTEXT"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
       "outputs": ["dist/**"]
+    },
+    "web#build": {
+      "dependsOn": ["^build"],
+      "env": ["VITE_APP_BASE_PATH", "VITE_APP_API_CONTEXT"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "$TURBO_ROOT$/apps/server/.env*"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "@agework/runtime-host#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/adapters/src/**",
+        "$TURBO_ROOT$/packages/adapters/scripts/generate-codex-types.mjs"
+      ],
+      "outputs": [
+        "dist/**",
+        "!dist/node_modules/**",
+        "!dist/package.json",
+        "!dist/package-lock.json",
+        "!dist/.sdk-install-stamp.json"
+      ]
+    },
+    "server#build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": ["dist/**", "!dist/agework-runtime/**"]
+    },
+    "package": {
+      "dependsOn": ["build", "^package"],
+      "cache": false
     },
     "lint": {
       "dependsOn": ["^lint"],
@@ -21,7 +54,7 @@
       "outputs": []
     },
     "dev": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "^package"],
       "cache": false,
       "persistent": true
     }

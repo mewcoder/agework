@@ -1,5 +1,5 @@
 {
-  "name": "agework-runtime",
+  "name": "agework-runtime-sdk-deps",
   "private": true,
   "type": "module",
   "dependencies": {

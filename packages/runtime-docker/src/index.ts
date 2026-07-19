@@ -6,7 +6,7 @@ import {
 import { DockerRuntimeProvider } from "./docker-runtime.provider";
 import { probeDockerDaemon } from "./probe";
 
-export const DOCKER_RUNTIME_TYPE = "docker" satisfies RuntimeType;
+export const DOCKER_RUNTIME_TYPE: "docker" = "docker" satisfies RuntimeType;
 
 /** Official bundled Runtime Plugin and reference implementation. */
 export function createRuntimePlugin(): RuntimeProviderPlugin {

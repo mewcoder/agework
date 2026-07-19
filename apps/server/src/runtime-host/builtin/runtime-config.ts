@@ -10,8 +10,8 @@ import { ConfigService } from "../../config/config.service";
  * 2. 随 server build 内嵌的产物(scripts/embed-runtime.mjs 复制到 dist/agework-runtime/main.mjs,
  *    prod/desktop 走这条,与 server 同版本);
  * 3. dev 回退:从 workspace 里已构建的 @agework/runtime-host 产物解析(需先
- *    `pnpm --filter @agework/runtime-host build`,turbo `^build` 会带上)。
- * server 因此不 import @agework/worker,只消费 agework-runtime 这个外部产物。
+ *    `pnpm build:runtime`,Turbo 会带上依赖并完成 platform package)。
+ * server 不 import 内部 Worker,只消费 agework-runtime 这个外部产物。
  */
 export function resolveRuntimeEntry(entryOverride?: string): string {
   if (entryOverride) return entryOverride;

@@ -8,6 +8,7 @@ catalog:
   "@ag-ui/client": "0.0.57"
   "@ag-ui/core": "0.0.57"
   "typescript": "^5.9.3"
+  "tsdown": "^0.22.9"
 
 onlyBuiltDependencies:
   - "@nestjs/core"

@@ -21,20 +21,23 @@
     "build": "pnpm build:worker && pnpm build:host",
     "prepare:codex-types": "node ../../packages/adapters/scripts/generate-codex-types.mjs",
     "prepare:test": "pnpm prepare:codex-types && pnpm --filter @agework/shared build && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-docker build && pnpm --filter @agework/agent-sdk build && pnpm --filter @agework/agent-acp build",
-    "build:worker": "pnpm build:worker:bundle && pnpm package:sdk",
-    "build:worker:bundle": "pnpm prepare:codex-types && pnpm --filter @agework/shared build && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-docker build && pnpm --filter @agework/agent-sdk build && pnpm --filter @agework/agent-acp build && esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
+    "build:worker": "pnpm build:worker:bundle",
+    "build:worker:bundle": "pnpm prepare:codex-types && esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
     "package:sdk": "node scripts/install-sdk-deps.mjs",
-    "build:host": "pnpm --filter @agework/shared build && pnpm --filter @agework/runtime-sdk build && esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/runtime-sdk --outfile=dist/host.cjs",
+    "build:host": "esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/runtime-sdk --outfile=dist/host.cjs",
+    "package": "pnpm package:sdk",
     "typecheck": "pnpm prepare:codex-types && tsc --noEmit",
     "test": "pnpm prepare:test && vitest run"
   },
   "dependencies": {
+    "@agework/adapters": "workspace:*",
+    "@agework/agent-acp": "workspace:*",
     "@agework/agent-sdk": "workspace:*",
     "@agework/runtime-docker": "workspace:*",
     "@agework/runtime-sdk": "workspace:*",
     "@agework/shared": "workspace:*",
-    "@agework/worker": "workspace:*",
     "@nestjs/common": "^11.0.1",
+    "rxjs": "7.8.1",
     "ws": "^8.21.0"
   },
   "optionalDependencies": {

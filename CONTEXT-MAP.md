@@ -36,7 +36,7 @@ RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。
 
 Phase 3 清尾后只剩 `RuntimeHostContract` 实现（`RuntimeHostAdapter`，路由 builtin/registered）+ `AdminWorkerController`（现场查询）+ `WorkspaceHostListener`（workspace 删除时调 `releaseOwner`）。旧执行栈（connection/instance/registry）已全部删除。
 
-- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime/host` 的 `RuntimeHost` 库。
+- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime-host` 的 `RuntimeHost` 库。
   - `0001` ~ `0006` — 旧 worker-manager 执行栈设计，已删除
 
 ### `apps/web` — 前端
@@ -47,18 +47,19 @@ RunSession(run 生命周期前端唯一归属,不碰 aui)、resume 数据流、r
 - ADRs: [`apps/web/docs/adr/`](apps/web/docs/adr/)
   - `0001-stop-optimistic-status-delayed-revalidate.md` — stop 后乐观写 + 延迟单次校准,不立即 invalidate
 
-### `packages/providers` — runtime provider extension point
+### `packages/runtime-sdk` — runtime provider extension point
 
 Runtime provider 抽为扩展点包，与 agent adapter 对称。
 
-- ADRs: [`packages/providers/docs/adr/`](packages/providers/docs/adr/)
+- ADRs: [`packages/runtime-sdk/docs/adr/`](packages/runtime-sdk/docs/adr/)
   - `0001-runtime-as-extension-point-package.md` — runtime provider 抽为 `packages/runtime` 扩展点包
 
-### `packages/worker` — worker runner entry
+### `apps/runtime/src/worker` — worker runner component
 
 Runner 独立入口 + 显式 env 白名单。
 
-- ADRs: [`packages/worker/docs/adr/`](packages/worker/docs/adr/)
+- Context: [`apps/runtime/src/worker/CONTEXT.md`](apps/runtime/src/worker/CONTEXT.md)
+- ADRs: [`apps/runtime/docs/adr/`](apps/runtime/docs/adr/)
   - `0001-runner-independent-entry.md` — Runner 独立入口 + 显式 env 白名单
 
 ### `packages/adapters` → codex adapter — Codex 接入后端

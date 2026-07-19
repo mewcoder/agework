@@ -1,6 +1,7 @@
 # @agework/shared
 
-跨 web / api / worker 的共享类型包。**纯类型、零构建、零运行时代码。**
+跨 Web、Server 与 Runtime 的共享契约和小型基础工具包。它既包含 TypeScript 类型，也包含
+协议校验、ID、CLI 路径解析和文件系统等运行时代码，并通过 `tsc` 保留多 subpath 目录结构。
 
 ## 子路径边界
 
@@ -10,12 +11,11 @@
 | `@agework/shared/protocol` | api↔worker 运行时协议（JSON-RPC、RunChannelMessage、RuntimeChannel 等） | api / worker / adapters |
 | `@agework/shared/api` | web↔api HTTP wire 契约（请求/响应形状） | web / api |
 
-## 为什么必须纯类型
+## 运行时边界
 
-api 的 `nest build` 是纯 tsc 构建，生产用 `node dist/src/main` 启动，
-Node 无法加载本包的 `.ts` 运行时代码。所有导出必须是 `export type`，
-编译后被完全擦除。需要值字面量时在消费侧本地声明并用
-`satisfies readonly X[]` 对齐契约类型。
+包根、protocol、CLI、filesystem 和 git 入口包含运行时代码；Server/Runtime 的生产构建必须
+能解析对应 `dist` 产物。仅用于 wire shape 的声明继续优先使用 `export type`，避免无意义的
+运行时依赖。
 
 ## 契约约定
 

@@ -24,7 +24,7 @@
 
 > 更贴近代码的模块级决策记录（ADR）随代码就近存放，见各模块 `docs/adr/`，如
 > `apps/server/src/runtime/docs/adr/`、`apps/server/src/runtime-host/docs/adr/`、
-> `packages/runtime-sdk/docs/adr/`、`packages/worker/docs/adr/`、`apps/runtime/docs/adr/`。
+> `packages/runtime-sdk/docs/adr/`、`apps/runtime/docs/adr/`。
 > 后端架构与命名规则见 [`.claude/rules/`](../.claude/rules/)。
 
 ## 开发指南

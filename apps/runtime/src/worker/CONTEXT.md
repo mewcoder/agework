@@ -1,4 +1,4 @@
-# Worker Runtime (packages/worker)
+# Worker Runtime (`apps/runtime/src/worker`)
 
 worker 常驻进程与 runner 单次执行单元之间的边界:谁跟 Host 通信、谁跑 agent、谁有自己的入口。
 

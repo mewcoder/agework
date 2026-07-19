@@ -94,16 +94,17 @@ packages/runtime-example/
 {
   "name": "@scope/runtime-example",
   "version": "0.0.1",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./dist/index.js"
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -111,7 +112,18 @@ packages/runtime-example/
   },
   "devDependencies": {
     "@agework/runtime-sdk": "workspace:*",
+    "tsdown": "^0.22.9",
     "typescript": "catalog:"
+  },
+  "tsdown": {
+    "entry": "src/index.ts",
+    "format": "cjs",
+    "platform": "node",
+    "target": "node22",
+    "fixedExtension": true,
+    "sourcemap": true,
+    "dts": true,
+    "deps": { "skipNodeModulesBundle": true }
   }
 }
 ```
@@ -126,6 +138,7 @@ packages/runtime-example/
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "declaration": true,
+    "isolatedDeclarations": true,
     "target": "ES2023",
     "outDir": "./dist",
     "rootDir": "./src",

@@ -17,7 +17,7 @@ import type { RuntimeHostProviderConfig } from "../types";
  *
  * fork 的目标是 agework-runtime 产物 bundle(纯 JS,ESM),用 `node` 直跑并注入
  * `AGEWORK_WORKER_ROLE=worker` 让同一产物以 worker 角色启动。入口路径由 server
- * 经 config 传入,包因此既不依赖 `@agework/worker` 也不依赖 tsx。
+ * 经 config 传入,provider 因此不依赖 Runtime 内部 Worker 实现或 tsx。
  */
 export class NativeRuntimeProvider implements RuntimeProvider {
   readonly type = "native";

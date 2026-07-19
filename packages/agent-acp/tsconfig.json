@@ -5,6 +5,7 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "declaration": true,
+    "isolatedDeclarations": true,
     "composite": true,
     "target": "ES2023",
     "types": ["node", "vitest/globals"],

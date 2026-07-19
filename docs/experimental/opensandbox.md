@@ -22,7 +22,7 @@
   - `pullRuntimeImages()`：从 `config.toml` 读取并拉取 `execd`/`egress` 镜像
   - `composeUp/Down/Logs/Restart()`：操作 `infra/opensandbox/docker-compose.yml`
   - `waitForHealth()` / `healthCheck()`：健康检查
-  - `isWorkerImageStale()`：比较 worker 镜像构建时间与 `apps/runtime`/`packages/worker`/
+  - `isWorkerImageStale()`：比较 worker 镜像构建时间与 `apps/runtime`/
     `packages/shared`/`packages/adapters` 源码 mtime
 - `packages/runtime-opensandbox` — OpenSandbox RuntimeProvider 插件、SDK 适配和插件私有配置
 - `packages/runtime-sdk` — 第三方插件公共 SDK、manifest 和生命周期契约
@@ -40,7 +40,7 @@ pnpm opensandbox:health  # 健康检查（GET /health）
 pnpm opensandbox:rebuild # 重新构建 worker 镜像并重启 opensandbox-server
 ```
 
-修改 `apps/runtime`、`packages/worker`、`packages/shared`、`packages/adapters` 源码后，再次执行
+修改 `apps/runtime`、`packages/shared`、`packages/adapters` 或 bundled plugin 源码后，再次执行
 `pnpm opensandbox:up` 会提示 worker 镜像是否过期；过期时执行 `pnpm opensandbox:rebuild`
 重新构建并让新 sandbox 使用新镜像。
 

@@ -7,7 +7,8 @@ import { OpenSandboxRuntimeProvider } from "./opensandbox-runtime.provider";
 import type { OpenSandboxConnectionConfig } from "./types";
 import { resolveOpenSandboxConnectionConfig } from "./config";
 
-export const OPENSANDBOX_RUNTIME_TYPE = "opensandbox" satisfies RuntimeType;
+export const OPENSANDBOX_RUNTIME_TYPE: "opensandbox" =
+  "opensandbox" satisfies RuntimeType;
 
 /** 创建延迟实例化的 OpenSandbox runtime 插件描述。 */
 export function createOpenSandboxRuntimePlugin(

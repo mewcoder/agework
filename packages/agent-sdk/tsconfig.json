@@ -3,6 +3,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "declaration": true,
+    "isolatedDeclarations": true,
     "composite": true,
     "target": "ES2023",
     "sourceMap": true,

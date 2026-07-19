@@ -37,7 +37,7 @@ web → server HTTP →(owner-scoped 文件命令队列,与 run 命令共用同�
 WorkspaceFileCommandStore 按 commandId 收敛 → HTTP 响应 → web
 ```
 
-**不复用 `command.result`**:`cancel`/`interrupt`/`approval_resolved`/`user_message` 那套「server 发请求 → worker 应答」范式(`packages/shared/src/protocol/channel.ts:95-136`)从下到上都是 run-scoped 的——`RunChannelMessage.runId` 必填,`RunnerManager.handle()`(`packages/worker/src/runner-manager.ts:61`)按 `command.runId` 把命令转发给对应 runner 子进程,`command.result` 最终落进 `RunEvent` 表而 `RunEvent.runId` 是必填外键关联 `Run`(`onDelete: Cascade`,`schema.prisma:191-194`)。文件预览的典型场景恰恰是「worker 在线但没有活跃 run」(上一个 run 已终态,容器/进程还常驻着)——这时没有真实 runId 可用,伪造一个会在外键处直接失败,借用最近一次真实 run 的 runId 又会污染那次 run 的审计事件时间线并撞上 seq 去重状态。详见 ADR-0004。
+**不复用 `command.result`**:`cancel`/`interrupt`/`approval_resolved`/`user_message` 那套「server 发请求 → worker 应答」范式(`packages/shared/src/protocol/channel.ts:95-136`)从下到上都是 run-scoped 的——`RunChannelMessage.runId` 必填,`RunnerManager.handle()`(`apps/runtime/src/worker/runner-manager.ts:61`)按 `command.runId` 把命令转发给对应 runner 子进程,`command.result` 最终落进 `RunEvent` 表而 `RunEvent.runId` 是必填外键关联 `Run`(`onDelete: Cascade`,`schema.prisma:191-194`)。文件预览的典型场景恰恰是「worker 在线但没有活跃 run」(上一个 run 已终态,容器/进程还常驻着)——这时没有真实 runId 可用,伪造一个会在外键处直接失败,借用最近一次真实 run 的 runId 又会污染那次 run 的审计事件时间线并撞上 seq 去重状态。详见 ADR-0004。
 
 worker 数据面(HTTP 长轮询 command 通道)本身仍是仓库里唯一能触达全部工作区形态(含沙箱、远端)的机制,下行**复用同一条物理长轮询连接**(不新开连接),只是队列里的消息类型从单一 `RunChannelMessage<CommandPayload>` 变成 `RunChannelMessage<CommandPayload> | OwnerCommand<WorkspaceFileCommandPayload>` 的联合;上行结果新开一个 owner-scoped 端点直接回传,不进 `WorkerUpstreamPort`/`WorkerEventService`/`RunEventService`。
 
@@ -57,14 +57,14 @@ worker 数据面(HTTP 长轮询 command 通道)本身仍是仓库里唯一能触
 
 - worker 必须在线:容器停着(stop 留载体)或 worker 未拉起时无法预览,返回明确的「运行时未启动」提示(v1 不做自动拉起,见 §6)。
 - 命令通道是长轮询,worker 在线时往返延迟可忽略;server 对每次请求设超时(10s)兜底。
-- **不需要为此上 WS**(已核实实现):worker 以 25s 真长轮询挂起(`packages/worker/src/worker.ts:23`),server 新命令入队即刻 resolve 挂起的 poll(`worker-manager/connection/command-queue.ts:46 resolveOwnerWaiters`),命令下发与 WS 推送一样即时;结果经独立端点即时回传。文件预览是人手点击的低频请求,通道开销无感;将来若做终端流等高频场景,再整体评估 worker 数据面升级 WS,契约不受影响。
+- **不需要为此上 WS**(已核实实现):worker 以 25s 真长轮询挂起(`apps/runtime/src/worker/worker.ts:23`),server 新命令入队即刻 resolve 挂起的 poll(`worker-manager/connection/command-queue.ts:46 resolveOwnerWaiters`),命令下发与 WS 推送一样即时;结果经独立端点即时回传。文件预览是人手点击的低频请求,通道开销无感;将来若做终端流等高频场景,再整体评估 worker 数据面升级 WS,契约不受影响。
 
 **worker 侧执行纪律(同进程内解决,不新开进程)**:worker 是单线程常驻进程,同时还要通过 IPC 转发同 owner 下其他正在跑的 run 的事件,文件操作因此不能拖慢或搞挂它:
 
 1. `WorkspaceFileCommandHandler`(fs 操作)用 `fs/promises` 异步 API,不用 `directory-browser.ts` 那种同步风格——真正的磁盘 I/O 走 libuv 线程池,不占主线程,常规读取(哪怕读满 1MiB 文本/5MiB 图片)不会让同 owner 下其他 run 有能感知到的卡顿。
 2. 每次 fs 调用套 `AbortSignal` 超时(8s,比 server 侧 awaiter 的 10s 短,worker 能抢先把「文件系统响应超时」这个具体错误回传,而不是让 server 触发笼统超时),防止网络挂载盘等真正卡死的场景一直占着线程池槽位。
 3. 分流点在 `worker.ts` 的 `commands.run((command) => runnerManager.handle(command))` 回调 lambda 里(**`commands.ts` 一行不动**,保持通用):文件命令走 `void fileHandler(cmd).catch(...)` 触发即走,外层 `await` 秒过,不拖慢同批次排在后面的 `cancel`/`interrupt`;其余仍走 `runnerManager.handle`。分流前先查 `expiresAt` 过期即弃(见 §3 投递语义);`commands.ts` 已有的 `processedCommands` commandId 去重对文件命令天然生效(白赚一层进程内去重)。
-4. 全程严格 try/catch 到底,任何失败都转成走结果通道回传 `error`,不允许裸抛/裸 reject 冒到顶层——`packages/worker/src` 目前没有任何 `unhandledRejection`/`uncaughtException` 兜底,一次 unhandled rejection 会直接终止整个 worker 进程,连带杀掉该 owner 下所有正在跑的 run。
+4. 全程严格 try/catch 到底,任何失败都转成走结果通道回传 `error`,不允许裸抛/裸 reject 冒到顶层——`apps/runtime/src/worker` 目前没有任何 `unhandledRejection`/`uncaughtException` 兜底,一次 unhandled rejection 会直接终止整个 worker 进程,连带杀掉该 owner 下所有正在跑的 run。
 
 关键点:**API 契约对前端只有一套**(见 §4),且与 runtime 形态无关;后端实现也只有一条 worker 代理路径,没有「本机直读」分支。
 
@@ -86,7 +86,7 @@ packages/shared/src/protocol/workspace-file-command.ts   # 新增独立协议:Wo
                                           # + 相对 path,无 runId)、WorkspaceFileCommandResult(含错误形状)、
                                           # 不含 runId 的 OwnerCommand 信封类型(带 seq/expiresAt,见 §3)
 
-packages/worker/src/files/
+apps/runtime/src/worker/files/
 ├── workspace-file-browser.ts             # 纯函数(异步 fs/promises):列一层目录、读文件、
 │                                         # 路径安全校验、截断/二进制/symlink 判定
 ├── workspace-file-browser.spec.ts

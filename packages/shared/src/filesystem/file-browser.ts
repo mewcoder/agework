@@ -1,7 +1,7 @@
 /**
  * 工作空间文件浏览器（纯异步 fs/promises，无运行时依赖）。
  *
- * 提取自 `packages/worker/src/files/workspace-file-browser.ts`，供 worker
+ * 提取自 Runtime Worker 的 `files/workspace-file-browser.ts`，供 worker
  * 和 server builtin Host 文件入口共用同一份安全校验 + fs 读取逻辑。
  *
  * 安全校验：相对路径、NUL/`..`/绝对路径拒绝、realpath 前缀判断挡 symlink 逃逸、

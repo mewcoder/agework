@@ -24,7 +24,7 @@ Contexts in this repo:
 | `apps/server` runtime module | `apps/server/src/runtime/docs/adr/` |
 | `apps/server` runtime-host module | `apps/server/src/runtime-host/docs/adr/` |
 | `packages/runtime-sdk` | `packages/runtime-sdk/docs/adr/` |
-| `packages/worker` | `packages/worker/docs/adr/` |
+| `apps/runtime`（含 Worker） | `apps/runtime/docs/adr/` |
 
 If a context has its own `CONTEXT.md` (per-context glossary), read it before working in that context. Most contexts currently have only `docs/adr/`, no `CONTEXT.md` yet — that's fine, `/domain-modeling` creates them lazily.
 
@@ -38,7 +38,7 @@ If a context has its own `CONTEXT.md` (per-context glossary), read it before wor
     apps/server/src/runtime/docs/adr/
     apps/server/src/runtime-host/docs/adr/
     packages/runtime-sdk/docs/adr/
-    packages/worker/docs/adr/
+    apps/runtime/docs/adr/
 ```
 
 Multi-context repo (presence of `CONTEXT-MAP.md` at the root):

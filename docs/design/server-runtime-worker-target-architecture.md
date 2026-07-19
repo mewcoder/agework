@@ -285,7 +285,7 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime-host`），�
   （远程部署只要求 Host → server 单向可达，容器内 worker 永不要求直连 server）。
 
 同一实现、两种宿主。`@agework/runtime-sdk` 提供插件契约，Host 只内建 Native，Docker 作为官方 bundled plugin，
-`packages/worker` 维持现状（只改连接对端）。
+Runtime 内部 `apps/runtime/src/worker` 维持现状（只改连接对端）。
 不新建 `packages/runtime-core` 之类的包（"core" 是禁用词，且没有第三个消费者）。
 
 ### 4.5 崩溃与恢复语义
@@ -368,7 +368,7 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime-host`），�
    回滚 = 把该 Host 切回旧链路，不涉及数据回滚。
 4. registered 链路：隧道协议扩展承载 submitRun / command / 事件流 / ACK / epoch
    （收编现状 UpstreamMessage），注册协议从上报单个 runtimeType 改为上报 capabilities。
-   `packages/worker` 的 `WorkerHttpTransport` 对端从 server 换成 Host。
+   Runtime 内部 Worker 的 `WorkerHttpTransport` 对端从 server 换成 Host。
 5. Worker 表停写（保留表结构以便回滚，读路径全部切走）。
 6. admin"运行资源"改走 `listWorkers` 现场查询。
 

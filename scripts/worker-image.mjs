@@ -7,9 +7,12 @@ import { buildWorkerImage, WORKER_IMAGE_TAG } from "./build-worker.mjs";
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const WORKER_SOURCE_PATHS = [
   "apps/runtime",
-  "packages/worker",
   "packages/shared",
   "packages/adapters",
+  "packages/agent-sdk",
+  "packages/agent-acp",
+  "packages/runtime-sdk",
+  "packages/runtime-docker",
 ];
 const SKIP_DIR_NAMES = new Set(["node_modules", "dist", ".turbo", ".next"]);
 

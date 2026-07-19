@@ -17,13 +17,13 @@
    - `CLAUDE.md`
    - `CONTEXT-MAP.md`
 2. 阅读相关 Context 与 ADR：
-   - `packages/worker/CONTEXT.md`
-   - `packages/worker/docs/adr/0001-runner-independent-entry.md`
+   - `apps/runtime/src/worker/CONTEXT.md`
+   - `apps/runtime/docs/adr/0002-worker-runner-independent-entry.md`
    - `apps/server/src/run/docs/adr/0001-question-interrupt-terminal-model.md`
    - `apps/runtime/docs/adr/0001-sdk-external-plus-real-npm-install.md`
 3. 阅读现有实现：
-   - `packages/worker/src/agent/index.ts`
-   - `packages/worker/src/runner-manager.ts`
+   - `apps/runtime/src/worker/agent/index.ts`
+   - `apps/runtime/src/worker/runner-manager.ts`
    - `packages/adapters/src/claude/business/claude-agent.adapter.ts`
    - `packages/adapters/src/codex/base/adapter.ts`
    - `packages/shared/src/common/index.ts`
@@ -234,7 +234,7 @@ Server
 
 ### 4.1 为什么进程属于 Runner
 
-遵守 `packages/worker/CONTEXT.md`：
+遵守 `apps/runtime/src/worker/CONTEXT.md`：
 
 - Worker 只管理 Runner，不运行 Agent。
 - Runner 才是单次运行 Agent 的执行单元。
@@ -317,11 +317,11 @@ packages/agent-acp/src/
 ```text
 packages/adapters/package.json
 packages/adapters/src/index.ts
-packages/worker/src/agent/index.ts
+apps/runtime/src/worker/agent/index.ts
 packages/shared/src/common/index.ts
 packages/shared/src/protocol/channel.ts
 packages/shared/src/cli/cli-resolver.ts
-apps/runtime/package.docker.json
+apps/runtime/sdk-deps/package.json
 apps/runtime/scripts/install-sdk-deps.mjs
 apps/server/src/runtime/**
 apps/server/src/model-provider/**
@@ -331,7 +331,7 @@ apps/web/src/** agent selector / labels / icons
 
 不要把 ACP 代码放入：
 
-- `packages/worker`：Worker 只选择 Driver。
+- `apps/runtime/src/worker`：Worker 只选择 Driver。
 - `apps/server`：Server 不应理解 ACP wire event。
 - `packages/shared/protocol`：不要把 ACP 类型变成 AgeWork 跨进程协议。
 
@@ -1129,7 +1129,7 @@ OpenCode 支持：
 ### 16.5 Runtime 安装
 
 - Native：安装 `opencode-ai` 到 Agent 专属目录。
-- Container：`apps/runtime/package.docker.json` 增加 OpenCode CLI 依赖或复用真实安装脚本。
+- Container：`apps/runtime/sdk-deps/package.json` 增加 OpenCode CLI 依赖并更新锁文件，或复用真实安装脚本。
 - binary path 通过 Runtime 环境/RunConfig 传 Runner，遵守 ADR-0004，不塞入 EnvConfig 的错误层。
 - `opencode --version` 纳入检测结果。
 
@@ -1560,8 +1560,8 @@ sdk.acp.error
 ```bash
 pnpm --filter @agework/agent-acp typecheck
 pnpm --filter @agework/agent-acp test
-pnpm --filter @agework/worker typecheck
-pnpm --filter @agework/worker test
+pnpm --filter @agework/runtime-host typecheck
+pnpm --filter @agework/runtime-host test
 pnpm --filter @agework/shared test
 pnpm --filter server test
 pnpm --filter web test

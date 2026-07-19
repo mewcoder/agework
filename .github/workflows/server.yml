@@ -21,15 +21,13 @@ jobs:
           version: 10.33.4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.18.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @agework/adapters typecheck
-      - run: pnpm --filter @agework/worker typecheck
-      - run: pnpm --filter @agework/runtime typecheck
+      - run: pnpm --filter @agework/runtime-host typecheck
       - run: pnpm --filter server typecheck
       - run: pnpm --filter server lint
       - run: pnpm --filter @agework/adapters test
-      - run: pnpm --filter @agework/worker test
-      - run: pnpm --filter @agework/runtime test
+      - run: pnpm --filter @agework/runtime-host test
       - run: pnpm test:server

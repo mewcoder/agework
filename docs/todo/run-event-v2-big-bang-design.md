@@ -20,7 +20,7 @@
 | §5.3 eventKey 幂等 | 已落地，`run-event.repository.ts` `insertOrGetByEventKey`（P2002 幂等返回） |
 | §11 Processor 拆分 | 已落地：`WorkerEventService`（seq 闸门+分发）、`RunStatusService`、`WorkerAgUiEventHandler`、`WorkerSeqStore`。命名与设计不同（无 `RunEventRecorder`/`StateUpdater` 后缀），职责边界一致，不再 rename |
 | §8 事件 type（大部分） | 已落地：run.created / run.status_changed / runtime.status_changed / message.accepted/started/completed / tool.started/completed/failed / command.sent/handled/failed/result / system.issue（builder 全在 `run-event.service.ts`） |
-| §9 Raw JSONL 写入 | **已存在**（worker 侧）：`packages/worker/src/logging/trace.ts` `TraceLogWriter` 写 sdk.raw 全量 + AG-UI 全量 JSONL，带 envelope/脱敏/单文件上限；路径 `{conversationId}.raw.jsonl`/`{conversationId}.agui.jsonl`，落在 `runtimeLogDir`（sandbox 场景 bind mount 到宿主机，`docker-runtime.provider.ts`；local 场景本就是宿主机目录），容器销毁文件仍在 |
+| §9 Raw JSONL 写入 | **已存在**（worker 侧）：`apps/runtime/src/worker/logging/trace.ts` `TraceLogWriter` 写 sdk.raw 全量 + AG-UI 全量 JSONL，带 envelope/脱敏/单文件上限；路径 `{conversationId}.raw.jsonl`/`{conversationId}.agui.jsonl`，落在 `runtimeLogDir`（sandbox 场景 bind mount 到宿主机，`docker-runtime.provider.ts`；local 场景本就是宿主机目录），容器销毁文件仍在 |
 | §15.1 Admin RunEvent list | 已落地，`run-event.repository.ts` `listAdminEvents`（type/typePrefix/origin/target/chain/refs/runSeq range 过滤） |
 | §16 时间线 UI（基础） | 已落地，`apps/web/src/pages/admin/run/run-event-timeline.tsx` |
 

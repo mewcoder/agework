@@ -2,16 +2,17 @@
   "name": "@agework/runtime-docker",
   "version": "0.0.1",
   "private": true,
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./dist/index.js"
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "prepare:test": "pnpm --filter @agework/runtime-sdk build",
     "typecheck": "tsc --noEmit",
     "test": "pnpm prepare:test && vitest run"
@@ -26,8 +27,23 @@
     "@agework/runtime-sdk": "workspace:*",
     "@swc/core": "^1.15.40",
     "@types/node": "^24.0.0",
+    "tsdown": "catalog:",
     "typescript": "catalog:",
     "unplugin-swc": "^1.5.9",
     "vitest": "^4.1.8"
+  },
+  "tsdown": {
+    "entry": "src/index.ts",
+    "format": "cjs",
+    "platform": "node",
+    "target": "node22",
+    "fixedExtension": true,
+    "sourcemap": true,
+    "dts": {
+      "sourcemap": true
+    },
+    "deps": {
+      "skipNodeModulesBundle": true
+    }
   }
 }

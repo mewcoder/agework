@@ -22,7 +22,7 @@
    - `packages/adapters/src/codex/base/{types,config,utils}.ts`
    - `packages/adapters/src/codex/business/codex-agent.adapter.ts`（NestJS+env+provider 注入子类）
    - `packages/adapters/src/claude/business/claude-agent.adapter.ts`（**HITL 参照实现**：`pendingActionSink` + `canUseTool` + terminal interrupt）
-   - `packages/worker/src/agent/index.ts`（`createAgentDriver`，backend 分支在此）、`packages/worker/src/worker.ts`（runner 进程生命周期、finalize、`forceExitAfterInterrupt`）、`packages/worker/src/runner-manager.ts`（子进程 fork / SIGTERM→SIGKILL）
+   - `apps/runtime/src/worker/agent/index.ts`（`createAgentDriver`，backend 分支在此）、`apps/runtime/src/worker/worker.ts`（runner 进程生命周期、finalize、`forceExitAfterInterrupt`）、`apps/runtime/src/worker/runner-manager.ts`（子进程 fork / SIGTERM→SIGKILL）
    - `apps/runtime/src/runner.ts`
    - `apps/server/src/run/**`（尤其 `run.service.ts` 的 `resumeWithAnswers` / `extractResumeAnswers`、`driver/**`）、`apps/server/src/run/docs/adr/0001-question-interrupt-terminal-model.md`
    - `packages/shared/src/protocol/run-events.ts`、`packages/shared/src/common/index.ts`（`PendingAction`）、`packages/react-ag-ui/src/runtime/types.ts`（`AgUiInterrupt` / `AgUiResumeEntry`）
@@ -352,7 +352,7 @@ RunEvent：复用 `packages/shared/src/protocol/run-events.ts` 现有词汇—�
 
 ## 15. Raw Trace 与日志
 
-复用现有链路：adapter `config.trace?.(...)` → worker `TraceLogWriter`（`worker.ts` 建，`packages/worker/src/logging/trace.ts`）→ `sdk.raw` JSONL append 到 `rawRuntimeFilePath`，admin 端点读回。**不新建并行 trace 管道。** 每条 JSON-RPC 消息形如：
+复用现有链路：adapter `config.trace?.(...)` → worker `TraceLogWriter`（`worker.ts` 建，`apps/runtime/src/worker/logging/trace.ts`）→ `sdk.raw` JSONL append 到 `rawRuntimeFilePath`，admin 端点读回。**不新建并行 trace 管道。** 每条 JSON-RPC 消息形如：
 ```ts
 type CodexAppServerTrace = { timestamp; direction:"client_to_server"|"server_to_client"; kind:"request"|"response"|"notification"|"server_request"; method?; id?; threadId?; turnId?; itemId?; payload };
 ```
@@ -409,7 +409,7 @@ capability 开关 + `turn/steer` + `tool/requestUserInput` + MCP elicitation + �
 - **集成**（真 codex，可在无凭证 CI 跳过 + 单独 secret job）：initialize / 新建 Thread / 简单 Prompt / Resume / Interrupt / Command Approval / app-server 崩溃。
 - **E2E**：选 Codex → 提交改文件任务 → 看 Reasoning/Plan/Command → 处理 Approval → 看 Diff → 完成 → 刷新一致 → 追问 resume 同 Thread。
 - **Runtime 矩阵（第一阶段必测）**：Managed Native macOS / Managed Native Linux / Managed Docker Linux。后续：Registered Native（Beta）、OpenSandbox（不阻塞首版）。
-- CI 扩展：`pnpm --filter @agework/adapters typecheck|test`、`@agework/worker test`、`@agework/runtime-host test`、`server test`、`web test`、`pnpm build`、**Codex Schema drift check**（§9）。真实模型 smoke 独立触发/nightly，不卡普通 PR。
+- CI 扩展：`pnpm --filter @agework/adapters typecheck|test`、`@agework/runtime-host typecheck|test`、`server test`、`web test`、`pnpm build`、**Codex Schema drift check**（§9）。真实模型 smoke 独立触发/nightly，不卡普通 PR。
 
 ---
 

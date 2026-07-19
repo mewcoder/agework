@@ -23,7 +23,7 @@ AgeWork 桌面客户端由 Electron 壳、NestJS 后端、React Web 静态产物
 | `pnpm -C apps/desktop build` | 只编译 Electron 主进程和 preload。不会刷新 web/api/worker。 |
 | `pnpm -C apps/desktop start` | 等同于启动当前已有 Electron 产物。不会重新构建。 |
 | `pnpm --filter web build` | 只刷新前端静态产物。通常不要单独用于验证桌面客户端。 |
-| `pnpm --filter server build` | 只刷新后端产物。 |
+| `pnpm build:server` | 刷新后端及其 Runtime 依赖产物。 |
 
 ## 运行时排查
 

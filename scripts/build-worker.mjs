@@ -8,16 +8,16 @@ export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  * Managed 的 docker/opensandbox 载体镜像 = agework-runtime 产物镜像。
  * worker 内置其中,launcher 注入 AGEWORK_WORKER_ROLE=worker 以 worker 角色启动;
  * 同一镜像默认(无 role)= manager,Registered 远程 manager 也用它。
- * 即"worker 镜像 = runtime 镜像 = 同一产物", packages/worker/Dockerfile 退役。
+ * 即"worker 镜像 = runtime 镜像 = 同一产物",Worker 源码归 apps/runtime 所有。
  */
 export const WORKER_IMAGE_TAG = "agework/runtime:latest";
 export const WORKER_DOCKERFILE = "apps/runtime/Dockerfile";
 
 export function buildWorkerBundle() {
-  console.log("pnpm --filter @agework/runtime-host build");
+  console.log("pnpm exec turbo run build --filter=@agework/runtime-host");
   const result = spawnSync(
     "pnpm",
-    ["--filter", "@agework/runtime-host", "build"],
+    ["exec", "turbo", "run", "build", "--filter=@agework/runtime-host"],
     { cwd: repoRoot, stdio: "inherit" }
   );
 

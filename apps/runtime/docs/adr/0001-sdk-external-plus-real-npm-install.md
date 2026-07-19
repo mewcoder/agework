@@ -15,13 +15,13 @@ store 里的原始位置,导致内嵌进 server 的产物(`apps/server/dist/agew
 在这条路径上真正跑过 agent。
 
 Docker 镜像从来没有这个问题,因为它压根不依赖 bundle 里 `import.meta.url` 那套技巧:
-`package.docker.json` 单独声明这两个 SDK,镜像构建时在容器里跑一次真实 `npm install`,flat
+`sdk-deps/package.json` 与锁文件单独声明这两个 SDK,镜像构建时在容器里跑一次真实 `npm ci`,flat
 安装出的平台二进制包和主包是平级兄弟,从 `dist/main.js` 往上一层就能找到。这条路径被验证过是
 可靠的。
 
 决定:改回 `--external`,不再 inline 这两个 SDK。二进制的真实安装由 **apps/runtime 自己
 拥有和管理**——`apps/runtime` 的 build 脚本在 esbuild 之后跑 `scripts/install-sdk-deps.mjs`,
-复用 `package.docker.json` 清单做一次真实 `npm install`,产出自成一体的
+复用 `sdk-deps/` 锁定清单做一次真实 `npm ci`,产出自成一体的
 `apps/runtime/dist/node_modules`(含平台二进制,~460MB)。这份 dist 因此不只是 dev 回退用的
 产物,而是"平台二进制唯一真实安装点"。
 
@@ -32,7 +32,7 @@ Docker 镜像从来没有这个问题,因为它压根不依赖 bundle 里 `impor
 
 Docker 镜像不适用这个"符链接复用"模式——它跑在容器里,平台(通常是 Linux)与构建这台机器
 (常是 macOS)不同,`apps/runtime/dist/node_modules` 里装的是构建机器自己的平台二进制,没法直接
-搬进容器用。Docker 镜像继续维持自己单独 `npm install`(`package.docker.json` + Dockerfile 里已有
+搬进容器用。Docker 镜像继续维持自己单独 `npm ci`(`sdk-deps/` + Dockerfile 里已有
 的那步),这是全平台通用、真正必要的重复,不是这次要消灭的对象。
 
 ## 怎么用
@@ -40,9 +40,9 @@ Docker 镜像不适用这个"符链接复用"模式——它跑在容器里,平�
 不需要手动装任何东西,正常跑构建命令即可,这一步会自动触发:
 
 - 日常开发:`pnpm dev` / `pnpm dev:server`——turbo 的 `^build` 会先构建
-  `@agework/runtime-host`,内含这次真实 `npm install`,装一次留在
+  `@agework/runtime-host`,随后 package task 执行带本地指纹缓存的真实 `npm ci`,安装在
   `apps/runtime/dist/node_modules`(首次约 15s、~460MB 磁盘,只发生这一处)。
-- 构建 server:`pnpm build` / `pnpm --filter server build`——`embed-runtime.mjs`
+- 构建 server:`pnpm build` / `pnpm build:server`——`embed-runtime.mjs`
   只建符链接,不重复装。
 - Docker 镜像:`pnpm worker:build`——跟以前一样自己在容器里单独装,不受影响。
 

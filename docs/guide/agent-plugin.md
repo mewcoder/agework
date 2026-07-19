@@ -9,9 +9,9 @@
 |---|---|
 | SDK 类型、Driver 与插件上下文 | `packages/agent-sdk/src/types.ts` |
 | manifest 校验 | `packages/agent-sdk/src/plugin.ts` |
-| 外部包动态加载 | `packages/worker/src/agent/plugin-loader.ts` |
-| agentType 注册与重复检查 | `packages/worker/src/agent/plugin-registry.ts` |
-| Worker 选择插件 | `packages/worker/src/agent/index.ts` |
+| 外部包动态加载 | `apps/runtime/src/worker/agent/plugin-loader.ts` |
+| agentType 注册与重复检查 | `apps/runtime/src/worker/agent/plugin-registry.ts` |
+| Worker 选择插件 | `apps/runtime/src/worker/agent/index.ts` |
 | ACP 完整示例 | `packages/agent-acp/src/plugin.ts` |
 | Claude/Codex 聚合示例 | `packages/adapters/src/plugin.ts` |
 
@@ -21,7 +21,7 @@
 worker ──> agent-sdk <── agent plugin
 ```
 
-Agent Plugin 只依赖 `@agework/agent-sdk`，不能依赖 `@agework/worker`。Claude/Codex 与 ACP
+Agent Plugin 只依赖 `@agework/agent-sdk`，不能依赖 Runtime 内部 Worker。Claude/Codex 与 ACP
 是默认随发行版注册的 bundled plugins。
 
 ## 2. 当前能力边界
@@ -99,7 +99,7 @@ Runner 的受控环境传递链，在 Native 和 Docker Runtime 下都可用。
 
 Agent 插件最终在 Worker 镜像内执行，只在宿主机安装包不会改变已有镜像：
 
-- 已发布包可以加入 `apps/runtime/package.docker.json` 后重建镜像。
+- 已发布包可以加入 `apps/runtime/sdk-deps/package.json` 和锁文件后重建镜像。
 - 私有 workspace 包应使用自定义 Worker 镜像。
 - 官方插件可以像 `@agework/agent-acp` 一样作为静态 bundled plugin 编入发行产物。
 
@@ -122,16 +122,17 @@ packages/agent-example/
 {
   "name": "@scope/agent-example",
   "version": "0.0.1",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./src/index.ts",
   "exports": {
     ".": {
       "types": "./src/index.ts",
-      "default": "./dist/index.js"
+      "require": "./dist/index.cjs",
+      "default": "./dist/index.cjs"
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsdown",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {
@@ -139,7 +140,18 @@ packages/agent-example/
   },
   "devDependencies": {
     "@agework/agent-sdk": "workspace:*",
+    "tsdown": "^0.22.9",
     "typescript": "catalog:"
+  },
+  "tsdown": {
+    "entry": "src/index.ts",
+    "format": "cjs",
+    "platform": "node",
+    "target": "node22",
+    "fixedExtension": true,
+    "sourcemap": true,
+    "dts": true,
+    "deps": { "skipNodeModulesBundle": true }
   }
 }
 ```
@@ -154,6 +166,7 @@ packages/agent-example/
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "declaration": true,
+    "isolatedDeclarations": true,
     "target": "ES2023",
     "outDir": "./dist",
     "rootDir": "./src",
@@ -303,7 +316,7 @@ protocol、API format 矩阵、CLI spec 和按类型封闭的 options。未知 i
 ```bash
 pnpm --filter @scope/agent-example typecheck
 pnpm --filter @agework/agent-sdk typecheck
-pnpm --filter @agework/worker typecheck
+pnpm --filter @agework/runtime-host typecheck
 pnpm --filter server typecheck
 pnpm --filter web typecheck
 ```

@@ -1,5 +1,5 @@
 # Build context must be the monorepo root:
-#   pnpm --filter @agework/runtime-host build
+#   pnpm exec turbo run build --filter=@agework/runtime-host
 #   docker build -t agework/runtime:latest -f apps/runtime/Dockerfile .
 # (runtime bundles workspace packages @agework/{worker,shared,adapters,agent-acp,runtime-docker} into
 # dist/main.js + dist/runner.js via esbuild; this must be built locally before
@@ -8,7 +8,7 @@
 # 同一镜像两种角色:默认(无 AGEWORK_WORKER_ROLE)= Registered Runtime;
 # launcher 注入 AGEWORK_WORKER_ROLE=worker 起 worker(worker 镜像 = 本镜像)。
 # runner 是独立产物 dist/runner.js,由容器内已在跑的 worker 进程按需 fork,
-# 不经这个入口(见 packages/worker/docs/adr/0001)。
+# 不经这个入口(见 apps/runtime/docs/adr/0002)。
 
 FROM node:22
 
@@ -25,8 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY apps/runtime/package.docker.json ./package.json
-RUN npm install --omit=dev --no-package-lock
+COPY apps/runtime/sdk-deps/package.json ./package.json
+COPY apps/runtime/sdk-deps/package-lock.json ./package-lock.json
+RUN npm ci --omit=dev --no-audit --no-fund
 COPY apps/runtime/dist/main.js ./dist/main.js
 COPY apps/runtime/dist/runner.js ./dist/runner.js
 
