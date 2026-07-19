@@ -4,7 +4,7 @@
 > 不属于当前主要维护方向，也不承诺随每次主线改动持续验证。常规本地隔离优先使用 Docker runtime。
 
 实现以独立插件包 `@agework/runtime-opensandbox` 接入。公共契约由 `@agework/runtime-sdk`
-提供，Native / Docker 由 `@agework/runtime-host` 内建；builtin、registered 或自定义 Host 都通过同一个 `providerPlugins`
+提供，`@agework/runtime-host` 只内建 Native；Docker 与 OpenSandbox 都通过同一个 `providerPlugins`
 契约装配它。通用代码示例见 [`packages/runtime-opensandbox/README.md`](../../packages/runtime-opensandbox/README.md)。
 
 记录使用 OpenSandbox 运行时（runtime type `opensandbox`，需将 `opensandbox` 加入
@@ -26,7 +26,8 @@
     `packages/shared`/`packages/adapters` 源码 mtime
 - `packages/runtime-opensandbox` — OpenSandbox RuntimeProvider 插件、SDK 适配和插件私有配置
 - `packages/runtime-sdk` — 第三方插件公共 SDK、manifest 和生命周期契约
-- `apps/runtime/src/providers` — Runtime Host 的 Native / Docker 内建实现
+- `apps/runtime/src/providers` — Runtime Host 的 Native 内建实现
+- `packages/runtime-docker` — 默认随发行版装配的 Docker Runtime Plugin
 - `apps/server/.env` 中的 `OPENSANDBOX_*`（DOMAIN/PROTOCOL/API_KEY/IMAGE/...）
 
 ## 常用命令

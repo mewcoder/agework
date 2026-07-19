@@ -9,12 +9,14 @@
   },
   "scripts": {
     "prepare:codex-types": "node ../adapters/scripts/generate-codex-types.mjs",
-    "prepare:test": "pnpm prepare:codex-types && pnpm --filter @agework/shared build",
+    "prepare:test": "pnpm prepare:codex-types && pnpm --filter @agework/shared build && pnpm --filter @agework/agent-sdk build && pnpm --filter @agework/agent-acp build",
     "typecheck": "pnpm prepare:codex-types && tsc --noEmit",
     "test": "pnpm prepare:test && vitest run"
   },
   "dependencies": {
     "@agework/adapters": "workspace:*",
+    "@agework/agent-acp": "workspace:*",
+    "@agework/agent-sdk": "workspace:*",
     "@agework/shared": "workspace:*",
     "rxjs": "7.8.1"
   },

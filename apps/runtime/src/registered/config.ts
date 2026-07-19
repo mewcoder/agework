@@ -23,6 +23,8 @@ export interface RegisteredRuntimeHostConfig {
   workerImage?: string;
   /** 显式允许加载的 runtime 插件包。 */
   pluginPackages: string[];
+  /** 显式允许 Worker 加载的 Agent Adapter 插件包。 */
+  agentPluginPackages: string[];
   /** native 专用:fork worker 用的 agework-runtime 产物入口(纯 JS bundle,ESM)。
    *  不传则默认 fork registered Runtime Host 自身(process.argv[1])——它与 worker 是同一
    *  产物,注入 AGEWORK_WORKER_ROLE=worker 即以 worker 角色启动。registered Host + native
@@ -40,7 +42,7 @@ export interface RegisteredRuntimeHostConfig {
  * registered Runtime Host 启动配置:CLI 参数优先,env 兜底。
  * `agework-runtime --server <url> --token <配对码> --runtime <type[,type...]>
  *   [--worker-image <tag>] [--log-dir <path>] [--runtime-entry <path>]
- *   [--plugins <package[,package...]>]`
+ *   [--plugins <package[,package...]>] [--agent-plugins <package[,package...]>]`
  * 运行方式支持逗号分隔多值(如 `--runtime native,docker`);
  * env 读 AGEWORK_RUNTIME_TYPES,单数 AGEWORK_RUNTIME_TYPE 作兼容别名。
  */
@@ -69,6 +71,14 @@ export function resolveRegisteredRuntimeHostConfig(
   const pluginPackages = [
     ...new Set(
       (args.get("plugins") ?? env.AGEWORK_RUNTIME_PLUGINS ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    ),
+  ];
+  const agentPluginPackages = [
+    ...new Set(
+      (args.get("agent-plugins") ?? env.AGEWORK_AGENT_PLUGINS ?? "")
         .split(",")
         .map((value) => value.trim())
         .filter(Boolean)
@@ -111,6 +121,7 @@ export function resolveRegisteredRuntimeHostConfig(
     runtimeTypes,
     runtimeLogHostPath,
     pluginPackages,
+    agentPluginPackages,
     ...(workerImage ? { workerImage } : {}),
     ...(runtimeEntryPath ? { runtimeEntryPath } : {}),
     ...(workerPort ? { workerPort } : {}),

@@ -5,6 +5,7 @@ import type {
   RuntimeType,
 } from "@agework/runtime-sdk";
 import type { RuntimeHostProviderConfig } from "./types";
+import { createRuntimePlugin as createDockerRuntimePlugin } from "@agework/runtime-docker";
 
 const CONFIG: RuntimeHostProviderConfig = {
   workerImage: "agework-worker:test",
@@ -16,9 +17,14 @@ const CONFIG: RuntimeHostProviderConfig = {
 };
 
 describe("createRuntimeResolver", () => {
-  it("resolves each built-in runtimeType (build-once)", () => {
+  it("keeps only native as a built-in runtime", () => {
     const resolve = createRuntimeResolver(CONFIG);
     expect(resolve("native").type).toBe("native");
+    expect(() => resolve("docker")).toThrow(/Unknown runtime provider/);
+  });
+
+  it("resolves Docker through the same plugin path as external runtimes", () => {
+    const resolve = createRuntimeResolver(CONFIG, [createDockerRuntimePlugin()]);
     expect(resolve("docker").type).toBe("docker");
   });
 
@@ -57,15 +63,15 @@ describe("createRuntimeResolver", () => {
     expect(() => resolve("opensandbox")).toThrow(/Unknown runtime provider/);
   });
 
-  it("rejects a plugin that shadows a built-in provider", () => {
+  it("rejects a plugin that shadows the native built-in provider", () => {
     const plugin: RuntimeProviderPlugin = {
       apiVersion: 1,
-      type: "docker",
-      displayName: "Docker replacement",
+      type: "native",
+      displayName: "Native replacement",
       scopes: ["workspace"],
       create: () => ({
-        type: "docker",
-        start: async () => ({ runtimeInstanceId: "docker-1" }),
+        type: "native",
+        start: async () => ({ runtimeInstanceId: "native-1" }),
         release: async () => {},
         stop: async () => {},
         destroy: async () => {},

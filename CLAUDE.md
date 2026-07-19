@@ -10,6 +10,9 @@
 - `apps/desktop`：Electron 桌面壳；不在 workspace 内，使用根目录 `desktop:*` 脚本。
 - `packages/shared`：前后端共享类型、API 类型、协议类型。
 - `packages/adapters`：Claude、Codex 等 agent adapter。
+- `packages/agent-sdk`：Agent Adapter 插件的公共轻量契约。
+- `packages/agent-acp`：官方 ACP Agent 插件与 profile 扩展示例。
+- `packages/runtime-docker`：官方 Docker Runtime 插件与 Runtime Provider 示例。
 - `packages/react-ag-ui`：本仓库维护的 `@assistant-ui/react-ag-ui`。
 - `e2e`：Playwright 端到端测试。
 

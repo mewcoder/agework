@@ -24,6 +24,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       runtimeTypes: ["docker"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       pluginPackages: [],
+      agentPluginPackages: [],
       workerImage: "agework/runtime:latest",
     });
   });
@@ -44,6 +45,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       pluginPackages: [],
+      agentPluginPackages: [],
       runtimeEntryPath: "/path/flag.js",
     });
   });
@@ -59,6 +61,7 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
       runtimeTypes: ["native"],
       runtimeLogHostPath: DEFAULT_LOG_DIR,
       pluginPackages: [],
+      agentPluginPackages: [],
     });
   });
 
@@ -169,6 +172,27 @@ describe("resolveRegisteredRuntimeHostConfig", () => {
     expect(config.pluginPackages).toEqual([
       "@agework/runtime-opensandbox",
       "@acme/runtime-firecracker",
+    ]);
+  });
+
+  it("parses agent plugin package names for a registered Host", () => {
+    const config = resolveRegisteredRuntimeHostConfig(
+      [
+        "--server",
+        "http://h/api/v1",
+        "--token",
+        "t",
+        "--runtime",
+        "native",
+        "--agent-plugins",
+        "@acme/agent-example,@acme/agent-second",
+      ],
+      {}
+    );
+
+    expect(config.agentPluginPackages).toEqual([
+      "@acme/agent-example",
+      "@acme/agent-second",
     ]);
   });
 

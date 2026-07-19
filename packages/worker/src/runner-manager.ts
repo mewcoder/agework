@@ -619,8 +619,7 @@ const RUNNER_ENV_PASSTHROUGH_KEYS = [
   "AGEWORK_WORKER_SCOPE",
   "AGEWORK_WORKER_OWNER_ID",
   "AGEWORK_WORKER_RUNTIME_RESOURCE_NAME",
-  "AGEWORK_CLAUDE_CLI_PATH",
-  "AGEWORK_CODEX_CLI_PATH",
+  "AGEWORK_AGENT_PLUGINS",
   // Codex backend selection (【决策8】 SDK fallback): the runner process
   // needs to know which backend to use — without this it always defaults
   // to "app-server", breaking the SDK fallback path.
@@ -636,6 +635,13 @@ function buildRunnerEnv(config: RunConfig): NodeJS.ProcessEnv {
     const value = process.env[key];
     if (value !== undefined) env[key] = value;
   }
+  // Agent CLI override uses a generic key so external plugins do not require
+  // another Worker allowlist edit.
+  const agentCliEnvKey = `AGEWORK_${config.agentProviderConfig.agentType
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .toUpperCase()}_CLI_PATH`;
+  const agentCliPath = process.env[agentCliEnvKey];
+  if (agentCliPath !== undefined) env[agentCliEnvKey] = agentCliPath;
   env.AGEWORK_WORKER_ROLE = "runner";
   env.AGEWORK_WORKER_RUN_ID = config.runId;
   if (config.workerLogFilePath) {

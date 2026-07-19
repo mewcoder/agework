@@ -78,6 +78,7 @@ describe("TunnelClient", () => {
       runtimeTypes: ["docker"],
       runtimeLogHostPath: "/logs",
       pluginPackages: [],
+      agentPluginPackages: [],
       workerImage: "agework/runtime:latest",
     };
     const hostContract = {

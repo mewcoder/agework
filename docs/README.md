@@ -21,15 +21,22 @@
 | [architecture/docker-runtime-explained.md](architecture/docker-runtime-explained.md) | Docker / OpenSandbox / worker 镜像入门讲解 |
 | [architecture/rbac-matrix.md](architecture/rbac-matrix.md) | 权限归属矩阵与实现锚点 |
 | [architecture/agent-event-logging-guide.md](architecture/agent-event-logging-guide.md) | Agent 事件 / 日志排查实操指南 |
-| [architecture/acp-agent-integration-guide.md](architecture/acp-agent-integration-guide.md) | 新增 ACP agent 的接入触点、权限接法与验证清单 |
-
-Runtime 插件开发见 [`../packages/runtime-sdk/README.md`](../packages/runtime-sdk/README.md)；
-OpenSandbox 是参考实现，见 [`../packages/runtime-opensandbox/README.md`](../packages/runtime-opensandbox/README.md)。
 
 > 更贴近代码的模块级决策记录（ADR）随代码就近存放，见各模块 `docs/adr/`，如
 > `apps/server/src/runtime/docs/adr/`、`apps/server/src/runtime-host/docs/adr/`、
 > `packages/runtime-sdk/docs/adr/`、`packages/worker/docs/adr/`、`apps/runtime/docs/adr/`。
 > 后端架构与命名规则见 [`.claude/rules/`](../.claude/rules/)。
+
+## 开发指南
+
+`guide/` 存放面向开发者的操作指南，不作为架构设计记录。
+
+| 文档 | 内容 |
+|---|---|
+| [guide/README.md](guide/README.md) | 插件开发指南入口与能力边界 |
+| [guide/runtime-plugin.md](guide/runtime-plugin.md) | Runtime 插件的使用、Provider 开发、安装启用与 bundled 发行流程 |
+| [guide/agent-plugin.md](guide/agent-plugin.md) | Agent 插件的使用、Driver 开发、执行侧边界与动态 manifest 目标 |
+| [guide/acp-agent.md](guide/acp-agent.md) | ACP Agent Profile 的环境、bridge、权限与协议验证流程 |
 
 ## 设计定案
 

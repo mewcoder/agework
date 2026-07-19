@@ -240,6 +240,22 @@ export class ConfigService implements OnModuleInit {
     return Array.from(new Set(packages));
   }
 
+  /** builtin Host 显式允许 Worker 加载的 Agent Adapter 插件包。 */
+  getAgentPluginPackages(): string[] {
+    const raw = this.getEnv(EnvKey.AGENT_PLUGINS);
+    if (!raw) return [];
+    const packages = raw
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (packages.some((value) => /\s/.test(value))) {
+      throw new Error(
+        `AGEWORK_AGENT_PLUGINS expects comma-separated package names, got: ${raw}`
+      );
+    }
+    return Array.from(new Set(packages));
+  }
+
   getDefaultRuntimeType(): RuntimeType {
     return this.getAllowedRuntimeTypes()[0];
   }

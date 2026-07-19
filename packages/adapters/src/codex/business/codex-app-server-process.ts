@@ -8,7 +8,7 @@
  * Implements {@link AppServerTransport} so the client can be constructed
  * directly with a process instance.
  *
- * Pattern mirrors `AcpProcess` (`packages/adapters/src/acp/process/acp-process.ts`).
+ * Pattern mirrors `AcpProcess` (`packages/agent-acp/src/engine/process.ts`).
  */
 
 import { spawn, type ChildProcess } from "node:child_process";

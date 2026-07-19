@@ -57,11 +57,7 @@ export function buildCapabilities(
         ...availabilityOf(runtimeType),
         displayName:
           displayNameOf(runtimeType) ??
-          (runtimeType === "native"
-            ? "Native"
-            : runtimeType === "docker"
-              ? "Docker"
-              : runtimeType),
+          (runtimeType === "native" ? "Native" : runtimeType),
         scopes:
           runtimeType === "native"
             ? ["workspace"]

@@ -7,7 +7,8 @@ AgeWork 面向个人与团队时，Native 和 Docker 是主要运行方式。Ope
 
 ## 决定
 
-- `@agework/runtime-sdk` 公开 `RuntimeProviderPlugin` 装配契约，Native 与 Docker 由 Runtime Host 内建。
+- `@agework/runtime-sdk` 公开 `RuntimeProviderPlugin` 装配契约，Runtime Host 只内建 Native。
+- Docker 与 OpenSandbox 都是独立插件；Docker 作为官方 bundled plugin 默认随发行版装配。
 - OpenSandbox 实现和 `@alibaba-group/opensandbox` SDK 迁入独立包
   `@agework/runtime-opensandbox`。
 - `RuntimeHost` 接收外部 plugin 列表，resolver 在初始化时完成一次性实例化，并拒绝重复类型或

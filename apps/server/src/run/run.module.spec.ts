@@ -163,6 +163,7 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getAgentEventTraceConfig: () => ({ enabled: false, maxFileMb: 5 }),
     getBuiltinWorkerHttpPort: () => 7101,
     getRuntimePluginPackages: () => [],
+    getAgentPluginPackages: () => [],
     getHostCliDir: () => "/tmp/agework-host-test/cli",
   };
 }

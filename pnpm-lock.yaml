@@ -50,6 +50,12 @@ importers:
 
   apps/runtime:
     dependencies:
+      '@agework/agent-sdk':
+        specifier: workspace:*
+        version: link:../../packages/agent-sdk
+      '@agework/runtime-docker':
+        specifier: workspace:*
+        version: link:../../packages/runtime-docker
       '@agework/runtime-sdk':
         specifier: workspace:*
         version: link:../../packages/runtime-sdk
@@ -103,6 +109,9 @@ importers:
       '@agework/adapters':
         specifier: workspace:*
         version: link:../../packages/adapters
+      '@agework/runtime-docker':
+        specifier: workspace:*
+        version: link:../../packages/runtime-docker
       '@agework/runtime-sdk':
         specifier: workspace:*
         version: link:../../packages/runtime-sdk
@@ -489,9 +498,9 @@ importers:
       '@ag-ui/core':
         specifier: 'catalog:'
         version: 0.0.57
-      '@agentclientprotocol/sdk':
-        specifier: 1.2.1
-        version: 1.2.1(zod@4.4.3)
+      '@agework/agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
       '@agework/shared':
         specifier: workspace:*
         version: link:../shared
@@ -527,6 +536,52 @@ importers:
         specifier: ^4.1.8
         version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.12.4)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.12.4)(typescript@5.9.3))(vite@8.1.4(@types/node@24.12.4)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
+  packages/agent-acp:
+    dependencies:
+      '@ag-ui/client':
+        specifier: 'catalog:'
+        version: 0.0.57
+      '@ag-ui/core':
+        specifier: 'catalog:'
+        version: 0.0.57
+      '@agentclientprotocol/sdk':
+        specifier: 1.2.1
+        version: 1.2.1(zod@4.4.3)
+      '@agework/shared':
+        specifier: workspace:*
+        version: link:../shared
+      rxjs:
+        specifier: 7.8.1
+        version: 7.8.1
+    devDependencies:
+      '@agework/agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
+      '@swc/core':
+        specifier: ^1.15.40
+        version: 1.15.40
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      unplugin-swc:
+        specifier: ^1.5.9
+        version: 1.5.9(@swc/core@1.15.40)
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.13.3)(typescript@5.9.3))(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
+
+  packages/agent-sdk:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/react-ag-ui:
     dependencies:
       '@ag-ui/client':
@@ -560,6 +615,31 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+
+  packages/runtime-docker:
+    dependencies:
+      '@nestjs/common':
+        specifier: ^11.0.1
+        version: 11.1.24(class-transformer@0.5.1)(class-validator@0.15.1)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+    devDependencies:
+      '@agework/runtime-sdk':
+        specifier: workspace:*
+        version: link:../runtime-sdk
+      '@swc/core':
+        specifier: ^1.15.40
+        version: 1.15.40
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.13.3
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      unplugin-swc:
+        specifier: ^1.5.9
+        version: 1.5.9(@swc/core@1.15.40)
+      vitest:
+        specifier: ^4.1.8
+        version: 4.1.8(@opentelemetry/api@1.9.1)(@types/node@24.13.3)(@vitest/coverage-v8@4.1.8)(jsdom@29.1.1(@noble/hashes@2.2.0))(msw@2.14.6(@types/node@24.13.3)(typescript@5.9.3))(vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.22.4))
 
   packages/runtime-opensandbox:
     dependencies:
@@ -631,6 +711,12 @@ importers:
       '@agework/adapters':
         specifier: workspace:*
         version: link:../adapters
+      '@agework/agent-acp':
+        specifier: workspace:*
+        version: link:../agent-acp
+      '@agework/agent-sdk':
+        specifier: workspace:*
+        version: link:../agent-sdk
       '@agework/shared':
         specifier: workspace:*
         version: link:../shared

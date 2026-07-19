@@ -37,7 +37,7 @@ export async function runRunner() {
   workerLog("runner config loaded");
   const trace = new TraceLogWriter(config.agentEventTrace);
 
-  const driver = createAgentDriver(
+  const driver = await createAgentDriver(
     config,
     trace.sink(),
     (_threadId, payload) => {

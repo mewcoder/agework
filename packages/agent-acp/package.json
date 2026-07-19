@@ -1,0 +1,37 @@
+{
+  "name": "@agework/agent-acp",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare:test": "pnpm --filter @agework/shared build && pnpm --filter @agework/agent-sdk build",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm prepare:test && vitest run"
+  },
+  "dependencies": {
+    "@ag-ui/client": "catalog:",
+    "@ag-ui/core": "catalog:",
+    "@agentclientprotocol/sdk": "1.2.1",
+    "@agework/shared": "workspace:*",
+    "rxjs": "7.8.1"
+  },
+  "peerDependencies": {
+    "@agework/agent-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@agework/agent-sdk": "workspace:*",
+    "@swc/core": "^1.15.40",
+    "@types/node": "^24.0.0",
+    "typescript": "catalog:",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.8"
+  }
+}

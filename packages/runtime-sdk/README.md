@@ -3,6 +3,9 @@
 AgeWork Runtime 插件的公共 SDK。它只包含稳定契约、manifest helper、placement 类型和沙箱启动
 公共工具，不依赖 NestJS、Runtime Host 或任何具体 sandbox SDK。
 
+完整的新建、安装、启用和发行流程见
+[`Runtime 插件使用与开发`](../../docs/guide/runtime-plugin.md)。
+
 ## 创建插件
 
 插件包依赖 SDK，并把它声明为 peer dependency，避免宿主与插件各带一份不兼容契约：

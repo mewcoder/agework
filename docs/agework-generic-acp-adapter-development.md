@@ -89,7 +89,7 @@ OpenCode 官方提供 `opencode acp`，通过 stdio 上的 JSON-RPC 与 Client �
 
 ### 1.1 本文最终决策
 
-1. 在 `packages/adapters/src/acp` 新建通用 ACP Client Adapter。
+1. 在 `packages/agent-acp/src` 新建通用 ACP Client Adapter。
 2. 使用官方包 `@agentclientprotocol/sdk`，首版锁定精确版本，不使用 `^`。
 3. 首版只实现 stdio + NDJSON Transport。
 4. 每个 AgeWork Runner 启动一个 ACP Agent 子进程。
@@ -272,47 +272,44 @@ Server
 新增：
 
 ```text
-packages/adapters/src/acp/
+packages/agent-acp/src/
 ├── index.ts
-├── protocol/
-│   ├── types.ts
-│   └── capabilities.ts
-├── process/
-│   ├── acp-process.ts
-│   ├── acp-process.spec.ts
+├── plugin.ts
+├── adapter.ts
+├── adapter.spec.ts
+├── create-adapter.ts
+├── engine/
+│   ├── client.ts
+│   ├── session.ts
+│   ├── process.ts
 │   ├── stdio-stream.ts
-│   └── stdio-stream.spec.ts
-├── client/
-│   ├── acp-client.ts
-│   ├── acp-client.spec.ts
-│   ├── acp-session.ts
-│   └── acp-session.spec.ts
-├── agui/
-│   ├── acp-to-agui.ts
-│   ├── acp-to-agui.spec.ts
+│   ├── capabilities.ts
+│   ├── errors.ts
+│   ├── safe-env.ts
+│   └── sdk.ts
+├── bridge/
+│   ├── to-agui.ts
+│   ├── to-agui.spec.ts
 │   ├── content.ts
-│   └── tools.ts
-├── control/
-│   ├── permission-bridge.ts
-│   ├── permission-bridge.spec.ts
+│   ├── tools.ts
+│   ├── permission.ts
+│   ├── permission.spec.ts
 │   └── pending-controls.ts
-├── profiles/
-│   ├── profile.ts
+├── agents/
+│   ├── types.ts
 │   ├── registry.ts
-│   ├── registry.spec.ts
-│   └── opencode.profile.ts
-├── business/
-│   ├── acp-agent.adapter.ts
-│   └── acp-agent.adapter.spec.ts
+│   ├── opencode/
+│   │   ├── index.ts
+│   │   ├── profile.ts
+│   │   └── profile.spec.ts
+│   └── pi/
+│       ├── index.ts
+│       ├── profile.ts
+│       └── profile.spec.ts
 └── testing/
     ├── fake-acp-agent.ts
-    └── fixtures/
-        ├── initialize.jsonl
-        ├── messages.jsonl
-        ├── tools.jsonl
-        ├── plan.jsonl
-        ├── permission.jsonl
-        └── errors.jsonl
+    ├── fake-acp-agent.script.mjs
+    └── fake-agent-app.ts
 ```
 
 需要修改：
@@ -1561,8 +1558,8 @@ sdk.acp.error
 普通 CI：
 
 ```bash
-pnpm --filter @agework/adapters typecheck
-pnpm --filter @agework/adapters test
+pnpm --filter @agework/agent-acp typecheck
+pnpm --filter @agework/agent-acp test
 pnpm --filter @agework/worker typecheck
 pnpm --filter @agework/worker test
 pnpm --filter @agework/shared test

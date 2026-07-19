@@ -284,7 +284,7 @@ Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime-host`），�
 - **daemon 入口**：registered 场景，远程机器跑同一套代码，主动外连 server 建隧道
   （远程部署只要求 Host → server 单向可达，容器内 worker 永不要求直连 server）。
 
-同一实现、两种宿主。`@agework/runtime-sdk` 提供插件契约，Native/Docker 内建实现留在 Host，
+同一实现、两种宿主。`@agework/runtime-sdk` 提供插件契约，Host 只内建 Native，Docker 作为官方 bundled plugin，
 `packages/worker` 维持现状（只改连接对端）。
 不新建 `packages/runtime-core` 之类的包（"core" 是禁用词，且没有第三个消费者）。
 

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "composite": true,
+    "target": "ES2023",
+    "types": ["node", "vitest/globals"],
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "skipLibCheck": true,
+    "strict": true,
+    "noImplicitAny": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": [
+    "src/**/*.spec.ts",
+    "src/**/*.test.ts",
+    "src/testing/**",
+    "dist",
+    "node_modules"
+  ]
+}

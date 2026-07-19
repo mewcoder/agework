@@ -78,12 +78,15 @@ export async function makeRunConfig(
       logPaths
     ),
     workerLogFilePath: logPaths.workerRuntimeFilePath,
-    ...(cliPaths?.claude ? { claudeExecutablePath: cliPaths.claude } : {}),
-    ...(cliPaths?.codex ? { codexExecutablePath: cliPaths.codex } : {}),
-    ...(cliPaths?.opencode
-      ? { opencodeExecutablePath: cliPaths.opencode }
+    ...(cliPaths
+      ? {
+          agentExecutablePaths: Object.fromEntries(
+            Object.entries(cliPaths).filter(
+              (entry): entry is [string, string] => typeof entry[1] === "string"
+            )
+          ),
+        }
       : {}),
-    ...(cliPaths?.pi ? { piExecutablePath: cliPaths.pi } : {}),
   };
 }
 
@@ -135,7 +138,8 @@ export function buildWorkerEnv(
   workerId: string,
   runtimeType: string,
   runtimeTarget: RuntimeSpec,
-  runConfig: RunConfig
+  runConfig: RunConfig,
+  agentPluginPackages: readonly string[] = []
 ): Record<string, string> {
   const env: Record<string, string> = {
     AGEWORK_WORKER_ROLE: "worker",
@@ -148,6 +152,16 @@ export function buildWorkerEnv(
   };
   if (runConfig.workerLogFilePath) {
     env.AGEWORK_WORKER_LOG_FILE = runConfig.workerLogFilePath;
+  }
+  if (agentPluginPackages.length > 0) {
+    env.AGEWORK_AGENT_PLUGINS = [...new Set(agentPluginPackages)].join(",");
+  }
+  const agentCliEnvKey = `AGEWORK_${runConfig.agentProviderConfig.agentType
+    .replace(/[^a-zA-Z0-9]/g, "_")
+    .toUpperCase()}_CLI_PATH`;
+  const agentCliPath = process.env[agentCliEnvKey]?.trim();
+  if (agentCliPath) {
+    env[agentCliEnvKey] = agentCliPath;
   }
   return env;
 }

@@ -13,5 +13,9 @@ _Avoid_: Runner、agent process
 _Avoid_: Worker instance、agent process、runner script（弱化了它是独立入口这件事）
 
 **Runner env allowlist**:
-fork runner 时显式传入的环境变量集合:OS 基础环境(`PATH`/`HOME` 等,供 runner 内部 fork 的 agent CLI 子进程使用)+ runner 真正读取的少数 `AGEWORK_WORKER_*` 变量(`AGEWORK_WORKER_RUN_ID`、日志相关几个)。明确排除 worker 自己连接 Host 的地址与认证凭据(`AGEWORK_WORKER_API_BASE`、`AGEWORK_WORKER_START_TOKEN`)——runner 不需要也不应该拿到。取代此前 fork 时整份 spread `process.env` 的做法。
+fork runner 时显式传入的环境变量集合:OS 基础环境(`PATH`/`HOME` 等,供 runner 内部 fork 的 agent CLI 子进程使用)+ runner 真正读取的少数 `AGEWORK_WORKER_*` 变量(`AGEWORK_WORKER_RUN_ID`、日志相关几个)+显式插件清单 `AGEWORK_AGENT_PLUGINS`。明确排除 worker 自己连接 Host 的地址与认证凭据(`AGEWORK_WORKER_API_BASE`、`AGEWORK_WORKER_START_TOKEN`)——runner 不需要也不应该拿到。取代此前 fork 时整份 spread `process.env` 的做法。
 _Avoid_: 全量继承、`...process.env`
+
+**Agent plugin boundary**:
+Worker/Runner 只依赖 `@agework/agent-sdk` 的 `AgentDriver` 与 `AgentPlugin` 契约。Claude/Codex 由 `@agework/adapters/plugin` 聚合，ACP 由 `@agework/agent-acp` 提供；两者都是随发行版携带、经标准注册表装配的 bundled plugin。外部插件通过 `AGEWORK_AGENT_PLUGINS` 显式加载，不做隐式扫描。
+_Avoid_: Worker 直接 import 具体 Adapter class、按 `agentType` 写实现分支

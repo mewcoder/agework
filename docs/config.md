@@ -44,8 +44,9 @@ AgeWork 配置按边界分为四类：
 
 | 变量                                           | 默认值                  | 建议     | 说明                                                                                                                                          |
 | ---------------------------------------------- | ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AGEWORK_RUNTIME_ALLOWED_TYPES`                | `native`                | 保留 ENV | 当前部署允许创建的 runtime type（可逗号组合）；Native/Docker 为内建类型，其余类型必须由已加载插件提供。                                      |
+| `AGEWORK_RUNTIME_ALLOWED_TYPES`                | `native`                | 保留 ENV | 当前部署允许创建的 runtime type（可逗号组合）；只有 Native 为内建类型，Docker 是发行版默认装配的官方插件。                                  |
 | `AGEWORK_RUNTIME_PLUGINS`                      | 空                      | 保留 ENV | 显式加载的 runtime 插件包名（逗号分隔），例如 `@agework/runtime-opensandbox`；不会自动发现依赖。                                               |
+| `AGEWORK_AGENT_PLUGINS`                        | 空                      | 保留 ENV | Worker 显式加载的 Agent 插件包名（逗号分隔）；Claude/Codex 与 ACP 官方插件已随发行版装配，不需要填写。                                        |
 | `AGEWORK_RUNTIME_ALLOWED_SCOPES`               | `user`                  | 保留 ENV | 当前部署允许创建的 sandbox 运行范围，可选 `user`、`workspace` 或 `user,workspace`；第一项作为默认值。沙箱指定本地目录时必须使用 `workspace`。 |
 | `AGEWORK_SANDBOX_OPENSANDBOX_DOMAIN`           | `localhost:8080`        | 保留 ENV | OpenSandbox 服务地址，格式为 host:port。仅 `AGEWORK_RUNTIME_ALLOWED_TYPES` 包含 `opensandbox` 时需要关注。                                    |
 | `AGEWORK_SANDBOX_OPENSANDBOX_PROTOCOL`         | `http`                  | 保留 ENV | 可选 `http`、`https`。                                                                                                                        |

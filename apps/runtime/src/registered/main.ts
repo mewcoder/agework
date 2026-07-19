@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { detectEnvConfig, resolveInstalledBinPath } from "@agework/shared/cli";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import type { RuntimeProviderPlugin } from "@agework/runtime-sdk";
+import { createRuntimePlugin as createDockerRuntimePlugin } from "@agework/runtime-docker";
 import {
   resolveRegisteredRuntimeHostConfig,
   type RuntimeType,
@@ -11,25 +12,21 @@ import {
 import { TunnelClient, buildCapabilities, log } from "./tunnel-client.js";
 import { TunnelUpstream } from "./tunnel-upstream.js";
 import { RuntimeHost, type RuntimeHostConfig } from "../host/runtime-host.js";
-import {
-  probeDockerDaemon,
-  type CapabilityAvailability,
-} from "../host/capability-probe.js";
 import { WorkerHttpServer } from "../host/worker-http-server.js";
 import { loadRuntimePlugins } from "../plugins/runtime-plugin-loader.js";
+
+type CapabilityAvailability = { available: boolean; reason?: string };
 
 /**
  * 探测一种 runtimeType 在本机的当前可用性(启动 + 定期刷新共用):
  * - native:Host 进程能跑就可用;
- * - docker:`docker info` 探测 daemon 是否可达;
- * - plugin:插件已成功装配即声明可用，进一步连接错误由 provider 启动时暴露。
+ * - plugin:由插件自己的 probe 声明可用性；未提供 probe 则装配成功即视为可用。
  */
 async function detectRuntimeTypeAvailability(
   runtimeType: RuntimeType,
   pluginsByType: ReadonlyMap<RuntimeType, RuntimeProviderPlugin>
 ): Promise<CapabilityAvailability> {
   if (runtimeType === "native") return { available: true };
-  if (runtimeType === "docker") return probeDockerDaemon();
   const plugin = pluginsByType.get(runtimeType);
   if (plugin?.probe) return plugin.probe();
   return { available: true };
@@ -71,7 +68,10 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     config.userWorkspaceRoot ?? "/home/agework/workspaces";
   // 与 builtin Host 的约定一致:~/.agework/cli/<agent>/
   const cliInstallDir = join(homedir(), ".agework", "cli");
-  const providerPlugins = await loadRuntimePlugins(config.pluginPackages);
+  const providerPlugins = [
+    createDockerRuntimePlugin(),
+    ...(await loadRuntimePlugins(config.pluginPackages)),
+  ];
   const pluginsByType = new Map(
     providerPlugins.map((plugin) => [plugin.type, plugin])
   );
@@ -97,7 +97,7 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
     agentEventTrace: { enabled: false, maxFileMb: 50 },
     cliInstallDir,
     capabilities,
-    // docker daemon 中途挂掉/恢复要反映到放置准入,只拦新 run 不动存量
+    // provider 依赖中途挂掉/恢复要反映到放置准入,只拦新 run 不动存量
     refreshCapabilities: () =>
       detectCapabilities(config.runtimeTypes, pluginsByType),
     providerConfig: {
@@ -109,6 +109,7 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
       },
     },
     providerPlugins,
+    agentPluginPackages: config.agentPluginPackages,
     // native runtimeType 的 CLI 路径:Host 就是执行机器本机——
     // 一键安装目录优先(host.installCli 装的),否则按本机 PATH 检测结果
     resolveCliPaths: async () => {

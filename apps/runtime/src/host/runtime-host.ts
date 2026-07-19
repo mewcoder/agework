@@ -55,7 +55,6 @@ import {
   rpcResponseToCommandResultMessage,
 } from "@agework/shared/protocol/rpc";
 export { WorkerHttpServer } from "./worker-http-server.js";
-export { probeDockerDaemon } from "./capability-probe.js";
 export { loadRuntimePlugins } from "../plugins/runtime-plugin-loader.js";
 import { WorkerPool, type WorkerEntry } from "./worker-pool";
 import { buildWorkerEnv, makeRunConfig, resolveSpec } from "./run-config";
@@ -96,8 +95,10 @@ export interface RuntimeHostConfig {
   capabilityRefreshMs?: number;
   /** Runtime Host 的内建 provider 配置；插件只接收其中的通用部分。 */
   providerConfig: RuntimeHostProviderConfig;
-  /** 按需装配的外部 runtime provider；Native/Docker 由核心包内建。 */
+  /** 按需装配的 runtime provider；只有 Native 由核心包内建。 */
   providerPlugins?: RuntimeProviderPlugin[];
+  /** Worker runner 显式加载的外部 Agent plugin 包；内置 adapters 不在此列。 */
+  agentPluginPackages?: string[];
   /**
    * native runtimeType 的 agent CLI 路径解析（override > detected）。Host 是执行机器本机,
    * 由宿主注入:builtin 用 server 的 RuntimeService 解析,daemon 用本机 detectEnvConfig。
@@ -468,7 +469,8 @@ export class RuntimeHost implements RuntimeHostContract {
       workerId,
       runtimeType,
       runtimeTarget,
-      runConfig
+      runConfig,
+      this.config.agentPluginPackages
     );
 
     const ctx: RuntimeLaunchContext = {

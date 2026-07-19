@@ -1,6 +1,6 @@
 import type { RuntimeProviderConfig } from "@agework/runtime-sdk";
 
-export const BUILTIN_RUNTIME_TYPES = ["native", "docker"] as const;
+export const BUILTIN_RUNTIME_TYPES = ["native"] as const;
 export type BuiltinRuntimeType = (typeof BUILTIN_RUNTIME_TYPES)[number];
 
 export type NativeProviderConfig = {

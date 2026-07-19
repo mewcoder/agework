@@ -80,6 +80,7 @@ describe("runtime capability config", () => {
   const originalAllowedTypes = process.env.AGEWORK_RUNTIME_ALLOWED_TYPES;
   const originalAllowedScopes = process.env.AGEWORK_RUNTIME_ALLOWED_SCOPES;
   const originalRuntimePlugins = process.env.AGEWORK_RUNTIME_PLUGINS;
+  const originalAgentPlugins = process.env.AGEWORK_AGENT_PLUGINS;
 
   afterEach(() => {
     if (originalAllowedTypes === undefined) {
@@ -96,6 +97,11 @@ describe("runtime capability config", () => {
       delete process.env.AGEWORK_RUNTIME_PLUGINS;
     } else {
       process.env.AGEWORK_RUNTIME_PLUGINS = originalRuntimePlugins;
+    }
+    if (originalAgentPlugins === undefined) {
+      delete process.env.AGEWORK_AGENT_PLUGINS;
+    } else {
+      process.env.AGEWORK_AGENT_PLUGINS = originalAgentPlugins;
     }
   });
 
@@ -144,6 +150,17 @@ describe("runtime capability config", () => {
     expect(service.getRuntimePluginPackages()).toEqual([
       "@agework/runtime-opensandbox",
       "@acme/runtime-example",
+    ]);
+  });
+
+  it("parses and deduplicates explicit agent plugin packages", () => {
+    process.env.AGEWORK_AGENT_PLUGINS =
+      "@acme/agent-example, @acme/agent-example,@acme/agent-second";
+    const { service } = createService([]);
+
+    expect(service.getAgentPluginPackages()).toEqual([
+      "@acme/agent-example",
+      "@acme/agent-second",
     ]);
   });
 

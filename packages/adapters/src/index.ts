@@ -17,17 +17,3 @@ export {
   type CodexAgentInstance,
   type CodexBackendConfig,
 } from "./codex/factory";
-
-export {
-  AcpAgentAdapter,
-  type AcpAgentAdapterConfig,
-  createAcpAdapter,
-  type CreateAcpAdapterOptions,
-  getAcpProfile,
-  isAcpAgent,
-  openCodeAcpProfile,
-  piAcpProfile,
-  type AcpAgentProfile,
-  AcpError,
-  type AcpErrorCode,
-} from "./acp";

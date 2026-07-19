@@ -4,8 +4,8 @@ import {
   loadRuntimePlugins,
   RuntimeHost,
   WorkerHttpServer,
-  probeDockerDaemon,
 } from "@agework/runtime-host";
+import { createRuntimePlugin as createDockerRuntimePlugin } from "@agework/runtime-docker";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -40,23 +40,21 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
     const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
-    const providerPlugins = await loadRuntimePlugins(
-      configService.getRuntimePluginPackages()
-    );
+    const providerPlugins = [
+      createDockerRuntimePlugin(),
+      ...(await loadRuntimePlugins(configService.getRuntimePluginPackages())),
+    ];
     const pluginsByType = new Map(
       providerPlugins.map((plugin) => [plugin.type, plugin])
     );
-    // native 进程内恒可用；docker 探测 daemon；插件的进一步健康探测由其启动阶段暴露。
+    // native 进程内恒可用；其余 provider 由各自插件声明探测能力。
     const detectCapabilities = async (): Promise<HostCapabilityStatus> => {
       const entries = await Promise.all(
         configService.getAllowedRuntimeTypes().map(async (runtimeType) => {
           const plugin = pluginsByType.get(runtimeType);
-          const availability =
-            runtimeType === "docker"
-              ? await probeDockerDaemon()
-              : plugin?.probe
-                ? await plugin.probe()
-                : { available: true };
+          const availability = plugin?.probe
+            ? await plugin.probe()
+            : { available: true };
           return [
             runtimeType,
             {
@@ -64,9 +62,7 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
               displayName:
                 runtimeType === "native"
                   ? "Native"
-                  : runtimeType === "docker"
-                    ? "Docker"
-                    : plugin?.displayName ?? runtimeType,
+                  : plugin?.displayName ?? runtimeType,
               scopes:
                 runtimeType === "native"
                   ? ["workspace"]
@@ -87,10 +83,11 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
       agentEventTrace: configService.getAgentEventTraceConfig(),
       cliInstallDir: configService.getHostCliDir(),
       capabilities,
-      // docker daemon 中途挂掉/恢复反映到放置准入,只拦新 run
+      // provider 依赖中途挂掉/恢复反映到放置准入,只拦新 run
       refreshCapabilities: detectCapabilities,
       providerConfig,
       providerPlugins,
+      agentPluginPackages: configService.getAgentPluginPackages(),
       resolveCliPaths: async () => {
         const row = await repository.findById(BUILTIN_HOST_ID);
         return row

@@ -1,104 +1,39 @@
-import {
-  ClaudeAgentAdapter,
-  createCodexAdapter,
-  type CodexAgentInstance,
-  cancelQuestion,
-  AcpAgentAdapter,
-  createAcpAdapter,
-  getAcpProfile,
-  isAcpAgent,
-} from "@agework/adapters";
+import { createAgentPlugin as createBuiltinAgentPlugin } from "@agework/adapters/plugin";
+import { createAgentPlugin as createAcpAgentPlugin } from "@agework/agent-acp";
+import type {
+  AgentDriver,
+  AgentRunInput,
+  AgentRunPayload,
+} from "@agework/agent-sdk";
 import type {
   AgentTraceSink,
-  CommandPayload,
   RunConfig,
   RunStatusPayload,
 } from "@agework/shared/protocol";
 import { findInPath } from "@agework/shared/cli";
-import type { Subscription } from "rxjs";
 import { MockAgentDriver } from "./mock-agent.driver";
+import { AgentPluginRegistry } from "./plugin-registry";
+import {
+  loadAgentPlugins,
+  parseAgentPluginPackages,
+} from "./plugin-loader";
 
-type Adapter = ClaudeAgentAdapter | CodexAgentInstance | AcpAgentAdapter;
+export type { AgentDriver, AgentRunInput, AgentRunPayload } from "@agework/agent-sdk";
 
-export type AgentRunPayload = { threadId: string } & Record<string, unknown>;
-
-export type AgentRunInput = {
-  aguiThreadId: string;
-  payload: AgentRunPayload;
-};
-
-export type DriverEventStream = {
-  subscribe(o: {
-    next: (event: unknown) => void;
-    complete: () => void;
-    error: (error: Error) => void;
-  }): Subscription;
-};
-
-export type AgentDriver = {
-  run(input: AgentRunInput): DriverEventStream;
-  interrupt(aguiThreadId?: string): Promise<void>;
-  cancel(aguiThreadId?: string): Promise<void>;
-  resolveControl(command: CommandPayload): boolean | Promise<boolean>;
-  shutdown?(): Promise<void>;
-};
-
-type CliPaths = {
-  claudeExecutablePath?: string;
-  codexExecutablePath?: string;
-  opencodeExecutablePath?: string;
-  piExecutablePath?: string;
-};
-
-class AdapterDriver implements AgentDriver {
-  constructor(private readonly adapter: Adapter) {}
-
-  run(input: AgentRunInput): DriverEventStream {
-    return this.adapter.run(input.payload as never) as DriverEventStream;
-  }
-
-  interrupt(aguiThreadId?: string): Promise<void> {
-    return this.adapter.interrupt(aguiThreadId);
-  }
-
-  async cancel(aguiThreadId?: string): Promise<void> {
-    if (aguiThreadId) {
-      cancelQuestion(aguiThreadId);
-    }
-    await this.adapter.interrupt(aguiThreadId);
-  }
-
-  resolveControl(command: CommandPayload): boolean {
-    if (command.type !== "approval_resolved") return false;
-    // Both Claude and Codex adapters implement resolveApproval (【决策2】).
-    // The adapter interprets the opaque payload provider-specifically.
-    return this.adapter.resolveApproval(
-      command.conversationId,
-      command.payload,
-      command.resumeRunId
-    );
-  }
-}
-
-export function createAgentDriver(
+export async function createAgentDriver(
   config: RunConfig,
   trace: AgentTraceSink | undefined,
   emitRunStatusForAguiThread: (
     aguiThreadId: string,
     payload: RunStatusPayload
   ) => void
-): AgentDriver {
+): Promise<AgentDriver> {
   const { agentProviderConfig, runtimePath } = config;
-  // RunConfig 里的路径（native runtimeType 从 envConfig 提取）优先于 worker env。
-  const envCliPaths = resolveCliPaths(process.env);
-  const claudeExecutablePath =
-    config.claudeExecutablePath ?? envCliPaths.claudeExecutablePath;
-  const codexExecutablePath =
-    config.codexExecutablePath ?? envCliPaths.codexExecutablePath;
-  const opencodeExecutablePath =
-    config.opencodeExecutablePath ?? envCliPaths.opencodeExecutablePath;
-  const piExecutablePath =
-    config.piExecutablePath ?? envCliPaths.piExecutablePath;
+  const agentType = agentProviderConfig.agentType;
+  // Native Host 解析结果优先；容器/手工部署退回约定 env，再退回 PATH。
+  const executablePath =
+    config.agentExecutablePaths?.[agentType] ??
+    resolveAgentExecutablePath(agentType, process.env);
 
   const pendingActionSink = (event: {
     threadId: string;
@@ -120,82 +55,24 @@ export function createAgentDriver(
     return new MockAgentDriver();
   }
 
-  const credentials =
-    agentProviderConfig.source === "system"
-      ? {}
-      : {
-          apiKey: agentProviderConfig.apiKey,
-          model: agentProviderConfig.model,
-          baseUrl: agentProviderConfig.baseUrl,
-          extraConfig: agentProviderConfig.extraConfig,
-        };
-  // claude 只有 anthropic 一种格式,不需要;codex/opencode 据此选 wire_api / provider npm。
-  const apiFormat =
-    agentProviderConfig.source === "custom"
-      ? agentProviderConfig.apiFormat
-      : undefined;
-
-  if (agentProviderConfig.agentType === "claude") {
-    return new AdapterDriver(
-      new ClaudeAgentAdapter({
-        ...credentials,
-        cwd: runtimePath,
-        isEnvironmentConfig: agentProviderConfig.source === "system",
-        pendingActionSink,
-        trace,
-        ...(claudeExecutablePath
-          ? { pathToClaudeCodeExecutable: claudeExecutablePath }
-          : {}),
-      })
-    );
-  }
-
-  // ACP profile agent 统一分发(opencode / pi / ...),不落进 codex 兜底(doc §15.1)。
-  if (isAcpAgent(agentProviderConfig.agentType)) {
-    const profile = getAcpProfile(agentProviderConfig.agentType);
-    if (!profile) {
-      throw new Error(
-        `ACP profile not registered: ${agentProviderConfig.agentType}`
-      );
-    }
-    const acpExecutablePaths: Record<string, string | undefined> = {
-      opencode: opencodeExecutablePath,
-      pi: piExecutablePath,
-    };
-    const executablePath = acpExecutablePaths[agentProviderConfig.agentType];
-    // 权限预设随 run input 下发,profile 在 spawn 前映射成 agent 自己的配置注入。
-    const forwardedProps = (
-      config.input as { forwardedProps?: Record<string, unknown> } | undefined
-    )?.forwardedProps;
-    const permissionMode =
-      typeof forwardedProps?.permissionMode === "string"
-        ? forwardedProps.permissionMode
-        : undefined;
-    return new AdapterDriver(
-      createAcpAdapter(profile, {
-        source: agentProviderConfig.source,
-        cwd: runtimePath,
-        apiFormat,
-        ...credentials,
-        ...(permissionMode ? { permissionMode } : {}),
-        trace,
-        pendingActionSink,
-        ...(executablePath ? { executablePath } : {}),
-      })
-    );
-  }
-
-  return new AdapterDriver(
-    createCodexAdapter({
-      ...credentials,
-      // 矩阵保证 codex 不会拿到 anthropic 格式;这里做类型收窄兜底。
-      apiFormat: apiFormat === "anthropic" ? undefined : apiFormat,
-      cwd: runtimePath,
-      trace,
-      pendingActionSink,
-      ...(codexExecutablePath ? { codexPath: codexExecutablePath } : {}),
-    })
+  const registry = new AgentPluginRegistry();
+  registry.register(createBuiltinAgentPlugin());
+  registry.register(createAcpAgentPlugin());
+  const externalPlugins = await loadAgentPlugins(
+    parseAgentPluginPackages(process.env.AGEWORK_AGENT_PLUGINS)
   );
+  for (const plugin of externalPlugins) registry.register(plugin);
+
+  return registry.createDriver({
+    agentType,
+    provider: agentProviderConfig,
+    runtimePath,
+    input: config.input,
+    ...(executablePath ? { executablePath } : {}),
+    env: config.env,
+    trace,
+    pendingActionSink,
+  });
 }
 
 export function toAgentRunInput(
@@ -220,22 +97,10 @@ export function toAgentRunInput(
   };
 }
 
-export function resolveCliPaths(
+export function resolveAgentExecutablePath(
+  agentType: string,
   env: Record<string, string | undefined>
-): CliPaths {
-  const claudeExecutablePath =
-    env.AGEWORK_CLAUDE_CLI_PATH?.trim() || (findInPath("claude") ?? undefined);
-  const codexExecutablePath =
-    env.AGEWORK_CODEX_CLI_PATH?.trim() || (findInPath("codex") ?? undefined);
-  const opencodeExecutablePath =
-    env.AGEWORK_OPENCODE_CLI_PATH?.trim() ||
-    (findInPath("opencode") ?? undefined);
-  const piExecutablePath =
-    env.AGEWORK_PI_CLI_PATH?.trim() || (findInPath("pi") ?? undefined);
-  return {
-    claudeExecutablePath,
-    codexExecutablePath,
-    opencodeExecutablePath,
-    piExecutablePath,
-  };
+): string | undefined {
+  const envKey = `AGEWORK_${agentType.replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}_CLI_PATH`;
+  return env[envKey]?.trim() || (findInPath(agentType) ?? undefined);
 }

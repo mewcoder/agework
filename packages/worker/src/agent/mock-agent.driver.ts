@@ -1,10 +1,10 @@
 import { Observable } from "rxjs";
 import type {
   AgentDriver,
+  AgentEventStream,
   AgentRunInput,
   AgentRunPayload,
-  DriverEventStream,
-} from "./index";
+} from "@agework/agent-sdk";
 
 /**
  * 确定性 mock 执行器：`baseUrl` 以 `mock:` 开头的自定义模型 provider 会命中它
@@ -23,7 +23,7 @@ export class MockAgentDriver implements AgentDriver {
   private aborted = false;
   private wake: (() => void) | undefined;
 
-  run(input: AgentRunInput): DriverEventStream {
+  run(input: AgentRunInput): AgentEventStream {
     return new Observable<unknown>((subscriber) => {
       this.play(input, (event) => subscriber.next(event)).then(
         () => subscriber.complete(),

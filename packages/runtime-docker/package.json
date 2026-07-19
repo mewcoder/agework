@@ -1,0 +1,33 @@
+{
+  "name": "@agework/runtime-docker",
+  "version": "0.0.1",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare:test": "pnpm --filter @agework/runtime-sdk build",
+    "typecheck": "tsc --noEmit",
+    "test": "pnpm prepare:test && vitest run"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1"
+  },
+  "peerDependencies": {
+    "@agework/runtime-sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@agework/runtime-sdk": "workspace:*",
+    "@swc/core": "^1.15.40",
+    "@types/node": "^24.0.0",
+    "typescript": "catalog:",
+    "unplugin-swc": "^1.5.9",
+    "vitest": "^4.1.8"
+  }
+}

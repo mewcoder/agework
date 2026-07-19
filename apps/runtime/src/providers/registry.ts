@@ -1,5 +1,4 @@
 import { NativeRuntimeProvider } from "./native/native-runtime.provider";
-import { DockerRuntimeProvider } from "./docker/docker-runtime.provider";
 import type {
   RuntimeProvider,
   RuntimeProviderPlugin,
@@ -21,7 +20,6 @@ export function createRuntimeResolver(
 ): (type: RuntimeType) => RuntimeProvider {
   const providers = new Map<RuntimeType, RuntimeProvider>([
     ["native", new NativeRuntimeProvider(cfg)],
-    ["docker", new DockerRuntimeProvider(toRuntimeProviderConfig(cfg))],
   ]);
   for (const plugin of plugins) {
     if (plugin.apiVersion !== RUNTIME_PLUGIN_API_VERSION) {

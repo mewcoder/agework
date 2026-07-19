@@ -1,11 +1,11 @@
 # runtime provider 扩展点的历史拆分决策
 
-> 部分决策已被 [0002-opensandbox-as-plugin-package.md](0002-opensandbox-as-plugin-package.md)
-> 取代：OpenSandbox 具体实现不再留在核心 provider 包，由外部插件契约接入。
+> Provider 布局已被后续决策取代：Runtime Host 只内建 Native；Docker 与 OpenSandbox
+> 都通过独立 Runtime Plugin 接入。
 
 系统有两个扩展点:agent adapter 与 runtime plugin。当前定案把公共契约放在
-`packages/runtime-sdk`（`@agework/runtime-sdk`），Host 与 Native/Docker 内建实现放在
-`apps/runtime`（`@agework/runtime-host`），外部插件只依赖 SDK。
+`packages/runtime-sdk`（`@agework/runtime-sdk`）。Host 与 Native 实现放在
+`apps/runtime`（`@agework/runtime-host`），所有 sandbox 实现只依赖 SDK。
 
 ## 决定
 

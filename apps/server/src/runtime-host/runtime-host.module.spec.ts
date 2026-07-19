@@ -91,5 +91,6 @@ function createConfigServiceMock(): Partial<ConfigService> {
     getRuntimeLogDir: vi.fn().mockReturnValue("/tmp/agework-runtime-logs"),
     getIdleTimeoutSeconds: vi.fn().mockReturnValue(600),
     getRuntimePluginPackages: vi.fn().mockReturnValue([]),
+    getAgentPluginPackages: vi.fn().mockReturnValue([]),
   };
 }
