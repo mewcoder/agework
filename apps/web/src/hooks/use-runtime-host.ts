@@ -126,7 +126,7 @@ export function useWorkers() {
 export function useStopWorker() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { runtimeHostId: string; workerKey: string }) =>
+    mutationFn: (input: { runtimeHostId: string; workerId: string }) =>
       workerApi.stopWorker(input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: adminWorkerKeys.workers });

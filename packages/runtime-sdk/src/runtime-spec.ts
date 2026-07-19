@@ -33,7 +33,8 @@ function resolveWorkspaceMount(input: RuntimeSpecInput): WorkspaceMount {
   }
 
   // native:无容器,runtimePath === hostPath,日志目录直接用宿主机目录。
-  if (input.scope === undefined) {
+  // V3: scope 始终存在,native 通过 runtimeType 判定,不再用 scope === undefined。
+  if (input.runtimeType === "native") {
     return {
       hostPath: workspaceRootPath,
       runtimePath: workspaceRootPath,
@@ -68,23 +69,16 @@ function resolveWorkspaceMount(input: RuntimeSpecInput): WorkspaceMount {
   };
 }
 
-/** 运行实例归属键:user scope 下全用户共享一个容器(userId),其余按 workspace。 */
-function resolveOwnerId(input: RuntimeSpecInput): string {
-  return input.scope === "user"
-    ? input.userId
-    : input.workspaceId;
-}
-
 /**
- * 组装一次 run 的目标运行环境:空间映射(resolveWorkspaceMount)+ 运行实例归属
- * (resolveOwnerId)拼成 RuntimeSpec。纯计算,不启动也不 attach worker。
+ * 组装一次 run 的目标运行环境:空间映射(resolveWorkspaceMount)拼成 RuntimeSpec。
+ * 纯计算,不启动也不 attach worker。归属身份(isolation)由 Runtime Host 从
+ * placement 派生后注入 RuntimeLaunchContext,不再进入 RuntimeSpec。
  */
 export function resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
   const mount = resolveWorkspaceMount(input);
-  const ownerId = resolveOwnerId(input);
   const { userId, workspaceId } = input;
 
-  if (input.scope === undefined) {
+  if (input.runtimeType === "native") {
     const native: NativeRuntimeSpec = {
       runtimeType: "native",
       userId,
@@ -92,7 +86,6 @@ export function resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       hostPath: mount.hostPath,
       runtimePath: mount.runtimePath,
       runtimeLogDir: mount.runtimeLogDir,
-      ownerId,
     };
     return native;
   }
@@ -109,7 +102,6 @@ export function resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
       // sandbox 分支 resolveWorkspaceMount 必定填了 mountTarget。
       mountTarget: mount.mountTarget as string,
     },
-    ownerId,
   };
   return spec;
 }

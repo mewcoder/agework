@@ -10,16 +10,16 @@ import { RuntimeHostService } from "./runtime-host.service";
 import { RuntimeHostModule } from "./runtime-host.module";
 import { BUILTIN_RUNTIME_HOST } from "./contract/builtin-runtime-host";
 import {
-  RUNTIME_HOST_OWNER_RECONCILIATION,
-  type RuntimeHostOwnerReconciliation,
+  RUNTIME_HOST_RESOURCE_RECONCILIATION,
+  type RuntimeHostResourceReconciliationPort,
 } from "./runtime-host.types";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
   constructor(
     readonly runtimeHostService: RuntimeHostService,
-    @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
-    readonly ownerReconciliation: RuntimeHostOwnerReconciliation
+    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
+    readonly resourceReconciliation: RuntimeHostResourceReconciliationPort
   ) {}
 }
 
@@ -55,7 +55,7 @@ describe("RuntimeHostModule wiring", () => {
     expect(consumer.runtimeHostService).toBe(
       testingModule.get(RuntimeHostService)
     );
-    expect(consumer.ownerReconciliation).toBeDefined();
+    expect(consumer.resourceReconciliation).toBeDefined();
   });
 });
 

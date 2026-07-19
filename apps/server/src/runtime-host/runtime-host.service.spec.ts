@@ -132,6 +132,7 @@ describe("RuntimeHostService", () => {
     diagnostics = {
       listWorkers: vi.fn().mockResolvedValue([]),
       listRunIds: vi.fn().mockResolvedValue([]),
+      listLifecycleClaims: vi.fn().mockResolvedValue([]),
       stopWorker: vi.fn().mockResolvedValue(undefined),
     };
     service = new RuntimeHostService(
@@ -139,7 +140,12 @@ describe("RuntimeHostService", () => {
       connectivity as unknown as RuntimeHostConnectivity,
       environment as unknown as RuntimeHostEnvironment,
       workspaceData as unknown as RuntimeHostWorkspaceData,
-      diagnostics as unknown as RuntimeHostDiagnostics
+      diagnostics as unknown as RuntimeHostDiagnostics,
+      {
+        getSessionEpoch: vi.fn(),
+        markReconciled: vi.fn(),
+        markReconcileFailed: vi.fn(),
+      } as never
     );
   });
 
@@ -151,19 +157,6 @@ describe("RuntimeHostService", () => {
 
   it("getBuiltinHostId returns the fixed builtin Host id", () => {
     expect(service.getBuiltinHostId()).toBe("builtin");
-  });
-
-  it("resolveRuntimeSpec delegates to the pure resolver", () => {
-    const result = service.resolveRuntimeSpec({
-      userId: "u-1",
-      workspaceId: "ws-1",
-      workspaceRootPath: "/data/u-1/ws-1",
-      userWorkspaceRootPath: "/data/u-1",
-      runtimeLogHostPath: "/data/logs/runtime",
-      runtimeType: "native",
-    });
-    expect(result.runtimeType).toBe("native");
-    expect(result.ownerId).toBe("ws-1");
   });
 
   it("onApplicationBootstrap persists the builtin Host capability report", async () => {
@@ -336,11 +329,11 @@ describe("RuntimeHostService", () => {
     });
   });
 
-  it("stopWorkerForAdmin routes to the diagnostics contract with the target host and key", async () => {
-    await service.stopWorkerForAdmin("rt-1", "workspace:ws-1#native");
+  it("stopWorkerForAdmin routes to the diagnostics contract with the target host and workerId", async () => {
+    await service.stopWorkerForAdmin("rt-1", "w-1");
     expect(diagnostics.stopWorker).toHaveBeenCalledWith({
       runtimeHostId: "rt-1",
-      key: "workspace:ws-1#native",
+      workerId: "w-1",
     });
   });
 
@@ -349,7 +342,7 @@ describe("RuntimeHostService", () => {
       new Error("runtime host rt-1 is not connected")
     );
     await expect(
-      service.stopWorkerForAdmin("rt-1", "workspace:ws-1#native")
+      service.stopWorkerForAdmin("rt-1", "w-1")
     ).rejects.toMatchObject({
       status: 502,
       message: expect.stringContaining("rt-1 is not connected"),

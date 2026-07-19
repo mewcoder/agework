@@ -206,7 +206,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                       <Badge variant="outline">
                         {run.worker.runtimeType === "native"
                           ? "host"
-                          : run.worker.scope}
+                          : run.worker.isolation.scope}
                       </Badge>
                     }
                   />
@@ -224,7 +224,7 @@ function RunDetailContent({ run }: { run: AdminRunDetail }) {
                       </Badge>
                     }
                   />
-                  <DetailItem label="Owner" value={run.worker.ownerId} mono />
+                  <DetailItem label="隔离主体" value={run.worker.isolation.subjectId} mono />
                   <DetailItem
                     label="Host"
                     value={run.worker.runtimeHostId}

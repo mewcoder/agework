@@ -65,9 +65,10 @@ function makeCtx(
 ): RuntimeLaunchContext {
   return {
     runtimeType: "opensandbox",
-    ownerId: "ws-1",
-    workspaceId: "ws-1",
+    workerId: "worker-1",
     runId: "run-1",
+    workspaceId: "ws-1",
+    isolation: { scope: "workspace", subjectId: "ws-1" },
     placement: {
       runtimeType: "opensandbox",
       userId: "u1",
@@ -88,10 +89,8 @@ function makeCtx(
 function makeRef(runtimeInstanceId = "sandbox-abc"): RuntimeInstanceRef {
   return {
     runtimeType: "opensandbox",
-    ownerId: "ws-1",
     workerId: "worker-1",
     runtimeInstanceId,
-    scope: "workspace",
   };
 }
 
@@ -124,37 +123,39 @@ describe("OpenSandbox runtime plugin provider", () => {
       );
     });
 
-    it("passes workerEnv and ownership metadata into createSandbox", async () => {
+    it("passes workerEnv and structured isolation metadata into createSandbox", async () => {
       const client = makeClient();
 
       await makeProvider(client).start(
-        makeCtx({ workerEnv: { AGEWORK_WORKER_OWNER_ID: "ws-1" } })
+        makeCtx({ workerEnv: { AGEWORK_WORKER_ROLE: "worker" } })
       );
 
       expect(client.createSandbox).toHaveBeenCalledWith(
         expect.objectContaining({
           env: expect.objectContaining({
-            AGEWORK_WORKER_OWNER_ID: "ws-1",
+            AGEWORK_WORKER_ROLE: "worker",
           }),
           metadata: expect.objectContaining({
-            "agework.io/runtime-owner-id": "ws-1",
+            "agework.io/scope": "workspace",
+            "agework.io/subject-id": "ws-1",
+            "agework.io/worker-id": "worker-1",
           }),
         })
       );
     });
 
-    it("starts the worker in the just-created sandbox with owner env", async () => {
+    it("starts the worker in the just-created sandbox with worker env", async () => {
       const client = makeClient();
 
       await makeProvider(client).start(
-        makeCtx({ workerEnv: { AGEWORK_WORKER_OWNER_ID: "ws-1" } })
+        makeCtx({ workerEnv: { AGEWORK_WORKER_ROLE: "worker" } })
       );
 
       const sandbox = await createdSandbox(client);
       expect(sandbox.runCommand).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          envs: expect.objectContaining({ AGEWORK_WORKER_OWNER_ID: "ws-1" }),
+          envs: expect.objectContaining({ AGEWORK_WORKER_ROLE: "worker" }),
         })
       );
     });

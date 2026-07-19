@@ -6,8 +6,21 @@ import type {
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
+  RuntimeStartOptions,
 } from "@agework/runtime-sdk";
 import type { RuntimeHostProviderConfig } from "../types";
+
+/** Node ErrnoException 形状检查(避免引用内部类型)。 */
+function isErrnoException(
+  err: unknown
+): err is { code: string } {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    typeof (err as { code?: unknown }).code === "string"
+  );
+}
 
 /**
  * native 运行形态的 Provider:fork 一个 worker 子进程,IPC channel 只在内部用于
@@ -31,8 +44,10 @@ export class NativeRuntimeProvider implements RuntimeProvider {
   start(
     ctx: RuntimeLaunchContext,
     onExit?: () => void,
-    onProvisioned?: (runtimeInstanceId: string) => void
+    onProvisioned?: (runtimeInstanceId: string) => void,
+    options?: RuntimeStartOptions
   ): Promise<{ runtimeInstanceId: string }> {
+    options?.signal?.throwIfAborted();
     const startToken = randomUUID();
     const child = fork(this.config.native.runtimeEntryPath, [], {
       env: {
@@ -50,56 +65,71 @@ export class NativeRuntimeProvider implements RuntimeProvider {
       `native worker forked ${safeLogJson({ runId: ctx.runId, pid: child.pid })}`
     );
 
-    this.channels.set(ctx.ownerId, child);
+    this.channels.set(ctx.workerId, child);
     child.on("exit", () => {
-      if (this.channels.get(ctx.ownerId) !== child) return; // stale process, superseded
-      this.channels.delete(ctx.ownerId);
+      if (this.channels.get(ctx.workerId) !== child) return; // stale process, superseded
+      this.channels.delete(ctx.workerId);
       onExit?.();
     });
     return Promise.resolve({ runtimeInstanceId });
   }
 
-  /** owner 仍在:SIGTERM owner 持有的进程句柄。 */
+  /** worker 仍在:SIGTERM worker 持有的进程句柄。 */
   release(ref: RuntimeInstanceRef): void {
     this.stop(ref);
   }
 
   stop(ref: RuntimeInstanceRef): void {
-    this.terminateChannel(ref.ownerId);
+    this.terminateChannel(ref.workerId);
   }
 
-  /** owner 永久消失:有内存 channel 杀 channel,否则按 pid 杀(重启后清孤儿)。 */
+  /**
+   * worker 永久消失:有内存 channel 杀 channel,否则按 pid 杀(重启后清孤儿)。
+   * 非 ESRCH 错误传播给调用方,避免假成功 ACK(SPEC §5.2)。
+   */
   destroy(ref: RuntimeInstanceRef): void {
-    if (this.channels.has(ref.ownerId)) {
-      this.terminateChannel(ref.ownerId);
+    if (this.channels.has(ref.workerId)) {
+      this.terminateChannel(ref.workerId);
       return;
     }
     this.killByInstanceId(ref.runtimeInstanceId);
   }
 
-  private terminateChannel(ownerId: string): void {
-    const channel = this.channels.get(ownerId);
+  private terminateChannel(workerId: string): void {
+    const channel = this.channels.get(workerId);
     if (channel && !channel.killed) {
       try {
         channel.kill("SIGTERM");
       } catch (err) {
+        if (isErrnoException(err) && err.code === "ESRCH") {
+          this.channels.delete(workerId);
+          return;
+        }
         this.logger.warn(
-          `terminate native worker failed ${safeLogJson({ ownerId, error: err instanceof Error ? err.message : String(err) })}`
+          `terminate native worker failed ${safeLogJson({ workerId, error: err instanceof Error ? err.message : String(err) })}`
         );
+        // 非 ESRCH 不能假装资源已清理，也不能先丢 tracked channel。
+        throw err;
       }
     }
-    this.channels.delete(ownerId);
+    this.channels.delete(workerId);
   }
 
-  /** runtimeInstanceId 格式为 `pid:startToken`;向 pid 发送 SIGTERM,进程已退出(ESRCH)时忽略。 */
+  /**
+   * runtimeInstanceId 格式为 `pid:startToken`;向 pid 发送 SIGTERM。
+   * ESRCH(进程已退出)是预期状态,静默忽略;其它错误(EPERM 等)传播给调用方,
+   * 避免假成功 ACK(SPEC §5.2)。
+   */
   private killByInstanceId(runtimeInstanceId: string): void {
     const [pidStr] = runtimeInstanceId.split(":");
     const pid = Number(pidStr);
     if (!Number.isInteger(pid)) return;
     try {
       process.kill(pid, "SIGTERM");
-    } catch {
-      // ESRCH: process already gone
+    } catch (err) {
+      // ESRCH: No such process —— 进程已退出,预期状态,静默
+      if (isErrnoException(err) && err.code === "ESRCH") return;
+      throw err;
     }
   }
 }

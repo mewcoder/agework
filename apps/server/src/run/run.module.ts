@@ -9,9 +9,11 @@ import { RunStatusService } from "./status/run-status.service";
 import { RunFinalizationStore } from "./status/run-finalization.store";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
 import { RunWorkspaceListener } from "./workspace/run-workspace.listener";
+import { RunUserListener } from "./user/run-user.listener";
 import { RunService } from "./run.service";
 import { RunLauncher } from "./launch/run.launcher";
 import { HostAgUiEventHandler } from "./upstream/host-agui-event.handler";
+import { RuntimeHostReconciliationCoordinator } from "./recovery/runtime-host-reconciliation.coordinator";
 
 // controllers
 import { AdminRunController } from "./admin/admin-run.controller";
@@ -20,6 +22,8 @@ import { AdminRunController } from "./admin/admin-run.controller";
 import { RunEventModule } from "../run-event/run-event.module";
 import { ConversationModule } from "../conversation/conversation.module";
 import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
+import { WorkspaceModule } from "../workspace/workspace.module";
+import { UserModule } from "../user/user.module";
 
 /**
  * Run 领域：一次执行的生命周期、事件记录/聚合。普通用例只经
@@ -29,7 +33,13 @@ import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
  * RunStatusService / RunLauncher 直接注入 ConversationService 回写会话状态与消息。
  */
 @Module({
-  imports: [RuntimeHostModule, RunEventModule, ConversationModule],
+  imports: [
+    RuntimeHostModule,
+    RunEventModule,
+    ConversationModule,
+    WorkspaceModule,
+    UserModule,
+  ],
   controllers: [AdminRunController],
   providers: [
     RunRepository,
@@ -37,12 +47,14 @@ import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
     HostUpstreamHandler,
     UpstreamSeqStore,
     RunRecoveryService,
+    RuntimeHostReconciliationCoordinator,
     RunStatusService,
     RunFinalizationStore,
     RunService,
     RunLauncher,
     HostAgUiEventHandler,
     RunWorkspaceListener,
+    RunUserListener,
   ],
   exports: [RunService],
 })

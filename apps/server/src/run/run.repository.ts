@@ -131,6 +131,21 @@ export class RunRepository {
     return rows.map((row) => row.conversationId);
   }
 
+  /** user 停用/删除级联用：该 user 名下所有活跃 run 的会话 id（去重）。 */
+  async findActiveConversationIdsForUser(
+    userId: string
+  ): Promise<string[]> {
+    const rows = await this.prisma.run.findMany({
+      where: {
+        conversation: { workspace: { userId } },
+        status: { in: ACTIVE_RUN_STATUSES },
+      },
+      select: { conversationId: true },
+      distinct: ["conversationId"],
+    });
+    return rows.map((row) => row.conversationId);
+  }
+
   /** 管理端：按 runId 查 conversationId（用于定位该 run 对应的 raw trace 文件）。 */
   async findConversationId(runId: string): Promise<string | null> {
     const run = await this.prisma.run.findUnique({

@@ -54,12 +54,12 @@ export function buildSandboxStartInput(
   const runtimeLogDir = placement.runtimeLogDir;
   const workerApiBaseUrl = toContainerReachableUrl(cfg.workerApiBaseUrl);
   const sandboxPlacement: SandboxPlacement = {
-    scope: placement.sandbox.scope,
-    ownerId: ctx.ownerId,
+    scope: ctx.isolation.scope,
     workspaceId: ctx.workspaceId,
     workspaceHostPath: placement.hostPath,
     workspaceMountPath: placement.sandbox.mountTarget,
   };
+  const { isolation, workerId } = ctx;
   return {
     placement: sandboxPlacement,
     image: cfg.workerImage,
@@ -67,21 +67,17 @@ export function buildSandboxStartInput(
     env: {
       ...ctx.workerEnv,
       AGEWORK_WORKER_API_BASE: workerApiBaseUrl,
-      AGEWORK_WORKER_RUNTIME_RESOURCE_NAME: `agework-worker-${safePathPart(ctx.ownerId)}`,
       AGEWORK_WORKER_LOG_DIR: runtimeLogDir,
-      AGEWORK_WORKER_LOG_FILE: `${runtimeLogDir}/${safePathPart(ctx.ownerId)}.runtime.worker.log`,
+      AGEWORK_WORKER_LOG_FILE: `${runtimeLogDir}/${workerId}.runtime.worker.log`,
     },
     metadata: {
-      "agework.io/runtime-owner-id": ctx.ownerId,
-      "agework.io/scope": placement.sandbox.scope,
+      "agework.io/runtime-type": ctx.runtimeType,
+      "agework.io/scope": isolation.scope,
+      "agework.io/subject-id": isolation.subjectId,
+      "agework.io/workspace-id": ctx.workspaceId,
+      "agework.io/worker-id": workerId,
     },
     runtimeLogHostPath: cfg.runtimeLogHostPath,
     runtimeLogMountPath: runtimeLogDir,
-    expectedRuntimeInstanceId: ctx.expectedRuntimeInstanceId,
   };
-}
-
-function safePathPart(value: string): string {
-  const safe = value.replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
-  return (safe || "unknown").slice(0, 120);
 }

@@ -11,12 +11,13 @@ import type {
   ListDirectoryInput,
   ReadFileDiffInput,
   ReadFileInput,
-  ReleaseOwnerInput,
+  ReleaseRuntimeResourcesInput,
   RunStatusPayload,
   RuntimeHostContract,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   RuntimeHostUpstream,
+  RuntimeLifecycleClaim,
   SearchFilesInput,
   StopWorkerInput,
   SubmitRunInput,
@@ -37,8 +38,7 @@ import {
   type HostRunReapBinding,
   type HostRunReapPort,
   type RuntimeHostConnectivity,
-  type RuntimeHostOwnerReconciliation,
-  type RuntimeHostOwnerRef,
+  type RuntimeHostResourceReconciliationPort,
   type RuntimeHostRunReconciliation,
 } from "../runtime-host.types";
 import { RunEventService } from "../../run-event/run-event.service";
@@ -66,7 +66,7 @@ import {
 export class RuntimeHostAdapter
   implements
     RuntimeHostContract,
-    RuntimeHostOwnerReconciliation,
+    RuntimeHostResourceReconciliationPort,
     RuntimeHostRunReconciliation,
     RuntimeHostConnectivity,
     HostRunReapBinding
@@ -181,9 +181,9 @@ export class RuntimeHostAdapter
 
   // ── 环境 / 文件 / 观测 契约方法（按 runtimeHostId 定向分派） ───────────
 
-  async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
-    // 目标 Host 无该 owner 的 worker 时为空操作(幂等)
-    await this.route(input.runtimeHostId).releaseOwner(input);
+  async releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void> {
+    // 目标 Host 无该 target 的 worker 时为空操作(幂等)
+    await this.route(input.runtimeHostId).releaseResources(input);
   }
 
   async detectEnv(runtimeHostId: string): Promise<HostCapabilityStatus> {
@@ -231,7 +231,7 @@ export class RuntimeHostAdapter
   }
 
   async stopWorker(input: StopWorkerInput): Promise<void> {
-    // 按 runtimeHostId 定向路由;WorkerKey = `${OwnerKey}#${RuntimeType}`。
+    // admin 诊断面按 host+workerId 精确停止目标 worker
     await this.route(input.runtimeHostId).stopWorker(input);
   }
 
@@ -244,18 +244,48 @@ export class RuntimeHostAdapter
     return builtin.concat(tunnel);
   }
 
-  async listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]> {
-    const workers = runtimeHostId
-      ? await this.listWorkersOn(runtimeHostId)
-      : await this.listWorkers();
-    const refs = new Map<string, RuntimeHostOwnerRef>();
-    for (const worker of workers) {
-      if (worker.scope !== "workspace" && worker.scope !== "user") continue;
-      const owner = `${worker.scope}:${worker.ownerId}` as const;
-      const ref = { runtimeHostId: worker.runtimeHostId, owner };
-      refs.set(`${ref.runtimeHostId}\0${ref.owner}`, ref);
+  /** Server 重连对账:获取业务生命周期 claims(覆盖 session + worker + release_pending)。
+   *  不再从 admin WorkerSnapshot 合成业务 owner。 */
+  async listLifecycleClaims(
+    runtimeHostId?: string
+  ): Promise<RuntimeLifecycleClaim[]> {
+    if (runtimeHostId) {
+      return isBuiltinHostId(runtimeHostId)
+        ? this.stampClaims(
+            await this.builtinHost.listLifecycleClaims(),
+            BUILTIN_HOST_ID
+          )
+        : this.tunnelHost.listLifecycleClaimsOn(runtimeHostId);
     }
-    return [...refs.values()];
+    // 聚合所有在线 Host
+    const builtin = this.stampClaims(
+      await this.builtinHost.listLifecycleClaims(),
+      BUILTIN_HOST_ID
+    );
+    // SPEC §5.3: 查询失败必须显式失败，不能折叠为空列表。
+    // 不再 catch 单 Host 错误——让其传播给调用方。
+    const tunnelClaims = await Promise.all(
+      this.tunnelHandler.listConnected().map((hostId) =>
+        this.tunnelHost.listLifecycleClaimsOn(hostId)
+      )
+    );
+    return builtin.concat(tunnelClaims.flat());
+  }
+
+  /** 列出所有当前在线的 Host id(含 builtin)。 */
+  listConnectedHostIds(): string[] {
+    return [BUILTIN_HOST_ID, ...this.tunnelHandler.listConnected()];
+  }
+
+  /** 给 builtin Host 的 claims 盖章 runtimeHostId(Host 本地为空串)。 */
+  private stampClaims(
+    claims: RuntimeLifecycleClaim[],
+    runtimeHostId: string
+  ): RuntimeLifecycleClaim[] {
+    return claims.map((claim) => ({
+      ...claim,
+      runtimeHostId,
+    }));
   }
 
   /** Server 重启恢复只对账 runId，不把 admin Worker 诊断形状泄漏给 run 模块。 */

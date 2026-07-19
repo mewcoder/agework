@@ -1,34 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RunService } from "../run.service";
-import type { RuntimeHostOwnerReconciliation } from "../../runtime-host/runtime-host.types";
+import type { RuntimeHostResourceReconciliationPort } from "../../runtime-host/runtime-host.types";
 import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { RunWorkspaceListener } from "./run-workspace.listener";
 
 function makeDeps(
   overrides: {
     stopForWorkspace?: ReturnType<typeof vi.fn>;
-    releaseOwner?: ReturnType<typeof vi.fn>;
+    releaseResources?: ReturnType<typeof vi.fn>;
   } = {}
 ) {
   const stopForWorkspace =
     overrides.stopForWorkspace ?? vi.fn().mockResolvedValue(undefined);
-  const releaseOwner =
-    overrides.releaseOwner ?? vi.fn().mockResolvedValue(undefined);
+  const releaseResources =
+    overrides.releaseResources ?? vi.fn().mockResolvedValue(undefined);
   const listener = new RunWorkspaceListener(
     { stopForWorkspace } as unknown as RunService,
-    { releaseOwner } as unknown as RuntimeHostOwnerReconciliation
+    {
+      releaseResources,
+      listLifecycleClaims: vi.fn().mockResolvedValue([]),
+    } as unknown as RuntimeHostResourceReconciliationPort
   );
-  return { listener, stopForWorkspace, releaseOwner };
+  return { listener, stopForWorkspace, releaseResources };
 }
 
 describe("RunWorkspaceListener", () => {
-  it("stops active runs before releasing the workspace owner", async () => {
+  it("stops active runs before releasing the workspace resources", async () => {
     const order: string[] = [];
-    const { listener, releaseOwner } = makeDeps({
+    const { listener, releaseResources } = makeDeps({
       stopForWorkspace: vi.fn(async () => {
         order.push("stop");
       }),
-      releaseOwner: vi.fn(async () => {
+      releaseResources: vi.fn(async () => {
         order.push("release");
       }),
     });
@@ -38,14 +41,14 @@ describe("RunWorkspaceListener", () => {
     );
 
     expect(order).toEqual(["stop", "release"]);
-    expect(releaseOwner).toHaveBeenCalledWith({
+    expect(releaseResources).toHaveBeenCalledWith({
       runtimeHostId: "rt-1",
-      owner: "workspace:ws-1",
+      target: { type: "workspace", workspaceId: "ws-1" },
     });
   });
 
-  it("still releases the owner when stopping runs fails", async () => {
-    const { listener, releaseOwner } = makeDeps({
+  it("still releases the resources when stopping runs fails", async () => {
+    const { listener, releaseResources } = makeDeps({
       stopForWorkspace: vi.fn().mockRejectedValue(new Error("host offline")),
     });
 
@@ -55,12 +58,12 @@ describe("RunWorkspaceListener", () => {
       )
     ).resolves.toBeUndefined();
 
-    expect(releaseOwner).toHaveBeenCalledTimes(1);
+    expect(releaseResources).toHaveBeenCalledTimes(1);
   });
 
   it("swallows release failures (best-effort,重连对账兜底)", async () => {
     const { listener } = makeDeps({
-      releaseOwner: vi.fn().mockRejectedValue(new Error("tunnel timeout")),
+      releaseResources: vi.fn().mockRejectedValue(new Error("tunnel timeout")),
     });
 
     await expect(

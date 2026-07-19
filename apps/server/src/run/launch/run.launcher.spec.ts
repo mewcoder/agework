@@ -21,6 +21,8 @@ function makeWorkspaceView(
     username: "admin-1",
     runtimeHostId: "builtin",
     runtimeSource: "builtin",
+    userId: "user-1",
+    userLifecycleVersion: 1,
     ...overrides,
   };
 }
@@ -135,11 +137,12 @@ describe("RunLauncher", () => {
       runId: "run-1",
       conversationId: "conversation-1",
       placement: {
-        owner: "workspace:ws-1",
+        scope: "workspace",
         runtimeType: "native",
         runtimeHostId: "builtin",
         workspaceId: "ws-1",
         userId: "user-1",
+        userLifecycleVersion: 1,
         username: "admin-1",
         workspacePath: "/tmp/ws",
       },
@@ -183,7 +186,7 @@ describe("RunLauncher", () => {
     expect(registerOrder).toBeLessThan(submitOrder);
   });
 
-  it("derives a user owner key for user-scope sandbox workspaces", async () => {
+  it("passes user-scope placement for user-scope sandbox workspaces", async () => {
     await launch(
       makeStartInput({
         workspace: makeWorkspaceView({
@@ -196,7 +199,7 @@ describe("RunLauncher", () => {
     expect(mockRuntimeHost.submitRun).toHaveBeenCalledWith(
       expect.objectContaining({
         placement: expect.objectContaining({
-          owner: "user:user-1",
+          scope: "user",
           runtimeType: "docker",
         }),
       })

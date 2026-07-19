@@ -17,7 +17,7 @@ describe("AdminWorkerController", () => {
         {
           runtimeHostId: "builtin",
           workerId: "w-1",
-          workerKey: "workspace:ws-1#native",
+          isolation: { scope: "workspace", subjectId: "ws-1" },
           status: "ready",
         },
       ],
@@ -32,26 +32,22 @@ describe("AdminWorkerController", () => {
         expect.objectContaining({
           runtimeHostId: "builtin",
           workerId: "w-1",
-          workerKey: "workspace:ws-1#native",
           status: "ready",
         }),
       ],
     });
   });
 
-  it("stop delegates to RuntimeHostService.stopWorkerForAdmin with host and key", async () => {
+  it("stop delegates to RuntimeHostService.stopWorkerForAdmin with host and workerId", async () => {
     const stopWorkerForAdmin = vi.fn().mockResolvedValue(undefined);
     const controller = makeController({ stopWorkerForAdmin });
 
     const result = await controller.stop({
       runtimeHostId: "rt-1",
-      workerKey: "workspace:ws-1#native",
+      workerId: "w-1",
     });
 
-    expect(stopWorkerForAdmin).toHaveBeenCalledWith(
-      "rt-1",
-      "workspace:ws-1#native"
-    );
+    expect(stopWorkerForAdmin).toHaveBeenCalledWith("rt-1", "w-1");
     expect(result).toEqual({ ok: true });
   });
 });

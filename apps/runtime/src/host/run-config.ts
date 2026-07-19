@@ -6,7 +6,6 @@ import type {
   RuntimeSpec,
   SubmitRunInput,
 } from "@agework/shared/protocol";
-import { parseOwnerKey } from "@agework/shared/protocol";
 import { isRuntimeType, resolveRuntimeSpec } from "@agework/runtime-sdk";
 import type { RuntimeHostConfig } from "./runtime-host.js";
 
@@ -31,13 +30,11 @@ export function resolveSpec(
     userWorkspaceRootPath: config.getUserWorkspace(placement.username),
     runtimeLogHostPath: config.runtimeLogDir,
   };
-  if (runtimeType === "native") {
-    return resolveRuntimeSpec({ ...base, runtimeType: "native" });
-  }
+  // V3: scope 始终存在,native 也是 "workspace"。
   return resolveRuntimeSpec({
     ...base,
     runtimeType,
-    scope: parseOwnerKey(placement.owner).scope,
+    scope: placement.scope,
   });
 }
 
@@ -141,13 +138,18 @@ export function buildWorkerEnv(
   runConfig: RunConfig,
   agentPluginPackages: readonly string[] = []
 ): Record<string, string> {
+  const subjectId =
+    placement.scope === "user"
+      ? placement.userId
+      : placement.workspaceId;
   const env: Record<string, string> = {
     AGEWORK_WORKER_ROLE: "worker",
-    AGEWORK_WORKER_OWNER_ID: parseOwnerKey(placement.owner).id,
     AGEWORK_WORKER_ID: workerId,
     AGEWORK_WORKER_START_TOKEN: startToken,
     AGEWORK_WORKER_RUNTIME_TYPE: runtimeType,
-    AGEWORK_WORKER_SCOPE: parseOwnerKey(placement.owner).scope,
+    AGEWORK_WORKER_SCOPE: placement.scope,
+    AGEWORK_WORKER_SUBJECT_ID: subjectId,
+    AGEWORK_WORKER_USER_ID: placement.userId,
     AGEWORK_WORKER_WORKSPACE_PATH: runtimeTarget.runtimePath,
   };
   if (runConfig.workerLogFilePath) {

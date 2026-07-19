@@ -6,6 +6,7 @@ import type {
   RuntimeProvider,
   RuntimeLaunchContext,
   RuntimeInstanceRef,
+  RuntimeStartOptions,
   SandboxStartInput,
 } from "@agework/runtime-sdk";
 import { buildSandboxStartInput } from "@agework/runtime-sdk";
@@ -27,8 +28,10 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   async start(
     ctx: RuntimeLaunchContext,
     _onExit?: () => void,
-    onProvisioned?: (runtimeInstanceId: string) => void
+    onProvisioned?: (runtimeInstanceId: string) => void,
+    options?: RuntimeStartOptions
   ): Promise<{ runtimeInstanceId: string }> {
+    options?.signal?.throwIfAborted();
     const input = buildSandboxStartInput(ctx, this.config);
     const containerId = await this.runContainer(input);
     onProvisioned?.(containerId);
@@ -41,27 +44,39 @@ export class DockerRuntimeProvider implements RuntimeProvider {
     );
   }
 
-  /** 尚无独立 cache registry/TTL，释放时删除，避免 Host 丢索引后残留容器。 */
+  /** 尚无独立 cache registry/TTL，释放时删除，避免 Host 丢索引后残留容器。
+   *  不吞错误:清理失败必须传播给调用方,由 Runtime 写入重试账本(SPEC §5.2)。
+   *  "No such container" 视为成功(资源已不存在)。 */
   async release(ref: RuntimeInstanceRef): Promise<void> {
     await this.destroy(ref);
   }
 
   async destroy(ref: RuntimeInstanceRef): Promise<void> {
-    await this.dockerRemove(ref.runtimeInstanceId).catch(
-      swallow(this.logger, `remove container ${ref.runtimeInstanceId}`)
-    );
+    try {
+      await this.dockerRemove(ref.runtimeInstanceId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // "No such container" / "not found" 视为成功:资源已不存在
+      if (/no such|not found/i.test(msg)) {
+        this.logger.warn(
+          `container ${ref.runtimeInstanceId.slice(0, 12)} already gone: ${msg}`
+        );
+        return;
+      }
+      throw err;
+    }
   }
 
   private async runContainer(input: SandboxStartInput): Promise<string> {
     const { placement, image, env, metadata } = input;
-    const { workspaceHostPath, workspaceMountPath, ownerId } = placement;
+    const { workspaceHostPath, workspaceMountPath } = placement;
 
     const args = [
       "run",
       "-d",
       "--init",
-      "--name",
-      `agework-worker-${ownerId}`,
+      // 不再使用 ownerId 稳定命名:让 Docker 自动生成容器名,避免跨 subject 碰撞
+      // 与误停。stop/destroy 始终以 containerId 为准。workerId 仅作为 label 便于排查。
       // Docker Desktop 按 com.docker.compose.project label 对容器分组展示
       "--label",
       "com.docker.compose.project=agework",
@@ -93,44 +108,16 @@ export class DockerRuntimeProvider implements RuntimeProvider {
 
     args.push(image);
 
-    let stdout: string;
-    try {
-      ({ stdout } = await execFileAsync("docker", args, {
-        timeout: DOCKER_RUN_TIMEOUT_MS,
-      }));
-    } catch (err) {
-      const conflictingContainerId = parseDockerNameConflictContainerId(err);
-      if (!conflictingContainerId || input.expectedRuntimeInstanceId === undefined) {
-        throw err;
-      }
-
-      const runtimeInstanceId = await this.inspectContainerId(
-        conflictingContainerId
-      ).catch(swallow(this.logger, `docker inspect ${conflictingContainerId}`));
-      if (!runtimeInstanceId) {
-        throw err;
-      }
-
-      if (runtimeInstanceId === input.expectedRuntimeInstanceId) {
-        // 是当前 workspace 预期绑定的那个容器,理论上不该撞名,保守不清理
-        throw err;
-      }
-
-      this.logger.warn(
-        `Removing Docker container ${runtimeInstanceId.slice(0, 12)} not bound to current workspace before retrying sandbox create`
-      );
-      await this.dockerRemove(runtimeInstanceId);
-      ({ stdout } = await execFileAsync("docker", args, {
-        timeout: DOCKER_RUN_TIMEOUT_MS,
-      }));
-    }
+    const { stdout } = await execFileAsync("docker", args, {
+      timeout: DOCKER_RUN_TIMEOUT_MS,
+    });
 
     const containerId = stdout.trim();
     if (!containerId) {
       throw new Error("docker run returned empty container ID");
     }
     this.logger.log(
-      `Container started: ownerId=${ownerId} containerId=${containerId.slice(0, 12)}`
+      `Container started: workerId=${metadata["agework.io/worker-id"] ?? "?"} containerId=${containerId.slice(0, 12)}`
     );
     return containerId;
   }
@@ -164,42 +151,4 @@ export class DockerRuntimeProvider implements RuntimeProvider {
   private async dockerRemove(containerId: string): Promise<void> {
     await execFileAsync("docker", ["rm", "-f", containerId]);
   }
-
-  private async inspectContainerId(containerId: string): Promise<string> {
-    const { stdout } = await execFileAsync("docker", [
-      "inspect",
-      "--format",
-      "{{.Id}}",
-      containerId,
-    ]);
-    const inspectedId = stdout.trim();
-    if (!inspectedId) {
-      throw new Error(`docker inspect returned empty ID for ${containerId}`);
-    }
-    return inspectedId;
-  }
-
-}
-
-function parseDockerNameConflictContainerId(err: unknown): string | undefined {
-  const output = errorOutput(err);
-  return output.match(/is already in use by container "([a-f0-9]+)"/i)?.[1];
-}
-
-function errorOutput(err: unknown): string {
-  if (!err || typeof err !== "object") {
-    return String(err);
-  }
-  const output: string[] = [];
-  if (err instanceof Error) {
-    output.push(err.message);
-  }
-  const maybeWithOutput = err as { stderr?: unknown; stdout?: unknown };
-  if (typeof maybeWithOutput.stderr === "string") {
-    output.push(maybeWithOutput.stderr);
-  }
-  if (typeof maybeWithOutput.stdout === "string") {
-    output.push(maybeWithOutput.stdout);
-  }
-  return output.join("\n");
 }

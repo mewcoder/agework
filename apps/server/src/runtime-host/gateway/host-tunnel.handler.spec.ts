@@ -285,7 +285,7 @@ describe("HostTunnelHandler", () => {
     await register(ws);
     expect(events.emit).toHaveBeenCalledWith(
       "runtime-host.connected",
-      expect.objectContaining({ runtimeHostId: "rt-1" })
+      expect.objectContaining({ runtimeHostId: "rt-1", epoch: 1 })
     );
   });
 

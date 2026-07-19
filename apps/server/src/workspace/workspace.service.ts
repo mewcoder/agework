@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -24,7 +25,14 @@ import {
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
 import { RuntimeHostService } from "../runtime-host/runtime-host.service";
 import type { RuntimeType } from "@agework/runtime-sdk";
-import type { WorkerScope } from "@agework/shared/protocol";
+import type {
+  RuntimeLifecycleClaim,
+  WorkerScope,
+} from "@agework/shared/protocol";
+import {
+  RUNTIME_HOST_RESOURCE_RECONCILIATION,
+  type RuntimeHostResourceReconciliationPort,
+} from "../runtime-host/runtime-host.types";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
@@ -65,7 +73,9 @@ export class WorkspaceService {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeHostService: RuntimeHostService
+    private readonly runtimeHostService: RuntimeHostService,
+    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
+    private readonly hostResources: RuntimeHostResourceReconciliationPort
   ) {}
 
   /**
@@ -103,9 +113,10 @@ export class WorkspaceService {
   }
 
   /**
-   * run 启动所需的 workspace 运行上下文：目录 + Runtime Host/runtimeType 配置 + 属主用户名。
-   * 供 agent 层在调用 RunService.start 前解析（run 层不直接读 workspace 表）。
-   * workspace 不存在抛 404，未关联目录抛 400。
+   * run 启动所需的 workspace 运行上下文：目录 + Runtime Host/runtimeType 配置 +
+   * 属主用户名 + 用户生命周期版本。供 agent 层在调用 RunService.start 前解析
+   * （run 层不直接读 workspace 表）。workspace 不存在抛 404，未关联目录抛 400。
+   * User 必须 active 且未删除,否则抛 400(防止已禁用/删除用户启动新 run)。
    */
   async getRunContext(workspaceId: string): Promise<WorkspaceRunContext> {
     const workspace = await this.repo.findRunView(workspaceId);
@@ -115,6 +126,10 @@ export class WorkspaceService {
     if (!workspace.directory?.rootPath) {
       throw new BadRequestException("工作空间必须关联目录才能运行 agent");
     }
+    // DB 状态是权威:User 必须 active 且未删除才能启动新 run
+    if (workspace.user.status !== "active" || workspace.user.deletedAt) {
+      throw new BadRequestException("工作空间属主用户已禁用或删除,无法启动 run");
+    }
     return {
       workspaceId: workspace.id,
       workspaceRootPath: workspace.directory.rootPath,
@@ -123,7 +138,41 @@ export class WorkspaceService {
       username: workspace.user.username,
       runtimeHostId: workspace.runtimeHostId,
       runtimeSource: workspace.runtimeHost.source,
+      userId: workspace.user.id,
+      userLifecycleVersion: workspace.user.sessionVersion,
     };
+  }
+
+  /**
+   * registered Host 重连时对账 workspace 生命周期 claims。claims 由上层协调器
+   * 每个 attempt 只读取一次后传入；本方法只做 workspace owner 的 DB 判断和释放。
+   */
+  async reconcileRuntimeHostResources(
+    runtimeHostId: string,
+    claims: RuntimeLifecycleClaim[]
+  ): Promise<void> {
+    const workspaceIds = distinctWorkspaceIds(claims);
+    const targets = new Set(distinctPendingWorkspaceReleases(claims));
+
+    if (workspaceIds.length > 0) {
+      const activeIds = new Set(await this.repo.listActiveIds(workspaceIds));
+      for (const workspaceId of workspaceIds) {
+        if (!activeIds.has(workspaceId)) targets.add(workspaceId);
+      }
+    }
+
+    let firstError: unknown;
+    for (const workspaceId of targets) {
+      try {
+        await this.hostResources.releaseResources({
+          runtimeHostId,
+          target: { type: "workspace", workspaceId },
+        });
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
   }
 
   /**
@@ -584,4 +633,32 @@ function normalizeDirectorySource(source: string | null | undefined) {
   if (source === EXTERNAL_DIRECTORY_SOURCE) return EXTERNAL_DIRECTORY_SOURCE;
   if (source === REMOTE_DIRECTORY_SOURCE) return REMOTE_DIRECTORY_SOURCE;
   return MANAGED_DIRECTORY_SOURCE;
+}
+
+function distinctWorkspaceIds(claims: RuntimeLifecycleClaim[]): string[] {
+  const ids = new Set<string>();
+  for (const claim of claims) {
+    if (claim.kind === "session") {
+      ids.add(claim.workspaceId);
+    } else if (claim.kind === "worker") {
+      if (claim.scope === "workspace") ids.add(claim.subjectId);
+      for (const workspaceId of claim.workspaceIds) ids.add(workspaceId);
+    }
+  }
+  return [...ids];
+}
+
+function distinctPendingWorkspaceReleases(
+  claims: RuntimeLifecycleClaim[]
+): string[] {
+  const ids = new Set<string>();
+  for (const claim of claims) {
+    if (
+      claim.kind === "release_pending" &&
+      claim.target.type === "workspace"
+    ) {
+      ids.add(claim.target.workspaceId);
+    }
+  }
+  return [...ids];
 }

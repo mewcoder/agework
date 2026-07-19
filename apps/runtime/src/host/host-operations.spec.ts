@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ describe("HostWorkspaceOperations", () => {
   });
 
   it("owns Host-local directory operations", () => {
-    const root = mkdtempSync(join(tmpdir(), "agework-host-ops-"));
+    const root = realpathSync(mkdtempSync(join(tmpdir(), "agework-host-ops-")));
     roots.push(root);
     const operations = new HostWorkspaceOperations();
     const child = join(root, "project");

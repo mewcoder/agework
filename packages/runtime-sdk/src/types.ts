@@ -11,8 +11,8 @@ type RuntimeSpecBase = {
   workspaceId: string;
   hostPath: string;
   runtimePath: string;
+  /** 日志目录在执行环境内的路径(native 下即宿主机日志目录)。 */
   runtimeLogDir: string;
-  ownerId: string;
 };
 
 export type NativeRuntimeSpec = RuntimeSpecBase & {
@@ -45,12 +45,21 @@ export type RuntimeProviderConfig = {
   workerApiBaseUrl: string;
 };
 
+/**
+ * Runtime Host 内部派生的结构化隔离身份。scope 是最大共享边界，subjectId 是
+ * 该 scope 下的复用主体(user scope → userId, workspace scope → workspaceId)。
+ * provider 只接收隔离事实，不再从 ownerId 字符串反解析。
+ */
+export type RuntimeIsolation = {
+  scope: WorkerScope;
+  subjectId: string;
+};
+
 // ── Sandbox 启动输入(docker / opensandbox provider 与 buildSandboxStartInput
 // 之间的内部契约,不导出) ──
 
 export type SandboxPlacement = {
   scope: WorkerScope;
-  ownerId: string;
   workspaceId: string;
   workspaceHostPath: string;
   workspaceMountPath: string;
@@ -64,26 +73,21 @@ export type SandboxStartInput = {
   metadata: Record<string, string>;
   runtimeLogHostPath?: string;
   runtimeLogMountPath?: string;
-  /** 见 RuntimeLaunchContext.expectedRuntimeInstanceId 的三态语义。 */
-  expectedRuntimeInstanceId?: string | null;
 };
 
 // ── Placement 解析契约 ──
 
-/** 入参由 run 层用部署默认值补齐并校验完毕,这里只做纯 placement 计算。 */
+/** 入参由 run 层用部署默认值补齐并校验完毕,这里只做纯 placement 计算。
+ *  V3: scope 始终存在(native 也是 "workspace"),不再用 scope === undefined 暗示 native。 */
 export type RuntimeSpecInput = {
   userId: string;
   workspaceId: string;
   workspaceRootPath: string;
   userWorkspaceRootPath: string;
   runtimeLogHostPath: string;
-} & (
-  | { runtimeType: "native"; scope?: never }
-  | {
-      runtimeType: RuntimeType;
-      scope: WorkerScope;
-    }
-);
+  runtimeType: RuntimeType;
+  scope: WorkerScope;
+};
 
 // ── RuntimeProvider 契约 ──
 
@@ -94,25 +98,30 @@ export type RuntimeSpecInput = {
  *  第二参数传,不进 ctx。 */
 export type RuntimeLaunchContext = {
   runtimeType: RuntimeType;
-  ownerId: string;
-  workspaceId: string;
+  /** Runtime 内部控制身份;provider 的资源控制身份是 start() 返回的 runtimeInstanceId。 */
+  workerId: string;
   runId: string;
+  workspaceId: string;
+  /** 结构化隔离身份,由 Runtime 从 placement 唯一派生。 */
+  isolation: RuntimeIsolation;
   placement: RuntimeSpec;
   workerEnv: Record<string, string>;
-  /** 当前 workspace 绑定的 runtimeInstanceId(docker 容器名冲突恢复用),三态:
-   *  `undefined` = 调用方未接入此特性,不做冲突恢复直接抛出原始错误;
-   *  `null` = 调用方已接入但当前无绑定,冲突容器一定不是预期的,清理重建;
-   *  `<id>` = 调用方已接入且有绑定,与冲突容器精确比较,相同则保留、不同则清理重建。 */
-  expectedRuntimeInstanceId?: string | null;
 };
 
-/** 停止/销毁一个实例所需的最小信息,由调用方从 WorkerRegistry DB 行派生。 */
+/**
+ * 停止/销毁一个实例所需的最小信息。provider 的资源控制键是 runtimeInstanceId
+ * (Docker containerId / OpenSandbox sandboxId / Native pid:token);workerId
+ * 仅供 native provider 索引内存中的 child channel。
+ */
 export type RuntimeInstanceRef = {
   runtimeType: RuntimeType;
-  ownerId: string;
   workerId: string;
   runtimeInstanceId: string;
-  scope: WorkerScope;
+};
+
+export type RuntimeStartOptions = {
+  /** Host 取消 acquisition/timeout 时触发；provider 应尽快停止尚未 provision 的启动。 */
+  signal?: AbortSignal;
 };
 
 /**
@@ -130,7 +139,8 @@ export interface RuntimeProvider {
     ctx: RuntimeLaunchContext,
     onExit?: () => void,
     /** 资源一旦拿到稳定 id 立即回报，Host 可在后续启动步骤卡住时回滚。 */
-    onProvisioned?: (runtimeInstanceId: string) => void
+    onProvisioned?: (runtimeInstanceId: string) => void,
+    options?: RuntimeStartOptions
   ): Promise<{ runtimeInstanceId: string }>;
   release(ref: RuntimeInstanceRef): Promise<void> | void;
   stop(ref: RuntimeInstanceRef): Promise<void> | void;

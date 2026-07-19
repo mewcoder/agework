@@ -2,7 +2,7 @@
 
 server 侧 RuntimeHost 域的唯一模块:**节点资源**(注册行、配对、隧道、判死、envConfig、目录浏览)+ **下发面**(contract 实现与 Host 路由、builtin 装配、admin worker 观测)。RuntimeHost 是 worker 运行的载体——builtin（本机 in-process）或 registered（远程机器注册）。
 
-worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由 Host 进程内自治,server 只经契约下发与观测。owner 生命周期清理(workspace 删除 / user 禁用删除 / 重连对账)不在本模块——workspace、user 模块各自的 `owner-release/` listener 监听事件后向下调 owner reconciliation token。该端口只暴露 Host + OwnerKey，不向业务模块泄漏 Worker 快照。
+worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由 Host 进程内自治,server 只经契约下发与观测。workspace 删除 / user 禁用删除的即时清理由 run 模块 listener 编排；Host 重连对账由 `run/recovery` 的单一 coordinator 同步调用 Run、Workspace、User 根 Service。resource reconciliation 端口只暴露 Host + 业务目标(workspace/user),不向业务模块泄漏 Worker 快照。
 
 控制隧道只承载 `host.*` 契约；旧 `LocalRuntime` / `RemoteRuntime`、`runtime.*` RPC
 和 registered `Launcher` 已删除。worker 生命周期由 `RuntimeHost` 内部按 `runtimeType`
@@ -46,7 +46,7 @@ _Avoid_: CLI availability、system status
 server 进程内的 RuntimeHost 实例（`@agework/runtime/host`,与 registered daemon 同构）。固定 id `"builtin"`，`source: "builtin"`。自管 WorkerHttpServer，worker 数据面不再连 server 旧端点。所有 runtimeType 共用一行，能力矩阵在 `capabilities` JSON 里。
 
 **RuntimeHostContract**:
-server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseOwner` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。寻址单位是 run / owner / host,没有 workerId——worker 是 Host 内部现场。按 execution / upstream-binding / owner-lifecycle / environment / workspace-data / diagnostics 角色 token 注入；`setUpstream` 只属于启动期 binding，消费者不能越面调用。
+server 与 Host 的执行面契约接口。`submitRun` / `command` / `releaseResources` / `releaseRun` / `listWorkers` / `stopWorker` / `detectEnv` / `installCli` + 文件操作。业务生命周期寻址不使用 workerId；workerId 仅用于 admin 诊断/stop 与现场快照。按 execution / upstream-binding / resource-lifecycle / environment / workspace-data / diagnostics 角色 token 注入；`setUpstream` 只属于启动期 binding，消费者不能越面调用。
 _Avoid_: WorkerManagerService（已删）、Runtime 接口（旧名）
 
 **RuntimeHostAdapter**:
@@ -55,13 +55,13 @@ _Avoid_: WorkerManagerService（已删）、Runtime 接口（旧名）
 **执行边界**:
 `RuntimeHostService` 是模块根门面，负责鉴权、注册数据和用例编排；CLI/环境统一下调 environment，目录/文件/Git 统一下调 workspace-data，run 与 worker 动作分别经 execution / diagnostics 角色 token。`RuntimeHostAdapter` 是 builtin / registered 的唯一分流点，Service 不直接访问本机执行资源，也不自行拼 `host.*` RPC。
 
-**WorkerKey**:
-worker 池的唯一键：`${OwnerKey}#${runtimeType}`。同一 (owner, runtimeType) 至多一个活跃 worker。stopWorker / fence 全部用它。
-_Avoid_: WorkerInstance（旧词）、ownerId 裸用（多 runtimeType 下撞车）
+**ReuseIdentity** *(Runtime 内部)*:
+Runtime Host 从 placement 派生的结构化复用身份：`{ scope, subjectId, runtimeType }`。复用命中还必须处于同一 `userLifecycleVersion`；同一 ReuseIdentity 的不同 generation 可以为旧 active run 短暂并存，旧 generation 不再接收新 run。stopWorker / fence 使用 workerId,不再使用字符串 WorkerKey。
+_Avoid_: WorkerKey（已废弃）、OwnerKey（已废弃）、ownerId 裸用（多 runtimeType 下撞车）
 
-**OwnerKey**:
-worker 复用的 owner 键：`workspace:${workspaceId}`（workspace scope）或 `user:${userId}`（user scope）。releaseOwner 据此清理 worker。
-_Avoid_: Tenant、account
+**RuntimeLifecycleTarget**:
+Server 发给 Runtime 的资源收尾业务主体：workspace 或 user。`releaseResources` 据此清理匹配的 submission、acquisition 和 worker。不使用 Runtime 内部 cache key。
+_Avoid_: OwnerKey（已废弃）、Tenant、account
 
 **Admin 观测面**:
 `AdminWorkerController`（`/admin/runtime-hosts/workers/*`）——contract 现场查询（`listWorkers` / `stopWorker`），不读库。

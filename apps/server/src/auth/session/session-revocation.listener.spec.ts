@@ -20,8 +20,8 @@ function makeListener() {
 describe("SessionRevocationListener", () => {
   it("revokes all sessions on delete / disable / password-reset", async () => {
     for (const event of [
-      new UserDeletedEvent("user-1"),
-      new UserDisabledEvent("user-2"),
+      new UserDeletedEvent("user-1", 1),
+      new UserDisabledEvent("user-2", 2),
       new UserPasswordResetEvent("user-3"),
     ]) {
       const { listener, sessions } = makeListener();
@@ -35,7 +35,7 @@ describe("SessionRevocationListener", () => {
     sessions.revokeAllForUser.mockRejectedValueOnce(new Error("db down"));
 
     await expect(
-      listener.onSessionsShouldRevoke(new UserDisabledEvent("user-1"))
+      listener.onSessionsShouldRevoke(new UserDisabledEvent("user-1", 1))
     ).resolves.toBeUndefined();
   });
 });

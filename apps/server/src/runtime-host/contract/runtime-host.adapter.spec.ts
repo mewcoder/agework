@@ -17,7 +17,7 @@ function makeBuiltinHost() {
     submitRun: vi.fn().mockResolvedValue(undefined),
     command: vi.fn().mockResolvedValue(undefined),
     releaseRun: vi.fn(),
-    releaseOwner: vi.fn().mockResolvedValue(undefined),
+    releaseResources: vi.fn().mockResolvedValue(undefined),
     detectEnv: vi.fn().mockResolvedValue({
       native: { available: true, scopes: ["workspace"] },
     }),
@@ -33,6 +33,7 @@ function makeBuiltinHost() {
     listChangedFiles: vi.fn().mockResolvedValue({ list: [], truncated: false }),
     listWorkers: vi.fn().mockResolvedValue([]),
     listRunIds: vi.fn().mockResolvedValue([]),
+    listLifecycleClaims: vi.fn().mockResolvedValue([]),
     stopWorker: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -74,11 +75,12 @@ function makePlacement(
   overrides: Partial<RunPlacement> = {}
 ): RunPlacement {
   return {
-    owner: "workspace:ws-1",
+    scope: "workspace",
     runtimeType: "native",
     runtimeHostId,
     workspaceId: "ws-1",
     userId: "user-1",
+    userLifecycleVersion: 1,
     username: "admin-1",
     workspacePath: "/tmp/ws-1",
     ...overrides,
@@ -357,7 +359,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     });
   });
 
-  describe("观测与 owner 级动作", () => {
+  describe("观测与资源生命周期动作", () => {
     it("listRunIds uses the dedicated Host run inventory including acquiring sessions", async () => {
       tunnelHandler.sendRequest.mockResolvedValue({
         runIds: ["run-ready", "run-acquiring"],
@@ -401,35 +403,66 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       ]);
     });
 
-    it("listOwners exposes deduplicated Host + OwnerKey refs instead of worker snapshots", async () => {
-      builtinHost.listWorkers.mockResolvedValue([
-        { scope: "workspace", ownerId: "ws-1" },
-        { scope: "workspace", ownerId: "ws-1" },
+    it("listLifecycleClaims aggregates builtin and tunnel claims with runtimeHostId stamping", async () => {
+      builtinHost.listLifecycleClaims.mockResolvedValue([
+        {
+          kind: "session",
+          runId: "run-local",
+          phase: "ready",
+          userId: "user-1",
+          userLifecycleVersion: 1,
+          workspaceId: "ws-1",
+          runtimeHostId: "",
+        },
       ]);
       tunnelHandler.listConnected.mockReturnValue(["rt-registered-1"]);
       tunnelHandler.sendRequest.mockResolvedValue({
-        workers: [{ scope: "user", ownerId: "user-1" }],
+        claims: [
+          {
+            kind: "worker",
+            workerId: "w-remote",
+            scope: "workspace",
+            subjectId: "ws-2",
+            userId: "user-2",
+            userLifecycleVersion: 1,
+            workspaceIds: ["ws-2"],
+            runtimeHostId: "",
+          },
+        ],
       });
 
-      await expect(adapter.listOwners()).resolves.toEqual([
-        { runtimeHostId: "builtin", owner: "workspace:ws-1" },
-        { runtimeHostId: "rt-registered-1", owner: "user:user-1" },
+      const claims = await adapter.listLifecycleClaims();
+
+      expect(claims.map((c) => [c.kind, c.runtimeHostId])).toEqual([
+        ["session", "builtin"],
+        ["worker", "rt-registered-1"],
       ]);
     });
 
-    it("listOwners can query one registered Host without scanning the others", async () => {
+    it("listLifecycleClaims queries a single registered Host without scanning the others", async () => {
       tunnelHandler.listConnected.mockReturnValue(["rt-other"]);
       tunnelHandler.sendRequest.mockResolvedValue({
-        workers: [{ scope: "user", ownerId: "user-1" }],
+        claims: [
+          {
+            kind: "session",
+            runId: "run-1",
+            phase: "ready",
+            userId: "user-1",
+            userLifecycleVersion: 1,
+            workspaceId: "ws-1",
+            runtimeHostId: "",
+          },
+        ],
       });
 
-      await expect(adapter.listOwners("rt-1")).resolves.toEqual([
-        { runtimeHostId: "rt-1", owner: "user:user-1" },
-      ]);
-      expect(builtinHost.listWorkers).not.toHaveBeenCalled();
+      const claims = await adapter.listLifecycleClaims("rt-1");
+
+      expect(claims).toHaveLength(1);
+      expect(claims[0].runtimeHostId).toBe("rt-1");
+      expect(builtinHost.listLifecycleClaims).not.toHaveBeenCalled();
       expect(tunnelHandler.sendRequest).toHaveBeenCalledWith(
         "rt-1",
-        expect.objectContaining({ method: "host.listWorkers" }),
+        expect.objectContaining({ method: "host.listLifecycleClaims" }),
         expect.any(Number)
       );
     });
@@ -437,12 +470,12 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     it("stopWorker routes builtin to the in-process host without touching the tunnel", async () => {
       await adapter.stopWorker({
         runtimeHostId: "builtin",
-        key: "workspace:ws-1#native",
+        workerId: "w-1",
       });
 
       expect(builtinHost.stopWorker).toHaveBeenCalledWith({
         runtimeHostId: "builtin",
-        key: "workspace:ws-1#native",
+        workerId: "w-1",
       });
       expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
@@ -450,7 +483,7 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
     it("stopWorker routes registered hosts through their own tunnel only", async () => {
       await adapter.stopWorker({
         runtimeHostId: "rt-registered-1",
-        key: "workspace:ws-1#native",
+        workerId: "w-1",
       });
 
       expect(builtinHost.stopWorker).not.toHaveBeenCalled();
@@ -461,38 +494,38 @@ describe("RuntimeHostAdapter (Phase 2 路由)", () => {
       expect(request.method).toBe("host.stopWorker");
       expect(request.params).toEqual({
         runtimeHostId: "rt-registered-1",
-        key: "workspace:ws-1#native",
+        workerId: "w-1",
       });
     });
 
-    it("releaseOwner routes builtin to the in-process host without touching the tunnel", async () => {
-      await adapter.releaseOwner({
+    it("releaseResources routes builtin to the in-process host without touching the tunnel", async () => {
+      await adapter.releaseResources({
         runtimeHostId: "builtin",
-        owner: "workspace:ws-1",
+        target: { type: "workspace", workspaceId: "ws-1" },
       });
 
-      expect(builtinHost.releaseOwner).toHaveBeenCalledWith({
+      expect(builtinHost.releaseResources).toHaveBeenCalledWith({
         runtimeHostId: "builtin",
-        owner: "workspace:ws-1",
+        target: { type: "workspace", workspaceId: "ws-1" },
       });
       expect(tunnelHandler.sendRequest).not.toHaveBeenCalled();
     });
 
-    it("releaseOwner routes registered hosts through their own tunnel only", async () => {
-      await adapter.releaseOwner({
+    it("releaseResources routes registered hosts through their own tunnel only", async () => {
+      await adapter.releaseResources({
         runtimeHostId: "rt-registered-1",
-        owner: "workspace:ws-1",
+        target: { type: "workspace", workspaceId: "ws-1" },
       });
 
-      expect(builtinHost.releaseOwner).not.toHaveBeenCalled();
+      expect(builtinHost.releaseResources).not.toHaveBeenCalled();
       expect(tunnelHandler.sendRequest).toHaveBeenCalledTimes(1);
       const [runtimeHostId, request] = tunnelHandler.sendRequest.mock
         .calls[0] as [string, { method: string; params: unknown }];
       expect(runtimeHostId).toBe("rt-registered-1");
-      expect(request.method).toBe("host.releaseOwner");
+      expect(request.method).toBe("host.releaseResources");
       expect(request.params).toEqual({
         runtimeHostId: "rt-registered-1",
-        owner: "workspace:ws-1",
+        target: { type: "workspace", workspaceId: "ws-1" },
       });
     });
   });

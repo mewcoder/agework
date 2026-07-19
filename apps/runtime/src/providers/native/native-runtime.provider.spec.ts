@@ -33,9 +33,10 @@ const makeProvider = () => new NativeRuntimeProvider(CONFIG);
 
 const makeCtx = (over: Record<string, unknown> = {}) => ({
   runtimeType: "native" as const,
-  ownerId: "owner-1",
-  workspaceId: "ws-1",
+  workerId: "worker-1",
   runId: "run-1",
+  workspaceId: "ws-1",
+  isolation: { scope: "workspace" as const, subjectId: "ws-1" },
   placement: {
     runtimeType: "native" as const,
     userId: "u1",
@@ -43,7 +44,6 @@ const makeCtx = (over: Record<string, unknown> = {}) => ({
     hostPath: "/w",
     runtimePath: "/w",
     runtimeLogDir: "/logs",
-    ownerId: "owner-1",
   },
   workerEnv: {},
   ...over,
@@ -53,10 +53,8 @@ const makeRef = (
   over: Partial<RuntimeInstanceRef> = {}
 ): RuntimeInstanceRef => ({
   runtimeType: "native",
-  ownerId: "owner-1",
   workerId: "worker-1",
   runtimeInstanceId: "12345:some-token",
-  scope: "workspace",
   ...over,
 });
 
@@ -119,11 +117,24 @@ describe("NativeRuntimeProvider", () => {
       expect(child.kill).toHaveBeenCalledTimes(1);
     });
 
-    it("does nothing for an unknown owner", () => {
+    it("does nothing for an unknown worker", () => {
       const provider = makeProvider();
       expect(() =>
-        provider.stop(makeRef({ ownerId: "unknown", runtimeInstanceId: "9:x" }))
+        provider.stop(makeRef({ workerId: "unknown", runtimeInstanceId: "9:x" }))
       ).not.toThrow();
+    });
+
+    it("propagates EPERM and retains the tracked channel for retry", async () => {
+      const provider = makeProvider();
+      await provider.start(makeCtx());
+      const child = forkMock.children[0];
+      child.kill.mockImplementation(() => {
+        throw Object.assign(new Error("not permitted"), { code: "EPERM" });
+      });
+
+      expect(() => provider.stop(makeRef())).toThrow("not permitted");
+      expect(() => provider.stop(makeRef())).toThrow("not permitted");
+      expect(child.kill).toHaveBeenCalledTimes(2);
     });
   });
 

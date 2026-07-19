@@ -2,13 +2,14 @@ import type { RpcRequest, RpcResponse, RpcNotification } from "./rpc";
 import type { RunChannelMessage } from "./run-channel-message";
 import type {
   SubmitRunInput,
-  ReleaseOwnerInput,
+  ReleaseRuntimeResourcesInput,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   StopWorkerInput,
   InstallCliInput,
   InstallCliResult,
   WorkerSnapshot,
+  RuntimeLifecycleClaim,
   HostCapabilityStatus,
   ListDirectoryInput,
   DirectoryListing,
@@ -87,7 +88,7 @@ export type HostTunnelServerMessage = HostTunnelRegisteredMessage;
 
 // ── 执行面隧道协议 ──────────────────────────────────────────────────
 //
-// server → Host:submitRun / command / releaseOwner(有去有回,ACK 语义)。
+// server → Host:submitRun / command / releaseResources(有去有回,ACK 语义)。
 // Host → server:host.upstream(单向通知,承载事件流与终态事实)。
 // 所有 Phase 2 消息在 meta 中携带 epoch,server 重启后旧 epoch 消息丢弃。
 
@@ -97,8 +98,16 @@ export type HostSubmitRunRpcParams = SubmitRunInput;
 /** server → Host:下发 run 级命令。 */
 export type HostCommandRpcParams = RuntimeHostCommandInput;
 
-/** server → Host:owner 级释放(定向路由,params 就是 RuntimeHostContract.releaseOwner 的入参)。 */
-export type HostReleaseOwnerRpcParams = ReleaseOwnerInput;
+/** server → Host:资源释放(定向路由,params 就是 RuntimeHostContract.releaseResources 的入参)。 */
+export type HostReleaseResourcesRpcParams = ReleaseRuntimeResourcesInput;
+
+/** server → Host:查询业务生命周期 claims(重连对账用)。 */
+export type HostListLifecycleClaimsRpcParams = { runtimeHostId: string };
+
+/** host.listLifecycleClaims 响应:该 Host 的业务生命周期 claims 列表。 */
+export type HostListLifecycleClaimsRpcResult = {
+  claims: RuntimeLifecycleClaim[];
+};
 
 /** Host → server:上行事件/终态事实通知(单向)。 */
 export type HostUpstreamNotification =
@@ -130,7 +139,7 @@ export type HostReleaseRunParams = RuntimeHostRunRef;
 export type HostTunnelHostRpcRequest =
   | RpcRequest<"host.submitRun", HostSubmitRunRpcParams>
   | RpcRequest<"host.command", HostCommandRpcParams>
-  | RpcRequest<"host.releaseOwner", HostReleaseOwnerRpcParams>
+  | RpcRequest<"host.releaseResources", HostReleaseResourcesRpcParams>
   | RpcRequest<"host.detectEnv", { runtimeHostId: string }>
   | RpcRequest<"host.listDirectory", ListDirectoryInput>
   | RpcRequest<"host.createDirectory", CreateDirectoryInput>
@@ -141,6 +150,7 @@ export type HostTunnelHostRpcRequest =
   | RpcRequest<"host.listChangedFiles", ListChangedFilesInput>
   | RpcRequest<"host.listRuns", Record<string, never>>
   | RpcRequest<"host.listWorkers", Record<string, never>>
+  | RpcRequest<"host.listLifecycleClaims", HostListLifecycleClaimsRpcParams>
   | RpcRequest<"host.stopWorker", StopWorkerInput>
   | RpcRequest<"host.installCli", InstallCliInput>;
 
@@ -160,6 +170,7 @@ export type HostTunnelHostRpcResponse =
   | RpcResponse<WorkspaceChangedFilesResponse>
   | RpcResponse<HostListRunsRpcResult>
   | RpcResponse<HostListWorkersRpcResult>
+  | RpcResponse<HostListLifecycleClaimsRpcResult>
   | RpcResponse<InstallCliResult>
   | RpcResponse<null>;
 

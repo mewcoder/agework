@@ -6,20 +6,22 @@ import type {
   HostCapabilityStatus,
   HostListRunsRpcResult,
   HostListWorkersRpcResult,
+  HostListLifecycleClaimsRpcResult,
   InstallCliInput,
   InstallCliResult,
   ListChangedFilesInput,
   ListDirectoryInput,
   ReadFileDiffInput,
   ReadFileInput,
-  ReleaseOwnerInput,
+  ReleaseRuntimeResourcesInput,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   RuntimeHostEnvironment,
   RuntimeHostExecution,
-  RuntimeHostOwnerLifecycle,
+  RuntimeHostResourceLifecycle,
   RuntimeHostWorkspaceData,
   RuntimeHostDiagnostics,
+  RuntimeLifecycleClaim,
   SearchFilesInput,
   StopWorkerInput,
   SubmitRunInput,
@@ -48,7 +50,7 @@ const INSTALL_CLI_TIMEOUT_MS = 150_000;
  * builtin+registered 的聚合,Adapter 编排);单 Host 现场查询另经 `listWorkersOn`。
  */
 export type RoutedRuntimeHost = RuntimeHostExecution &
-  RuntimeHostOwnerLifecycle &
+  RuntimeHostResourceLifecycle &
   RuntimeHostEnvironment &
   RuntimeHostWorkspaceData &
   Pick<RuntimeHostDiagnostics, "stopWorker">;
@@ -112,13 +114,13 @@ export class TunnelRuntimeHost implements RoutedRuntimeHost {
     });
   }
 
-  async releaseOwner(input: ReleaseOwnerInput): Promise<void> {
+  async releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void> {
     await this.tunnelHandler.sendRequest<never>(
       input.runtimeHostId,
       {
         jsonrpc: "2.0",
         id: generateId(),
-        method: "host.releaseOwner",
+        method: "host.releaseResources",
         params: input,
       },
       this.timeoutMs
@@ -267,6 +269,27 @@ export class TunnelRuntimeHost implements RoutedRuntimeHost {
       },
       this.timeoutMs
     );
+  }
+
+  /** 单个 registered Host 的业务生命周期 claims 投影(重连对账用)。 */
+  async listLifecycleClaimsOn(
+    runtimeHostId: string
+  ): Promise<RuntimeLifecycleClaim[]> {
+    const result =
+      await this.tunnelHandler.sendRequest<HostListLifecycleClaimsRpcResult>(
+        runtimeHostId,
+        {
+          jsonrpc: "2.0",
+          id: generateId(),
+          method: "host.listLifecycleClaims",
+          params: { runtimeHostId },
+        },
+        this.timeoutMs
+      );
+    return result.claims.map((claim) => ({
+      ...claim,
+      runtimeHostId,
+    }));
   }
 
   /** 所有隧道在线 registered Host 的 worker 快照聚合;单 Host 失败只记日志不影响其余。 */

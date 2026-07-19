@@ -151,20 +151,10 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
   });
   const shutdown = () => {
     client.stop();
-    // 停掉名下所有 worker 运行实例(目标架构不做跨重启容器复用),超时兜底强退
-    const stopAll = runtimeHost.listWorkers().then((workers) =>
-      Promise.allSettled(
-        workers.map((w) =>
-          runtimeHost.stopWorker({
-            runtimeHostId: w.runtimeHostId,
-            key: w.workerKey,
-          })
-        )
-      )
-    );
+    // 使用 Runtime 内部幂等 shutdown 停止所有 worker,不再 listWorkers → stopWorker(key)
+    const shutdownAll = runtimeHost.shutdown();
     const timeout = new Promise((resolve) => setTimeout(resolve, 10_000));
-    void Promise.race([stopAll, timeout]).then(() => {
-      runtimeHost.drain();
+    void Promise.race([shutdownAll, timeout]).then(() => {
       void httpServer.stop();
       process.exit(0);
     });

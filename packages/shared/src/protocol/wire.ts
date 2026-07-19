@@ -61,8 +61,8 @@ export function isHostTunnelHostRpcRequest(
       return isSubmitRunInput(params);
     case "host.command":
       return isRuntimeHostCommandInput(params);
-    case "host.releaseOwner":
-      return isRuntimeHostId(params) && isOwnerKey(params.owner);
+    case "host.releaseResources":
+      return isReleaseRuntimeResourcesInput(params);
     case "host.detectEnv":
       return isRuntimeHostId(params);
     case "host.listDirectory":
@@ -83,8 +83,10 @@ export function isHostTunnelHostRpcRequest(
     case "host.listRuns":
     case "host.listWorkers":
       return true;
+    case "host.listLifecycleClaims":
+      return isRuntimeHostId(params);
     case "host.stopWorker":
-      return isRuntimeHostId(params) && isNonEmptyString(params.key);
+      return isRuntimeHostId(params) && isNonEmptyString(params.workerId);
     case "host.installCli":
       return isRuntimeHostId(params) && isNonEmptyString(params.agentType);
     default:
@@ -220,14 +222,32 @@ function isSubmitRunInput(value: Record<string, unknown>): boolean {
   }
   const placement = value.placement;
   return (
-    isOwnerKey(placement.owner) &&
+    (placement.scope === "workspace" || placement.scope === "user") &&
     isNonEmptyString(placement.runtimeType) &&
     isNonEmptyString(placement.runtimeHostId) &&
     isNonEmptyString(placement.workspaceId) &&
     isNonEmptyString(placement.userId) &&
+    isPositiveInteger(placement.userLifecycleVersion) &&
     isNonEmptyString(placement.username) &&
     isString(placement.workspacePath)
   );
+}
+
+function isReleaseRuntimeResourcesInput(
+  value: Record<string, unknown>
+): boolean {
+  if (!isRuntimeHostId(value) || !isRecord(value.target)) return false;
+  const target = value.target;
+  if (target.type === "workspace") {
+    return isNonEmptyString(target.workspaceId);
+  }
+  if (target.type === "user") {
+    return (
+      isNonEmptyString(target.userId) &&
+      isPositiveInteger(target.userLifecycleVersion)
+    );
+  }
+  return false;
 }
 
 function isRuntimeHostCommandInput(value: Record<string, unknown>): boolean {
@@ -296,10 +316,6 @@ function isRuntimeCapabilities(value: unknown): boolean {
 
 function isRuntimeHostId(value: Record<string, unknown>): boolean {
   return isNonEmptyString(value.runtimeHostId);
-}
-
-function isOwnerKey(value: unknown): boolean {
-  return typeof value === "string" && /^(workspace|user):.+/.test(value);
 }
 
 function isProtocolVersion(value: unknown): value is number {

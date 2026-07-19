@@ -1,6 +1,15 @@
 # Server · Runtime Host · Worker 目标架构（理想态定案）
 
 > 状态：已落地（2026-07-14）：三期迁移全部完成并通过出口判据验收（词汇 grep 清零、run/runtime 模块无 P0/P1）；registered Host 多 runtimeType 能力已收口（daemon `--runtime native,docker` 多值 + 启动时按类型探测可用性上报）。
+>
+> **⚠️ 更新（2026-07-19）**：本文档中关于 `OwnerKey`/`WorkerKey`、`releaseOwner`、`listOwners` 等 owner 边界设计已被 `.scratch/runtime-owner-boundary/SPEC.md` 全面取代。SPEC 移除了公共协议中的 `OwnerKey`/`WorkerKey`，改由 Server 下发业务事实（`scope + userId + workspaceId + userLifecycleVersion`），Runtime 独立派生 `ReuseIdentity` 并决定复用策略。本文档的以下部分与 SPEC 冲突，以 SPEC 为准：
+> - §3 中 `OwnerKey`/`WorkerKey` 类型定义和构造规则
+> - §3 中 `releaseOwner(owner: OwnerKey)` 和 `stopWorker(key: WorkerKey)` 契约
+> - §4 中 worker 池用 `WorkerKey` 索引的描述
+> - §5 中 `placement.owner` 字段
+> - §7 中涉及 owner 级 RPC 的迁移步骤
+>
+> 本文仍是三层关系（Server → Runtime Host → Worker）和执行面隔离原则的权威参考；owner 边界细节请参阅 SPEC。
 > 本文是三层关系的重新设计：**server 只管业务事实，Runtime Host 独占执行面，worker 是唯一的执行代理概念**。
 > 它有意推翻若干既有定案（见 §6 翻案清单），实施按 §7 三期迁移推进。
 

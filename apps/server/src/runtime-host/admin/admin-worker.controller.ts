@@ -24,7 +24,7 @@ export class AdminWorkerController {
   async stop(@Body() body: StopWorkerDto) {
     await this.runtimeHostService.stopWorkerForAdmin(
       body.runtimeHostId,
-      body.workerKey
+      body.workerId
     );
     return { ok: true };
   }

@@ -144,6 +144,8 @@ export type RunPlacement = {
   runtimeHostId: string;
   workspaceId: string;
   userId: string;
+  /** DB User.sessionVersion；可逆 user 生命周期的 execution generation。 */
+  userLifecycleVersion: number;
   username: string;
   workspacePath: string;
 };
@@ -156,16 +158,26 @@ export type RunPlacement = {
 - Server 仍负责校验 Workspace 归属、持久化配置和选择目标 Host。
 - Runtime 必须按当前 capability 再校验 `(runtimeType, scope)`，防 registered Host 能力漂移。
 - Runtime SDK 保留 user-scope workspacePath 必须位于 user root 下的路径校验。
+- `userId` 与 `userLifecycleVersion` 来自 Workspace run view 关联的数据库 User，
+  不能只信请求会话参数；User 必须 active 且未删除。
 
 ### 5.2 Lifecycle
 
 ```ts
-export type ReleaseRuntimeResourcesInput = {
-  runtimeHostId: string;
-  target: RuntimeLifecycleTarget;
-  /** user disable/re-enable 等可逆生命周期使用；不可逆删除也应单调。 */
-  lifecycleVersion?: number;
-};
+export type ReleaseRuntimeResourcesInput =
+  | {
+      runtimeHostId: string;
+      target: { type: "workspace"; workspaceId: string };
+    }
+  | {
+      runtimeHostId: string;
+      target: {
+        type: "user";
+        userId: string;
+        /** 必填，来源为状态写入后返回的 User.sessionVersion。 */
+        userLifecycleVersion: number;
+      };
+    };
 
 export interface RuntimeHostResourceLifecycle {
   releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void>;
@@ -175,28 +187,64 @@ export interface RuntimeHostResourceLifecycle {
 语义：
 
 - workspace target：取消/fence 该 workspace 已受理的 submission 和 run；只释放 workspace-scope worker。user-scope 共享 worker继续服务同用户其他 workspace。
-- user target：取消/fence 该 user 的全部 submission 和 run；释放该用户的 user-scope worker以及所有 workspace-scope worker。
+- user target：fence 该 user 中 `userLifecycleVersion <= target version` 的 submission、acquisition 和 worker；释放该代及旧代的两类 scope worker。
 - 成功 ACK 是完成屏障：命令开始前已受理的匹配 reservation、acquisition 和 ready worker 都已取消或完成回滚。
-- 重复调用幂等；旧 lifecycle version 不得影响更新版本下创建的资源。
+- workspace 删除不可逆，Runtime 保存永久 tombstone；workspaceId 不复用，不需要 workspace version。
+- user fence 保存撤销 version 高水位。re-enable 后首次携带更高 version 的 submit 进入新 generation；迟到的旧 release 不得命中新 generation。
+- 重复调用幂等；provider 清理失败时 fence 保留、RPC 返回错误，并把清理目标保留在 Runtime retry ledger，不能先丢索引再吞错。
+- release ACK 是执行资源准入/清理屏障，不替代 run cancel，也不保证 Server 已持久化业务 Run 终态。Server 必须先发 cancel；若产品需要等待 runner 退出，应由 run 命令协议另行提供 completion ACK。
 
-如果实现阶段不能在同一批引入可靠 lifecycle version，至少必须完成不可逆 workspace/user delete 的 fencing；user disable/re-enable 必须保留阻塞测试或单独任务，不能默认为已解决。
+`User.sessionVersion` 已在 status 更新、软删除与 re-enable 时原子递增，本任务直接复用它，不新增 schema 字段。它也会因角色/密码变化递增，可能造成保守的新 generation，但不会扩大隔离边界。
+
+generation 与撤销必须分开：只有收到 `releaseResources(user, V)` 才表示 `<= V` 已撤销。单纯观察到更高 `sessionVersion`（例如角色调整或密码重置）不会终止旧 generation 的 active run；旧 worker只继续服务已绑定 run，待空闲策略回收。更高 version 的新 submit 不复用旧 generation worker，避免 Runtime 猜测这次 version bump 是否具有撤销含义。
+
+Runtime 对每个 user 分别维护 `revokedThroughVersion` 与 `maxObservedVersion`。submit 的准入条件是 `version > revokedThroughVersion && version >= maxObservedVersion`；接受后同步提升 `maxObservedVersion`。一旦更高版本已被接受，后来到达的低版本 submit 必须拒绝，旧 generation worker只能继续已绑定 run，不能重新接活。
+
+权威来源已经存在：
+
+- `apps/server/prisma/schema.prisma`：`User.sessionVersion Int @default(1)`。
+- `apps/server/src/user/user.repository.ts`：`updateProfile()` 在 role/status 变化时与业务字段同一次 Prisma update 原子递增；`softDelete()` 与 `deletedAt` 同一次 update 原子递增；password update/reset 也递增。
+- `apps/server/src/user/user.service.ts`：disabled 与 re-enable 都走 `updateProfile()`；disabled 事件必须改为携带 update 返回的新版本。
+- `apps/server/src/workspace/workspace.repository.ts`：`findRunView()` 需要把关联 User 的 `status/deletedAt/sessionVersion` 加入 select，作为 placement 的数据库权威值。
+
+`softDelete()` 必须直接返回同一次 update 产生的 `{ sessionVersion }`，不能写后另查；disabled/deleted 事件携带这个精确 post-write version。DB 状态是权威，当前进程内 `emit()` 只用于加速，不能作为可靠提交/释放事务；重连及周期 reconciliation 负责最终补发。
 
 ### 5.3 Reconciliation
 
 不要再从 admin `WorkerSnapshot` 合成业务 owner。
 
-新增最小业务对账投影：
+新增业务生命周期 claims 投影。它必须覆盖尚未形成 ready worker 的状态，不能只返回 worker 复用主体：
 
 ```ts
-export type RuntimeSubjectRef = {
-  runtimeHostId: string;
-  scope: "workspace" | "user";
-  subjectId: string;
-  userId: string;
-};
+export type RuntimeLifecycleClaim =
+  | {
+      kind: "session";
+      runtimeHostId: string;
+      runId: string;
+      phase: "reserved" | "configuring" | "acquiring" | "ready";
+      userId: string;
+      userLifecycleVersion: number;
+      workspaceId: string;
+    }
+  | {
+      kind: "worker";
+      runtimeHostId: string;
+      workerId: string;
+      scope: "workspace" | "user";
+      subjectId: string;
+      userId: string;
+      userLifecycleVersion: number;
+      workspaceIds: string[];
+    }
+  | {
+      kind: "release_pending";
+      runtimeHostId: string;
+      target: RuntimeLifecycleTarget;
+      userLifecycleVersion?: number;
+    };
 
 export interface RuntimeHostResourceReconciliation {
-  listResourceSubjects(runtimeHostId: string): Promise<RuntimeSubjectRef[]>;
+  listLifecycleClaims(runtimeHostId: string): Promise<RuntimeLifecycleClaim[]>;
   releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void>;
 }
 ```
@@ -204,7 +252,8 @@ export interface RuntimeHostResourceReconciliation {
 要求：
 
 - 查询失败必须显式失败，不能折叠为空列表。
-- Host 重连后先完成 run reconcile 与 resource subject reconcile，再接收新的 submit；若暂时不能做全 Host gate，至少对待确认 subject 保持 fence。
+- Host tunnel session 增加 `reconciling | ready | reconcile_failed` admission phase。注册后先进入 reconciling；只允许 claims/release 等控制 RPC，`host.submitRun` 仅在 ready 允许。
+- reconcile 以 tunnel epoch 为 CAS 条件；旧 epoch 完成不能把新连接误标 ready。失败保持 fail-closed，并允许在同一连接重试。
 - workspace 存活校验必须同时考虑其 user 是否仍 active。
 - 失败要进入可重试状态，不能只寄希望于“下次再重连”。
 
@@ -276,6 +325,7 @@ runIndex: Map<string, string>;
 - `workersById` 是 stop、fence 和现场控制的权威索引。
 - `reuseIndex` 是可替换策略索引；初期可以一 identity 对一个 workerId。
 - `WorkerEntry` 保存结构化 isolation、`userId`、相关 workspace/run，而不是从字符串 key 反解析。
+- `WorkerEntry` 与 acquisition 保存 `userLifecycleVersion`；复用命中必须处于同一 user generation，不能让 re-enable 后的新 run 绑定旧代 worker。
 - 序列化只用于 Map key，不能成为协议；不要用可歧义的 `scope:id#runtimeType` 直接拼接，优先数组 JSON 或长度前缀编码。
 
 ### 6.3 Reservation 与 release fencing
@@ -286,7 +336,7 @@ RunSession 在 reserve 时必须保存：
 - `workspaceId`；
 - `scope`；
 - `runtimeType`；
-- lifecycle version（若启用）。
+- `userLifecycleVersion`。
 
 release 必须：
 
@@ -297,6 +347,20 @@ release 必须：
 5. 最后返回 ACK。
 
 新 submit 只有在业务主体有效且 lifecycle version 不旧于 fence 时才能进入。
+
+状态机固定为：
+
+```text
+OPEN
+  → FENCED                 # 同步线性化点；在第一次 await 前完成
+  → SESSIONS_CANCELLING
+  → ACQUISITIONS_DRAINING
+  → WORKERS_RELEASING
+  → COMPLETE               # 成功 ACK
+  ↘ RETRY_PENDING          # 返回 error，fence 与清理账本保留
+```
+
+submit 的线性化点是同步 reserve 完整 placement：release 先安装 fence时 submit 被拒绝；submit 先 reserve 时 release 必须能枚举并标记它，异步 continuation 每次进入下一阶段前复查 session phase/fence。
 
 ## 7. Runtime SDK 与 Provider
 
@@ -318,27 +382,18 @@ type RuntimeLaunchContext = {
   runId: string;
   workspaceId: string;
   isolation: { scope: "workspace" | "user"; subjectId: string };
-  resourceName: string;
   placement: RuntimeSpec;
   workerEnv: Record<string, string>;
-  expectedRuntimeInstanceId?: string | null;
 };
 ```
 
-`resourceName` 由 Runtime 生成，对 provider 不透明。它必须避免：
-
-- userId 与 workspaceId 字面相同；
-- 不同 runtimeType；
-- 特殊字符 sanitize 后相同；
-- 超长 ID 截断后相同；
-- 将来同一复用身份允许多个 worker。
-
-建议使用带 scope/runtimeType 的稳定哈希，并把原始结构化字段分别写入 labels，不把 lossy sanitize 结果当唯一标识。
+`workerId` 是 Runtime 内控制身份；provider 的资源控制身份是 `start()` 返回的 `runtimeInstanceId`（Docker containerId、OpenSandbox sandboxId、Native pid/token）。公共 SDK 不定义跨 provider 的资源名称。容器名、日志文件名等都只是 provider 内部的可读性细节，不参与复用、路由、停止或释放。
 
 ### 7.2 Provider 改动
 
-- Docker：容器名使用 `resourceName`；labels 分别记录 runtimeType、scope、subjectId、userId、workerId。
-- OpenSandbox：metadata 与日志名使用同一 resourceName/isolation 结构。
+- Docker：删除基于 ownerId 的稳定命名。可以不传 `--name` 让 Docker 自动生成，也可以仅为排查使用 `agework-worker-${workerId}`；两种方式都不进入公共契约。labels 分别记录 runtimeType、scope、subjectId、userId、workspaceId、workerId；stop/destroy 始终以 containerId 为准。稳定 owner 名称消失后，同名冲突恢复与 `expectedRuntimeInstanceId` 一并退役。
+- Runtime SDK 的 `safePathPart` 当前只用于 worker resource env 与日志文件名。相关字段若没有真实消费者则删除；若仍需保留，直接以 workerId 生成本次 worker 的诊断名称，不再建立通用 resourceName 概念。
+- OpenSandbox 没有 owner-based sandbox name，实际控制键始终是 sandboxId。目标只调整 metadata/env/log 的 isolation 表达，不改变 sandboxId 生命周期控制；外部服务 metadata 长度限制当前未验证，不能依赖 raw ID 一定可接受。
 - Native：child channel 按 `workerId` 索引，不再按裸 ownerId；stop/release 使用 workerId。
 - `AGEWORK_WORKER_OWNER_ID` 改为 isolation/reuse 中性命名，或在 worker 不需要该信息时直接删除。同步 runner env allowlist 与日志字段。
 
@@ -368,11 +423,13 @@ type RuntimeLaunchContext = {
 
 1. 建立 tunnel 与 epoch fencing。
 2. 对账 active runs。
-3. 获取结构化 resource subjects。
+3. 获取结构化 lifecycle claims。
 4. Server 依据 Workspace/User 当前状态下发 release。
 5. 对账成功后 Host 才进入 ready-for-submit。
 
 业务对账不能调用 `listWorkers()`，也不能把单 Host 查询错误解释为“没有资源”。
+
+Server 最小落点：`HostSession` 保存 `admissionPhase`；连接注册时以当前 epoch 建立 `reconciling` session，协调器完成 run + lifecycle claims 对账后显式 `markReconciled(runtimeHostId, epoch)`。`sendRequest(host.submitRun)` 检查 phase，其他 reconciliation RPC 可在 reconciling 阶段调用。
 
 ## 9. Wire 升级
 
@@ -393,26 +450,45 @@ type RuntimeLaunchContext = {
 ### 10.1 Shared protocol
 
 - `packages/shared/src/protocol/runtime-host.ts`
+- `packages/shared/src/protocol/channel.ts`：删除重复 RuntimeSpec family 与 `RuntimeSpecBase.ownerId`，Runtime 统一从 runtime-sdk 导入
 - `packages/shared/src/protocol/index.ts`
 - `packages/shared/src/protocol/host-tunnel.ts`
 - `packages/shared/src/protocol/wire.ts`
-- 对应 protocol / wire specs
+- `packages/shared/src/protocol/runtime-host.spec.ts`
+- `packages/shared/src/protocol/wire.spec.ts`
+- `packages/shared/src/api/runs.ts`：Run detail 的 WorkerSnapshot 传播形状
 
 ### 10.2 Server
 
 - `apps/server/src/run/launch/run.launcher.ts` 与 spec
+- `apps/server/src/workspace/workspace.repository.ts` / `workspace.service.ts`：run view 返回 DB userId/status/deletedAt/sessionVersion
+- `apps/server/src/user/user.events.ts` / `user.service.ts` / `user.repository.ts`：disabled/deleted 事件携带状态写入后的 sessionVersion
 - `apps/server/src/run/run.service.ts`：增加按 user 停止 active runs 的用例入口
 - `apps/server/src/run/workspace/run-workspace.listener.ts` 与 spec
 - `apps/server/src/runtime-host/runtime-host.types.ts`
+- `apps/server/src/runtime-host/runtime-host.module.ts` 与 module spec
 - `apps/server/src/runtime-host/contract/runtime-host.adapter.ts` 与 spec
 - `apps/server/src/runtime-host/contract/tunnel-runtime-host.ts`
 - `apps/server/src/runtime-host/gateway/host-tunnel.handler.ts` 与 spec
 - `apps/server/src/runtime-host/runtime-host.service.ts` 与 spec
+- 删除 `RuntimeHostService.resolveRuntimeSpec()` 及其仅测试消费者
 - `apps/server/src/runtime-host/dto/stop-worker.dto.ts`
 - `apps/server/src/runtime-host/admin/admin-worker.controller.ts` 与 spec
+- `apps/server/src/run/launch/run.launcher.spec.ts`
+- `apps/server/src/run/run.service.spec.ts`
+- `apps/server/src/run/workspace/run-workspace.listener.spec.ts`
+- `apps/server/src/runtime-host/runtime-host.service.spec.ts`
+- `apps/server/src/runtime-host/contract/runtime-host.adapter.spec.ts`
+- `apps/server/src/runtime-host/admin/admin-worker.controller.spec.ts`
+- `apps/server/src/workspace/workspace.module.ts`
+- `apps/server/src/user/user.module.ts`
 - `apps/server/src/workspace/owner-release/`：重命名为 resource reconciliation 语义
 - `apps/server/src/user/owner-release/`：重命名并覆盖两类 scope
-- 相关 module specs / DI token mocks
+- `apps/server/src/run/run.module.spec.ts`
+- `apps/server/src/runtime-host/runtime-host.module.spec.ts`
+- `apps/server/src/runtime-host/gateway/host-tunnel.handler.spec.ts`
+- `apps/server/src/user/owner-release/user-owner-release.listener.spec.ts`
+- `apps/server/src/workspace/owner-release/workspace-owner-release.listener.spec.ts`
 
 ### 10.3 Runtime Host
 
@@ -422,8 +498,12 @@ type RuntimeLaunchContext = {
 - `apps/runtime/src/host/run-config.ts`
 - `apps/runtime/src/registered/tunnel-client.ts` 与 spec
 - `apps/runtime/src/registered/main.ts`
+- 将 signal shutdown 抽为可测试单元或新增 main-level spec
 - `apps/runtime/src/providers/native/native-runtime.provider.ts` 与 spec
 - worker logging / runner env allowlist 与相关 specs
+- 明确更新 `apps/runtime/src/host/runtime-host.spec.ts`、`worker-pool.spec.ts`、
+  `apps/runtime/src/registered/tunnel-client.spec.ts`、
+  `apps/runtime/src/providers/native/native-runtime.provider.spec.ts`
 
 ### 10.4 Runtime SDK / providers
 
@@ -432,18 +512,24 @@ type RuntimeLaunchContext = {
 - `packages/runtime-sdk/src/sandbox-launch.ts`
 - `packages/runtime-docker/src/docker-runtime.provider.ts`
 - `packages/runtime-opensandbox/src/opensandbox-runtime.provider.ts`
-- 上述文件对应 specs
+- `packages/runtime-sdk/src/runtime-spec.spec.ts`
+- `packages/runtime-sdk/src/sandbox-launch.spec.ts`
+- `packages/runtime-docker/src/docker-runtime.provider.spec.ts`
+- `packages/runtime-opensandbox/src/opensandbox-runtime.provider.spec.ts`
 
 ### 10.5 Web admin
 
 - `apps/web/src/api/runtime-hosts.ts`
 - `apps/web/src/hooks/use-runtime-host.ts`
-- admin worker panel / run detail 中的 workerKey、owner 展示与停止参数
+- `apps/web/src/pages/admin/runtime-host/worker-panel.tsx`
+- `apps/web/src/pages/admin/run/run-detail-sheet.tsx`
 
 ### 10.6 文档
 
 - 更新 `docs/design/server-runtime-worker-target-architecture.md`，推翻“owner 由 Server 算好传入”的旧契约。
 - 更新 `docs/architecture/worker-rpc-protocol.md`。
+- 更新 `apps/server/src/runtime-host/CONTEXT.md`；ADR 0008、0011 及仍描述旧 owner endpoint 的 0009 添加 superseded 指针。
+- 更新 `CONTEXT-MAP.md` 中 workspace 删除调用 `releaseOwner` 的旧描述，并复核 `apps/server/src/runtime-host/docs/adr/0007-runtime-lifecycle-stop-vs-destroy.md` 的 ownerId 生命周期表述。
 - 更新 `docs/config.md` 中 worker owner env 的旧名称。
 - 在 Runtime Host ADR 中记录“scope 是最大共享边界，reuse 是 Runtime 策略”；历史 ADR 保留正文但加 superseded 指针。
 - 更新 `docs/README.md` 索引（若新增 ADR 不需要顶层索引，可只更新所属 context index）。
@@ -460,15 +546,15 @@ type RuntimeLaunchContext = {
 
 ### Task 2：SDK / Provider
 
-- `ownerId` 改为 isolation + opaque resourceName。
-- 修正 Docker 名称、labels、OpenSandbox metadata、Native channel 索引。
+- `ownerId` 改为结构化 isolation；删除跨 provider resourceName 与 `expectedRuntimeInstanceId`。
+- Docker 名称降为内部可读性细节并更新 labels；同步 OpenSandbox metadata 与 Native channel 索引。
 
-验收：不同 scope/runtimeType 和 sanitize 冲突输入不会命名碰撞或误停。
+验收：provider 生命周期只依赖 runtimeInstanceId/workerId；容器名变化不会影响复用、停止或清理。
 
 ### Task 3：Shared v3 协议与 Runtime daemon
 
 - 新 `RunPlacement`、release、reconciliation、stop、snapshot 类型。
-- 更新 wire decoder、RPC method、tunnel client。
+- 更新 wire decoder、RPC method、tunnel client；在 wire spec 明确增加 v3 submit/release/stop/claims 正反例，而不是只改类型 fixture。
 - 增加 Runtime release fencing 与内部 shutdown API。
 
 验收：v3 wire 坏输入被拒绝；release ACK 满足完成屏障。
@@ -519,6 +605,7 @@ type RuntimeLaunchContext = {
 - workspace 删除 user-scope：清该 workspace runs，但保留共享 worker。
 - user disabled/deleted：先 cancel，再释放两类 scope。
 - re-enable 后迟到的旧 disable release 不得误停新 worker。
+- 同一 ReuseIdentity 的不同 userLifecycleVersion 不得复用同一旧代 worker。
 
 ### Reconnection
 
@@ -537,7 +624,7 @@ type RuntimeLaunchContext = {
 
 ### Provider
 
-- Docker resourceName 与结构化 labels 正确。
+- Docker 不再以 ownerId 作为稳定名称或控制键，结构化 labels 正确。
 - Native 多 worker channel 按 workerId 隔离，停止一个不影响另一个。
 - OpenSandbox metadata 与 SDK input 一致。
 - 启动失败 rollback、heartbeat fence、worker HTTP 鉴权现有行为回归。
@@ -558,7 +645,7 @@ type RuntimeLaunchContext = {
 | P0 | release ACK 后旧 acquisition 重新创建资源 | reserve 时记录 placement；subject fence；等待 acquisition settle |
 | P0 | user disabled 后 workspace-scope worker继续执行 | user target 匹配该 user 的全部 WorkerEntry 与 RunSession |
 | P0 | v2/v3 registered daemon 不兼容 | 升 protocol version；发布说明要求同步升级；不静默降级 |
-| P1 | Docker/native 以裸 ownerId 索引导致碰撞或误停 | opaque resourceName；native 按 workerId 索引 |
+| P1 | Docker/native 以裸 ownerId 命名或索引导致碰撞、误删、误停 | Docker 名称不承载身份，按 containerId 控制；Native 按 workerId 索引 |
 | P1 | 重连对账失败被当成无资源 | 显式错误结果与 retry；ready gate |
 | P1 | 为兼容继续把 legacy owner 泄漏回业务层 | legacy translation 只能存在于 transport adapter |
 | P2 | UI/日志/配置继续使用 owner 旧术语 | grep 验收并更新文档/env/展示 |

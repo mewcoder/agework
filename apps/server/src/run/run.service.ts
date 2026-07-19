@@ -56,6 +56,11 @@ export class RunService implements OnApplicationBootstrap {
     await this.runRecovery.failInterruptedRuns();
   }
 
+  /** registered Host 重连时同步对账现场 run；失败必须向协调器传播。 */
+  reconcileRuntimeHostRuns(runtimeHostId: string): Promise<void> {
+    return this.runRecovery.reconcileRuntimeHost(runtimeHostId);
+  }
+
   /** 管理端：分页查询 run 列表。 */
   async listForAdmin(params: { status?: string; take: number; skip: number }) {
     const { runs, total } = await this.runRepository.listForAdmin(params);
@@ -111,6 +116,27 @@ export class RunService implements OnApplicationBootstrap {
       await this.runRepository.findActiveConversationIdsForWorkspace(
         workspaceId
       );
+    await Promise.all(
+      conversationIds.map((conversationId) =>
+        this.stop(conversationId).catch((err) => {
+          this.logger.warn(
+            `stop run for conversation ${conversationId} failed: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        })
+      )
+    );
+  }
+
+  /**
+   * user 停用/删除级联：停止该 user 名下所有活跃 run（best-effort，逐个吞错）。
+   * 由 RunUserListener 监听 USER_DISABLED / USER_DELETED 触发，先于 releaseResources
+   * 执行，保证 run 以 cancelled 而非 worker-lost error 收场。
+   */
+  async stopForUser(userId: string): Promise<void> {
+    const conversationIds =
+      await this.runRepository.findActiveConversationIdsForUser(userId);
     await Promise.all(
       conversationIds.map((conversationId) =>
         this.stop(conversationId).catch((err) => {

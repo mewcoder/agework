@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -8,6 +9,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { generateId } from "@agework/shared";
 import type { UserRole } from "@agework/shared/api";
+import type { RuntimeLifecycleClaim } from "@agework/shared/protocol";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 import type { UserSession } from "./user.types";
 import {
@@ -38,6 +40,10 @@ import {
   type UserRecord,
   type UserSessionRecord,
 } from "./user.repository";
+import {
+  RUNTIME_HOST_RESOURCE_RECONCILIATION,
+  type RuntimeHostResourceReconciliationPort,
+} from "../runtime-host/runtime-host.types";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -51,8 +57,53 @@ export class UserService {
   constructor(
     private users: UserRepository,
     private passwordHasher: PasswordHasherService,
-    private events: EventEmitter2
+    private events: EventEmitter2,
+    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
+    private readonly hostResources: RuntimeHostResourceReconciliationPort
   ) {}
+
+  /**
+   * registered Host 重连时对账 user 生命周期 claims。claims 由上层协调器
+   * 每个 attempt 只读取一次后传入；release_pending 按原 user/version 重放。
+   */
+  async reconcileRuntimeHostResources(
+    runtimeHostId: string,
+    claims: RuntimeLifecycleClaim[]
+  ): Promise<void> {
+    const userIds = distinctClaimUserIds(claims);
+    const targets = new Map<string, { userId: string; version: number }>();
+
+    for (const target of pendingUserReleaseTargets(claims)) {
+      targets.set(`${target.userId}:${target.version}`, target);
+    }
+    if (userIds.length > 0) {
+      const inactiveUsers =
+        await this.users.findInactiveSessionVersions(userIds);
+      for (const user of inactiveUsers) {
+        targets.set(`${user.id}:${user.sessionVersion}`, {
+          userId: user.id,
+          version: user.sessionVersion,
+        });
+      }
+    }
+
+    let firstError: unknown;
+    for (const { userId, version } of targets.values()) {
+      try {
+        await this.hostResources.releaseResources({
+          runtimeHostId,
+          target: {
+            type: "user",
+            userId,
+            userLifecycleVersion: version,
+          },
+        });
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+    if (firstError) throw firstError;
+  }
 
   /**
    * 列出用户；super_admin 可看到全部角色，普通管理员只能看到受限角色范围（由 repository 过滤）。
@@ -178,7 +229,10 @@ export class UserService {
       data.status !== undefined &&
       normalizeStatus(data.status) === "disabled"
     ) {
-      this.events.emit(USER_DISABLED_EVENT, new UserDisabledEvent(id));
+      this.events.emit(
+        USER_DISABLED_EVENT,
+        new UserDisabledEvent(id, updated.sessionVersion)
+      );
     }
 
     return this.toUserDto(updated);
@@ -222,8 +276,11 @@ export class UserService {
       throw new BadRequestException("管理员账号不能删除，只能停用");
     }
 
-    await this.users.softDelete(id);
-    this.events.emit(USER_DELETED_EVENT, new UserDeletedEvent(id));
+    const { sessionVersion } = await this.users.softDelete(id);
+    this.events.emit(
+      USER_DELETED_EVENT,
+      new UserDeletedEvent(id, sessionVersion)
+    );
   }
 
   /**
@@ -558,4 +615,36 @@ export class UserService {
       sessionVersion: user.sessionVersion,
     };
   }
+}
+
+function distinctClaimUserIds(claims: RuntimeLifecycleClaim[]): string[] {
+  const ids = new Set<string>();
+  for (const claim of claims) {
+    if (claim.kind !== "release_pending") ids.add(claim.userId);
+  }
+  return [...ids];
+}
+
+function pendingUserReleaseTargets(
+  claims: RuntimeLifecycleClaim[]
+): Array<{ userId: string; version: number }> {
+  const targets: Array<{ userId: string; version: number }> = [];
+  for (const claim of claims) {
+    if (
+      claim.kind !== "release_pending" ||
+      claim.target.type !== "user"
+    ) {
+      continue;
+    }
+    if (claim.userLifecycleVersion === undefined) {
+      throw new Error(
+        `release_pending user claim is missing userLifecycleVersion: ${claim.target.userId}`
+      );
+    }
+    targets.push({
+      userId: claim.target.userId,
+      version: claim.userLifecycleVersion,
+    });
+  }
+  return targets;
 }

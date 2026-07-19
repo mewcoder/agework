@@ -80,19 +80,21 @@ export type {
 } from "./channel";
 export type {
   RuntimeType,
-  OwnerKey,
-  WorkerKey,
   RunPlacement,
   SubmitRunInput,
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
-  ReleaseOwnerInput,
+  RuntimeLifecycleTarget,
+  ReleaseRuntimeResourcesInput,
+  RuntimeHostResourceLifecycle,
+  RuntimeLifecycleClaim,
+  RuntimeHostResourceReconciliation,
   StopWorkerInput,
   WorkerSnapshot,
   RuntimeHostContract,
   RuntimeHostExecution,
   RuntimeHostUpstreamBinding,
-  RuntimeHostOwnerLifecycle,
+  RuntimeHostResourceLifecycle as RuntimeHostOwnerLifecycle,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,
   RuntimeHostDiagnostics,
@@ -167,55 +169,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// ── owner/worker key 构造器(运行时值必须内联在本入口文件,原因见
-//    common/index.ts 的 generateId 注释;类型定义在 runtime-host.ts) ──
+// ── owner/worker key 构造器已退役 ──
+// scope + userId + workspaceId 是 Server 下发的业务事实,Runtime 内部派生
+// ReuseIdentity 作为复用身份。公共协议不再导出 OwnerKey/WorkerKey 构造/解析函数。
 
-export function workspaceOwnerKey(workspaceId: string): `workspace:${string}` {
-  return `workspace:${workspaceId}`;
-}
-
-export function userOwnerKey(userId: string): `user:${string}` {
-  return `user:${userId}`;
-}
-
-export function workerKey(
-  owner: `workspace:${string}` | `user:${string}`,
-  runtimeType: string
-): `${"workspace" | "user"}:${string}#${string}` {
-  return `${owner}#${runtimeType}` as `${"workspace" | "user"}:${string}#${string}`;
-}
-
-/** 拆 owner 键。仅接受上面构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
-export function parseOwnerKey(
-  owner: `workspace:${string}` | `user:${string}`
-): {
-  scope: "workspace" | "user";
-  id: string;
-} {
-  const sep = owner.indexOf(":");
-  const scope = owner.slice(0, sep);
-  const id = owner.slice(sep + 1);
-  if ((scope !== "workspace" && scope !== "user") || !id) {
-    throw new Error(`invalid owner key: ${String(owner)}`);
-  }
-  return { scope, id };
-}
-
-/** 拆 worker 键。仅接受 workerKey() 构造器产出的形状，坏输入直接抛错（编程错误，不兜）。 */
-export function parseWorkerKey(key: `${"workspace" | "user"}:${string}#${string}`): {
-  owner: `workspace:${string}` | `user:${string}`;
-  runtimeType: string;
-} {
-  const sep = key.lastIndexOf("#");
-  const runtimeType = key.slice(sep + 1);
-  if (sep < 0 || !runtimeType) {
-    throw new Error(`invalid worker key: ${String(key)}`);
-  }
-  return {
-    owner: key.slice(0, sep) as `workspace:${string}` | `user:${string}`,
-    runtimeType,
-  };
-}
 export type {
   RpcBatch,
   RpcError,
@@ -243,11 +200,13 @@ export type {
   HostTunnelServerMessage,
   HostSubmitRunRpcParams,
   HostCommandRpcParams,
-  HostReleaseOwnerRpcParams,
+  HostReleaseResourcesRpcParams,
   HostUpstreamNotification,
   HostUpstreamEnvelope,
   HostUpstreamAckParams,
   HostReleaseRunParams,
+  HostListLifecycleClaimsRpcParams,
+  HostListLifecycleClaimsRpcResult,
   HostTunnelHostRpcRequest,
   HostTunnelHostRpcResponse,
   HostTunnelHostNotification,
@@ -262,7 +221,7 @@ export type {
 export const RUNTIME_TUNNEL_CLOSE_GONE = 4410;
 
 /** RuntimeHost 控制隧道线协议版本。独立于 AGEWORK_VERSION，应用版本变化不等于协议破坏。 */
-export const RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION = 2;
+export const RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION = 3;
 
 /** Host ↔ Worker HTTP 数据面线协议版本。 */
 export const RUNTIME_WORKER_HTTP_PROTOCOL_VERSION = 1;

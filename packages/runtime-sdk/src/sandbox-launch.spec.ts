@@ -20,9 +20,10 @@ function makeCtx(
 ): RuntimeLaunchContext {
   return {
     runtimeType: "docker",
-    ownerId: "ws-1",
-    workspaceId: "ws-1",
+    workerId: "worker-1",
     runId: "run-1",
+    workspaceId: "ws-1",
+    isolation: { scope: "workspace", subjectId: "ws-1" },
     placement: {
       runtimeType: "docker",
       userId: "u1",
@@ -34,7 +35,6 @@ function makeCtx(
       ...placementOverrides,
     } as never,
     workerEnv: {
-      AGEWORK_WORKER_OWNER_ID: "ws-1",
       AGEWORK_WORKER_ROLE: "worker",
     },
     ...overrides,
@@ -44,7 +44,6 @@ function makeCtx(
 describe("buildSandboxStartInput", () => {
   it("env = workerEnv + API_BASE/日志字段,loopback host 换成容器可达网关", () => {
     const input = buildSandboxStartInput(makeCtx(), CONFIG);
-    expect(input.env.AGEWORK_WORKER_OWNER_ID).toBe("ws-1");
     expect(input.env.AGEWORK_WORKER_ROLE).toBe("worker");
     expect(input.env.AGEWORK_WORKER_API_BASE).toContain("host.docker.internal");
     expect(input.env.AGEWORK_WORKER_LOG_DIR).toBe(
@@ -52,12 +51,33 @@ describe("buildSandboxStartInput", () => {
     );
   });
 
-  it("归属 metadata 由这里唯一构造", () => {
+  it("日志文件名以 workerId 命名", () => {
+    const input = buildSandboxStartInput(makeCtx(), CONFIG);
+    expect(input.env.AGEWORK_WORKER_LOG_FILE).toBe(
+      "/home/agework/.agework/logs/runtime/worker-1.runtime.worker.log"
+    );
+  });
+
+  it("isolation metadata 由这里唯一构造", () => {
     const input = buildSandboxStartInput(makeCtx(), CONFIG);
     expect(input.metadata).toEqual({
-      "agework.io/runtime-owner-id": "ws-1",
+      "agework.io/runtime-type": "docker",
       "agework.io/scope": "workspace",
+      "agework.io/subject-id": "ws-1",
+      "agework.io/workspace-id": "ws-1",
+      "agework.io/worker-id": "worker-1",
     });
+  });
+
+  it("user scope 透传 subjectId=userId", () => {
+    const input = buildSandboxStartInput(
+      makeCtx({
+        isolation: { scope: "user", subjectId: "u1" },
+      }),
+      CONFIG
+    );
+    expect(input.metadata["agework.io/scope"]).toBe("user");
+    expect(input.metadata["agework.io/subject-id"]).toBe("u1");
   });
 
   it("workspace 挂载路径非绝对 → 抛错(两 provider 共享的校验)", () => {

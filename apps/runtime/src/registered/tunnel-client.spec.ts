@@ -115,6 +115,7 @@ describe("TunnelClient", () => {
       capabilities: {
         docker: {
           available: true,
+          displayName: "docker",
           scopes: ["user", "workspace"],
         },
       },

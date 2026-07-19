@@ -125,7 +125,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     });
   });
 
-  it("retries remote cleanup when the registered host reconnects", async () => {
+  it("retries remote cleanup when the coordinator runs reconciliation", async () => {
     const deps = makeDeps([
       makeActiveRun({ runtimeHostId: "rt-registered-1" }),
     ]);
@@ -150,9 +150,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     await service.failInterruptedRuns();
     expect(runtimeHost.releaseRun).not.toHaveBeenCalled();
 
-    await service.onRuntimeHostConnected({
-      runtimeHostId: "rt-registered-1",
-    });
+    await service.reconcileRuntimeHost("rt-registered-1");
 
     expect(command).toHaveBeenCalledTimes(2);
     expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
@@ -177,9 +175,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       listRunIds: vi.fn().mockResolvedValue(["run-stale"]),
     });
 
-    await service.onRuntimeHostConnected({
-      runtimeHostId: "rt-registered-1",
-    });
+    await service.reconcileRuntimeHost("rt-registered-1");
 
     expect(runtimeHost.command).toHaveBeenCalledWith({
       runtimeHostId: "rt-registered-1",
@@ -211,9 +207,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
       listRunIds: vi.fn().mockResolvedValue(["run-active"]),
     });
 
-    await service.onRuntimeHostConnected({
-      runtimeHostId: "rt-registered-1",
-    });
+    await service.reconcileRuntimeHost("rt-registered-1");
 
     expect(runtimeHost.command).not.toHaveBeenCalled();
     expect(runtimeHost.releaseRun).not.toHaveBeenCalled();

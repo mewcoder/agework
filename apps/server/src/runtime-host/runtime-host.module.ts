@@ -16,7 +16,7 @@ import {
   RUNTIME_HOST_CONNECTIVITY,
   RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_OWNER_RECONCILIATION,
+  RUNTIME_HOST_RESOURCE_RECONCILIATION,
   RUNTIME_HOST_RUN_RECONCILIATION,
   RUNTIME_HOST_RUN_REAP_BINDING,
   RUNTIME_HOST_UPSTREAM_BINDING,
@@ -34,9 +34,9 @@ import {
  *   消费者不感知 builtin/registered 的路由细节。
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
- * - owner 生命周期清理不在本模块:workspace / user 模块各自监听事件后
- *   向下调 owner reconciliation token；diagnostics 供上层根 Service 编排
- *   admin 观测用例(如 run 模块的 admin 详情)。
+ * - 资源生命周期判断归 workspace / user owner；重连同步用例由上层 run
+ *   coordinator 编排各根 Service。diagnostics 供上层根 Service 编排 admin
+ *   观测用例(如 run 模块的 admin 详情)。
  */
 @Module({
   imports: [RunEventModule],
@@ -55,7 +55,7 @@ import {
     { provide: RUNTIME_HOST_WORKSPACE_DATA, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
     {
-      provide: RUNTIME_HOST_OWNER_RECONCILIATION,
+      provide: RUNTIME_HOST_RESOURCE_RECONCILIATION,
       useExisting: RuntimeHostAdapter,
     },
     {
@@ -78,7 +78,7 @@ import {
     RUNTIME_HOST_UPSTREAM_BINDING,
     // environment / workspace-data 仅本模块 RuntimeHostService 消费,不对外导出
     RUNTIME_HOST_DIAGNOSTICS,
-    RUNTIME_HOST_OWNER_RECONCILIATION,
+    RUNTIME_HOST_RESOURCE_RECONCILIATION,
     RUNTIME_HOST_RUN_RECONCILIATION,
     RUNTIME_HOST_RUN_REAP_BINDING,
   ],

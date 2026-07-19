@@ -39,9 +39,9 @@ function statusVariant(status: string) {
   return "outline" as const;
 }
 
-/** 同名 workerKey 可能出现在不同 Host 上,行标识必须带 Host。 */
+/** 同名 workerId 可能出现在不同 Host 上,行标识必须带 Host。 */
 function workerRowId(worker: WorkerSnapshot) {
-  return `${worker.runtimeHostId}:${worker.workerKey}`;
+  return `${worker.runtimeHostId}:${worker.workerId}`;
 }
 
 export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
@@ -79,7 +79,7 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
     try {
       await stopMutation.mutateAsync({
         runtimeHostId: pendingStop.runtimeHostId,
-        workerKey: pendingStop.workerKey,
+        workerId: pendingStop.workerId,
       });
     } finally {
       setStoppingId(null);
@@ -94,16 +94,16 @@ export function WorkerPanel({ showHeader = true }: { showHeader?: boolean }) {
       meta: { headerClassName: "pl-4", cellClassName: "pl-4" },
       cell: ({ row }) => (
         <DataTableBadge variant="outline">
-          {row.original.runtimeType === "native" ? "host" : row.original.scope}
+          {row.original.runtimeType === "native" ? "host" : row.original.isolation.scope}
         </DataTableBadge>
       ),
     },
     {
-      id: "owner",
-      header: "所有者",
+      id: "subject",
+      header: "隔离主体",
       cell: ({ row }) => (
-        <DataTableText className="max-w-[200px]" title={row.original.ownerId}>
-          {row.original.ownerId}
+        <DataTableText className="max-w-[200px]" title={row.original.isolation.subjectId}>
+          {row.original.isolation.subjectId}
         </DataTableText>
       ),
     },

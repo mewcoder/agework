@@ -15,7 +15,7 @@ describe("runtime wire decoders", () => {
     expect(
       isHostTunnelClientMessage({
         type: "register",
-        protocolVersion: 1,
+        protocolVersion: 3,
         processInstanceId: "proc-1",
         capabilities: {
           docker: { available: true, scopes: ["user", "workspace"] },
@@ -27,7 +27,7 @@ describe("runtime wire decoders", () => {
         type: "registered",
         runtimeHostId: "host-1",
         heartbeatIntervalSeconds: 10,
-        protocolVersion: 1,
+        protocolVersion: 3,
         epoch: 1,
       })
     ).toBe(true);
@@ -77,6 +77,189 @@ describe("runtime wire decoders", () => {
         jsonrpc: "2.0",
         id: "req-3",
         method: "host.legacyMethod",
+        params: {},
+      })
+    ).toBe(false);
+  });
+
+  it("v3 submitRun: accepts placement with scope + userLifecycleVersion, rejects legacy owner field", () => {
+    const validPlacement = {
+      scope: "workspace",
+      runtimeType: "docker",
+      runtimeHostId: "host-1",
+      workspaceId: "ws-1",
+      userId: "u1",
+      userLifecycleVersion: 1,
+      username: "alice",
+      workspacePath: "/data/ws-1",
+    };
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "submit-1",
+        method: "host.submitRun",
+        params: {
+          runId: "run-1",
+          conversationId: "conv-1",
+          placement: validPlacement,
+          agentProviderConfig: { agentType: "claude", source: "system" },
+          input: {},
+        },
+      })
+    ).toBe(true);
+
+    // legacy owner field instead of scope → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "submit-2",
+        method: "host.submitRun",
+        params: {
+          runId: "run-1",
+          conversationId: "conv-1",
+          placement: {
+            owner: "workspace:ws-1",
+            runtimeType: "docker",
+            runtimeHostId: "host-1",
+            workspaceId: "ws-1",
+            userId: "u1",
+            username: "alice",
+            workspacePath: "/data/ws-1",
+          },
+          agentProviderConfig: { agentType: "claude", source: "system" },
+          input: {},
+        },
+      })
+    ).toBe(false);
+
+    // missing userLifecycleVersion → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "submit-3",
+        method: "host.submitRun",
+        params: {
+          runId: "run-1",
+          conversationId: "conv-1",
+          placement: {
+            scope: "workspace",
+            runtimeType: "docker",
+            runtimeHostId: "host-1",
+            workspaceId: "ws-1",
+            userId: "u1",
+            username: "alice",
+            workspacePath: "/data/ws-1",
+          },
+          agentProviderConfig: { agentType: "claude", source: "system" },
+          input: {},
+        },
+      })
+    ).toBe(false);
+
+    // invalid scope → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "submit-4",
+        method: "host.submitRun",
+        params: {
+          runId: "run-1",
+          conversationId: "conv-1",
+          placement: {
+            ...validPlacement,
+            scope: "tenant",
+          },
+          agentProviderConfig: { agentType: "claude", source: "system" },
+          input: {},
+        },
+      })
+    ).toBe(false);
+  });
+
+  it("v3 releaseResources: accepts workspace/user targets, rejects legacy host.releaseOwner", () => {
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "rel-1",
+        method: "host.releaseResources",
+        params: {
+          runtimeHostId: "host-1",
+          target: { type: "workspace", workspaceId: "ws-1" },
+        },
+      })
+    ).toBe(true);
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "rel-2",
+        method: "host.releaseResources",
+        params: {
+          runtimeHostId: "host-1",
+          target: {
+            type: "user",
+            userId: "u1",
+            userLifecycleVersion: 3,
+          },
+        },
+      })
+    ).toBe(true);
+    // user target without userLifecycleVersion → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "rel-3",
+        method: "host.releaseResources",
+        params: {
+          runtimeHostId: "host-1",
+          target: { type: "user", userId: "u1" },
+        },
+      })
+    ).toBe(false);
+    // legacy host.releaseOwner → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "rel-4",
+        method: "host.releaseOwner",
+        params: { runtimeHostId: "host-1", owner: "workspace:ws-1" },
+      })
+    ).toBe(false);
+  });
+
+  it("v3 stopWorker: uses workerId, rejects legacy key field", () => {
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "stop-1",
+        method: "host.stopWorker",
+        params: { runtimeHostId: "host-1", workerId: "worker-1" },
+      })
+    ).toBe(true);
+    // legacy key field → reject
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "stop-2",
+        method: "host.stopWorker",
+        params: { runtimeHostId: "host-1", key: "workspace:ws-1#docker" },
+      })
+    ).toBe(false);
+  });
+
+  it("v3 listLifecycleClaims: accepts runtimeHostId param", () => {
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "claims-1",
+        method: "host.listLifecycleClaims",
+        params: { runtimeHostId: "host-1" },
+      })
+    ).toBe(true);
+    expect(
+      isHostTunnelHostRpcRequest({
+        jsonrpc: "2.0",
+        id: "claims-2",
+        method: "host.listLifecycleClaims",
         params: {},
       })
     ).toBe(false);

@@ -9,6 +9,7 @@ import {
   type RuntimeHostContract,
   type HostListRunsRpcResult,
   type HostListWorkersRpcResult,
+  type HostListLifecycleClaimsRpcResult,
   type InstallCliResult,
   type RuntimeCapabilities,
   type WorkerScope,
@@ -260,6 +261,7 @@ export class TunnelClient {
     | WorkspaceFileDiffResponse
     | HostListRunsRpcResult
     | HostListWorkersRpcResult
+    | HostListLifecycleClaimsRpcResult
     | HostCapabilityStatus
     | DirectoryListing
     | InstallCliResult
@@ -273,8 +275,8 @@ export class TunnelClient {
       case "host.command":
         await hostContract.command(request.params);
         return;
-      case "host.releaseOwner":
-        await hostContract.releaseOwner(request.params);
+      case "host.releaseResources":
+        await hostContract.releaseResources(request.params);
         return;
       case "host.detectEnv":
         return hostContract.detectEnv(request.params.runtimeHostId);
@@ -298,6 +300,9 @@ export class TunnelClient {
       case "host.listWorkers":
         const workers = await hostContract.listWorkers();
         return { workers };
+      case "host.listLifecycleClaims":
+        const claims = await hostContract.listLifecycleClaims();
+        return { claims };
       case "host.stopWorker":
         return await hostContract.stopWorker(request.params);
       case "host.installCli":

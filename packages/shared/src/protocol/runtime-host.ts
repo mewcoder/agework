@@ -13,36 +13,27 @@ import type {
 
 // ── Server ↔ Runtime Host 契约 ──────────────────────────────────────
 //
-// 设计定案见 docs/design/server-runtime-worker-target-architecture.md §4.2。
-// run、环境、文件和观测能力统一经此契约进入目标 Host。
+// 设计定案见 .scratch/runtime-owner-boundary/SPEC.md。
+// Server 只下发 scope 与业务身份事实,Runtime 是复用身份与复用策略的唯一权威。
 
 /** Runtime SDK 插件声明的开放标识，如 native / docker / opensandbox。 */
 export type RuntimeType = string;
 
-/** worker 复用的 owner 键：workspace-scope 用 workspaceId，user-scope 用 userId。 */
-export type OwnerKey = `workspace:${string}` | `user:${string}`;
-
 /**
- * worker 池的唯一键（不变量 2）：同一 (owner, runtimeType) 至多一个活跃 worker。
- * 池、观测、stopWorker、fence 全部用它，杜绝裸 ownerKey 在多 runtimeType 下撞车。
- */
-export type WorkerKey = `${OwnerKey}#${string}`;
-
-// 注意:本文件只放类型。owner/worker key 的构造函数(运行时值)内联在
-// protocol/index.ts——原因见该文件 RUNTIME_TUNNEL_CLOSE_GONE 旁注释与
-// common/index.ts 的 generateId 注释(type-stripping 消费方擦掉 type-only
-// 导入后,无扩展名的运行时相对导入无法解析)。
-
-/**
- * 一次 run 的放置决策：server 按 workspace 配置算好传入，Host 不解引用任何业务数据
- * （workspaceId/userId 对 Host 只是不透明的路由/复用/收尾键，见不变量 7）。
+ * 一次 run 的放置决策：Server 把业务事实(scope + userId + workspaceId +
+ * userLifecycleVersion)交给 Runtime,Runtime 从中派生隔离与复用身份。
+ * Host 不解引用任何业务数据(workspaceId/userId 对 Host 是不透明的路由/复用/
+ * 收尾键,见不变量 7),但需要 username / workspacePath 派生执行机路径。
  */
 export type RunPlacement = {
-  owner: OwnerKey;
+  /** 最大共享边界,始终存在;native 也是 "workspace"。 */
+  scope: "workspace" | "user";
   runtimeType: RuntimeType;
   runtimeHostId: string;
   workspaceId: string;
   userId: string;
+  /** DB User.sessionVersion;可逆 user 生命周期的 execution generation。 */
+  userLifecycleVersion: number;
   /** Host 派生 user 级挂载根用（执行机路径约定按用户名组织）。 */
   username: string;
   /** workspace 在宿主机上的根路径，Host 据此计算挂载/运行路径。 */
@@ -67,41 +58,71 @@ export type RuntimeHostCommandInput = {
   runtimeHostId: string;
   payload: CommandPayload;
 };
-
 /** run 终态后的 Host 内部状态清理路由。 */
 export type RuntimeHostRunRef = {
   runtimeHostId: string;
   runId: string;
 };
 
-/** owner 级释放的定向路由输入。 */
-export type ReleaseOwnerInput = {
-  /** 目标 Host。 */
-  runtimeHostId: string;
-  owner: OwnerKey;
-};
+// ── 资源生命周期 ──────────────────────────────────────────────────────
 
-/** stopWorker 的定向路由输入。 */
+/** Runtime 收尾的业务主体:workspace 或 user。 */
+export type RuntimeLifecycleTarget =
+  | { type: "workspace"; workspaceId: string }
+  | { type: "user"; userId: string };
+
+/**
+ * 资源释放的定向路由输入。
+ * - workspace target:取消/fence 该 workspace 已受理的 submission 和 run;只释放
+ *   workspace-scope worker;user-scope 共享 worker 继续服务同用户其他 workspace。
+ * - user target:fence 该 user 中 userLifecycleVersion <= target version 的
+ *   submission、acquisition 和 worker;释放该代及旧代的两类 scope worker。
+ * - 成功 ACK 是完成屏障。
+ */
+export type ReleaseRuntimeResourcesInput =
+  | {
+      runtimeHostId: string;
+      target: { type: "workspace"; workspaceId: string };
+    }
+  | {
+      runtimeHostId: string;
+      target: {
+        type: "user";
+        userId: string;
+        /** 必填,来源为状态写入后返回的 User.sessionVersion。 */
+        userLifecycleVersion: number;
+      };
+    };
+
+/** Host 上资源生命周期(替代旧 releaseOwner)。 */
+export interface RuntimeHostResourceLifecycle {
+  releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void>;
+}
+
+/** stopWorker 的定向路由输入;admin 诊断面按 host+workerId 精确停止。 */
 export type StopWorkerInput = {
   /** 目标 Host。 */
   runtimeHostId: string;
-  /** 池键 `OwnerKey#RuntimeType`。 */
-  key: WorkerKey;
+  /** Runtime 内部控制身份。 */
+  workerId: string;
 };
 
 /**
- * admin 观测用的 worker 快照（诊断面显式例外，业务代码禁止消费）。
- * 形状即 Host 内存池条目（WorkerEntry）的直投影，不再模拟已删除的 Worker 表行。
+ * admin 观测用的 worker 快照(诊断面显式例外,业务代码禁止消费)。
+ * 形状即 Host 内存池条目(WorkerEntry)的直投影。只表达现场事实,不能作为业务
+ * 生命周期命令输入。
  */
 export type WorkerSnapshot = {
   /** 所在 Host。Host 本地不知道自己的注册 id，置空串，由 server 路由层盖章。 */
   runtimeHostId: string;
   workerId: string;
-  /** 池键 `OwnerKey#RuntimeType`，stopWorker 用。 */
-  workerKey: WorkerKey;
   runtimeType: string;
-  scope: string;
-  ownerId: string;
+  /** 结构化隔离身份,由 Runtime 从 placement 唯一派生。 */
+  isolation: {
+    scope: "workspace" | "user";
+    subjectId: string;
+  };
+  userId: string;
   /** 仅供 admin 现场诊断关联 run，不持久化到 server。 */
   runIds: string[];
   runtimeInstanceId: string;
@@ -109,6 +130,46 @@ export type WorkerSnapshot = {
   /** 最后一次心跳/事件上报时间（ISO）。 */
   lastSeenAt: string;
 };
+
+// ── 业务生命周期 claims 投影(重连对账) ────────────────────────────────
+
+/**
+ * Runtime Host 的业务生命周期 claims 投影,供 Server 重连对账。
+ * 必须覆盖尚未形成 ready worker 的状态,不能只返回 worker 复用主体。
+ */
+export type RuntimeLifecycleClaim =
+  | {
+      kind: "session";
+      runtimeHostId: string;
+      runId: string;
+      phase: "reserved" | "configuring" | "acquiring" | "ready";
+      userId: string;
+      userLifecycleVersion: number;
+      workspaceId: string;
+    }
+  | {
+      kind: "worker";
+      runtimeHostId: string;
+      workerId: string;
+      scope: "workspace" | "user";
+      subjectId: string;
+      userId: string;
+      userLifecycleVersion: number;
+      workspaceIds: string[];
+    }
+  | {
+      kind: "release_pending";
+      runtimeHostId: string;
+      target: RuntimeLifecycleTarget;
+      userLifecycleVersion?: number;
+    };
+
+/** Server 重连对账使用的资源 reconciliation 端口。 */
+export interface RuntimeHostResourceReconciliation {
+  /** 查询目标 Host 的业务生命周期 claims。查询失败必须显式失败,不能折叠为空列表。 */
+  listLifecycleClaims(runtimeHostId: string): Promise<RuntimeLifecycleClaim[]>;
+  releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void>;
+}
 
 // ── 环境 / 文件 / 观测动词 ─────────────────────────────────────────
 //
@@ -262,16 +323,6 @@ export interface RuntimeHostUpstreamBinding {
   setUpstream(upstream: RuntimeHostUpstream): void;
 }
 
-/** Host 上 owner 级资源生命周期。 */
-export interface RuntimeHostOwnerLifecycle {
-  /**
-   * owner 级释放：workspace 删除传 workspace:X，user 注销/禁用传 user:Y。
-   * 按 runtimeHostId 定向路由到目标 Host,不广播。
-   * 幂等、可重试；目标键无 worker 时为空操作（见 §3.5 场景 4）。
-   */
-  releaseOwner(input: ReleaseOwnerInput): Promise<void>;
-}
-
 /** Host 本机环境与 CLI 能力。 */
 export interface RuntimeHostEnvironment {
   /** 每种 runtimeType 的可用性 + CLI 检测结果，构成目标 Host 的能力矩阵。 */
@@ -315,6 +366,13 @@ export interface RuntimeHostDiagnostics {
   /** Host 现场 run 会话清单（含尚未绑定 Worker 的 acquiring），恢复对账用。 */
   listRunIds(runtimeHostId: string): Promise<string[]>;
 
+  /**
+   * 业务生命周期 claims 投影(重连对账用)。
+   * 必须覆盖尚未形成 ready worker 的状态,不能只返回 worker 复用主体。
+   * 查询失败必须显式失败,不能折叠为空列表。
+   */
+  listLifecycleClaims(): Promise<RuntimeLifecycleClaim[]>;
+
   /** 按 runtimeHostId 定向停止目标 Host 上的一个 worker（admin 诊断入口）。 */
   stopWorker(input: StopWorkerInput): Promise<void>;
 }
@@ -327,7 +385,7 @@ export interface RuntimeHostContract
   extends
     RuntimeHostExecution,
     RuntimeHostUpstreamBinding,
-    RuntimeHostOwnerLifecycle,
+    RuntimeHostResourceLifecycle,
     RuntimeHostEnvironment,
     RuntimeHostWorkspaceData,
     RuntimeHostDiagnostics {}

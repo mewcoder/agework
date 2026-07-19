@@ -7,16 +7,13 @@ import {
 } from "@nestjs/common";
 import type { Response } from "express";
 import type { AgentModeState } from "@agework/shared";
-import {
-  parseOwnerKey,
-  userOwnerKey,
-  workspaceOwnerKey,
-  type AgentProviderConfig,
-  type RecordRunEventInput,
-  type RunPlacement,
-  type RuntimeHostExecution,
-  type RunExecutionHandle,
-  type WorkerScope,
+import type {
+  AgentProviderConfig,
+  RecordRunEventInput,
+  RunPlacement,
+  RuntimeHostExecution,
+  RunExecutionHandle,
+  WorkerScope,
 } from "@agework/shared/protocol";
 import { isRuntimeType } from "@agework/runtime-sdk";
 import { RunRepository } from "../run.repository";
@@ -88,9 +85,9 @@ export class RunLauncher {
       interruptReason,
     } = input;
     const agentType = agentProviderConfig.agentType;
-    const placement = this.buildPlacement({ workspace, userId });
+    const placement = this.buildPlacement({ workspace });
     const runtimeType = placement.runtimeType;
-    const scope = parseOwnerKey(placement.owner).scope;
+    const scope = placement.scope;
     const stream = new RunStream(res);
 
     await this.claimRun({
@@ -166,17 +163,19 @@ export class RunLauncher {
   }
 
   /**
-   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 builtin Host 的策略，
+   * 业务放置校验 + 构造 RunPlacement。部署 allow-list 是 builtin Host 的策略,
    * registered Host 的 workspace 跳过——它的 runtimeType/scope 已在
    * 创建时对着该 Host 的能力矩阵校验过(见
    * WorkspaceService.resolveRegisteredPlacement)。执行机路径/RunConfig 派生
    * 不在这里:那是 Host 侧(契约实现)的职责。
+   *
+   * SPEC: placement.userId 取 DB workspace view 的 workspace.userId
+   * (属主用户),不是请求用户——管理员代操作时请求用户 != 属主用户。
    */
   private buildPlacement(input: {
     workspace: WorkspaceRunContext;
-    userId: string;
   }): RunPlacement {
-    const { workspace, userId } = input;
+    const { workspace } = input;
     const registered = workspace.runtimeSource === "registered";
     const runtimeType = workspace.runtimeType;
     if (!registered && !this.configService.isRuntimeTypeAllowed(runtimeType)) {
@@ -210,14 +209,12 @@ export class RunLauncher {
     const scope: WorkerScope = requestedWorkerScope;
 
     return {
-      owner:
-        scope === "user"
-          ? userOwnerKey(userId)
-          : workspaceOwnerKey(workspace.workspaceId),
+      scope,
       runtimeType,
       runtimeHostId: workspace.runtimeHostId,
       workspaceId: workspace.workspaceId,
-      userId,
+      userId: workspace.userId,
+      userLifecycleVersion: workspace.userLifecycleVersion,
       username: workspace.username,
       workspacePath: workspace.workspaceRootPath,
     };
@@ -413,7 +410,7 @@ export class RunLauncher {
           runId,
           status: "starting",
           runtimeType,
-          scope: parseOwnerKey(placement.owner).scope,
+          scope: placement.scope,
         }),
         `record runtime starting for run ${runId}`
       );
@@ -441,7 +438,7 @@ export class RunLauncher {
             runId,
             status: "start_failed",
             runtimeType,
-            scope: parseOwnerKey(placement.owner).scope,
+            scope: placement.scope,
             error: err instanceof Error ? err.message : String(err),
             data: errorLogFields(err),
           })

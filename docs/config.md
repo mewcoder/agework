@@ -115,13 +115,15 @@ POST /api/v1/admin/config/reset    body: { key }
 | -------------------------------------- | ----------- | ----------------------------------------------- |
 | `AGEWORK_WORKER_ROLE`                  | Host/Worker | 进程角色，取值 `worker` 或 `runner`。           |
 | `AGEWORK_WORKER_ID`                    | Host        | Host 内的 Worker 标识。                         |
-| `AGEWORK_WORKER_OWNER_ID`              | Host        | 从 owner key 解析出的业务 owner id。            |
+| `AGEWORK_WORKER_OWNER_ID`              | Host        | ~~已废弃~~。由 `AGEWORK_WORKER_SUBJECT_ID` 替代。            |
 | `AGEWORK_WORKER_START_TOKEN`           | Host        | Worker 向 Host 注册时使用的一次性凭据。         |
 | `AGEWORK_WORKER_API_BASE`              | Host        | Worker 所属 Host 的 HTTP 端点。                 |
 | `AGEWORK_WORKER_RUNTIME_TYPE`          | Host        | 执行方式：`native`、`docker` 或 `opensandbox`。 |
 | `AGEWORK_WORKER_SCOPE`                 | Host        | Worker 复用范围：`user` 或 `workspace`。        |
+| `AGEWORK_WORKER_SUBJECT_ID`            | Host        | 复用主体 ID（user scope → userId, workspace scope → workspaceId）。 |
+| `AGEWORK_WORKER_USER_ID`               | Host        | 归属用户 ID（用于日志与生命周期匹配）。         |
 | `AGEWORK_WORKER_WORKSPACE_PATH`        | Host        | Worker 在执行环境内看到的 workspace 路径。      |
-| `AGEWORK_WORKER_RUNTIME_RESOURCE_NAME` | Provider    | provider 内部资源名，仅用于诊断。               |
+| `AGEWORK_WORKER_RUNTIME_RESOURCE_NAME` | Provider    | ~~已废弃~~。provider 资源名不再进入公共契约。   |
 | `AGEWORK_WORKER_LOG_DIR`               | Provider    | 执行环境内的日志目录。                          |
 | `AGEWORK_WORKER_LOG_FILE`              | Host/Worker | 当前 Worker 或 Runner 的日志文件。              |
 | `AGEWORK_WORKER_RUN_ID`                | Worker      | Runner 对应的全链路 runId。                     |

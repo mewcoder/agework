@@ -163,20 +163,37 @@ export class WorkspaceRepository {
   /** 给定 id 集合中仍存活(未软删)的 workspace id。 */
   async listActiveIds(ids: string[]): Promise<string[]> {
     if (ids.length === 0) return [];
+    // SPEC §5.3: workspace 存活校验必须同时考虑其 user 是否仍 active。
+    // 已停用/软删 user 名下的 workspace 也视为不活跃,需要补发释放。
     const rows = await this.prisma.workspace.findMany({
-      where: { id: { in: ids }, deletedAt: null },
+      where: {
+        id: { in: ids },
+        deletedAt: null,
+        user: {
+          status: "active",
+          deletedAt: null,
+        },
+      },
       select: { id: true },
     });
     return rows.map((row) => row.id);
   }
 
-  /** run 启动视图：目录 + runtimeHost 配置 + 属主用户名。 */
+  /** run 启动视图：目录 + runtimeHost 配置 + 属主用户名 + 用户生命周期版本。 */
   findRunView(id: string) {
     return this.prisma.workspace.findFirst({
       where: { id, deletedAt: null },
       include: {
         directory: true,
-        user: { select: { username: true } },
+        user: {
+          select: {
+            username: true,
+            id: true,
+            sessionVersion: true,
+            status: true,
+            deletedAt: true,
+          },
+        },
         runtimeHost: { select: { source: true } },
       },
     });

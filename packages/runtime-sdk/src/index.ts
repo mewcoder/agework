@@ -8,6 +8,7 @@ export type {
   RuntimeProviderPlugin,
   RuntimePluginModule,
   RuntimeLaunchContext,
+  RuntimeStartOptions,
   RuntimeInstanceRef,
   RuntimeProviderConfig,
   WorkerScope,
@@ -17,4 +18,5 @@ export type {
   SandboxPlacementInfo,
   RuntimeSpecInput,
   SandboxStartInput,
+  RuntimeIsolation,
 } from "./types";

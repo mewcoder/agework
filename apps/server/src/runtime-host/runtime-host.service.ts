@@ -14,8 +14,6 @@ import type {
   RuntimeHostDiagnostics,
   RuntimeHostEnvironment,
   RuntimeHostWorkspaceData,
-  RuntimeSpec,
-  WorkerKey,
   WorkerSnapshot,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
@@ -34,7 +32,6 @@ import type {
   WorkspaceFileDiffResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
-import { resolveRuntimeSpec, type RuntimeSpecInput } from "@agework/runtime-sdk";
 import { RuntimeHostRepository } from "./runtime-host.repository";
 import {
   BUILTIN_HOST_ID,
@@ -47,10 +44,13 @@ import {
   type RuntimeHostRow,
 } from "./runtime-host.types";
 import { resolveRuntimeHostCliPaths } from "./environment/runtime-host-environment";
+import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
 
 /**
- * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
+  * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
  * 所有执行机动作统一经最小 RuntimeHost 角色端口；本类不自行访问执行机或拼隧道 RPC。
+ *
+ * 注意:resolveRuntimeSpec 已删除(SPEC §10.2),由 Runtime SDK 直接处理。
  */
 @Injectable()
 export class RuntimeHostService implements OnApplicationBootstrap {
@@ -65,7 +65,8 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     @Inject(RUNTIME_HOST_WORKSPACE_DATA)
     private readonly workspaceData: RuntimeHostWorkspaceData,
     @Inject(RUNTIME_HOST_DIAGNOSTICS)
-    private readonly diagnostics: RuntimeHostDiagnostics
+    private readonly diagnostics: RuntimeHostDiagnostics,
+    private readonly tunnelHandler: HostTunnelHandler
   ) {}
 
   /** 启动时只初始化一行 builtin Host，并持久化 Host 报告的完整能力矩阵。 */
@@ -91,17 +92,27 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     return isBuiltinHostId(runtimeHostId);
   }
 
-  /** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
+/** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
   getBuiltinHostId(): string {
     return BUILTIN_HOST_ID;
   }
 
-  /** 从 run 输入解析出目标运行环境(纯计算,不启动 worker;默认值由 run 层补齐)。 */
-  resolveRuntimeSpec(input: RuntimeSpecInput): RuntimeSpec {
-    return resolveRuntimeSpec(input);
+  /** 判断给定 epoch 是否仍是该 registered Host 的当前 tunnel session。 */
+  isCurrentReconciliationEpoch(runtimeHostId: string, epoch: number): boolean {
+    return this.tunnelHandler.getSessionEpoch(runtimeHostId) === epoch;
   }
 
-  /** 创建 registered Runtime Host 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
+  /** 对账成功后以 epoch CAS 放行 submitRun；旧连接不能放行新 session。 */
+  markReconciled(runtimeHostId: string, epoch: number): boolean {
+    return this.tunnelHandler.markReconciled(runtimeHostId, epoch);
+  }
+
+  /** 对账失败后以 epoch CAS 保持 fail-closed。 */
+  markReconcileFailed(runtimeHostId: string, epoch: number): boolean {
+    return this.tunnelHandler.markReconcileFailed(runtimeHostId, epoch);
+  }
+
+/** 创建 registered Runtime Host 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
   async create(
     ownerId: string,
     name: string
@@ -138,27 +149,27 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     return { list: await this.diagnostics.listWorkers() };
   }
 
-  /**
-   * admin: 按 runtimeHostId 定向停止目标 Host 上的一个 worker。
-   * 目标 Host 离线/超时是预期失败,按上游不可达(502)报告。
-   */
-  async stopWorkerForAdmin(
-    runtimeHostId: string,
-    workerKey: string
-  ): Promise<void> {
-    try {
-      await this.diagnostics.stopWorker({
-        runtimeHostId,
-        key: workerKey as WorkerKey,
-      });
-    } catch (err) {
-      throw new BadGatewayException(
-        `stop worker failed on host ${runtimeHostId}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
+/**
+ * admin: 按 runtimeHostId 定向停止目标 Host 上的一个 worker。
+ * 目标 Host 离线/超时是预期失败,按上游不可达(502)报告。
+ */
+async stopWorkerForAdmin(
+  runtimeHostId: string,
+  workerId: string
+): Promise<void> {
+  try {
+    await this.diagnostics.stopWorker({
+      runtimeHostId,
+      workerId,
+    });
+  } catch (err) {
+    throw new BadGatewayException(
+      `stop worker failed on host ${runtimeHostId}: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
   }
+}
 
   /**
    * 查询 Host 是否存在且对该用户可见（自己的 registered 或全局 builtin，且未注销）；

@@ -5,7 +5,6 @@ import { WorkspaceService } from "./workspace.service";
 import { WorkspaceRepository } from "./workspace.repository";
 import { WorkspaceDirectoryHandler } from "./directory/workspace-directory.handler";
 import { WorkspaceRuntimePolicy } from "./placement/workspace-runtime.policy";
-import { WorkspaceOwnerReleaseListener } from "./owner-release/workspace-owner-release.listener";
 import { ConversationModule } from "../conversation/conversation.module";
 import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 
@@ -17,7 +16,6 @@ import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
     WorkspaceRepository,
     WorkspaceDirectoryHandler,
     WorkspaceRuntimePolicy,
-    WorkspaceOwnerReleaseListener,
   ],
   exports: [WorkspaceService],
 })

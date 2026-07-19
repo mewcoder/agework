@@ -1,7 +1,7 @@
 /**
- * 跑一次 run 所需的 workspace 运行上下文（目录 + runtime 配置 + 属主用户名）。
- * 由 WorkspaceService.getRunContext 解析产出，agent 层取出后当参数喂给
- * RunService.start，run 因此不必直接读 workspace 表。
+ * 跑一次 run 所需的 workspace 运行上下文（目录 + runtime 配置 + 属主用户名 +
+ * 用户生命周期版本）。由 WorkspaceService.getRunContext 解析产出，agent 层取出后
+ * 当参数喂给 RunService.start，run 因此不必直接读 workspace 表。
  */
 export type WorkspaceRunContext = {
   workspaceId: string;
@@ -14,4 +14,8 @@ export type WorkspaceRunContext = {
   runtimeHostId: string;
   /** 绑定 RuntimeHost 的来源:"builtin" = 本机 in-process,"registered" = 远程机器。 */
   runtimeSource: string;
+  /** 属主用户 id(placement 业务事实)。 */
+  userId: string;
+  /** DB User.sessionVersion;可逆 user 生命周期的 execution generation。 */
+  userLifecycleVersion: number;
 };

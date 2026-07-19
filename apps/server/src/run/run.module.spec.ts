@@ -110,9 +110,11 @@ async function createRunsTestingModule(
     .useValue({
       submitRun: vi.fn().mockResolvedValue(undefined),
       command: vi.fn().mockResolvedValue(undefined),
-      releaseOwner: vi.fn().mockResolvedValue(undefined),
+      releaseResources: vi.fn().mockResolvedValue(undefined),
       releaseRun: vi.fn().mockResolvedValue(undefined),
       listWorkers: vi.fn().mockResolvedValue([]),
+      listRunIds: vi.fn().mockResolvedValue([]),
+      listLifecycleClaims: vi.fn().mockResolvedValue([]),
       stopWorker: vi.fn().mockResolvedValue(undefined),
       detectEnv: vi.fn().mockResolvedValue({}),
       installCli: vi.fn().mockResolvedValue({}),

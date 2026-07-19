@@ -53,6 +53,8 @@ type UpstreamAckEntry = {
 
 type HostSession = {
   epoch: number;
+  /** admissionPhase: 重连对账阶段控制,防止 submitRun 在对账完成前受理。 */
+  admissionPhase: "reconciling" | "ready" | "reconcile_failed";
   ackEntries: UpstreamAckEntry[];
   ackHead: number;
   pendingAckSeq?: number;
@@ -159,6 +161,11 @@ export class HostTunnelHandler
     this.runReapPort = port;
   }
 
+  /** 获取 Host 的当前 session epoch (用于协调器标记对账完成)。 */
+  getSessionEpoch(runtimeHostId: string): number | undefined {
+    return this.hostSessions.get(runtimeHostId)?.epoch;
+  }
+
   /** 向目标 runtimeHostId 发一条单向通知(不等回应,不在线即丢弃,best-effort)。 */
   sendNotification(
     runtimeHostId: string,
@@ -172,7 +179,7 @@ export class HostTunnelHandler
   }
 
   /** 向目标 runtimeHostId 发一次 RPC（launch/stop/destroy/host.*），等它回应或超时。
-   *  Phase 2 扩展：接受 HostTunnelAllRpcRequest，包含 host.submitRun/command/releaseOwner。 */
+   *  Phase 3: host.submitRun 仅在 admissionPhase === "ready" 时允许,防止对账前受理新 run。 */
   sendRequest<Result>(
     runtimeHostId: string,
     request: HostTunnelAllRpcRequest,
@@ -184,6 +191,17 @@ export class HostTunnelHandler
     if (!socket || socket.readyState !== socket.OPEN) {
       return Promise.reject(
         new Error(`runtime host ${runtimeHostId} is not connected`)
+      );
+    }
+    // SPEC §5.3: host.submitRun 仅在 admissionPhase === "ready" 时允许
+    if (
+      request.method === "host.submitRun" &&
+      !this.isReadyForSubmit(runtimeHostId)
+    ) {
+      return Promise.reject(
+        new Error(
+          `runtime host ${runtimeHostId} is not ready (still reconciling), rejecting submitRun`
+        )
       );
     }
     return new Promise<Result>((resolve, reject) => {
@@ -378,6 +396,7 @@ export class HostTunnelHandler
           `runtime host ${runtimeHostId} version mismatch: daemon=${parsed.version} server=${AGEWORK_VERSION} (允许接入,registered daemon 单独构建后可能与 server 漂移)`
         );
       }
+      const epoch = this.nextEpoch(runtimeHostId);
       const reply: HostTunnelRegisteredMessage = {
         type: "registered",
         runtimeHostId,
@@ -385,13 +404,13 @@ export class HostTunnelHandler
         protocolVersion: RUNTIME_HOST_TUNNEL_PROTOCOL_VERSION,
         // Phase 2: 每次 register 递增会话 epoch,Host 盖在上行信封里,
         // 被顶掉的旧连接残留消息按 epoch 丢弃(防脑裂)。
-        epoch: this.nextEpoch(runtimeHostId),
+        epoch,
       };
       ws.send(JSON.stringify(reply));
-      // 注册成功的事实:下游据此做重连对账(如补发离线期间丢失的 owner 级释放)
+      // 注册成功的事实:下游据此做重连对账(如补发离线期间丢失的资源释放)
       this.events.emit(
         RUNTIME_HOST_CONNECTED_EVENT,
-        new RuntimeHostConnectedEvent(runtimeHostId)
+        new RuntimeHostConnectedEvent(runtimeHostId, epoch)
       );
       return;
     }
@@ -433,18 +452,52 @@ export class HostTunnelHandler
     ws.close(1008, "invalid tunnel message");
   }
 
-  /** register 时递增该 Runtime Host 的隧道会话 epoch 并返回。 */
+  /** register 时递增该 Runtime Host 的隧道会话 epoch 并返回。新连接进入 reconciling 状态。 */
   private nextEpoch(runtimeHostId: string): number {
     const session = this.hostSessions.get(runtimeHostId);
     const epoch = (session?.epoch ?? 0) + 1;
     this.hostSessions.set(runtimeHostId, {
       epoch,
+      admissionPhase: "reconciling",
       ackEntries: [],
       ackHead: 0,
       ackScheduled: false,
       failed: false,
     });
     return epoch;
+  }
+
+  /** 显式标记 Host 完成对账,进入 ready 状态。用于外部的 reconciliation coordinator。 */
+  markReconciled(runtimeHostId: string, epoch: number): boolean {
+    const session = this.hostSessions.get(runtimeHostId);
+    if (!session || session.epoch !== epoch) {
+      this.logger.warn(
+        `markReconciled failed for ${runtimeHostId}: epoch mismatch (expected ${epoch}, current ${session?.epoch ?? "none"})`
+      );
+      return false;
+    }
+    session.admissionPhase = "ready";
+    this.logger.log(
+      `host ${runtimeHostId} (epoch ${epoch}) marked ready, accepting submitRun`
+    );
+    return true;
+  }
+
+  /** 标记 Host 对账失败,进入 reconcile_failed 状态(fail-closed:不接受 submitRun)。 */
+  markReconcileFailed(runtimeHostId: string, epoch: number): boolean {
+    const session = this.hostSessions.get(runtimeHostId);
+    if (!session || session.epoch !== epoch) return false;
+    session.admissionPhase = "reconcile_failed";
+    this.logger.warn(
+      `host ${runtimeHostId} (epoch ${epoch}) reconciliation failed, submitRun blocked`
+    );
+    return true;
+  }
+
+  /** 检查 Host 是否已对账完成,可用于 submitRun。 */
+  isReadyForSubmit(runtimeHostId: string): boolean {
+    const session = this.hostSessions.get(runtimeHostId);
+    return session?.admissionPhase === "ready";
   }
 
   /**

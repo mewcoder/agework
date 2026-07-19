@@ -70,7 +70,7 @@ export const workerApi = {
   /** 现场查询所有 Host（builtin + registered）的 worker 快照。 */
   list: () =>
     apiGet<LiveWorkerListResponse>("/api/v1/admin/runtime-hosts/workers/list"),
-  /** 定向停止 worker:runtimeHostId 选 Host,workerKey 定位其上的 worker。 */
-  stopWorker: (input: { runtimeHostId: string; workerKey: string }) =>
+  /** 定向停止 worker:runtimeHostId 选 Host,workerId 定位其上的 worker。 */
+  stopWorker: (input: { runtimeHostId: string; workerId: string }) =>
     apiPost<{ ok: boolean }>("/api/v1/admin/runtime-hosts/workers/stop", input),
 };

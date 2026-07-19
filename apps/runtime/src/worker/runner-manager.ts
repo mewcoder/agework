@@ -617,8 +617,8 @@ const RUNNER_ENV_PASSTHROUGH_KEYS = [
   "AGEWORK_WORKER_LOG_MAX_FILE_MB",
   "AGEWORK_WORKER_RUNTIME_TYPE",
   "AGEWORK_WORKER_SCOPE",
-  "AGEWORK_WORKER_OWNER_ID",
-  "AGEWORK_WORKER_RUNTIME_RESOURCE_NAME",
+  "AGEWORK_WORKER_SUBJECT_ID",
+  "AGEWORK_WORKER_USER_ID",
   "AGEWORK_AGENT_PLUGINS",
   // Codex backend selection (【决策8】 SDK fallback): the runner process
   // needs to know which backend to use — without this it always defaults

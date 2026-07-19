@@ -21,13 +21,12 @@ const resolve = (overrides: Partial<RuntimeSpecInput> = {}) =>
 
 describe("runtime SDK resolveRuntimeSpec", () => {
   describe("sandbox, user scope", () => {
-    it("hostPath=userRoot, runtimePath under /workspaces/, ownerId=userId", () => {
+    it("hostPath=userRoot, runtimePath under /workspaces/", () => {
       const r = resolve();
       expect(r.runtimeType).toBe("docker");
       expect(r.hostPath).toBe("/data/users/user-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
       expect(r.runtimeLogDir).toBe(CONTAINER_RUNTIME_LOG_DIR);
-      expect(r.ownerId).toBe("user-1");
       expect(r.workspaceId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
         scope: "user",
@@ -35,7 +34,7 @@ describe("runtime SDK resolveRuntimeSpec", () => {
       });
     });
 
-    it("different workspaces of the same user get different runtimePaths, same ownerId", () => {
+    it("different workspaces of the same user get different runtimePaths", () => {
       const a = resolve({
         workspaceId: "ws-a",
         workspaceRootPath: "/data/users/user-1/ws-a",
@@ -46,16 +45,14 @@ describe("runtime SDK resolveRuntimeSpec", () => {
       });
       expect(a.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-a`);
       expect(b.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-b`);
-      expect(a.ownerId).toBe(b.ownerId); // 同用户共享桶
     });
   });
 
   describe("sandbox, workspace scope", () => {
-    it("hostPath=workspaceRoot, mountTarget per-workspace, ownerId=workspaceId", () => {
+    it("hostPath=workspaceRoot, mountTarget per-workspace", () => {
       const r = resolve({ scope: "workspace" });
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe(`${CONTAINER_WORKSPACES_ROOT}/ws-1`);
-      expect(r.ownerId).toBe("ws-1");
       expect((r as { sandbox?: unknown }).sandbox).toMatchObject({
         scope: "workspace",
         mountTarget: `${CONTAINER_WORKSPACES_ROOT}/ws-1`,
@@ -64,14 +61,13 @@ describe("runtime SDK resolveRuntimeSpec", () => {
   });
 
   describe("native", () => {
-    it("runtimePath === hostPath === workspaceRootPath, no sandbox info, ownerId=workspaceId", () => {
-      const r = resolve({ runtimeType: "native" });
+    it("runtimePath === hostPath === workspaceRootPath, no sandbox info", () => {
+      const r = resolve({ runtimeType: "native", scope: "workspace" });
       expect(r.runtimeType).toBe("native");
       expect(r.hostPath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimePath).toBe("/data/users/user-1/ws-1");
       expect(r.runtimeLogDir).toBe("/data/logs/runtime");
       expect((r as { sandbox?: unknown }).sandbox).toBeUndefined();
-      expect(r.ownerId).toBe("ws-1");
     });
   });
 

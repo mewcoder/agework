@@ -149,6 +149,21 @@ export class UserRepository {
     return rows.map((row) => row.id);
   }
 
+  /** 给定 id 集合中已停用/软删的 user 及其当前 sessionVersion（重连对账用）。 */
+  async findInactiveSessionVersions(
+    ids: string[]
+  ): Promise<{ id: string; sessionVersion: number }[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.user.findMany({
+      where: {
+        id: { in: ids },
+        OR: [{ status: { not: "active" } }, { deletedAt: { not: null } }],
+      },
+      select: { id: true, sessionVersion: true },
+    });
+    return rows;
+  }
+
   findCredentialByIdActive(id: string): Promise<CredentialUserRecord | null> {
     return this.prisma.user.findFirst({
       where: { id, status: "active", deletedAt: null },
@@ -302,11 +317,15 @@ export class UserRepository {
     });
   }
 
-  async softDelete(id: string): Promise<void> {
-    await this.prisma.user.update({
+  /** 软删 user 并原子递增 sessionVersion。返回同一次 update 产生的 sessionVersion,
+   *  不能写后另查——disabled/deleted 事件携带这个精确 post-write version。 */
+  async softDelete(id: string): Promise<{ sessionVersion: number }> {
+    const updated = await this.prisma.user.update({
       where: { id },
       data: { deletedAt: new Date(), sessionVersion: { increment: 1 } },
+      select: { sessionVersion: true },
     });
+    return { sessionVersion: updated.sessionVersion };
   }
 
   async syncDevSuperAdmin(

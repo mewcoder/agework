@@ -1,19 +1,18 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { workspaceOwnerKey } from "@agework/shared/protocol";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
 } from "../../workspace/workspace.events";
 import {
-  RUNTIME_HOST_OWNER_RECONCILIATION,
-  type RuntimeHostOwnerReconciliation,
+  RUNTIME_HOST_RESOURCE_RECONCILIATION,
+  type RuntimeHostResourceReconciliationPort,
 } from "../../runtime-host/runtime-host.types";
 import { RunService } from "../run.service";
 
 /**
  * workspace 删除的执行面收尾编排(方案 B:工作空间总能删,任务被停)。
- * 设计 §3.5 场景 4 要求两步有序:**先** cancel 名下活跃 run,**再** releaseOwner
+ * 设计 §8.1 要求两步有序:**先** cancel 名下活跃 run,**再** releaseResources
  * 回收 worker——顺序保证 run 以 cancelled 而非 worker-lost error 收场。
  * 编排放本模块:run 对 workspace / runtime-host 都是合法向下依赖,是这个
  * 跨领域用例的最上层 owner。两步各自 best-effort:失败仅记录日志,不影响
@@ -25,8 +24,8 @@ export class RunWorkspaceListener {
 
   constructor(
     private readonly runService: RunService,
-    @Inject(RUNTIME_HOST_OWNER_RECONCILIATION)
-    private readonly hostOwners: RuntimeHostOwnerReconciliation
+    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
+    private readonly hostResources: RuntimeHostResourceReconciliationPort
   ) {}
 
   @OnEvent(WORKSPACE_DELETED_EVENT)
@@ -44,13 +43,13 @@ export class RunWorkspaceListener {
       );
     }
     try {
-      await this.hostOwners.releaseOwner({
+      await this.hostResources.releaseResources({
         runtimeHostId,
-        owner: workspaceOwnerKey(workspaceId),
+        target: { type: "workspace", workspaceId },
       });
     } catch (err) {
       this.logger.warn(
-        `releaseOwner(workspace:${workspaceId}) failed on host ${runtimeHostId}: ${
+        `releaseResources(workspace:${workspaceId}) failed on host ${runtimeHostId}: ${
           err instanceof Error ? err.message : String(err)
         }`
       );

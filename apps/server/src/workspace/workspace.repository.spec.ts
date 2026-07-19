@@ -153,7 +153,11 @@ describe("WorkspaceRepository", () => {
       "ws-1",
     ]);
     expect(findMany).toHaveBeenCalledWith({
-      where: { id: { in: ["ws-1", "ws-2"] }, deletedAt: null },
+      where: {
+        id: { in: ["ws-1", "ws-2"] },
+        deletedAt: null,
+        user: { status: "active", deletedAt: null },
+      },
       select: { id: true },
     });
 

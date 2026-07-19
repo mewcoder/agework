@@ -1,4 +1,4 @@
-> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host`。
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host`。OwnerKey/WorkerKey 公共协议概念已被 [SPEC](../../../../../.scratch/runtime-owner-boundary/SPEC.md) 进一步推翻，复用身份由 Runtime 内部派生。
 
 # 工作空间文件命令(list_files/read_file)走独立通道,不进 command.result / RunEvent
 

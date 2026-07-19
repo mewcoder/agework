@@ -5,7 +5,6 @@ import {
   type OnApplicationBootstrap,
   type OnApplicationShutdown,
 } from "@nestjs/common";
-import { OnEvent } from "@nestjs/event-emitter";
 import { generateId } from "@agework/shared";
 import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
@@ -23,10 +22,6 @@ import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
 import { swallow } from "../../common/swallow";
-import {
-  RUNTIME_HOST_CONNECTED_EVENT,
-  type RuntimeHostConnectedEvent,
-} from "../../runtime-host/runtime-host.events";
 import { isActiveRunStatus } from "../status/run-status.policy";
 
 /** Host 终态收尾的日志措辞 + 写给用户的 run 失败原因,按触发场景取。 */
@@ -112,18 +107,9 @@ export class RunRecoveryService
     this.startAbandonedSweep();
   }
 
-  /** registered Host 重连后，以 Host 现场与数据库状态重新对账，不依赖本进程内存。 */
-  @OnEvent(RUNTIME_HOST_CONNECTED_EVENT, { async: true })
-  async onRuntimeHostConnected(
-    event: RuntimeHostConnectedEvent
-  ): Promise<void> {
-    this.pendingHostReconciliations.add(event.runtimeHostId);
-    await this.retryHostReconciliation(event.runtimeHostId);
-  }
-
   private async retryHostReconciliation(runtimeHostId: string): Promise<void> {
     try {
-      await this.reconcileHostRuns(runtimeHostId);
+      await this.reconcileRuntimeHost(runtimeHostId);
       this.pendingHostReconciliations.delete(runtimeHostId);
     } catch (err) {
       this.pendingHostReconciliations.add(runtimeHostId);
@@ -133,7 +119,11 @@ export class RunRecoveryService
     }
   }
 
-  private async reconcileHostRuns(runtimeHostId: string): Promise<void> {
+  /**
+   * registered Host 现场 run 与数据库状态对账。错误直接向同步协调器传播，
+   * 由协调器保持 fail-closed 并重跑完整 attempt。
+   */
+  async reconcileRuntimeHost(runtimeHostId: string): Promise<void> {
     const runIds = await this.runReconciliation.listRunIds(runtimeHostId);
     const rows = await this.runRepository.findRuntimeReconciliationRows(runIds);
     const rowById = new Map(rows.map((row) => [row.id, row]));

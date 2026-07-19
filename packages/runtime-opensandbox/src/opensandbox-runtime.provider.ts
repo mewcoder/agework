@@ -5,6 +5,7 @@ import {
   type RuntimeProvider,
   type RuntimeLaunchContext,
   type RuntimeInstanceRef,
+  type RuntimeStartOptions,
   type SandboxStartInput,
 } from "@agework/runtime-sdk";
 import { swallow } from "./util";
@@ -35,11 +36,14 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
   async start(
     ctx: RuntimeLaunchContext,
     _onExit?: () => void,
-    onProvisioned?: (runtimeInstanceId: string) => void
+    onProvisioned?: (runtimeInstanceId: string) => void,
+    options?: RuntimeStartOptions
   ): Promise<{ runtimeInstanceId: string }> {
+    options?.signal?.throwIfAborted();
     const input = buildSandboxStartInput(ctx, this.config);
     const sandbox = await this.createSandbox(input);
     onProvisioned?.(sandbox.id);
+    options?.signal?.throwIfAborted();
     await this.startWorkerInSandbox(sandbox, input);
     return { runtimeInstanceId: sandbox.id };
   }
@@ -51,23 +55,35 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
       .catch(swallow(this.logger, `pause sandbox ${ref.runtimeInstanceId}`));
   }
 
-  /** 当前没有可靠的 paused sandbox 重新接管协议，释放策略选择直接删除。 */
+  /** 当前没有可靠的 paused sandbox 重新接管协议，释放策略选择直接删除。
+   *  不吞错误:清理失败必须传播给调用方,由 Runtime 写入重试账本(SPEC §5.2)。
+   *  sandbox 已不存在的错误视为成功(资源已不存在)。 */
   async release(ref: RuntimeInstanceRef): Promise<void> {
     await this.destroy(ref);
   }
 
   async destroy(ref: RuntimeInstanceRef): Promise<void> {
     this.sandboxes.delete(ref.runtimeInstanceId);
-    await this.client
-      .deleteSandbox(ref.runtimeInstanceId)
-      .catch(swallow(this.logger, `delete sandbox ${ref.runtimeInstanceId}`));
+    try {
+      await this.client.deleteSandbox(ref.runtimeInstanceId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // sandbox 已不存在视为成功
+      if (/not found|no such|404/i.test(msg)) {
+        this.logger.warn(
+          `sandbox ${ref.runtimeInstanceId.slice(0, 12)} already gone: ${msg}`
+        );
+        return;
+      }
+      throw err;
+    }
   }
 
   private async createSandbox(
     input: SandboxStartInput
   ): Promise<OpenSandboxSandboxLike> {
     const { placement, image, env, metadata } = input;
-    const { workspaceHostPath, workspaceMountPath, ownerId } = placement;
+    const { workspaceHostPath, workspaceMountPath } = placement;
 
     // env / metadata / 挂载路径校验都由 buildSandboxStartInput 唯一构造,这里只透传。
     const sandbox = await this.client.createSandbox({
@@ -82,7 +98,7 @@ export class OpenSandboxRuntimeProvider implements RuntimeProvider {
     });
 
     this.logger.log(
-      `Sandbox created: ownerId=${ownerId} sandboxId=${sandbox.id.slice(0, 12)}`
+      `Sandbox created: workerId=${metadata["agework.io/worker-id"] ?? "?"} sandboxId=${sandbox.id.slice(0, 12)}`
     );
 
     this.sandboxes.set(sandbox.id, sandbox);

@@ -43,7 +43,7 @@ function makeService(overrides?: {
     setPassword: vi.fn().mockResolvedValue(makeUser()),
     recordFailedLogin: vi.fn().mockResolvedValue(undefined),
     recordSuccessfulLogin: vi.fn().mockResolvedValue(undefined),
-    softDelete: vi.fn().mockResolvedValue(undefined),
+    softDelete: vi.fn().mockResolvedValue({ sessionVersion: 2 }),
     syncDevSuperAdmin: vi.fn().mockResolvedValue(undefined),
     ...overrides?.repo,
   };
@@ -57,7 +57,12 @@ function makeService(overrides?: {
     service: new UserService(
       repo as unknown as UserRepository,
       hasher as PasswordHasherService,
-      events as never
+      events as never,
+      {
+        listLifecycleClaims: vi.fn().mockResolvedValue([]),
+        listConnectedHostIds: vi.fn().mockReturnValue([]),
+        releaseResources: vi.fn().mockResolvedValue(undefined),
+      } as never
     ),
     repo,
     hasher,
@@ -315,7 +320,7 @@ describe("UserService", () => {
       expect(repo.softDelete).toHaveBeenCalledWith("user-1");
       expect(events.emit).toHaveBeenCalledWith(
         "user.deleted",
-        expect.objectContaining({ userId: "user-1" })
+        expect.objectContaining({ userId: "user-1", sessionVersion: 2 })
       );
     });
 

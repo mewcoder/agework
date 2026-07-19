@@ -1,7 +1,9 @@
 import type {
   HostUpstreamNotification,
-  OwnerKey,
-  RuntimeHostOwnerLifecycle,
+  ReleaseRuntimeResourcesInput,
+  RuntimeHostResourceLifecycle,
+  RuntimeHostResourceReconciliation,
+  RuntimeLifecycleClaim,
 } from "@agework/shared/protocol";
 
 /**
@@ -58,17 +60,19 @@ export type RuntimeHostRow = {
   removedAt: Date | null;
 };
 
-/** owner 生命周期对账只暴露 Host + OwnerKey，不把 Worker 现场泄漏给业务模块。 */
-export type RuntimeHostOwnerRef = {
-  runtimeHostId: string;
-  owner: OwnerKey;
-};
+/** Workspace/User 删除与 Host 重连对账使用的资源生命周期端口(替代旧 OwnerReconciliation)。 */
+export type RuntimeHostResourceLifecyclePort = RuntimeHostResourceLifecycle;
 
-/** Workspace/User 删除与 Host 重连对账使用的专用端口。 */
-export interface RuntimeHostOwnerReconciliation extends RuntimeHostOwnerLifecycle {
-  /** runtimeHostId 省略时聚合所有在线 Host；指定时只查询目标 Host。 */
-  listOwners(runtimeHostId?: string): Promise<RuntimeHostOwnerRef[]>;
-}
+/** Server 重连对账使用的资源 reconciliation 端口。 */
+export type RuntimeHostResourceReconciliationPort =
+  RuntimeHostResourceReconciliation & {
+    /** runtimeHostId 省略时聚合所有在线 Host；指定时只查询目标 Host。 */
+    listLifecycleClaims(
+      runtimeHostId?: string
+    ): Promise<RuntimeLifecycleClaim[]>;
+    /** 列出所有当前在线的 Host id(含 builtin)。 */
+    listConnectedHostIds(): string[];
+  };
 
 /** Run 恢复对账只需要 Host 上仍被占用的 runId，不向业务模块暴露 Worker 快照。 */
 export interface RuntimeHostRunReconciliation {
@@ -97,8 +101,8 @@ export const RUNTIME_HOST_CONNECTIVITY = Symbol("RuntimeHostConnectivity");
 export const RUNTIME_HOST_ENVIRONMENT = Symbol("RuntimeHostEnvironment");
 export const RUNTIME_HOST_WORKSPACE_DATA = Symbol("RuntimeHostWorkspaceData");
 export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");
-export const RUNTIME_HOST_OWNER_RECONCILIATION = Symbol(
-  "RuntimeHostOwnerReconciliation"
+export const RUNTIME_HOST_RESOURCE_RECONCILIATION = Symbol(
+  "RuntimeHostResourceReconciliation"
 );
 export const RUNTIME_HOST_RUN_RECONCILIATION = Symbol(
   "RuntimeHostRunReconciliation"

@@ -29,9 +29,10 @@ function makeCtx(
 ): RuntimeLaunchContext {
   return {
     runtimeType: "docker",
-    ownerId: "ws-1",
-    workspaceId: "ws-1",
+    workerId: "worker-1",
     runId: "run-1",
+    workspaceId: "ws-1",
+    isolation: { scope: "workspace", subjectId: "ws-1" },
     placement: {
       runtimeType: "docker",
       userId: "u1",
@@ -52,18 +53,9 @@ function makeCtx(
 function makeRef(runtimeInstanceId = "container-abc"): RuntimeInstanceRef {
   return {
     runtimeType: "docker",
-    ownerId: "ws-1",
     workerId: "worker-1",
     runtimeInstanceId,
-    scope: "workspace",
   };
-}
-
-function dockerNameConflictError(containerId: string) {
-  const message = `docker: Error response from daemon: Conflict. The container name "/agework-worker-ws-1" is already in use by container "${containerId}".`;
-  const err = new Error(message) as Error & { stderr: string };
-  err.stderr = message;
-  return err;
 }
 
 const runArgsOf = () => {
@@ -79,7 +71,7 @@ describe("DockerRuntimeProvider", () => {
   });
 
   describe("start", () => {
-    it("runs a named container and returns its id", async () => {
+    it("runs an unnamed container and returns its id", async () => {
       mockExecFile.mockImplementation(((...args: any[]) => {
         args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
       }) as any);
@@ -89,14 +81,14 @@ describe("DockerRuntimeProvider", () => {
       expect(result).toEqual({ runtimeInstanceId: "container-abc" });
       const runArgs = runArgsOf();
       expect(runArgs).not.toContain("--rm");
-      const nameIdx = runArgs.indexOf("--name");
-      expect(runArgs[nameIdx + 1]).toBe("agework-worker-ws-1");
+      // 不再使用 ownerId 稳定命名,容器名由 Docker 自动生成
+      expect(runArgs).not.toContain("--name");
       expect(runArgs).toContain("com.docker.compose.project=agework");
       expect(runArgs).toContain("host.docker.internal:host-gateway");
       expect(runArgs).toContain("agework/runtime:latest");
     });
 
-    it("adds --label args from the fixed ownership metadata", async () => {
+    it("adds structured isolation labels from metadata", async () => {
       mockExecFile.mockImplementation(((...args: any[]) => {
         args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
       }) as any);
@@ -104,8 +96,11 @@ describe("DockerRuntimeProvider", () => {
       await makeProvider().start(makeCtx());
 
       const runArgs = runArgsOf();
-      expect(runArgs).toContain("agework.io/runtime-owner-id=ws-1");
+      expect(runArgs).toContain("agework.io/runtime-type=docker");
       expect(runArgs).toContain("agework.io/scope=workspace");
+      expect(runArgs).toContain("agework.io/subject-id=ws-1");
+      expect(runArgs).toContain("agework.io/workspace-id=ws-1");
+      expect(runArgs).toContain("agework.io/worker-id=worker-1");
     });
 
     it("passes workerEnv through as -e args", async () => {
@@ -114,11 +109,11 @@ describe("DockerRuntimeProvider", () => {
       }) as any);
 
       await makeProvider().start(
-        makeCtx({ workerEnv: { AGEWORK_WORKER_OWNER_ID: "ws-1" } })
+        makeCtx({ workerEnv: { AGEWORK_WORKER_ROLE: "worker" } })
       );
 
       const runArgs = runArgsOf();
-      expect(runArgs).toContain("AGEWORK_WORKER_OWNER_ID=ws-1");
+      expect(runArgs).toContain("AGEWORK_WORKER_ROLE=worker");
       expect(runArgs).toContain(
         "AGEWORK_WORKER_API_BASE=http://host.docker.internal:7101/api/v1"
       );
@@ -180,136 +175,6 @@ describe("DockerRuntimeProvider", () => {
       const ctx = makeCtx();
       (ctx.placement as { hostPath: string }).hostPath = "relative/path";
       await expect(makeProvider().start(ctx)).rejects.toThrow("absolute");
-    });
-
-    it("removes an unbound conflicting container and retries (no binding: expectedRuntimeInstanceId=null)", async () => {
-      const conflictingContainerId =
-        "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-      let runAttempts = 0;
-      mockExecFile.mockImplementation(((...args: any[]) => {
-        const cmdArgs = args[1] as string[];
-        const callback = args[args.length - 1];
-        if (cmdArgs[0] === "run") {
-          runAttempts += 1;
-          if (runAttempts === 1) {
-            callback(dockerNameConflictError(conflictingContainerId));
-            return;
-          }
-          callback(null, { stdout: "container-next\n", stderr: "" });
-          return;
-        }
-        if (cmdArgs[0] === "inspect") {
-          callback(null, { stdout: `${conflictingContainerId}\n`, stderr: "" });
-          return;
-        }
-        if (cmdArgs[0] === "rm") {
-          callback(null, { stdout: "", stderr: "" });
-          return;
-        }
-        callback(new Error(`unexpected docker command: ${cmdArgs.join(" ")}`));
-      }) as any);
-
-      const result = await makeProvider().start(
-        makeCtx({ expectedRuntimeInstanceId: null })
-      );
-
-      expect(result).toEqual({ runtimeInstanceId: "container-next" });
-      expect(mockExecFile).toHaveBeenCalledWith(
-        "docker",
-        ["rm", "-f", conflictingContainerId],
-        expect.any(Function)
-      );
-    });
-
-    it("removes a conflicting container bound to a different instance and retries", async () => {
-      const conflictingContainerId =
-        "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-      let runAttempts = 0;
-      mockExecFile.mockImplementation(((...args: any[]) => {
-        const cmdArgs = args[1] as string[];
-        const callback = args[args.length - 1];
-        if (cmdArgs[0] === "run") {
-          runAttempts += 1;
-          if (runAttempts === 1) {
-            callback(dockerNameConflictError(conflictingContainerId));
-            return;
-          }
-          callback(null, { stdout: "container-next\n", stderr: "" });
-          return;
-        }
-        if (cmdArgs[0] === "inspect") {
-          callback(null, { stdout: `${conflictingContainerId}\n`, stderr: "" });
-          return;
-        }
-        if (cmdArgs[0] === "rm") {
-          callback(null, { stdout: "", stderr: "" });
-          return;
-        }
-        callback(new Error(`unexpected docker command: ${cmdArgs.join(" ")}`));
-      }) as any);
-
-      const result = await makeProvider().start(
-        makeCtx({ expectedRuntimeInstanceId: "some-other-container-id" })
-      );
-
-      expect(result).toEqual({ runtimeInstanceId: "container-next" });
-      expect(mockExecFile).toHaveBeenCalledWith(
-        "docker",
-        ["rm", "-f", conflictingContainerId],
-        expect.any(Function)
-      );
-    });
-
-    it("does not remove a conflicting container that matches the expected binding", async () => {
-      const conflictingContainerId =
-        "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-      mockExecFile.mockImplementation(((...args: any[]) => {
-        const cmdArgs = args[1] as string[];
-        const callback = args[args.length - 1];
-        if (cmdArgs[0] === "run") {
-          callback(dockerNameConflictError(conflictingContainerId));
-          return;
-        }
-        if (cmdArgs[0] === "inspect") {
-          callback(null, { stdout: `${conflictingContainerId}\n`, stderr: "" });
-          return;
-        }
-        callback(new Error(`unexpected docker command: ${cmdArgs.join(" ")}`));
-      }) as any);
-
-      await expect(
-        makeProvider().start(
-          makeCtx({ expectedRuntimeInstanceId: conflictingContainerId })
-        )
-      ).rejects.toThrow("Conflict");
-
-      expect(mockExecFile).not.toHaveBeenCalledWith(
-        "docker",
-        expect.arrayContaining(["rm", "-f", conflictingContainerId]),
-        expect.any(Function)
-      );
-    });
-
-    it("does not attempt recovery when expectedRuntimeInstanceId is undefined (caller opted out)", async () => {
-      const conflictingContainerId =
-        "bef10e13ac2f21c751927a40ea3a1ce296898dbf42f93f4bb2eff494c4c36719";
-      mockExecFile.mockImplementation(((...args: any[]) => {
-        const cmdArgs = args[1] as string[];
-        const callback = args[args.length - 1];
-        if (cmdArgs[0] === "run") {
-          callback(dockerNameConflictError(conflictingContainerId));
-          return;
-        }
-        callback(new Error(`unexpected docker command: ${cmdArgs.join(" ")}`));
-      }) as any);
-
-      await expect(makeProvider().start(makeCtx())).rejects.toThrow("Conflict");
-
-      expect(mockExecFile).not.toHaveBeenCalledWith(
-        "docker",
-        expect.arrayContaining(["inspect"]),
-        expect.any(Function)
-      );
     });
   });
 

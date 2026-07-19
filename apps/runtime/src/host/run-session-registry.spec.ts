@@ -4,7 +4,14 @@ import { RunSessionRegistry } from "./run-session-registry.js";
 describe("RunSessionRegistry", () => {
   it("owns the run lifecycle state and config together", () => {
     const sessions = new RunSessionRegistry();
-    sessions.reserve("run-1");
+    const placement = {
+      userId: "user-1",
+      workspaceId: "ws-1",
+      scope: "workspace" as const,
+      runtimeType: "native",
+      userLifecycleVersion: 1,
+    };
+    sessions.reserve("run-1", placement);
     sessions.setConfig("run-1", { runId: "run-1" } as never);
 
     expect(sessions.has("run-1")).toBe(true);
