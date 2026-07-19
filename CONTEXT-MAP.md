@@ -13,16 +13,18 @@ Runtime manager (registered daemon entry + builtin Host library). `src/host/` �
 - ADRs: [`apps/runtime/docs/adr/`](apps/runtime/docs/adr/)
   - `0001-sdk-external-plus-real-npm-install.md` — SDK 保持 external，靠真实 npm install 提供二进制，不靠 bundle inline
 
-### `apps/server` → runtime module — RuntimeHost 注册表
+### `apps/server` → runtime-host module — 注册表、契约路由与管理门面
 
-RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。Phase 3：`Runtime` 模型改名 `RuntimeHost`，`runtimeType` 列删除（能力矩阵在 `capabilities` JSON），builtin 假行合并为一行 `"builtin"`。
+RuntimeHost 的注册/软删除、EnvConfig、CLI 检测持久化，以及 `RuntimeHostContract` 的 builtin/registered 路由。业务模块经 `RuntimeHostService` 消费环境、文件、诊断与资源对账；run 执行和启动期反向接线保留窄 token。worker 池、信箱、握手与 fence 归 `@agework/runtime/host`。
+
+- 当前边界定案：[`docs/design/runtime-owner-boundary.md`](docs/design/runtime-owner-boundary.md)
 
 - ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/)
   - `0001-runtime-soft-delete-required-fk.md` — RuntimeHost 只软删除，Workspace.runtimeHostId 必填
   - `0002-envconfig-two-layer-detected-vs-override.md` — EnvConfig 两层分离：detected 与 override 独立存储
   - `0003-cli-resolver-in-runtime-not-server.md` — CliResolver 放 apps/runtime，server 不做 CLI 检测
   - `0004-container-cli-path-via-env-not-envconfig.md` — Container CLI 路径不经 envConfig，直接 env 注入
-  - `0005-managed-container-runtime-process.md` — Managed container runtime 作为独立进程
+  - `0005` ~ `0011` — **SUPERSEDED** 的旧执行栈记录，仅作历史参考
 
 ### `apps/server` → run module — run 生命周期编排
 
@@ -31,13 +33,6 @@ RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。
 - ADRs: [`apps/server/src/run/docs/adr/`](apps/server/src/run/docs/adr/)
   - `0001-question-interrupt-terminal-model.md` — 问答走 AG-UI interrupt terminal model,worker/SDK 保持 pause model
   - `0002-resume-payload-generalization.md` — resume 契约泛化为 provider 无关 payload + 接受 cancelled(为 Codex 审批 decision/decline,顺带解锁 Claude 权限拒绝)
-
-### `apps/server` → runtime-host module — contract 实现 + admin 观测面
-
-Phase 3 清尾后只剩 `RuntimeHostContract` 实现（`RuntimeHostAdapter`，路由 builtin/registered）+ `AdminWorkerController`（现场查询）+ `WorkspaceHostListener`（workspace 删除时调 `releaseResources`）。旧执行栈（connection/instance/registry）已全部删除。
-
-- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime/host` 的 `RuntimeHost` 库。
-  - `0001` ~ `0006` — 旧 worker-manager 执行栈设计，已删除
 
 ### `apps/web` — 前端
 

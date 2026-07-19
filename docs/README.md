@@ -42,6 +42,7 @@
 | 文档 | 内容 |
 |---|---|
 | [design/server-runtime-worker-target-architecture.md](design/server-runtime-worker-target-architecture.md) | Server · Runtime Host · Worker 三层目标架构（已落地） |
+| [design/runtime-owner-boundary.md](design/runtime-owner-boundary.md) | Server 业务事实与 Runtime 隔离、复用、生命周期权威边界（已落地） |
 
 ## 实验性能力
 
