@@ -268,6 +268,52 @@ describe("RunStatusService", () => {
     expect(handler.isTerminalOrFinalizing("run-1")).toBe(true);
   });
 
+  it("fails a run without a live handle through the single status owner", async () => {
+    const { handler, runRepository, runConversation, runEvents } =
+      makeSubject();
+
+    await handler.failRun({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "host offline",
+    });
+
+    expect(runRepository.markError).toHaveBeenCalledWith(
+      "run-1",
+      "host offline"
+    );
+    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+      "conversation-1",
+      { runStatus: "error" }
+    );
+    expect(runEvents.runStatusChanged).toHaveBeenCalledWith({
+      runId: "run-1",
+      origin: "platform",
+      status: "error",
+      reason: "host offline",
+    });
+  });
+
+  it("fails a live run with the normal terminal side effects", async () => {
+    const registry = new LiveRunRegistry(makeConfig());
+    const unregister = vi.spyOn(registry, "unregister");
+    const { handler } = makeSubject({
+      activeRun: { id: "run-1" },
+      registry,
+    });
+    const handle = makeHandle();
+    registry.register("run-1", handle);
+
+    await handler.failRun({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "host offline",
+    });
+
+    expect(handle.saveRun).toHaveBeenCalledWith(false, "error");
+    expect(unregister).toHaveBeenCalledWith("run-1");
+  });
+
   it("marks cancelling and records a platform status event on cancel request", async () => {
     const { handler, runRepository, runEvents } = makeSubject();
 

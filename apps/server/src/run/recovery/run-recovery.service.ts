@@ -17,7 +17,7 @@ import {
   type HostRunReapPort,
   type RuntimeHostRunReconciliation,
 } from "../../runtime-host/runtime-host.types";
-import { ConversationService } from "../../conversation/conversation.service";
+import { RunStatusService } from "../status/run-status.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
@@ -59,7 +59,7 @@ export class RunRecoveryService
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly conversationService: ConversationService,
+    private readonly runStatusService: RunStatusService,
     private readonly runtimeHostService: RuntimeHostService,
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
@@ -90,7 +90,11 @@ export class RunRecoveryService
     } else {
       for (const run of activeRuns) {
         const runtimeHostId = run.conversation.workspace.runtimeHostId;
-        await this.failRun(run.id, run.conversationId, "服务重启导致运行中断");
+        await this.runStatusService.failRun({
+          runId: run.id,
+          conversationId: run.conversationId,
+          error: "服务重启导致运行中断",
+        });
         this.logger.log(`Marked interrupted run ${run.id} as error`);
 
         if (isBuiltinHostId(runtimeHostId)) continue;
@@ -214,11 +218,11 @@ export class RunRecoveryService
       this.logger.warn(
         `Run ${run.id} abandoned: registered host ${runtimeHostId} offline beyond grace window`
       );
-      await this.failRun(
-        run.id,
-        run.conversationId,
-        "Runtime Host 离线超时,运行中断"
-      );
+      await this.runStatusService.failRun({
+        runId: run.id,
+        conversationId: run.conversationId,
+        error: "Runtime Host 离线超时,运行中断",
+      });
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }
   }
@@ -240,7 +244,11 @@ export class RunRecoveryService
       this.logger.warn(
         `Run ${run.id} reaped: host ${runtimeHostId} ${logDetail}`
       );
-      await this.failRun(run.id, run.conversationId, runReason);
+      await this.runStatusService.failRun({
+        runId: run.id,
+        conversationId: run.conversationId,
+        error: runReason,
+      });
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }
   }
@@ -256,19 +264,4 @@ export class RunRecoveryService
     return heartbeatAt < cutoffMs;
   }
 
-  private async failRun(
-    runId: string,
-    conversationId: string,
-    reason: string
-  ): Promise<void> {
-    await this.runRepository.markError(runId, reason);
-    await this.conversationService
-      .setConversationRunState(conversationId, { runStatus: "error" })
-      .catch(
-        swallow(
-          this.logger,
-          `set conversation active run status to error for run ${runId}`
-        )
-      );
-  }
 }
