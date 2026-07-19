@@ -3,10 +3,13 @@ import type {
   AgentEventTraceConfig,
   RunConfig,
   RunPlacement,
-  RuntimeSpec,
   SubmitRunInput,
 } from "@agework/shared/protocol";
-import { isRuntimeType, resolveRuntimeSpec } from "@agework/runtime-sdk";
+import {
+  isRuntimeType,
+  resolveRuntimeSpec,
+  type RuntimeSpec,
+} from "@agework/runtime-sdk";
 import type { RuntimeHostConfig } from "./runtime-host.js";
 
 /**

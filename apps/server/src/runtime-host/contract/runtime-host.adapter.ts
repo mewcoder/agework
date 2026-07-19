@@ -22,15 +22,13 @@ import type {
   StopWorkerInput,
   SubmitRunInput,
   WorkerSnapshot,
-  WorkspaceFileQuery,
-} from "@agework/shared/protocol";
-import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
   WorkspaceFileListResponse,
+  WorkspaceFileQuery,
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
-} from "@agework/shared/api";
+} from "@agework/shared/protocol";
 import type { RuntimeHost } from "@agework/runtime/host";
 import {
   BUILTIN_HOST_ID,

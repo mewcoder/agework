@@ -19,27 +19,25 @@ import type {
   RuntimeHostCommandInput,
   RuntimeHostRunRef,
   RuntimeHostUpstream,
-  RuntimeSpec,
   SearchFilesInput,
   StopWorkerInput,
   SubmitRunInput,
   WorkerSnapshot,
-  WorkspaceFileQuery,
-} from "@agework/shared/protocol";
-import { generateId } from "@agework/shared";
-import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
   WorkspaceFileListResponse,
+  WorkspaceFileQuery,
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
-} from "@agework/shared/api";
+} from "@agework/shared/protocol";
+import { generateId } from "@agework/shared";
 import {
   isRuntimeType,
   type RuntimeInstanceRef,
   type RuntimeLaunchContext,
   type RuntimeProvider,
   type RuntimeProviderPlugin,
+  type RuntimeSpec,
   type RuntimeType,
 } from "@agework/runtime-sdk";
 import {
