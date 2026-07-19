@@ -56,20 +56,18 @@ import {
 export { WorkerHttpServer } from "./worker-http-server.js";
 export { loadRuntimePlugins } from "../plugins/runtime-plugin-loader.js";
 import {
-  WorkerPool,
   type WorkerEntry,
   deriveReuseIdentity,
   type AcquisitionTask,
   type ReuseIdentity,
 } from "./worker-pool";
+import { WorkerRegistry } from "./worker-registry";
 import {
   CleanupLedger,
   type CleanupMetadata,
   type ReleaseCleanupContext,
 } from "./cleanup-ledger";
 import { buildWorkerEnv, makeRunConfig, resolveSpec } from "./run-config";
-import { CommandMailbox } from "./command-mailbox";
-import { HandshakeStore } from "./handshake-store";
 import { RunSessionRegistry } from "./run-session-registry";
 import {
   HostEnvironmentOperations,
@@ -142,8 +140,8 @@ type WorkerLaunchAttempt = {
 /**
  * RuntimeHost：部署在一台执行机器上的常驻执行节点。
  *
- * 实现 `RuntimeHostContract`，作为 Host 门面协调 WorkerPool、RunSessionRegistry、
- * CommandMailbox、HandshakeStore 和本机操作组件。一台机器 = 一个 Host =
+ * 实现 `RuntimeHostContract`，作为 Host 门面协调 WorkerRegistry、
+ * RunSessionRegistry 和本机操作组件。一台机器 = 一个 Host =
  * 一行注册 = 一条隧道。
  *
  * 两种宿主：
@@ -153,9 +151,8 @@ type WorkerLaunchAttempt = {
  * 同一实现、两种宿主。不依赖 NestJS。
  */
 export class RuntimeHost implements RuntimeHostContract {
-  private readonly pool = new WorkerPool();
-  private readonly mailbox = new CommandMailbox();
-  private readonly handshakes = new HandshakeStore();
+  /** Worker 条目、握手与命令队列的单一生命周期聚合。 */
+  private readonly pool = new WorkerRegistry();
   private readonly sessions = new RunSessionRegistry();
   private readonly workspaceOperations = new HostWorkspaceOperations();
   private readonly environmentOperations: HostEnvironmentOperations;
@@ -674,11 +671,8 @@ export class RuntimeHost implements RuntimeHostContract {
     mode: WorkerRemovalMode,
     release?: ReleaseCleanupContext
   ): Promise<void> {
-    const entry = this.pool.remove(workerId);
+    const entry = this.pool.evict(workerId, reason);
     if (!entry) return;
-
-    this.handshakes.cancel(entry.workerId, reason);
-    this.mailbox.cleanup(entry.workerId);
 
     // 先收口 Host 内的 run 状态，终态不依赖 provider 收资源成功。
     for (const runId of entry.activeRuns) {
@@ -763,7 +757,7 @@ export class RuntimeHost implements RuntimeHostContract {
     };
     this.pool.put(entry);
 
-    const handshake = this.handshakes.waitForRegister(workerId, startToken);
+    const handshake = this.pool.waitForRegister(workerId, startToken);
     // provider.start 可能长期 pending；先安装 rejection handler，避免 timeout
     // cancel handshake 后直到 start settle 期间出现 unhandled rejection。
     void handshake.catch(() => {});
@@ -815,9 +809,7 @@ export class RuntimeHost implements RuntimeHostContract {
       attempt.cancelReason = reason;
       attempt.release = release;
       abortController.abort(reason);
-      this.handshakes.cancel(workerId, reason.message);
-      this.pool.remove(workerId);
-      this.mailbox.cleanup(workerId);
+      this.pool.evict(workerId, reason.message);
       result.reject(reason);
       if (attempt.runtimeInstanceId) {
         // 显式 catch 避免 onProvisioned 的 fire-and-forget 产生 unhandled rejection；
@@ -881,10 +873,8 @@ export class RuntimeHost implements RuntimeHostContract {
           attempt.cancelled = true;
           attempt.cancelReason = failure;
           abortController.abort(failure);
-          this.handshakes.cancel(workerId, failure.message);
         }
-        this.pool.remove(workerId);
-        this.mailbox.cleanup(workerId);
+        this.pool.evict(workerId, failure.message);
         try {
           await this.cleanupFailedLaunch(provider, entry, attempt);
         } catch (cleanupError) {
@@ -942,7 +932,7 @@ export class RuntimeHost implements RuntimeHostContract {
     runId: string,
     payload: CommandPayload
   ): void {
-    this.mailbox.enqueue(workerId, runId, payload);
+    this.pool.enqueueCommand(workerId, runId, payload);
     this.config.onCommandDispatched?.({
       runId,
       commandId: payload.commandId,
@@ -957,7 +947,7 @@ export class RuntimeHost implements RuntimeHostContract {
     workerId: string,
     query: { afterSeq?: number; waitMs?: number }
   ): Promise<{
-    commands: ReturnType<CommandMailbox["pollImmediate"]>;
+    commands: RunChannelMessage<CommandPayload>[];
     queueEpoch: number;
   }> {
     const afterSeq = query.afterSeq ?? 0;
@@ -966,9 +956,9 @@ export class RuntimeHost implements RuntimeHostContract {
     const entry = this.pool.getById(workerId);
     if (entry) this.pool.touch(workerId);
 
-    return this.mailbox.poll(workerId, afterSeq, waitMs).then((commands) => ({
+    return this.pool.pollCommands(workerId, afterSeq, waitMs).then((commands) => ({
       commands,
-      queueEpoch: this.mailbox.epochFor(workerId),
+      queueEpoch: this.pool.commandEpoch(workerId),
     }));
   }
 
@@ -984,7 +974,7 @@ export class RuntimeHost implements RuntimeHostContract {
     token: string,
     info: { pid?: number }
   ): boolean {
-    return this.handshakes.registerWorker(workerId, token, info);
+    return this.pool.registerWorker(workerId, token, info);
   }
 
   /**
@@ -1131,7 +1121,7 @@ export class RuntimeHost implements RuntimeHostContract {
 
   /** 进程退出时清理定时器(不停止 worker,shutdown 才停)。 */
   drain(): void {
-    this.mailbox.drain();
+    this.pool.drainControlPlane();
     if (this.fenceTimer) clearInterval(this.fenceTimer);
     if (this.capabilityTimer) clearInterval(this.capabilityTimer);
   }
