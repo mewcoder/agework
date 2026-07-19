@@ -36,7 +36,7 @@ RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。
 
 Phase 3 清尾后只剩 `RuntimeHostContract` 实现（`RuntimeHostAdapter`，路由 builtin/registered）+ `AdminWorkerController`（现场查询）+ `WorkspaceHostListener`（workspace 删除时调 `releaseOwner`）。旧执行栈（connection/instance/registry）已全部删除。
 
-- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime-host` 的 `RuntimeHost` 库。
+- ⚠ ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/) — **全部 SUPERSEDED**，仅保留为旧执行栈的历史记录。worker 池/信箱/握手/fence 已移入 `@agework/runtime/host` 的 `RuntimeHost` 库。
   - `0001` ~ `0006` — 旧 worker-manager 执行栈设计，已删除
 
 ### `apps/web` — 前端

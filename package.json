@@ -9,7 +9,7 @@
     "clean:dev": "node scripts/clean-dev.mjs",
     "dev:reset": "node scripts/init.mjs --dev --reset --no-install",
     "build": "turbo run build package",
-    "build:runtime": "turbo run build package --filter=@agework/runtime-host",
+    "build:runtime": "turbo run build package --filter=@agework/runtime",
     "build:server": "turbo run build package --filter=server",
     "start": "cross-env NODE_ENV=production AGEWORK_SERVE_FRONTEND=true pnpm --filter server start:prod",
     "start:server": "cross-env NODE_ENV=production pnpm --filter server start:prod",

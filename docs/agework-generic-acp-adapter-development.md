@@ -1560,8 +1560,8 @@ sdk.acp.error
 ```bash
 pnpm --filter @agework/agent-acp typecheck
 pnpm --filter @agework/agent-acp test
-pnpm --filter @agework/runtime-host typecheck
-pnpm --filter @agework/runtime-host test
+pnpm --filter @agework/runtime typecheck
+pnpm --filter @agework/runtime test
 pnpm --filter @agework/shared test
 pnpm --filter server test
 pnpm --filter web test

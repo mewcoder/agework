@@ -25,9 +25,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @agework/adapters typecheck
-      - run: pnpm --filter @agework/runtime-host typecheck
+      - run: pnpm --filter @agework/runtime typecheck
       - run: pnpm --filter server typecheck
       - run: pnpm --filter server lint
       - run: pnpm --filter @agework/adapters test
-      - run: pnpm --filter @agework/runtime-host test
+      - run: pnpm --filter @agework/runtime test
       - run: pnpm test:server

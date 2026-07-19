@@ -18,7 +18,7 @@
     "db:push": "prisma db push",
     "db:reset": "prisma db push --force-reset",
     "db:studio": "prisma studio",
-    "prepare:test": "pnpm db:generate && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-docker build && pnpm --filter @agework/runtime-host build:host",
+    "prepare:test": "pnpm db:generate && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-docker build && pnpm --filter @agework/runtime build:host",
     "test": "pnpm prepare:test && vitest run",
     "test:watch": "pnpm prepare:test && vitest",
     "test:cov": "pnpm prepare:test && vitest run --coverage"
@@ -27,7 +27,7 @@
     "@ag-ui/client": "catalog:",
     "@ag-ui/core": "catalog:",
     "@agework/runtime-docker": "workspace:*",
-    "@agework/runtime-host": "workspace:*",
+    "@agework/runtime": "workspace:*",
     "@agework/runtime-sdk": "workspace:*",
     "@agework/shared": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.86",

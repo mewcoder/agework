@@ -17,7 +17,7 @@
       ],
       "outputs": ["dist/**"]
     },
-    "@agework/runtime-host#build": {
+    "@agework/runtime#build": {
       "dependsOn": ["^build"],
       "inputs": [
         "$TURBO_DEFAULT$",

@@ -115,12 +115,12 @@ importers:
       '@ag-ui/core':
         specifier: 'catalog:'
         version: 0.0.57
+      '@agework/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       '@agework/runtime-docker':
         specifier: workspace:*
         version: link:../../packages/runtime-docker
-      '@agework/runtime-host':
-        specifier: workspace:*
-        version: link:../runtime
       '@agework/runtime-sdk':
         specifier: workspace:*
         version: link:../../packages/runtime-sdk

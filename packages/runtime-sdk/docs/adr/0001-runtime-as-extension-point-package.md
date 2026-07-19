@@ -5,7 +5,7 @@
 
 系统有两个扩展点:agent adapter 与 runtime plugin。当前定案把公共契约放在
 `packages/runtime-sdk`（`@agework/runtime-sdk`）。Host 与 Native 实现放在
-`apps/runtime`（`@agework/runtime-host`），所有 sandbox 实现只依赖 SDK。
+`apps/runtime`（`@agework/runtime`），所有 sandbox 实现只依赖 SDK。
 
 ## 决定
 

@@ -52,7 +52,7 @@ export function createRuntimePlugin() {
 把插件安装到 Runtime Host 的依赖环境后，再显式配置包名与允许的 runtime type：
 
 ```bash
-pnpm --filter @agework/runtime-host add @acme/runtime-example
+pnpm --filter @agework/runtime add @acme/runtime-example
 ```
 
 ```dotenv

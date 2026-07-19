@@ -8,7 +8,7 @@
 // 的 runner 文件名(见 apps/runtime/docs/adr/0002),不靠单独配置。
 //
 // 产物是 ESM,落地成 `.mjs` 让 node 无视 server 的 CommonJS package 直接当 ESM 跑。
-// 依赖 Turbo task graph:@agework/runtime-host 是 server 的 production dependency,先于 server 构建与 package。
+// 依赖 Turbo task graph:@agework/runtime 是 server 的 production dependency,先于 server 构建与 package。
 //
 // @anthropic-ai/claude-agent-sdk / @openai/codex-sdk 是 --external,不在 bundle 里
 // (见 apps/runtime/docs/adr/0001)——它们的真实二进制(每个平台几百 MB)通过

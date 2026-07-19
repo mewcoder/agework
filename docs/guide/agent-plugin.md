@@ -67,14 +67,14 @@ Worker 按 agentType 创建 Driver
 插件由 Runtime 产物中的 Runner 加载，因此包必须安装在 Runtime 产物可解析的位置：
 
 ```bash
-pnpm --filter @agework/runtime-host add '@scope/agent-example@workspace:*'
+pnpm --filter @agework/runtime add '@scope/agent-example@workspace:*'
 pnpm --filter @scope/agent-example build
 ```
 
 已发布到 npm 的包：
 
 ```bash
-pnpm --filter @agework/runtime-host add @scope/agent-example
+pnpm --filter @agework/runtime add @scope/agent-example
 ```
 
 配置：
@@ -316,7 +316,7 @@ protocol、API format 矩阵、CLI spec 和按类型封闭的 options。未知 i
 ```bash
 pnpm --filter @scope/agent-example typecheck
 pnpm --filter @agework/agent-sdk typecheck
-pnpm --filter @agework/runtime-host typecheck
+pnpm --filter @agework/runtime typecheck
 pnpm --filter server typecheck
 pnpm --filter web typecheck
 ```

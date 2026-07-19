@@ -30,7 +30,7 @@ import type {
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
 } from "@agework/shared/api";
-import type { RuntimeHost } from "@agework/runtime-host";
+import type { RuntimeHost } from "@agework/runtime/host";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,

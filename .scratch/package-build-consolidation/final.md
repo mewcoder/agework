@@ -10,6 +10,7 @@
 ## 一、Current state
 
 - Workspace members reduced from 12 to 11 by removing the private `@agework/worker` package boundary.
+- The deployable execution package is named `@agework/runtime`; its Host API is exposed through `@agework/runtime/host`.
 - Worker and per-run Runner remain distinct runtime components under `apps/runtime/src/worker` and still emit sibling Runtime artifacts.
 - Agent SDK, Runtime SDK, adapters, ACP, Docker, OpenSandbox, Shared and React AG-UI retain independent package boundaries.
 - Five single-entry SDK/plugin libraries use tsdown CJS emission; Shared retains tsc for its multi-subpath structure.

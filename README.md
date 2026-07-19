@@ -138,7 +138,7 @@ Web UI
 .
 ├── apps
 │   ├── server    # NestJS API、Prisma schema、服务端模块
-│   ├── runtime   # @agework/runtime-host，可部署 Host 与内建 Runtime
+│   ├── runtime   # @agework/runtime，Host + Worker/Runner 发行产物
 │   ├── web       # React + Vite 前端
 │   └── desktop   # Electron 桌面壳
 ├── packages

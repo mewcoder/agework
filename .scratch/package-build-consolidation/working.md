@@ -5,7 +5,7 @@
 ### Package responsibilities and boundaries
 
 - The workspace has 12 non-root packages/apps: three apps and nine `packages/*` entries. The dependency graph derived from manifests is acyclic.
-- Strong package/deployment boundaries: `server`, `web`, `@agework/runtime-host`, `@agework/shared`, `@assistant-ui/react-ag-ui`, both plugin SDK contracts, and the optional OpenSandbox dependency boundary.
+- Strong package/deployment boundaries: `server`, `web`, `@agework/runtime`, `@agework/shared`, `@assistant-ui/react-ag-ui`, both plugin SDK contracts, and the optional OpenSandbox dependency boundary.
 - The user has explicitly chosen Docker and ACP as separate official plugin/example packages. Their independent maintenance and example value is therefore a product requirement even though bundled production artifacts statically include them.
 - `@agework/worker` has a real process responsibility but no independent publish or artifact lifecycle: its only production consumer is `apps/runtime`, which bundles its source into `main.js` and `runner.js`. It is the strongest package-removal candidate.
 - `@agework/adapters` is also private/source-only and only used in production by the Worker bundled plugin. Moving it would reduce a package, but Claude/Codex form a coherent implementation/test area and the current user direction favored keeping Worker and adapters together until expansion requires more separation. Decision remains open pending later rounds.
@@ -32,7 +32,7 @@
 
 - `apps/server` declares `@agework/adapters` but has no production import.
 - `apps/runtime` directly declares `@agework/agent-sdk`, but imports are through Worker/bundled plugins; exact resolution needs re-evaluation after package consolidation.
-- Server imports `@agework/runtime-host` in production source while declaring it as a devDependency.
+- Server imports `@agework/runtime/host` in production source and declares `@agework/runtime` as a production dependency.
 - `packages/shared/README.md` incorrectly describes the package as pure types and zero runtime/build code.
 - Public SDK manifests are not yet fully publication-shaped (`files`, dist types/exports, compatibility/release policy).
 
@@ -50,7 +50,7 @@
 
 | Member | Evidence | Decision |
 |---|---|---|
-| `apps/runtime` (`@agework/runtime-host`) | `apps/runtime/package.json` exports Host CJS plus CLI artifacts; Server imports Host and embeds Runtime outputs | Keep deployment/library boundary |
+| `apps/runtime` (`@agework/runtime`) | `apps/runtime/package.json` exports Host CJS plus CLI artifacts; Server imports Host and embeds Runtime outputs | Keep deployment/library boundary |
 | `apps/server` | Nest production application; imports Runtime Host/SDK, Shared, React AG-UI | Keep; remove unused adapters manifest dependency; treat Runtime Host as production dependency |
 | `apps/web` | Vite application consuming Shared and React AG-UI | Keep |
 | `packages/shared` | Ten subpath exports and runtime consumers across Server/Web/Runtime/Worker/plugins | Keep cross-app/protocol boundary; correct README |
@@ -177,7 +177,7 @@ Exact Runtime dependencies after the move are adapters, ACP, Agent SDK, Docker, 
 - 36 non-archive files mention `@agework/worker` or `packages/worker`; 32 require move/update/delete treatment.
 - Functional changes are limited to Runtime imports/manifest, CI filters, lockfile importer, and image-staleness inputs. Other changes are maintained docs/context maps/comments.
 - Historical archive files and historical ADR bodies retain old paths; the Worker ADR moves under Runtime and a new ADR records package dissolution.
-- CI currently also uses incorrect `@agework/runtime` filters; correct them to `@agework/runtime-host` while removing Worker duplicates.
+- CI Runtime filters resolve to the final `@agework/runtime` package name after removing Worker duplicates.
 
 ### Final build orchestration
 

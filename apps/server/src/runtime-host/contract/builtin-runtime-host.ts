@@ -4,7 +4,7 @@ import {
   loadRuntimePlugins,
   RuntimeHost,
   WorkerHttpServer,
-} from "@agework/runtime-host";
+} from "@agework/runtime/host";
 import { createRuntimePlugin as createDockerRuntimePlugin } from "@agework/runtime-docker";
 import type { HostCapabilityStatus } from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";

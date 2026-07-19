@@ -277,7 +277,7 @@ admin 资源列表）都是 server 亲自管协议才需要的；协议下沉后
 
 ### 4.4 物理落点
 
-Runtime Host 的实现统一住 `apps/runtime`（`@agework/runtime-host`），公共插件契约位于
+Runtime 的实现统一住 `apps/runtime`（`@agework/runtime`），公共插件契约位于
 `packages/runtime-sdk`（`@agework/runtime-sdk`），Host 暴露两个入口：
 
 - **库入口**：builtin 场景，server 进程内直接 `new` 出 `RuntimeHostContract` 实现（进程内调用）。

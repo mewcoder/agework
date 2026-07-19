@@ -20,7 +20,7 @@
 runtime-host ──> runtime-sdk <── runtime plugin
 ```
 
-Runtime Plugin 只依赖 `@agework/runtime-sdk`，不能依赖 `@agework/runtime-host`。Runtime Host
+Runtime Plugin 只依赖 `@agework/runtime-sdk`，不能依赖 `@agework/runtime`。Runtime Host
 只内建 `native`；Docker 是默认随发行版注册的 bundled plugin。
 
 ## 2. 使用已有 Runtime Plugin
@@ -39,14 +39,14 @@ AGEWORK_RUNTIME_ALLOWED_TYPES=native,docker
 先把插件安装到 Runtime Host 的依赖环境。仓库内 workspace 包示例：
 
 ```bash
-pnpm --filter @agework/runtime-host add '@scope/runtime-example@workspace:*'
+pnpm --filter @agework/runtime add '@scope/runtime-example@workspace:*'
 pnpm --filter @scope/runtime-example build
 ```
 
 已发布到 npm 的包不需要 `workspace:*`：
 
 ```bash
-pnpm --filter @agework/runtime-host add @scope/runtime-example
+pnpm --filter @agework/runtime add @scope/runtime-example
 ```
 
 然后同时配置包名和允许的 runtime type：
@@ -265,6 +265,6 @@ bundled plugin
 ```bash
 pnpm --filter @scope/runtime-example typecheck
 pnpm --filter @agework/runtime-sdk typecheck
-pnpm --filter @agework/runtime-host typecheck
+pnpm --filter @agework/runtime typecheck
 pnpm --filter server typecheck
 ```

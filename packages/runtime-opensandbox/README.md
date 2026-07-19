@@ -23,7 +23,7 @@ AGEWORK_SANDBOX_OPENSANDBOX_PROTOCOL=http
 ## 通用装配
 
 ```ts
-import { RuntimeHost } from "@agework/runtime-host";
+import { RuntimeHost } from "@agework/runtime/host";
 import { createOpenSandboxRuntimePlugin } from "@agework/runtime-opensandbox";
 
 const host = new RuntimeHost({

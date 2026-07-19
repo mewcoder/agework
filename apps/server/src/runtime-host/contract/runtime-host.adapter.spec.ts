@@ -4,7 +4,7 @@ import type {
   RunPlacement,
   SubmitRunInput,
 } from "@agework/shared/protocol";
-import type { RuntimeHost } from "@agework/runtime-host";
+import type { RuntimeHost } from "@agework/runtime/host";
 import { RuntimeHostAdapter } from "./runtime-host.adapter";
 import { TunnelRuntimeHost } from "./tunnel-runtime-host";
 import type { ConfigService } from "../../config/config.service";
