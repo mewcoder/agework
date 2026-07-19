@@ -15,15 +15,9 @@ import {
 } from "./contract/builtin-runtime-host";
 import { RunEventModule } from "../run-event/run-event.module";
 import {
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_CONNECTIVITY,
-  RUNTIME_HOST_ENVIRONMENT,
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  RUNTIME_HOST_RUN_RECONCILIATION,
   RUNTIME_HOST_RUN_REAP_BINDING,
   RUNTIME_HOST_UPSTREAM_BINDING,
-  RUNTIME_HOST_WORKSPACE_DATA,
 } from "./runtime-host.types";
 
 /**
@@ -32,9 +26,8 @@ import {
  *
  * - `HostTunnelHandler`(隧道 WS 端点)、`HostLivenessWatchdog`(Host 级判死)、
  *   builtin Host 实例都是 internal provider,不 export。
- * - `RuntimeHostAdapter` 类本身不直接 export,而是按 execution / upstream-binding /
- *   connectivity / environment / workspace-data / diagnostics 角色 token 暴露契约;
- *   消费者不感知 builtin/registered 的路由细节。
+ * - `RuntimeHostAdapter` 类本身不 export；业务用例经根 `RuntimeHostService`，run
+ *   执行与两个启动期反向接线保留窄 token。
  * - worker 数据面由每个 Host 自己的 WorkerHttpServer 承接;worker 池由 Host
  *   进程内自治,本模块只经契约下发与观测。
  * - 资源生命周期判断归 workspace / user owner；重连同步用例由上层 run
@@ -54,18 +47,6 @@ import {
     RuntimeHostAdapter,
     { provide: RUNTIME_HOST_EXECUTION, useExisting: RuntimeHostAdapter },
     { provide: RUNTIME_HOST_UPSTREAM_BINDING, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_CONNECTIVITY, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_ENVIRONMENT, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_WORKSPACE_DATA, useExisting: RuntimeHostAdapter },
-    { provide: RUNTIME_HOST_DIAGNOSTICS, useExisting: RuntimeHostAdapter },
-    {
-      provide: RUNTIME_HOST_RESOURCE_RECONCILIATION,
-      useExisting: RuntimeHostAdapter,
-    },
-    {
-      provide: RUNTIME_HOST_RUN_RECONCILIATION,
-      useExisting: RuntimeHostAdapter,
-    },
     {
       provide: RUNTIME_HOST_RUN_REAP_BINDING,
       useExisting: RuntimeHostAdapter,
@@ -80,10 +61,6 @@ import {
     RuntimeHostService,
     RUNTIME_HOST_EXECUTION,
     RUNTIME_HOST_UPSTREAM_BINDING,
-    // environment / workspace-data 仅本模块 RuntimeHostService 消费,不对外导出
-    RUNTIME_HOST_DIAGNOSTICS,
-    RUNTIME_HOST_RESOURCE_RECONCILIATION,
-    RUNTIME_HOST_RUN_RECONCILIATION,
     RUNTIME_HOST_RUN_REAP_BINDING,
   ],
 })

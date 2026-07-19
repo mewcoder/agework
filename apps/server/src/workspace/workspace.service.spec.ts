@@ -134,6 +134,7 @@ function makeRuntimeHostService(overrides: Record<string, unknown> = {}) {
       before: "old",
       after: "new",
     }),
+    releaseResources: vi.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -157,12 +158,7 @@ function makeService(
     { emit: vi.fn() } as never,
     runtimePolicy,
     directoryHandler,
-    runtimeHostService as never,
-    {
-      listLifecycleClaims: vi.fn().mockResolvedValue([]),
-      listConnectedHostIds: vi.fn().mockReturnValue([]),
-      releaseResources: vi.fn().mockResolvedValue(undefined),
-    } as never
+    runtimeHostService as never
   );
 }
 
@@ -730,12 +726,7 @@ describe("WorkspaceService", () => {
           config as never,
           runtimePolicy
         ),
-        makeRuntimeHostService() as never,
-        {
-          listLifecycleClaims: vi.fn().mockResolvedValue([]),
-          listConnectedHostIds: vi.fn().mockReturnValue([]),
-          releaseResources: vi.fn().mockResolvedValue(undefined),
-        } as never
+        makeRuntimeHostService() as never
       );
 
       await service.delete(userId, workspaceId);
@@ -765,7 +756,13 @@ describe("WorkspaceService", () => {
           scope: "workspace",
           runtimeHostId: "builtin",
           directory: { rootPath: "/tmp/ws" },
-          user: { id: "user-1", username: "mew", status: "active", deletedAt: null, sessionVersion: 1 },
+          user: {
+            id: "user-1",
+            username: "mew",
+            status: "active",
+            deletedAt: null,
+            sessionVersion: 1,
+          },
         }),
       });
       const service = makeService(repo, makeConfig());
@@ -794,7 +791,13 @@ describe("WorkspaceService", () => {
           scope: "workspace",
           runtimeHostId: "builtin",
           directory: { rootPath: "/tmp/ws" },
-          user: { id: "user-1", username: "mew", status: "active", deletedAt: null, sessionVersion: 1 },
+          user: {
+            id: "user-1",
+            username: "mew",
+            status: "active",
+            deletedAt: null,
+            sessionVersion: 1,
+          },
         }),
       });
       const service = makeService(repo, makeConfig());
@@ -813,7 +816,13 @@ describe("WorkspaceService", () => {
           scope: "workspace",
           runtimeHostId: "rt-1",
           directory: { rootPath: "/remote/ws" },
-          user: { id: "user-1", username: "mew", status: "active", deletedAt: null, sessionVersion: 1 },
+          user: {
+            id: "user-1",
+            username: "mew",
+            status: "active",
+            deletedAt: null,
+            sessionVersion: 1,
+          },
         }),
       });
       const service = makeService(repo, makeConfig());
@@ -895,7 +904,13 @@ describe("WorkspaceService", () => {
         scope: "workspace",
         runtimeHostId: "builtin",
         directory: { rootPath: "/tmp/ws" },
-        user: { id: "user-1", username: "mew", status: "active", deletedAt: null, sessionVersion: 1 },
+        user: {
+          id: "user-1",
+          username: "mew",
+          status: "active",
+          deletedAt: null,
+          sessionVersion: 1,
+        },
       };
     }
 
@@ -906,7 +921,13 @@ describe("WorkspaceService", () => {
         scope: "workspace",
         runtimeHostId: "rt-1",
         directory: { rootPath: "/remote/ws" },
-        user: { id: "user-1", username: "mew", status: "active", deletedAt: null, sessionVersion: 1 },
+        user: {
+          id: "user-1",
+          username: "mew",
+          status: "active",
+          deletedAt: null,
+          sessionVersion: 1,
+        },
       };
     }
 

@@ -10,12 +10,10 @@ import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_RUN_RECONCILIATION,
   RUNTIME_HOST_RUN_REAP_BINDING,
   type HostReapReason,
   type HostRunReapBinding,
   type HostRunReapPort,
-  type RuntimeHostRunReconciliation,
 } from "../../runtime-host/runtime-host.types";
 import { RunStatusService } from "../status/run-status.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
@@ -64,8 +62,6 @@ export class RunRecoveryService
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
-    @Inject(RUNTIME_HOST_RUN_RECONCILIATION)
-    private readonly runReconciliation: RuntimeHostRunReconciliation,
     @Inject(RUNTIME_HOST_RUN_REAP_BINDING)
     private readonly runReapBinding: HostRunReapBinding
   ) {}
@@ -128,7 +124,7 @@ export class RunRecoveryService
    * 由协调器保持 fail-closed 并重跑完整 attempt。
    */
   async reconcileRuntimeHost(runtimeHostId: string): Promise<void> {
-    const runIds = await this.runReconciliation.listRunIds(runtimeHostId);
+    const runIds = await this.runtimeHostService.listRunIds(runtimeHostId);
     const rows = await this.runRepository.findRuntimeReconciliationRows(runIds);
     const rowById = new Map(rows.map((row) => [row.id, row]));
     let firstFailure: Error | undefined;
@@ -263,5 +259,4 @@ export class RunRecoveryService
     const heartbeatAt = row.lastHeartbeatAt?.getTime() ?? 0;
     return heartbeatAt < cutoffMs;
   }
-
 }

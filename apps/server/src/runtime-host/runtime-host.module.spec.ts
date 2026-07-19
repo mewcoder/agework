@@ -1,4 +1,4 @@
-import { Inject, Injectable, Module } from "@nestjs/common";
+import { Injectable, Module } from "@nestjs/common";
 import { EventEmitterModule } from "@nestjs/event-emitter";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,18 +12,10 @@ import {
   BUILTIN_RUNTIME_HOST,
   BUILTIN_RUNTIME_HOST_LIFECYCLE,
 } from "./contract/builtin-runtime-host";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "./runtime-host.types";
 
 @Injectable()
 class DownstreamRuntimeConsumer {
-  constructor(
-    readonly runtimeHostService: RuntimeHostService,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    readonly resourceReconciliation: RuntimeHostResourceReconciliationPort
-  ) {}
+  constructor(readonly runtimeHostService: RuntimeHostService) {}
 }
 
 @Module({
@@ -49,7 +41,7 @@ describe("RuntimeHostModule wiring", () => {
     );
   });
 
-  it("exports the root Service and narrow role ports to downstream modules", async () => {
+  it("exports the root Service to downstream modules", async () => {
     testingModule = await createRuntimeTestingModule([
       DownstreamRuntimeConsumerModule,
     ]);
@@ -58,7 +50,6 @@ describe("RuntimeHostModule wiring", () => {
     expect(consumer.runtimeHostService).toBe(
       testingModule.get(RuntimeHostService)
     );
-    expect(consumer.resourceReconciliation).toBeDefined();
   });
 });
 

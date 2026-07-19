@@ -16,7 +16,6 @@ describe("WorkspaceService runtime reconciliation", () => {
       {} as never,
       {} as never,
       {} as never,
-      {} as never,
       { releaseResources } as never
     );
 

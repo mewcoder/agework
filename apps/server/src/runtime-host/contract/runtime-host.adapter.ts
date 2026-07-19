@@ -35,9 +35,6 @@ import {
   isBuiltinHostId,
   type HostRunReapBinding,
   type HostRunReapPort,
-  type RuntimeHostConnectivity,
-  type RuntimeHostResourceReconciliationPort,
-  type RuntimeHostRunReconciliation,
 } from "../runtime-host.types";
 import { RunEventService } from "../../run-event/run-event.service";
 import { BUILTIN_RUNTIME_HOST } from "./builtin-runtime-host";
@@ -62,12 +59,7 @@ import {
  */
 @Injectable()
 export class RuntimeHostAdapter
-  implements
-    RuntimeHostContract,
-    RuntimeHostResourceReconciliationPort,
-    RuntimeHostRunReconciliation,
-    RuntimeHostConnectivity,
-    HostRunReapBinding
+  implements RuntimeHostContract, HostRunReapBinding
 {
   private readonly logger = new Logger(RuntimeHostAdapter.name);
   private upstream!: RuntimeHostUpstream;
@@ -263,9 +255,9 @@ export class RuntimeHostAdapter
     // SPEC §5.3: 查询失败必须显式失败，不能折叠为空列表。
     // 不再 catch 单 Host 错误——让其传播给调用方。
     const tunnelClaims = await Promise.all(
-      this.tunnelHandler.listConnected().map((hostId) =>
-        this.tunnelHost.listLifecycleClaimsOn(hostId)
-      )
+      this.tunnelHandler
+        .listConnected()
+        .map((hostId) => this.tunnelHost.listLifecycleClaimsOn(hostId))
     );
     return builtin.concat(tunnelClaims.flat());
   }

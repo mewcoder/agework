@@ -1,18 +1,9 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnApplicationShutdown,
-} from "@nestjs/common";
+import { Injectable, Logger, type OnApplicationShutdown } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import {
   RUNTIME_HOST_CONNECTED_EVENT,
   type RuntimeHostConnectedEvent,
 } from "../../runtime-host/runtime-host.events";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "../../runtime-host/runtime-host.types";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { WorkspaceService } from "../../workspace/workspace.service";
 import { UserService } from "../../user/user.service";
@@ -26,9 +17,7 @@ const RETRY_MAX_MS = 30_000;
  * 读取、workspace、user 对账，全部成功后才以 epoch CAS 放行 submitRun。
  */
 @Injectable()
-export class RuntimeHostReconciliationCoordinator
-  implements OnApplicationShutdown
-{
+export class RuntimeHostReconciliationCoordinator implements OnApplicationShutdown {
   private readonly logger = new Logger(
     RuntimeHostReconciliationCoordinator.name
   );
@@ -41,9 +30,7 @@ export class RuntimeHostReconciliationCoordinator
     private readonly runs: RunService,
     private readonly workspaces: WorkspaceService,
     private readonly users: UserService,
-    private readonly runtimeHosts: RuntimeHostService,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    private readonly hostResources: RuntimeHostResourceReconciliationPort
+    private readonly runtimeHosts: RuntimeHostService
   ) {}
 
   onApplicationShutdown(): void {
@@ -71,8 +58,7 @@ export class RuntimeHostReconciliationCoordinator
       await this.runs.reconcileRuntimeHostRuns(runtimeHostId);
       if (!this.isCurrent(runtimeHostId, epoch)) return;
 
-      const claims =
-        await this.hostResources.listLifecycleClaims(runtimeHostId);
+      const claims = await this.runtimeHosts.listLifecycleClaims(runtimeHostId);
       if (!this.isCurrent(runtimeHostId, epoch)) return;
 
       await this.workspaces.reconcileRuntimeHostResources(

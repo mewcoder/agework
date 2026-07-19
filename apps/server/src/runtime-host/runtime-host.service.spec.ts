@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { RuntimeHostRepository } from "./runtime-host.repository";
-import type {
-  RuntimeHostConnectivity,
-  RuntimeHostRow,
-} from "./runtime-host.types";
+import type { RuntimeHostRow } from "./runtime-host.types";
 import { RuntimeHostService } from "./runtime-host.service";
 import type {
   RuntimeHostDiagnostics,
@@ -135,12 +132,17 @@ describe("RuntimeHostService", () => {
       listLifecycleClaims: vi.fn().mockResolvedValue([]),
       stopWorker: vi.fn().mockResolvedValue(undefined),
     };
+    const host = {
+      ...connectivity,
+      ...environment,
+      ...workspaceData,
+      ...diagnostics,
+      releaseResources: vi.fn().mockResolvedValue(undefined),
+      listConnectedHostIds: vi.fn().mockReturnValue(["builtin"]),
+    };
     service = new RuntimeHostService(
       repository as unknown as RuntimeHostRepository,
-      connectivity as unknown as RuntimeHostConnectivity,
-      environment as unknown as RuntimeHostEnvironment,
-      workspaceData as unknown as RuntimeHostWorkspaceData,
-      diagnostics as unknown as RuntimeHostDiagnostics,
+      host as never,
       {
         getSessionEpoch: vi.fn(),
         markReconciled: vi.fn(),

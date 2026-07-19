@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Inject,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -40,10 +39,7 @@ import {
   type UserRecord,
   type UserSessionRecord,
 } from "./user.repository";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "../runtime-host/runtime-host.types";
+import { RuntimeHostService } from "../runtime-host/runtime-host.service";
 
 const INITIAL_PASSWORD_TTL_MS = 72 * 60 * 60 * 1000;
 const RESET_PASSWORD_TTL_MS = 24 * 60 * 60 * 1000;
@@ -58,8 +54,7 @@ export class UserService {
     private users: UserRepository,
     private passwordHasher: PasswordHasherService,
     private events: EventEmitter2,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    private readonly hostResources: RuntimeHostResourceReconciliationPort
+    private readonly runtimeHosts: RuntimeHostService
   ) {}
 
   /**
@@ -90,7 +85,7 @@ export class UserService {
     let firstError: unknown;
     for (const { userId, version } of targets.values()) {
       try {
-        await this.hostResources.releaseResources({
+        await this.runtimeHosts.releaseResources({
           runtimeHostId,
           target: {
             type: "user",
@@ -630,10 +625,7 @@ function pendingUserReleaseTargets(
 ): Array<{ userId: string; version: number }> {
   const targets: Array<{ userId: string; version: number }> = [];
   for (const claim of claims) {
-    if (
-      claim.kind !== "release_pending" ||
-      claim.target.type !== "user"
-    ) {
+    if (claim.kind !== "release_pending" || claim.target.type !== "user") {
       continue;
     }
     if (claim.userLifecycleVersion === undefined) {

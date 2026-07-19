@@ -5,7 +5,6 @@ import type { RunRepository } from "../run.repository";
 import type { RunStatusService } from "../status/run-status.service";
 import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
-import type { RuntimeHostRunReconciliation } from "../../runtime-host/runtime-host.types";
 
 function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
@@ -37,6 +36,7 @@ function makeDeps(activeRuns: unknown[]) {
   };
   const runtimeHostService: Partial<RuntimeHostService> = {
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
+    listRunIds: vi.fn().mockResolvedValue([]),
   };
   // check 间隔 60s;判死窗口 300s → 兜底 grace 600s(2×),
   // 保证「sweep 触发时刚断线的 run」还在 grace 内不被误杀。
@@ -55,17 +55,15 @@ function makeDeps(activeRuns: unknown[]) {
 function makeService(
   deps: ReturnType<typeof makeDeps>,
   runtimeHost: Partial<RuntimeHostContract>,
-  runReconciliation: Partial<RuntimeHostRunReconciliation> = {
-    listRunIds: vi.fn().mockResolvedValue([]),
-  }
+  runtimeHostServiceOverrides: Partial<RuntimeHostService> = {}
 ) {
+  Object.assign(deps.runtimeHostService, runtimeHostServiceOverrides);
   return new RunRecoveryService(
     deps.runRepository as RunRepository,
     deps.runStatusService as RunStatusService,
     deps.runtimeHostService as RuntimeHostService,
     deps.configService as ConfigService,
     runtimeHost as RuntimeHostContract,
-    runReconciliation as RuntimeHostRunReconciliation,
     { setRunReapPort: vi.fn() }
   );
 }

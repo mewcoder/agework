@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RunService } from "../run.service";
-import type { RuntimeHostResourceReconciliationPort } from "../../runtime-host/runtime-host.types";
+import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { WorkspaceDeletedEvent } from "../../workspace/workspace.events";
 import { RunWorkspaceListener } from "./run-workspace.listener";
 
@@ -19,7 +19,7 @@ function makeDeps(
     {
       releaseResources,
       listLifecycleClaims: vi.fn().mockResolvedValue([]),
-    } as unknown as RuntimeHostResourceReconciliationPort
+    } as unknown as RuntimeHostService
   );
   return { listener, stopForWorkspace, releaseResources };
 }
