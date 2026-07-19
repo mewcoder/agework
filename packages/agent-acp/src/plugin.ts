@@ -87,11 +87,18 @@ function createAcpDriver(context: AgentPluginCreateContext): AgentDriver {
 
 /** Official bundled Agent Plugin and reference implementation for ACP profiles. */
 export function createAgentPlugin(): AgentPlugin {
+  const profiles = listAcpProfiles();
   return defineAgentPlugin({
     apiVersion: 1,
     id: "acp",
     displayName: "Agent Client Protocol",
-    agentTypes: listAcpProfiles().map((profile) => profile.agentType),
+    agentTypes: profiles.map((profile) => profile.agentType),
+    runtimeRequirements: Object.fromEntries(
+      profiles.map((profile) => [
+        profile.agentType,
+        profile.runtimeRequirement,
+      ])
+    ),
     create: createAcpDriver,
   });
 }

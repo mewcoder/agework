@@ -8,7 +8,10 @@ import { PrismaModule } from "../prisma/prisma.module";
 import { PrismaService } from "../prisma/prisma.service";
 import { RuntimeHostService } from "./runtime-host.service";
 import { RuntimeHostModule } from "./runtime-host.module";
-import { BUILTIN_RUNTIME_HOST } from "./contract/builtin-runtime-host";
+import {
+  BUILTIN_RUNTIME_HOST,
+  BUILTIN_RUNTIME_HOST_LIFECYCLE,
+} from "./contract/builtin-runtime-host";
 import {
   RUNTIME_HOST_RESOURCE_RECONCILIATION,
   type RuntimeHostResourceReconciliationPort,
@@ -78,6 +81,8 @@ async function createRuntimeTestingModule(
       .useValue({})
       // builtin Host 工厂会装配 WorkerHttpServer,模块装配测试不需要真实例
       .overrideProvider(BUILTIN_RUNTIME_HOST)
+      .useValue({})
+      .overrideProvider(BUILTIN_RUNTIME_HOST_LIFECYCLE)
       .useValue({})
       .compile()
   );

@@ -99,7 +99,13 @@ Runner 的受控环境传递链，在 Native 和 Docker Runtime 下都可用。
 
 Agent 插件最终在 Worker 镜像内执行，只在宿主机安装包不会改变已有镜像：
 
-- 已发布包可以加入 `apps/runtime/sdk-deps/package.json` 和锁文件后重建镜像。
+- 官方 bundled plugin 必须在 `runtimeRequirements` 中用精确版本声明 npm 包和
+  主可执行文件；ACP Profile 的 `command` 会自动成为 `acpExecutable`。
+- `pnpm --filter @agework/runtime sync:bundled-agent-deps` 会由这些声明生成
+  `sdk-deps/package.json`、lockfile 和镜像验证清单，不手工编辑生成文件。
+- `pnpm worker:build` 和 OpenSandbox rebuild 会在构建前自动执行同步。
+- Runtime typecheck/package 会先执行 `check:bundled-agent-deps`；声明与生成文件不一致时
+  立即失败。Docker 构建还会验证每个声明的 package 版本和 binary。
 - 私有 workspace 包应使用自定义 Worker 镜像。
 - 官方插件可以像 `@agework/agent-acp` 一样作为静态 bundled plugin 编入发行产物。
 
@@ -243,6 +249,12 @@ export function createAgentPlugin() {
     id: "example",
     displayName: "Example Agent Plugin",
     agentTypes: ["example"],
+    runtimeRequirements: {
+      example: {
+        npmPackages: { "example-agent-cli": "1.2.3" },
+        agentExecutable: "example",
+      },
+    },
     create: (context) => new ExampleDriver(context),
   });
 }
@@ -252,6 +264,8 @@ export function createAgentPlugin() {
 
 - `id` 和 `agentTypes` 只能使用小写字母、数字和连字符。
 - 一个插件可以声明多个 `agentType`，但必须由同一个 `create()` 正确分流。
+- bundled plugin 的 `runtimeRequirements` 必须覆盖全部 `agentTypes`，npm 包使用精确版本。
+- API v1 外部插件可省略 `runtimeRequirements`，但需由自定义 Runtime 镜像或宿主环境提供 CLI。
 - 不同插件不能声明相同的 `agentType`。
 - `resolveControl()` 收到不属于自己的控制命令时返回 `false`。
 - `cancel()`、`interrupt()` 和 `shutdown()` 必须能收敛底层进程或 SDK session。
@@ -306,6 +320,8 @@ protocol、API format 矩阵、CLI spec 和按类型封闭的 options。未知 i
 
 - 包根导出了 `createAgentPlugin()`。
 - 插件未安装、未构建或 manifest 非法时，Loader 给出明确错误。
+- bundled Agent 的 runtime requirements 与 Runtime 生成清单一致。
+- Docker 镜像内声明的 package 版本、主 binary 和 ACP executable 均存在且可执行。
 - Driver 输出合法的 AG-UI run/message/tool 事件序列。
 - interrupt、cancel、approval 和 shutdown 都能收敛。
 - Native 与 Docker Worker 都能解析插件包和 CLI。

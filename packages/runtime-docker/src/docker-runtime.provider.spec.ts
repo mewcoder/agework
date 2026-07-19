@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { execFile } from "node:child_process";
-import { DockerRuntimeProvider } from "./docker-runtime.provider";
+import {
+  DockerRuntimeProvider,
+  dockerContainerName,
+} from "./docker-runtime.provider";
 import type {
   RuntimeProviderConfig,
   RuntimeLaunchContext,
@@ -70,8 +73,24 @@ describe("DockerRuntimeProvider", () => {
     mockExecFile.mockReset();
   });
 
+  it("derives safe diagnostic names without exposing subjects", () => {
+    const first = dockerContainerName({
+      scope: "workspace",
+      subjectId: "workspace/secret-1",
+      workerId: "worker-1",
+    });
+    const second = dockerContainerName({
+      scope: "workspace",
+      subjectId: "workspace/secret-2",
+      workerId: "worker-2",
+    });
+    expect(first).toMatch(/^agework-ws-[a-f0-9]{16}-[a-f0-9]{16}$/);
+    expect(first).not.toContain("workspace/secret-1");
+    expect(first).not.toBe(second);
+  });
+
   describe("start", () => {
-    it("runs an unnamed container and returns its id", async () => {
+    it("runs a diagnostically named container and returns its id", async () => {
       mockExecFile.mockImplementation(((...args: any[]) => {
         args[args.length - 1](null, { stdout: "container-abc\n", stderr: "" });
       }) as any);
@@ -81,9 +100,17 @@ describe("DockerRuntimeProvider", () => {
       expect(result).toEqual({ runtimeInstanceId: "container-abc" });
       const runArgs = runArgsOf();
       expect(runArgs).not.toContain("--rm");
-      // 不再使用 ownerId 稳定命名,容器名由 Docker 自动生成
-      expect(runArgs).not.toContain("--name");
+      expect(runArgs).toContain("--name");
+      expect(runArgs).toContain(
+        dockerContainerName({
+          scope: "workspace",
+          subjectId: "ws-1",
+          workerId: "worker-1",
+        })
+      );
       expect(runArgs).toContain("com.docker.compose.project=agework");
+      expect(runArgs).toContain("agework.io/managed-by=runtime-host");
+      expect(runArgs).toContain("agework.io/schema-version=1");
       expect(runArgs).toContain("host.docker.internal:host-gateway");
       expect(runArgs).toContain("agework/runtime:latest");
     });
@@ -240,6 +267,77 @@ describe("DockerRuntimeProvider", () => {
       }) as any);
 
       await expect(makeProvider().destroy(makeRef())).resolves.toBeUndefined();
+    });
+  });
+
+  describe("cleanupOrphans", () => {
+    it("filters strictly and removes only exited/dead containers", async () => {
+      mockExecFile.mockImplementation(((...args: any[]) => {
+        const cmdArgs = args[1] as string[];
+        const callback = args[args.length - 1];
+        if (cmdArgs[0] === "ps") {
+          callback(null, { stdout: "dead-1\nrun-1\n", stderr: "" });
+        } else if (cmdArgs[0] === "inspect") {
+          callback(null, {
+            stdout: cmdArgs[3] === "dead-1" ? "dead\n" : "running\n",
+            stderr: "",
+          });
+        } else {
+          callback(null, { stdout: "", stderr: "" });
+        }
+      }) as any);
+
+      await makeProvider().cleanupOrphans();
+      const psArgs = mockExecFile.mock.calls.find(
+        (call) => (call[1] as string[])[0] === "ps"
+      )![1] as string[];
+      expect(psArgs).toEqual(
+        expect.arrayContaining([
+          "--filter",
+          "label=agework.io/managed-by=runtime-host",
+          "label=agework.io/schema-version=1",
+          "label=agework.io/runtime-type=docker",
+          "label=agework.io/worker-id",
+          "label=agework.io/scope",
+        ])
+      );
+      expect(psArgs).not.toContain("status=exited");
+      expect(psArgs).not.toContain("status=dead");
+      expect(mockExecFile).toHaveBeenCalledWith(
+        "docker",
+        ["rm", "dead-1"],
+        expect.any(Function)
+      );
+      expect(mockExecFile).not.toHaveBeenCalledWith(
+        "docker",
+        ["rm", "run-1"],
+        expect.any(Function)
+      );
+    });
+
+    it("attempts every cleanup and reports aggregate failures", async () => {
+      mockExecFile.mockImplementation(((...args: any[]) => {
+        const cmdArgs = args[1] as string[];
+        const callback = args[args.length - 1];
+        if (cmdArgs[0] === "ps") {
+          callback(null, { stdout: "dead-1\ndead-2\n", stderr: "" });
+        } else if (cmdArgs[0] === "inspect") {
+          callback(null, { stdout: "dead\n", stderr: "" });
+        } else if (cmdArgs[1] === "dead-1") {
+          callback(new Error("rm dead-1 failed"));
+        } else {
+          callback(null, { stdout: "", stderr: "" });
+        }
+      }) as any);
+
+      await expect(makeProvider().cleanupOrphans()).rejects.toBeInstanceOf(
+        AggregateError
+      );
+      expect(mockExecFile).toHaveBeenCalledWith(
+        "docker",
+        ["rm", "dead-2"],
+        expect.any(Function)
+      );
     });
   });
 });

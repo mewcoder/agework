@@ -178,7 +178,7 @@ OpenSandbox 不进入通用 `pnpm boot` / `pnpm init:*` 初始化选项。需要
 OpenSandbox Server：
 
 ```bash
-pnpm opensandbox:up
+pnpm --filter @agework/runtime-opensandbox infra:up
 ```
 
 然后在 `apps/server/.env` 中设置：
@@ -192,11 +192,11 @@ AGEWORK_RUNTIME_ALLOWED_TYPES=opensandbox
 
 | 命令                      | 说明                                         |
 | ------------------------- | -------------------------------------------- |
-| `pnpm opensandbox:up`     | 准备 worker 镜像并启动本地 OpenSandbox Server，默认监听 `8080` |
-| `pnpm opensandbox:down`   | 停止 OpenSandbox Server                      |
-| `pnpm opensandbox:health` | 检查健康状态                                 |
-| `pnpm opensandbox:logs`   | 查看日志                                     |
-| `pnpm opensandbox:build`  | 重建 worker 镜像并重启 OpenSandbox Server    |
+| `pnpm --filter @agework/runtime-opensandbox infra:up`      | 准备 Runtime 镜像并启动本地 OpenSandbox Server，默认监听 `8080` |
+| `pnpm --filter @agework/runtime-opensandbox infra:down`    | 停止 OpenSandbox Server |
+| `pnpm --filter @agework/runtime-opensandbox infra:health`  | 检查健康状态 |
+| `pnpm --filter @agework/runtime-opensandbox infra:logs`    | 查看日志 |
+| `pnpm --filter @agework/runtime-opensandbox infra:rebuild` | 重建 Runtime 镜像并重启 OpenSandbox Server |
 
 OpenSandbox 相关配置位于 `infra/opensandbox`。worker 镜像默认标签为 `agework/worker:latest`。
 

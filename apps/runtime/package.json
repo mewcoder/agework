@@ -23,10 +23,12 @@
     "prepare:test": "pnpm prepare:codex-types && pnpm --filter @agework/shared build && pnpm --filter @agework/runtime-sdk build && pnpm --filter @agework/runtime-docker build && pnpm --filter @agework/agent-sdk build && pnpm --filter @agework/agent-acp build",
     "build:worker": "pnpm build:worker:bundle",
     "build:worker:bundle": "pnpm prepare:codex-types && esbuild src/main.ts src/runner.ts --bundle --platform=node --target=node22 --format=esm --outdir=dist --external:@anthropic-ai/claude-agent-sdk --external:@openai/codex-sdk --banner:js=\"import { createRequire } from 'module'; const require = createRequire(import.meta.url);\"",
-    "package:sdk": "node scripts/install-sdk-deps.mjs",
+    "sync:bundled-agent-deps": "pnpm exec tsx scripts/sync-bundled-agent-runtime.ts --write",
+    "check:bundled-agent-deps": "pnpm exec tsx scripts/sync-bundled-agent-runtime.ts --check",
+    "package:sdk": "pnpm check:bundled-agent-deps && node scripts/install-sdk-deps.mjs",
     "build:host": "esbuild src/host/runtime-host.ts --bundle --platform=node --target=node22 --format=cjs --external:@agework/runtime-sdk --outfile=dist/host.cjs",
     "package": "pnpm package:sdk",
-    "typecheck": "pnpm prepare:codex-types && tsc --noEmit",
+    "typecheck": "pnpm check:bundled-agent-deps && pnpm prepare:codex-types && tsc --noEmit",
     "test": "pnpm prepare:test && vitest run"
   },
   "dependencies": {

@@ -136,7 +136,10 @@ export async function runRegisteredRuntimeHost(): Promise<void> {
   const tunnelUpstream = new TunnelUpstream();
   runtimeHost.setUpstream(tunnelUpstream);
 
-  // worker HTTP 服务器——worker 的数据面对端
+  // provider 启动清理是对外可用的硬屏障：不 adopt 旧实例，失败则拒绝启动。
+  await runtimeHost.bootstrap();
+
+  // worker HTTP 服务器——worker 的数据面对端。必须在 bootstrap 后监听。
   const httpServer = new WorkerHttpServer(runtimeHost, workerPort);
   await httpServer.start();
 

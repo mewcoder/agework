@@ -4,6 +4,8 @@ server 侧 RuntimeHost 域的唯一模块:**节点资源**(注册行、配对、
 
 worker 数据面由每个 Host 自管的 `WorkerHttpServer` 承接;worker 池由 Host 进程内自治,server 只经契约下发与观测。workspace 删除 / user 禁用删除的即时清理由 run 模块 listener 编排；Host 重连对账由 `run/recovery` 的单一 coordinator 同步调用 Run、Workspace、User 根 Service。resource reconciliation 端口只暴露 Host + 业务目标(workspace/user),不向业务模块泄漏 Worker 快照。
 
+容器 provider 的名称只用于诊断：Docker name 由 scope、subject 的不可逆短 hash 和 workerId 的不可逆短 hash 组成，不暴露 raw owner，也不参与复用、路由、停止或释放；控制键始终是 `runtimeInstanceId`（Docker containerId）。Host 启动会等待 provider 的 orphan cleanup；Docker 只查询同时具备 `agework.io/managed-by=runtime-host`、`agework.io/schema-version=1`、`agework.io/runtime-type=docker`、`agework.io/scope`、`agework.io/worker-id` 的候选，再逐个 inspect，仅删除确认状态为 `exited/dead` 的容器，绝不删除 running 容器。当前 labels 没有 Host/controller authority，因此不按 Host 隔离清理；不做跨重启 adopt。旧版缺少 managed/schema labels 的容器不自动清理。
+
 控制隧道只承载 `host.*` 契约；旧 `LocalRuntime` / `RemoteRuntime`、`runtime.*` RPC
 和 registered `Launcher` 已删除。worker 生命周期由 `RuntimeHost` 内部按 `runtimeType`
 选择 provider。

@@ -42,7 +42,10 @@ import {
   type RuntimeProviderPlugin,
   type RuntimeType,
 } from "@agework/runtime-sdk";
-import { createRuntimeResolver } from "../providers/registry";
+import {
+  createRuntimeResolver,
+  type RuntimeProviderResolver,
+} from "../providers/registry";
 import type { RuntimeHostProviderConfig } from "../providers/types";
 import {
   isWorkerCommandResultRpcResponse,
@@ -159,7 +162,7 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly fenceTimer: ReturnType<typeof setInterval> | undefined;
   private readonly capabilityTimer: ReturnType<typeof setInterval> | undefined;
   private upstream!: RuntimeHostUpstream;
-  private readonly resolveProvider: (type: RuntimeType) => RuntimeProvider;
+  private readonly resolveProvider: RuntimeProviderResolver;
   // 不用 constructor parameter property:server dev 以 Node strip-only TS
   // 直接加载本文件,strip-only 不支持 parameter property 语法。
   private readonly config: RuntimeHostConfig;
@@ -175,6 +178,8 @@ export class RuntimeHost implements RuntimeHostContract {
   private readonly cleanupLedger = new CleanupLedger();
   /** shutdown promise(并发 SIGINT/SIGTERM 安全:重复信号返回同一 promise)。 */
   private shutdownPromise: Promise<void> | undefined;
+  /** provider bootstrap 是进程级一次性屏障，builtin/registered 都在对外可用前等待。 */
+  private bootstrapPromise: Promise<void> | undefined;
 
   constructor(config: RuntimeHostConfig) {
     this.config = config;
@@ -215,6 +220,33 @@ export class RuntimeHost implements RuntimeHostContract {
   /** 当前能力矩阵(register 上报 / 观测用)。 */
   getCapabilities(): HostCapabilityStatus {
     return this.capabilities;
+  }
+
+  /**
+   * 启动屏障：让各 provider 清理其有充分 authority 的本机孤儿资源。
+   * 不恢复、不 adopt 旧 worker；任一 provider 失败都会阻止 Host 对外可用。
+   */
+  async bootstrap(): Promise<void> {
+    if (this.bootstrapPromise) return this.bootstrapPromise;
+    this.bootstrapPromise = (async () => {
+      const cleanups = this.resolveProvider
+        .list()
+        .filter((provider) => provider.cleanupOrphans)
+        .map(async (provider) => {
+          await provider.cleanupOrphans!();
+        });
+      const results = await Promise.allSettled(cleanups);
+      const errors = results
+        .filter(
+          (result): result is PromiseRejectedResult =>
+            result.status === "rejected"
+        )
+        .map((result) => result.reason);
+      if (errors.length > 0) {
+        throw new AggregateError(errors, "Runtime provider bootstrap failed");
+      }
+    })();
+    return this.bootstrapPromise;
   }
 
   setUpstream(upstream: RuntimeHostUpstream): void {

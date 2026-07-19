@@ -1,3 +1,5 @@
+import type { AgentRuntimeRequirement } from "@agework/agent-sdk";
+
 /** Inputs a profile uses to build the agent subprocess environment. */
 export type AcpProfileEnvInput = {
   /** `system` = use the agent's own local auth/config; `custom` = AgeWork-provided provider. */
@@ -27,6 +29,8 @@ export interface AcpAgentProfile {
   /** Default command (overridden by a resolved executable path at launch). */
   command: string;
   args: readonly string[];
+  /** Packages and binaries required when this profile runs in a managed Runtime. */
+  runtimeRequirement: AgentRuntimeRequirement;
   /** Build the child environment for a run. */
   buildEnv(input: AcpProfileEnvInput): Record<string, string>;
   /**

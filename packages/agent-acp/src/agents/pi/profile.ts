@@ -65,6 +65,13 @@ export const piAcpProfile: AcpAgentProfile = {
   displayName: "Pi",
   command: "pi-acp",
   args: [],
+  runtimeRequirement: {
+    npmPackages: {
+      "@earendil-works/pi-coding-agent": "0.80.10",
+      "pi-acp": "0.0.31",
+    },
+    agentExecutable: "pi",
+  },
   buildEnv(input) {
     const env: Record<string, string> = {
       ...input.baseEnv,

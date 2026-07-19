@@ -1,5 +1,6 @@
 import { Logger } from "@nestjs/common";
 import type { FactoryProvider } from "@nestjs/common";
+import type { OnApplicationShutdown } from "@nestjs/common";
 import {
   loadRuntimePlugins,
   RuntimeHost,
@@ -27,14 +28,51 @@ export const BUILTIN_RUNTIME_HOST = Symbol("BUILTIN_RUNTIME_HOST");
 
 const logger = new Logger("BuiltinRuntimeHost");
 
-export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
-  provide: BUILTIN_RUNTIME_HOST,
+export const BUILTIN_RUNTIME_HOST_LIFECYCLE = Symbol(
+  "BUILTIN_RUNTIME_HOST_LIFECYCLE"
+);
+
+/** builtin Host 与 worker HTTP server 的唯一生命周期 owner。 */
+export class BuiltinRuntimeHostLifecycle implements OnApplicationShutdown {
+  private shutdownPromise: Promise<void> | undefined;
+
+  constructor(
+    readonly host: RuntimeHost,
+    private readonly httpServer: WorkerHttpServer
+  ) {}
+
+  async initialize(): Promise<void> {
+    try {
+      // 孤儿清理失败时不开放 worker HTTP，也不让 Nest 应用启动成功。
+      await this.host.bootstrap();
+      await this.httpServer.start();
+    } catch (error) {
+      await this.host.shutdown();
+      throw error;
+    }
+  }
+
+  async onApplicationShutdown(): Promise<void> {
+    if (this.shutdownPromise) return this.shutdownPromise;
+    this.shutdownPromise = (async () => {
+      try {
+        await this.host.shutdown();
+      } finally {
+        await this.httpServer.stop();
+      }
+    })();
+    return this.shutdownPromise;
+  }
+}
+
+export const builtinRuntimeHostLifecycleProvider: FactoryProvider<BuiltinRuntimeHostLifecycle> = {
+  provide: BUILTIN_RUNTIME_HOST_LIFECYCLE,
   inject: [ConfigService, RuntimeHostRepository, RunEventService],
   useFactory: async (
     configService: ConfigService,
     repository: RuntimeHostRepository,
     runEvents: RunEventService
-  ): Promise<RuntimeHost> => {
+  ): Promise<BuiltinRuntimeHostLifecycle> => {
     const workerPort = configService.getBuiltinWorkerHttpPort();
     const apiBasePath = configService.getApiBasePath();
     const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
@@ -104,17 +142,18 @@ export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
 
     // builtin Host 自管 worker HTTP 服务器——worker 数据面对端不再连 server
     const httpServer = new WorkerHttpServer(host, workerPort, apiBasePath);
-    await httpServer.start();
+    const lifecycle = new BuiltinRuntimeHostLifecycle(host, httpServer);
+    await lifecycle.initialize();
     logger.log(
       `builtin Host worker HTTP server listening on port ${workerPort}`
     );
-
-    // 进程退出时清理(不阻塞)
-    process.on("beforeExit", () => {
-      host.drain();
-      void httpServer.stop();
-    });
-
-    return host;
+    return lifecycle;
   },
+};
+
+export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
+  provide: BUILTIN_RUNTIME_HOST,
+  inject: [BUILTIN_RUNTIME_HOST_LIFECYCLE],
+  useFactory: (lifecycle: BuiltinRuntimeHostLifecycle): RuntimeHost =>
+    lifecycle.host,
 };

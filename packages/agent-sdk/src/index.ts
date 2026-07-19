@@ -9,6 +9,8 @@ export type {
   AgentPluginCreateContext,
   AgentPluginModule,
   AgentProviderSettings,
+  AgentRuntimeRequirement,
+  AgentRuntimeRequirements,
   AgentRunInput,
   AgentRunPayload,
   AgentSubscription,

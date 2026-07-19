@@ -306,7 +306,8 @@ Runtime 内部 `apps/runtime/src/worker` 维持现状（只改连接对端）。
   容器不再跨 server 重启复用，接受，换取执行面零持久化）。现状"startToken 入库→重启
   复用"机制两种场景下都作废。
 - **Host 重启**（registered 机器上）：内存 worker 池丢失。
-  策略：启动时按 provider 标记（容器 label）发现孤儿并**一律 destroy**——
+  策略：启动时等待各 provider 的 orphan cleanup；Docker 按严格 managed/schema/runtime/scope/worker
+  labels 发现 exited/dead 孤儿并 destroy，删除前复查状态且**不做跨重启 adopt**——
   孤儿 worker 关联的 run 必已被 server 的 Host 判死路径终结，没有续接价值，
   重发现-续管的复杂度不值得买。
 - **worker 判死（fence）**：留在 Host，超时即判死不变；上行表现为该 worker

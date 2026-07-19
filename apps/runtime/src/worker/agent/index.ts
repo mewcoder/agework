@@ -1,5 +1,3 @@
-import { createAgentPlugin as createBuiltinAgentPlugin } from "@agework/adapters/plugin";
-import { createAgentPlugin as createAcpAgentPlugin } from "@agework/agent-acp";
 import type {
   AgentDriver,
   AgentRunInput,
@@ -17,6 +15,7 @@ import {
   loadAgentPlugins,
   parseAgentPluginPackages,
 } from "./plugin-loader";
+import { createBundledAgentPlugins } from "./bundled-plugins";
 
 export type { AgentDriver, AgentRunInput, AgentRunPayload } from "@agework/agent-sdk";
 
@@ -56,8 +55,7 @@ export async function createAgentDriver(
   }
 
   const registry = new AgentPluginRegistry();
-  registry.register(createBuiltinAgentPlugin());
-  registry.register(createAcpAgentPlugin());
+  for (const plugin of createBundledAgentPlugins()) registry.register(plugin);
   const externalPlugins = await loadAgentPlugins(
     parseAgentPluginPackages(process.env.AGEWORK_AGENT_PLUGINS)
   );

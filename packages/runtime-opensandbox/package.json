@@ -13,6 +13,11 @@
   },
   "scripts": {
     "build": "tsdown",
+    "infra:rebuild": "node scripts/infra.mjs rebuild",
+    "infra:up": "node scripts/infra.mjs up",
+    "infra:down": "node scripts/infra.mjs down",
+    "infra:logs": "node scripts/infra.mjs logs",
+    "infra:health": "node scripts/infra.mjs health",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

@@ -17,7 +17,7 @@ export function createRuntimeResolver(
   cfg: RuntimeHostProviderConfig,
   plugins: RuntimeProviderPlugin[] = [],
   configuredRuntimeTypes: readonly string[] = []
-): (type: RuntimeType) => RuntimeProvider {
+): RuntimeProviderResolver {
   const providers = new Map<RuntimeType, RuntimeProvider>([
     ["native", new NativeRuntimeProvider(cfg)],
   ]);
@@ -43,11 +43,19 @@ export function createRuntimeResolver(
       throw new Error(`Runtime provider is configured but not loaded: ${type}`);
     }
   }
-  return (type) => {
+  const resolve = ((type: RuntimeType) => {
     const provider = providers.get(type);
     if (!provider) {
       throw new Error(`Unknown runtime provider: ${type}`);
     }
     return provider;
-  };
+  }) as RuntimeProviderResolver;
+  resolve.list = () => [...providers.values()];
+  return resolve;
 }
+
+export type RuntimeProviderResolver = {
+  (type: RuntimeType): RuntimeProvider;
+  /** Host bootstrap 专用；provider 仍由 registry 单例持有。 */
+  list(): readonly RuntimeProvider[];
+};

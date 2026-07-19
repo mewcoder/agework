@@ -124,6 +124,10 @@ export const openCodeAcpProfile: AcpAgentProfile = {
   displayName: "OpenCode",
   command: "opencode",
   args: ["acp"],
+  runtimeRequirement: {
+    npmPackages: { "opencode-ai": "1.18.3" },
+    agentExecutable: "opencode",
+  },
   buildEnv(input) {
     const env: Record<string, string> = {
       ...input.baseEnv,

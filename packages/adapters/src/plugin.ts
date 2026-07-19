@@ -9,6 +9,7 @@ import {
 } from "@agework/agent-sdk";
 import { ClaudeAgentAdapter, cancelQuestion } from "./claude/business/claude-agent.adapter";
 import { createCodexAdapter, type CodexAgentInstance } from "./codex/factory";
+import { BUILTIN_AGENT_RUNTIME_REQUIREMENTS } from "./runtime-requirements";
 
 type BuiltinAdapter = ClaudeAgentAdapter | CodexAgentInstance;
 
@@ -108,7 +109,8 @@ export function createAgentPlugin(): AgentPlugin {
     apiVersion: 1,
     id: "builtin-agents",
     displayName: "AgeWork Built-in Agents",
-    agentTypes: ["claude", "codex"],
+    agentTypes: Object.keys(BUILTIN_AGENT_RUNTIME_REQUIREMENTS),
+    runtimeRequirements: BUILTIN_AGENT_RUNTIME_REQUIREMENTS,
     create: createBuiltinDriver,
   });
 }

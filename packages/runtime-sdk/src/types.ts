@@ -135,6 +135,11 @@ export type RuntimeStartOptions = {
  */
 export interface RuntimeProvider {
   readonly type: RuntimeType;
+  /**
+   * Host 启动时清理本 provider 留下、且已无法续管的本机资源。
+   * 可选能力；实现必须只清理自己具有充分 authority 的资源，不能做跨重启 adopt。
+   */
+  cleanupOrphans?(): Promise<void> | void;
   start(
     ctx: RuntimeLaunchContext,
     onExit?: () => void,

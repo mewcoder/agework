@@ -13,6 +13,22 @@ export const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const WORKER_IMAGE_TAG = "agework/runtime:latest";
 export const WORKER_DOCKERFILE = "apps/runtime/Dockerfile";
 
+export function syncBundledAgentDeps() {
+  console.log("pnpm --filter @agework/runtime sync:bundled-agent-deps");
+  const result = spawnSync(
+    "pnpm",
+    ["--filter", "@agework/runtime", "sync:bundled-agent-deps"],
+    { cwd: repoRoot, stdio: "inherit" }
+  );
+
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error(
+      `Bundled Agent dependency sync failed with exit code ${result.status}`
+    );
+  }
+}
+
 export function buildWorkerBundle() {
   console.log("pnpm exec turbo run build --filter=@agework/runtime");
   const result = spawnSync(
@@ -28,6 +44,7 @@ export function buildWorkerBundle() {
 }
 
 export function buildWorkerImage() {
+  syncBundledAgentDeps();
   buildWorkerBundle();
 
   console.log(`docker build -t ${WORKER_IMAGE_TAG} -f ${WORKER_DOCKERFILE} .`);

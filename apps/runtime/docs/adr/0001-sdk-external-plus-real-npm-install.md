@@ -19,6 +19,11 @@ Docker 镜像从来没有这个问题,因为它压根不依赖 bundle 里 `impor
 安装出的平台二进制包和主包是平级兄弟,从 `dist/main.js` 往上一层就能找到。这条路径被验证过是
 可靠的。
 
+`sdk-deps` 现在同时是所有官方 bundled Agent 的 managed Runtime 依赖前缀。
+依赖列表不再独立手工维护：Agent Plugin/Profile 声明 `runtimeRequirements`，
+`sync:bundled-agent-deps` 生成 package manifest、lockfile 与容器验证清单。
+Runtime typecheck/package 做静态一致性门禁，Docker build 在 `npm ci` 后验证真实 binary。
+
 决定:改回 `--external`,不再 inline 这两个 SDK。二进制的真实安装由 **apps/runtime 自己
 拥有和管理**——`apps/runtime` 的 build 脚本在 esbuild 之后跑 `scripts/install-sdk-deps.mjs`,
 复用 `sdk-deps/` 锁定清单做一次真实 `npm ci`,产出自成一体的

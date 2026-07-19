@@ -82,12 +82,29 @@ export type AgentPluginCreateContext = {
   pendingActionSink: AgentPendingActionSink;
 };
 
+/** Reproducible packages and binaries required by one agent in a managed runtime. */
+export type AgentRuntimeRequirement = {
+  /** Exact npm versions installed into the managed Runtime dependency prefix. */
+  npmPackages: Readonly<Record<string, string>>;
+  /** Agent CLI binary resolved through the managed Runtime PATH. */
+  agentExecutable?: string;
+};
+
+export type AgentRuntimeRequirements = Readonly<
+  Record<string, AgentRuntimeRequirement>
+>;
+
 /** One package may serve several agent types (for example the bundled ACP profiles). */
 export interface AgentPlugin {
   readonly apiVersion: 1;
   readonly id: string;
   readonly displayName: string;
   readonly agentTypes: readonly string[];
+  /**
+   * Managed-runtime requirements keyed by agentType. Optional for API v1
+   * compatibility; bundled plugins must provide it and are checked by Runtime.
+   */
+  readonly runtimeRequirements?: AgentRuntimeRequirements;
   create(
     context: AgentPluginCreateContext
   ): AgentDriver | Promise<AgentDriver>;

@@ -391,7 +391,7 @@ type RuntimeLaunchContext = {
 
 ### 7.2 Provider 改动
 
-- Docker：删除基于 ownerId 的稳定命名。可以不传 `--name` 让 Docker 自动生成，也可以仅为排查使用 `agework-worker-${workerId}`；两种方式都不进入公共契约。labels 分别记录 runtimeType、scope、subjectId、userId、workspaceId、workerId；stop/destroy 始终以 containerId 为准。稳定 owner 名称消失后，同名冲突恢复与 `expectedRuntimeInstanceId` 一并退役。
+- Docker：容器名仅用于诊断，格式为 `agework-<ws|user>-<subject sha256短hash>-<worker sha256短hash>`，不暴露 raw owner、不能单独作为 authority，也不进入公共契约；stop/destroy 始终以 containerId 为准。容器增加 `agework.io/managed-by=runtime-host`、`agework.io/schema-version=1`，并保留 runtime/scope/subject/workspace/worker labels。Host 启动仅发现并删除严格标记且状态为 exited/dead 的容器，删除前重新检查状态，不做跨重启 adopt；旧版缺少 managed/schema/Host authority 的容器不自动清理。
 - Runtime SDK 的 `safePathPart` 当前只用于 worker resource env 与日志文件名。相关字段若没有真实消费者则删除；若仍需保留，直接以 workerId 生成本次 worker 的诊断名称，不再建立通用 resourceName 概念。
 - OpenSandbox 没有 owner-based sandbox name，实际控制键始终是 sandboxId。目标只调整 metadata/env/log 的 isolation 表达，不改变 sandboxId 生命周期控制；外部服务 metadata 长度限制当前未验证，不能依赖 raw ID 一定可接受。
 - Native：child channel 按 `workerId` 索引，不再按裸 ownerId；stop/release 使用 workerId。

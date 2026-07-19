@@ -4,7 +4,10 @@ import { EventEmitterModule } from "@nestjs/event-emitter";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConfigModule } from "../config/config.module";
 import { ConfigService } from "../config/config.service";
-import { BUILTIN_RUNTIME_HOST } from "../runtime-host/contract/builtin-runtime-host";
+import {
+  BUILTIN_RUNTIME_HOST,
+  BUILTIN_RUNTIME_HOST_LIFECYCLE,
+} from "../runtime-host/contract/builtin-runtime-host";
 import { ConversationService } from "../conversation/conversation.service";
 import { ModelProviderService } from "../model-provider/model-provider.service";
 import { PrismaModule } from "../prisma/prisma.module";
@@ -140,6 +143,8 @@ async function createRunsTestingModule(
         .fn()
         .mockResolvedValue({ path: "", status: "", before: "", after: "" }),
     })
+    .overrideProvider(BUILTIN_RUNTIME_HOST_LIFECYCLE)
+    .useValue({})
     .overrideProvider(ModelProviderService)
     .useValue({})
     .overrideProvider(ConversationService)

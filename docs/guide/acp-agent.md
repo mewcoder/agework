@@ -66,6 +66,10 @@ packages/agent-acp/src/agents/
 `engine/` 负责 ACP client、session、process 和协议能力，`bridge/` 负责权限与 AG-UI
 映射；新增 Agent 通常不需要修改这两个通用层。
 
+每个 bundled Profile 还必须声明 `runtimeRequirement`：精确 npm 包版本和主
+binary。Runtime 会把 Profile 的 `command` 直接生成为 `acpExecutable`，因此 Pi 的
+`pi-acp` bridge 也会被镜像门禁验证，无需在两处重复声明。
+
 ## 4. 实现 AcpAgentProfile
 
 Profile 契约：
@@ -76,6 +80,7 @@ export interface AcpAgentProfile {
   displayName: string;
   command: string;
   args: readonly string[];
+  runtimeRequirement: AgentRuntimeRequirement;
 
   buildEnv(input: AcpProfileEnvInput): Record<string, string>;
 

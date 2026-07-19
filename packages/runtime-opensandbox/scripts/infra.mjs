@@ -8,9 +8,9 @@ import {
   checkWorkerImageExists,
   ensureWorkerImage,
   isWorkerImageStale,
-} from "./worker-image.mjs";
+} from "../../../scripts/worker-image.mjs";
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
 const COMPOSE_FILE = "infra/opensandbox/docker-compose.yml";
 const CONFIG_TOML = "infra/opensandbox/config.toml";
@@ -113,7 +113,7 @@ async function cmdUp() {
   await waitForHealth();
   if (isWorkerImageStale()) {
     console.log(
-      "⚠️  runtime/worker 源码比 agework/runtime:latest 镜像新，建议执行 pnpm opensandbox:rebuild"
+      "⚠️  Runtime 源码比 agework/runtime:latest 镜像新，建议执行 pnpm --filter @agework/runtime-opensandbox infra:rebuild"
     );
   }
 }
@@ -146,7 +146,7 @@ if (isMain) {
       break;
     default:
       console.error(`Unknown command: ${command}`);
-      console.error("Usage: node scripts/opensandbox.mjs <up|down|logs|health|rebuild>");
+      console.error("Usage: node scripts/infra.mjs <up|down|logs|health|rebuild>");
       process.exit(1);
   }
 }

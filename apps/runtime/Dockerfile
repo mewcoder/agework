@@ -27,9 +27,17 @@ WORKDIR /app
 
 COPY apps/runtime/sdk-deps/package.json ./package.json
 COPY apps/runtime/sdk-deps/package-lock.json ./package-lock.json
-RUN npm ci --omit=dev --no-audit --no-fund
+COPY apps/runtime/sdk-deps/bundled-agent-runtime.json ./bundled-agent-runtime.json
+COPY apps/runtime/scripts/verify-bundled-agent-runtime.mjs ./verify-bundled-agent-runtime.mjs
+RUN npm ci --omit=dev --no-audit --no-fund \
+    && node ./verify-bundled-agent-runtime.mjs /app
 COPY apps/runtime/dist/main.js ./dist/main.js
 COPY apps/runtime/dist/runner.js ./dist/runner.js
+
+# Managed Runtime dependencies share one npm prefix. Adding its bin directory
+# to PATH lets every manifest-declared Agent CLI resolve without another
+# per-agent Dockerfile edit; explicit AGEWORK_*_CLI_PATH values still override it.
+ENV PATH="/app/node_modules/.bin:${PATH}"
 
 # Claude CLI 拒绝在 root/sudo 下使用 bypassPermissions,
 # 所以把 node 官方镜像内置的 UID 1000 用户重命名为 agework 后运行。

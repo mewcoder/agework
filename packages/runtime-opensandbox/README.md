@@ -49,3 +49,13 @@ runtime type 显式包含 `opensandbox` 时按各自配置动态加载它。
 ```bash
 pnpm --filter @agework/runtime-opensandbox build
 ```
+
+本地 OpenSandbox Server 的 compose 运维也归本包管理，不占用根 `package.json` 脚本：
+
+```bash
+pnpm --filter @agework/runtime-opensandbox infra:up
+pnpm --filter @agework/runtime-opensandbox infra:down
+pnpm --filter @agework/runtime-opensandbox infra:logs
+pnpm --filter @agework/runtime-opensandbox infra:health
+pnpm --filter @agework/runtime-opensandbox infra:rebuild
+```
