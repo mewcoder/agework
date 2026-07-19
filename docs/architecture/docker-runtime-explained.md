@@ -3,8 +3,7 @@
 本文用大白话解释项目里和 Docker、OpenSandbox、worker 镜像相关的文件分别是干什么的，
 面向不熟悉 Docker 的读者。涉及的运行时（runtime provider）实现细节见
 `apps/server/src/runtime/`，实验性 OpenSandbox 的操作文档见
-`docs/experimental/opensandbox.md`，更深入的历史设计见
-`docs/archive/superpowers/specs/`。
+`docs/experimental/opensandbox.md`。
 
 ## 1. 为什么要用 Docker
 

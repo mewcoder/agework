@@ -24,8 +24,8 @@ manager→worker 这一层（Runtime Host 的 native provider 里同样整份 sp
 - `apps/runtime` 的构建从单入口改成多入口(esbuild 产出 `dist/main.js` + `dist/runner.js`
   两个独立产物),Docker 镜像与 `apps/server/scripts/embed-runtime.mjs` 的内嵌产物都要跟着复制
   两个文件而不是一个。
-- `docs/todo/runtime-worker-module-refactor.md` 里"role 分派沿用现有 env 机制"一节所述的
+- 旧 runtime-worker-module-refactor 文档里"role 分派沿用现有 env 机制"一节所述的
   worker/runner 二级分派方案,以及"`packages/worker/main.ts` 保留到 Phase 4"的过渡状态,均由本
-  决定取代;文档需要同步更新,不再以旧述为准。
+  决定取代;不再以旧述为准。
 - `packages/worker/Dockerfile`、`package.docker.json` 及自身的 esbuild build 脚本随 `main.ts`
   删除一并清理(此前已因产物无活路径引用被标记为孤儿)。

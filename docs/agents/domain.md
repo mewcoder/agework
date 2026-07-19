@@ -21,7 +21,6 @@ Contexts in this repo:
 | Context | ADR location |
 |---|---|
 | `apps/runtime` | `apps/runtime/docs/adr/` |
-| `apps/server` runtime module | `apps/server/src/runtime/docs/adr/` |
 | `apps/server` runtime-host module | `apps/server/src/runtime-host/docs/adr/` |
 | `packages/runtime-sdk` | `packages/runtime-sdk/docs/adr/` |
 | `apps/runtime`（含 Worker） | `apps/runtime/docs/adr/` |
@@ -35,7 +34,6 @@ If a context has its own `CONTEXT.md` (per-context glossary), read it before wor
 ├── CONTEXT-MAP.md                     ← indexes all contexts
 └── (per-context ADR dirs, e.g.)
     apps/runtime/docs/adr/
-    apps/server/src/runtime/docs/adr/
     apps/server/src/runtime-host/docs/adr/
     packages/runtime-sdk/docs/adr/
     apps/runtime/docs/adr/

@@ -17,7 +17,7 @@ Runtime manager (registered daemon entry + builtin Host library). `src/host/` �
 
 RuntimeHost 的注册、软删除、EnvConfig 两层分离、CLI 检测归属。Phase 3：`Runtime` 模型改名 `RuntimeHost`，`runtimeType` 列删除（能力矩阵在 `capabilities` JSON），builtin 假行合并为一行 `"builtin"`。
 
-- ADRs: [`apps/server/src/runtime/docs/adr/`](apps/server/src/runtime/docs/adr/)
+- ADRs: [`apps/server/src/runtime-host/docs/adr/`](apps/server/src/runtime-host/docs/adr/)
   - `0001-runtime-soft-delete-required-fk.md` — RuntimeHost 只软删除，Workspace.runtimeHostId 必填
   - `0002-envconfig-two-layer-detected-vs-override.md` — EnvConfig 两层分离：detected 与 override 独立存储
   - `0003-cli-resolver-in-runtime-not-server.md` — CliResolver 放 apps/runtime，server 不做 CLI 检测

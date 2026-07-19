@@ -119,10 +119,6 @@ Web UI
 - **Worker**：负责启动 Agent adapter、转发任务、回传事件和运行状态。
 - **Agent Adapter**：把不同 Agent 的 SDK / CLI / 协议事件转换为 AgeWork 统一事件流。
 
-系统架构图：
-
-![AgeWork 系统架构图](docs/agework-system-architecture.png)
-
 ## Tech stack
 
 - Monorepo: pnpm workspace + Turborepo

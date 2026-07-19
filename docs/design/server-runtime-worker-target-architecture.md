@@ -329,7 +329,7 @@ Runtime 内部 `apps/runtime/src/worker` 维持现状（只改连接对端）。
 
 | 被推翻的定案                                                                                    | 替代                                                                                                                                          |
 | ----------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docs/design/runtime-workspace-worker-schema.md` 的 Worker + WorkerWorkspaceBinding 两表        | 出库，成为执行面内存状态。schema 只剩 RuntimeHost + Workspace。该文档中"防重键只能是裸 ownerId"的论证随协议整体下沉后依然成立，只是换了住址。 |
+| 旧 `runtime-workspace-worker-schema.md`（已删除）的 Worker + WorkerWorkspaceBinding 两表 | 出库，成为执行面内存状态。schema 只剩 RuntimeHost + Workspace。该文档中"防重键只能是裸 ownerId"的论证随协议整体下沉后依然成立，只是换了住址。 |
 | 同文档的 Runtime "一类型一行"模型（builtin 固定三行、registered 每机每类型一行）                | **一机一行** RuntimeHost + capabilities 能力矩阵；Workspace 绑定从单个 `runtimeId` 改为 `runtimeHostId` + `runtimeType` 两字段。              |
 | worker-manager ADR-0001「worker 是主概念，runtime 是载体」                                      | server 视角不再看见 worker；Host 内部 worker 仍是主概念。两份 CONTEXT.md 的主从矛盾随之消失。                                                 |
 | worker-manager ADR-0002「runtime 载体收尾分 stop/destroy」                                      | 降级为 provider 缓存策略，领域层只有 worker 存活/消失。                                                                                       |

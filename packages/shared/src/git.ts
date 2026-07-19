@@ -1,7 +1,7 @@
 /**
  * 工作空间 git 变更查看（纯 child_process，无运行时依赖）。
  *
- * 语义（见 docs/todo/workspace-diff-and-versioning-design.md，本次收窄为只 local）：
+ * 语义（原 workspace-diff 设计稿，本次收窄为只 local）：
  * git-only、累计 vs HEAD、只读。server 就是文件 owner，直接在本机 workspace 目录
  * 上跑 git，不经 worker。
  *

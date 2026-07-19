@@ -1,7 +1,6 @@
 # Agent 日志与事件查看指南
 
-> 本文是 [agent-event-trace-logging-plan.md](./agent-event-trace-logging-plan.md) Logging-only MVP 落地后的实操指南：出问题时去哪看、怎么看、怎么用。
-> 设计背景和字段定义见 [agework-agent-event-protocol-design.md](./agework-agent-event-protocol-design.md)；ENV 默认值表见 [config.md](../config.md)。
+> 设计背景和字段定义见源码 `RunEvent` / `AgentEvent` 协议类型；ENV 默认值表见 [config.md](../config.md)。
 
 ## 总览：四个落点
 
@@ -162,7 +161,4 @@ cat ~/.agework/logs/runtime/<conversationId>.worker.log \
 
 ## 相关文档
 
-- [agent-event-trace-logging-plan.md](./agent-event-trace-logging-plan.md) — 本轮改造的范围、决策和未来阶段规划
-- [agework-agent-event-protocol-design.md](./agework-agent-event-protocol-design.md) — 事件协议设计背景
-- [agent-event-system-review.md](./agent-event-system-review.md) — 改造前的体系评审
 - [config.md](../config.md) — 全部 ENV 默认值参考表

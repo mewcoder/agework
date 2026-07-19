@@ -4,7 +4,7 @@
 
 > 状态: 已拍板
 > 前置: ADR-0009（文件命令走独立 owner-scoped 通道）
-> 变更: 推翻 `docs/todo/workspace-file-preview-design.md` §3 中"为什么 local / docker 也不走 server 直读"的结论——builtin runtime 文件预览改为 server 直读，registered runtime 保持 worker 代理不变。
+> 变更: 推翻原 workspace-file-preview 设计稿 §3 中"为什么 local / docker 也不走 server 直读"的结论——builtin runtime 文件预览改为 server 直读，registered runtime 保持 worker 代理不变。
 
 ## 1. 背景
 

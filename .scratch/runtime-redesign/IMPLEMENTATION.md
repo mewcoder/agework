@@ -58,7 +58,7 @@
 
 - wm-0003 推翻 → 新 ADR 放 `apps/server/src/worker-manager/docs/adr/`
 - wm-0004 部分推翻 → 同上
-- wm-0005 保留+精确化 → 放 `apps/server/src/runtime/docs/adr/`(精确化 builtin→managed native)
+- wm-0005 保留+精确化 → 放 `apps/server/src/runtime-host/docs/adr/`(精确化 builtin→managed native)
 
 ## 6. 命令速查
 

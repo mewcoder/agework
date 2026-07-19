@@ -50,9 +50,8 @@
 - `WorkerCommands.processedCommands`(`commands.ts`,已存在的 commandId 去重 Set)挡**同一进程生命周期内**
   的重复投递;进程重启即清空,对文件命令天然生效(白赚一层)。
 - `OwnerCommand.expiresAt`(server 入队时取 now + awaiter 超时 10s)挡**跨重启**的陈旧重放——worker
-  分流处先查过期,过期直接丢弃、不执行不回传。这正是 `processedCommands` 挡不住、对将来写命令(见
-  workspace-diff-and-versioning-design.md 的 `discard_file_change`)危险的场景:重启后重放几分钟前的
-  写操作会在用户不知情时改工作区。
+  分流处先查过期,过期直接丢弃、不执行不回传。这正是 `processedCommands` 挡不住、对将来写命令(如
+  `discard_file_change`)危险的场景:重启后重放几分钟前的
 - server `file-command-results` 端点收到未知 `commandId`(pending 已超时清理)时静默返回 200——迟到
   结果是协议正常情况,不是异常。
 

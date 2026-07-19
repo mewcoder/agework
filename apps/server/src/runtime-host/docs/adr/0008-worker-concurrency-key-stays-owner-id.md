@@ -27,7 +27,7 @@ Worker，需要把 register/poll/心跳/handshake 整条协议的 key 从裸 `ow
   历史行必须在下一次起号前彻底清空，不能只标终态再等下次 sweep——sweep 如果按
   `(runtimeType, isolationScope, ownerId)` 三元组做，删不掉"同 owner 不同 runtimeType"
   的旧终态行，会在裸 `ownerId @unique` 下产生假冲突。因此 Worker 的停止/报错路径改成
-  立刻物理删行，不再是标记终态 + 懒惰 sweep（见 `docs/design/runtime-workspace-worker-schema.md`
-  "为什么 Worker 停了就删"）。
+  立刻物理删行，不再是标记终态 + 懒惰 sweep（见
+  `docs/design/server-runtime-worker-target-architecture.md` 的翻案清单）。
 - 一个用户同时只能有一个活跃的 user-scope Worker，不能跨两台 Runtime 并行——沿用现状限制，
   不是回归。

@@ -8,8 +8,7 @@
 契约装配它。通用代码示例见 [`packages/runtime-opensandbox/README.md`](../../packages/runtime-opensandbox/README.md)。
 
 记录使用 OpenSandbox 运行时（runtime type `opensandbox`，需将 `opensandbox` 加入
-`AGEWORK_RUNTIME_ALLOWED_TYPES`）时涉及的文件、启动方式和常见报错排查。历史设计文档见
-`docs/archive/superpowers/specs/`。
+`AGEWORK_RUNTIME_ALLOWED_TYPES`）时涉及的文件、启动方式和常见报错排查。
 
 ## 相关文件
 
