@@ -80,6 +80,7 @@ export class RunRecoveryService
   }
 
   async failInterruptedRuns(): Promise<void> {
+    await this.reconcileConversationRunStatuses();
     const activeRuns = await this.runRepository.listActive();
     if (activeRuns.length === 0) {
       this.logger.log("No interrupted active runs found.");
@@ -105,6 +106,25 @@ export class RunRecoveryService
       }
     }
     this.startAbandonedSweep();
+  }
+
+  private async reconcileConversationRunStatuses(): Promise<void> {
+    const staleConversations =
+      await this.runRepository.findRunningConversationsWithoutActiveRun();
+    for (const conversation of staleConversations) {
+      const latestStatus = conversation.runs[0]?.status;
+      const runStatus =
+        latestStatus === "finished" || latestStatus === "cancelled"
+          ? "idle"
+          : "error";
+      await this.runStatusService.reconcileConversationRunStatus({
+        conversationId: conversation.id,
+        runStatus,
+      });
+      this.logger.warn(
+        `Reconciled stale conversation ${conversation.id} run status to ${runStatus}`
+      );
+    }
   }
 
   private async retryHostReconciliation(runtimeHostId: string): Promise<void> {

@@ -215,6 +215,45 @@ describe("RunRepository", () => {
     expect(run?.id).toBe("run-1");
   });
 
+  it("finds running Conversation projections without an active Run", async () => {
+    const rows = [{ id: "conversation-1", runs: [{ status: "finished" }] }];
+    const findMany = vi.fn().mockResolvedValue(rows);
+    const service = new RunRepository({
+      conversation: { findMany },
+    } as never);
+
+    await expect(
+      service.findRunningConversationsWithoutActiveRun()
+    ).resolves.toEqual(rows);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        deletedAt: null,
+        runStatus: "running",
+        runs: {
+          none: {
+            status: {
+              in: [
+                "queued",
+                "preparing",
+                "running",
+                "cancelling",
+                "requires_action",
+              ],
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        runs: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    });
+  });
+
   it("finds the conversationId for a run", async () => {
     const findUnique = vi
       .fn()

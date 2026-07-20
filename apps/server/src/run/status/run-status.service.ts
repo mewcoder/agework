@@ -183,6 +183,17 @@ export class RunStatusService {
     );
   }
 
+  /** 重启对账专用：修复没有活跃 Run 时遗留的 Conversation 状态投影。 */
+  async reconcileConversationRunStatus(input: {
+    conversationId: string;
+    runStatus: "idle" | "error";
+  }): Promise<void> {
+    await this.conversationService.setConversationRunState(
+      input.conversationId,
+      { runStatus: input.runStatus }
+    );
+  }
+
   /** 平台侧取消请求:活跃 run 标记 cancelling 并记账;终态等 worker 上报 cancelled 收敛。 */
   async markCancelRequested(runId: string, reason?: string): Promise<void> {
     await this.runRepository.markCancelling(runId);

@@ -30,9 +30,11 @@ function makeDeps(activeRuns: unknown[]) {
   const runRepository: Partial<RunRepository> = {
     listActive: vi.fn().mockResolvedValue(activeRuns),
     findRuntimeReconciliationRows: vi.fn().mockResolvedValue([]),
+    findRunningConversationsWithoutActiveRun: vi.fn().mockResolvedValue([]),
   };
   const runStatusService: Partial<RunStatusService> = {
     failRun: vi.fn().mockResolvedValue(undefined),
+    reconcileConversationRunStatus: vi.fn().mockResolvedValue(undefined),
   };
   const runtimeHostService: Partial<RuntimeHostService> = {
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
@@ -118,6 +120,46 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
       runtimeHostId: "rt-registered-1",
       runId: "run-1",
+    });
+  });
+
+  it("repairs stale Conversation projections before recovering active runs", async () => {
+    const deps = makeDeps([]);
+    deps.runRepository.findRunningConversationsWithoutActiveRun = vi
+      .fn()
+      .mockResolvedValue([
+        { id: "conversation-finished", runs: [{ status: "finished" }] },
+        { id: "conversation-cancelled", runs: [{ status: "cancelled" }] },
+        { id: "conversation-error", runs: [{ status: "error" }] },
+        { id: "conversation-no-run", runs: [] },
+      ]);
+    service = makeService(deps, makeRuntimeHost());
+
+    await service.failInterruptedRuns();
+
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-finished",
+      runStatus: "idle",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-cancelled",
+      runStatus: "idle",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-error",
+      runStatus: "error",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-no-run",
+      runStatus: "error",
     });
   });
 
