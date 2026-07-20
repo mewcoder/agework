@@ -92,19 +92,41 @@ export class RunLauncher {
     const scope = placement.scope;
     const stream = new RunStream(res);
 
-    await this.claimRun({
+    const claimedConversation = await this.claimRun({
       conversationId,
       userId,
       runId,
       interruptReason,
       stopActiveRun: ports.stopActiveRun,
     });
-    await this.saveUserTurn({
-      conversationId,
-      userMessage,
-      agentType,
-      modelProviderId,
-    });
+
+    try {
+      await this.saveUserTurn({
+        conversationId,
+        userMessage,
+        agentType,
+        modelProviderId,
+      });
+      await this.createRun({
+        runId,
+        conversationId,
+        workspaceId: placement.workspaceId,
+        agentType,
+        runtimeType,
+        scope,
+        userMessageId,
+        userId,
+      });
+    } catch (err) {
+      await this.handlePreRunFailure({
+        runId,
+        conversationId,
+        claimedConversation,
+        stream,
+        error: err,
+      });
+      return;
+    }
 
     const aggregator = new AssistantMessageAggregator();
     const saveRun = this.makeSaveRun({ conversationId, runId, aggregator });
@@ -119,19 +141,6 @@ export class RunLauncher {
       runtimeType,
       scope,
     });
-
-    const runCreated = await this.createRun({
-      runId,
-      conversationId,
-      workspaceId: placement.workspaceId,
-      agentType,
-      runtimeType,
-      scope,
-      userMessageId,
-      userId,
-      stream,
-    });
-    if (!runCreated) return;
 
     const runtimeHandle: RunExecutionHandle = {
       runId,
@@ -226,14 +235,14 @@ export class RunLauncher {
     runId: string;
     interruptReason?: "user_steered";
     stopActiveRun: StopActiveRun;
-  }): Promise<void> {
+  }): Promise<boolean> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
     const activated = await this.conversationService.activateConversation(
       conversationId,
       userId
     );
-    if (activated) return;
+    if (activated) return true;
     if (interruptReason === "user_steered") {
       await stopActiveRun(conversationId, {
         reason: "user_steered",
@@ -243,7 +252,7 @@ export class RunLauncher {
         conversationId,
         runId,
       });
-      return;
+      return false;
     }
 
     throw new ConflictException(
@@ -317,8 +326,7 @@ export class RunLauncher {
     scope: string;
     userMessageId?: string;
     userId: string;
-    stream: RunStream;
-  }): Promise<boolean> {
+  }): Promise<void> {
     const {
       runId,
       conversationId,
@@ -328,57 +336,68 @@ export class RunLauncher {
       scope,
       userMessageId,
       userId,
-      stream,
     } = input;
 
-    try {
-      await this.runRepository.create({
-        id: runId,
-        conversationId,
-        agentType,
-        runtimeType,
-      });
-      this.recordRunEvent(
-        this.runEvents.runCreated({
-          runId,
-          conversationId,
-          workspaceId,
-          agentType,
-          runtimeType,
-          scope,
-        }),
-        `record run created for run ${runId}`
-      );
-      if (userMessageId) {
-        await this.conversationService
-          .attachMessageToRun(conversationId, userMessageId, runId)
-          .catch(
-            swallow(
-              this.logger,
-              `attach user message ${userMessageId} to run ${runId}`
-            )
-          );
-        this.recordRunEvent(
-          this.runEvents.messageAccepted({
-            runId,
-            conversationId,
-            messageId: userMessageId,
-            userId,
-          }),
-          `record message accepted for run ${runId}`
-        );
-      }
-      return true;
-    } catch (err) {
-      this.logger.warn("create run record failed", {
+    await this.runRepository.create({
+      id: runId,
+      conversationId,
+      agentType,
+      runtimeType,
+    });
+    this.recordRunEvent(
+      this.runEvents.runCreated({
         runId,
         conversationId,
-        ...errorLogFields(err),
-      });
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      stream.writeError({ threadId: conversationId, runId, message: errorMsg });
+        workspaceId,
+        agentType,
+        runtimeType,
+        scope,
+      }),
+      `record run created for run ${runId}`
+    );
+    if (userMessageId) {
+      await this.conversationService
+        .attachMessageToRun(conversationId, userMessageId, runId)
+        .catch(
+          swallow(
+            this.logger,
+            `attach user message ${userMessageId} to run ${runId}`
+          )
+        );
+      this.recordRunEvent(
+        this.runEvents.messageAccepted({
+          runId,
+          conversationId,
+          messageId: userMessageId,
+          userId,
+        }),
+        `record message accepted for run ${runId}`
+      );
+    }
+  }
+
+  /** Run 行尚未创建时失败：释放本次会话 claim，并结束当前响应。 */
+  private async handlePreRunFailure(input: {
+    runId: string;
+    conversationId: string;
+    claimedConversation: boolean;
+    stream: RunStream;
+    error: unknown;
+  }): Promise<void> {
+    const { runId, conversationId, claimedConversation, stream, error } = input;
+    this.logger.warn("prepare run failed", {
+      runId,
+      conversationId,
+      ...errorLogFields(error),
+    });
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      if (claimedConversation) {
+        await this.runStatusService.failLaunchClaim({ conversationId });
+      }
+    } finally {
+      stream.writeError({ threadId: conversationId, runId, message });
       stream.end();
-      return false;
     }
   }
 

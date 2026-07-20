@@ -113,6 +113,7 @@ describe("RunLauncher", () => {
     };
     mockRunStatusService = {
       failRun: vi.fn().mockResolvedValue(undefined),
+      failLaunchClaim: vi.fn().mockResolvedValue(undefined),
     };
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
@@ -295,6 +296,44 @@ describe("RunLauncher", () => {
     expect(mockLiveRunRegistry.register).toHaveBeenCalled();
     expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(res.write).not.toHaveBeenCalled();
+  });
+
+  it("releases the conversation claim when run creation fails", async () => {
+    mockRunRepository.create = vi
+      .fn()
+      .mockRejectedValue(new Error("database unavailable"));
+    const res = makeRes();
+
+    await launch(makeStartInput({ res }));
+
+    expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
+    expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining("database unavailable")
+    );
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it("releases the conversation claim when saving the user turn fails", async () => {
+    mockConversationEffects.saveUserMessage = vi
+      .fn()
+      .mockRejectedValue(new Error("message write failed"));
+    const res = makeRes();
+
+    await launch(
+      makeStartInput({
+        res,
+        userMessage: { id: "msg-1", content: "hi" },
+      })
+    );
+
+    expect(mockRunRepository.create).not.toHaveBeenCalled();
+    expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      conversationId: "conversation-1",
+    });
+    expect(res.end).toHaveBeenCalled();
   });
 
   it("routes submit failure through the run status owner", async () => {

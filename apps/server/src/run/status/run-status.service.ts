@@ -168,6 +168,21 @@ export class RunStatusService {
     });
   }
 
+  /**
+   * Run 行创建前失败时释放 Conversation claim。若已有别的活跃 Run 接管会话，
+   * 不覆盖它的 running 投影。
+   */
+  async failLaunchClaim(input: { conversationId: string }): Promise<void> {
+    const activeRun = await this.runRepository.findActiveByConversationId(
+      input.conversationId
+    );
+    if (activeRun) return;
+    await this.conversationService.setConversationRunState(
+      input.conversationId,
+      { runStatus: "error" }
+    );
+  }
+
   /** 平台侧取消请求:活跃 run 标记 cancelling 并记账;终态等 worker 上报 cancelled 收敛。 */
   async markCancelRequested(runId: string, reason?: string): Promise<void> {
     await this.runRepository.markCancelling(runId);

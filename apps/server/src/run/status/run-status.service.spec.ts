@@ -314,6 +314,27 @@ describe("RunStatusService", () => {
     expect(unregister).toHaveBeenCalledWith("run-1");
   });
 
+  it("releases a failed launch claim when no run row became active", async () => {
+    const { handler, runConversation } = makeSubject();
+
+    await handler.failLaunchClaim({ conversationId: "conversation-1" });
+
+    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+      "conversation-1",
+      { runStatus: "error" }
+    );
+  });
+
+  it("does not release a launch claim after another run became active", async () => {
+    const { handler, runConversation } = makeSubject({
+      activeRun: { id: "run-2" },
+    });
+
+    await handler.failLaunchClaim({ conversationId: "conversation-1" });
+
+    expect(runConversation.setConversationRunState).not.toHaveBeenCalled();
+  });
+
   it("marks cancelling and records a platform status event on cancel request", async () => {
     const { handler, runRepository, runEvents } = makeSubject();
 
