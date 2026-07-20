@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { listBundledAgentPluginIds } from "../src/worker/agent/bundled-plugins.ts";
+import { listBundledAgentPluginIds } from "../src/worker/agent/bundled-plugin-manifest.ts";
 import { BUILTIN_AGENT_RUNTIME_REQUIREMENTS } from "../../../packages/adapters/src/runtime-requirements.ts";
 import { listAcpProfiles } from "../../../packages/agent-acp/src/agents/registry.ts";
 import type {
