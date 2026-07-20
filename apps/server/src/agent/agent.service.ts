@@ -204,16 +204,13 @@ export class AgentService {
     await this.runService.resume(conversationId, res);
   }
 
-  /** 停止 conversation 的活跃 run；若无内存 handle 但状态仍为 running 则重置为 idle。 */
+  /** 校验 conversation 归属后停止活跃 run；状态收敛统一归 RunStatusService。 */
   async stop(conversationId: string, user: JwtUser): Promise<void> {
-    const conversation = await this.conversationService.findById(
+    await this.conversationService.findById(
       user.userId,
       conversationId
     );
-    const hadHandle = await this.runService.stop(conversationId);
-    if (!hadHandle && conversation.runStatus === "running") {
-      await this.conversationService.setRunStatus(conversationId, "idle");
-    }
+    await this.runService.stop(conversationId);
   }
 
   private getLastUserMessage(

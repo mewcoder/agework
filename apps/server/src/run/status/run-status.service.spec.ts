@@ -330,11 +330,19 @@ describe("RunStatusService", () => {
   });
 
   it("marks cancelled and records a platform status event when no handle exists", async () => {
-    const { handler, runRepository, runEvents } = makeSubject();
+    const { handler, runRepository, runConversation, runEvents } =
+      makeSubject();
 
-    await handler.markCancelledWithoutHandle("run-1");
+    await handler.markCancelledWithoutHandle({
+      runId: "run-1",
+      conversationId: "conversation-1",
+    });
 
     expect(runRepository.markCancelled).toHaveBeenCalledWith("run-1");
+    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+      "conversation-1",
+      { runStatus: "idle" }
+    );
     expect(runEvents.runStatusChanged).toHaveBeenCalledWith({
       runId: "run-1",
       origin: "platform",

@@ -342,11 +342,9 @@ export class ConversationService {
 
   /**
    * 原子切换会话运行状态;切到 `running` 时要求当前状态为 `idle`/`error`,防止重复启动 run。
-   * 返回是否命中并发生变更。
-   * 调用方:`AgentService`(停止后置 idle)、`RunLauncher`(激活前置 running)、
-   * `RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)。
+   * 仅供本 Service 的激活/状态投影入口复用,返回是否命中并发生变更。
    */
-  async setRunStatus(
+  private async setRunStatus(
     conversationId: string,
     runStatus: "idle" | "running" | "error"
   ): Promise<boolean> {
@@ -356,7 +354,7 @@ export class ConversationService {
   /**
    * ConversationEffectsPort 实现:原子激活会话(setRunStatus("running")),
    * 激活失败时校验归属(findById 抛 NotFoundException),返回是否成功激活。
-   * 调用方:`RunLauncher.claimRun`,经 Port 回流,run 模块不直接依赖本 Service。
+   * 调用方:`RunLauncher.claimRun`。
    */
   async activateConversation(
     conversationId: string,
@@ -370,8 +368,7 @@ export class ConversationService {
 
   /**
    * ConversationEffectsPort 实现:设置会话运行终态 / 中间态(idle / error / pendingUserAction)。
-   * 调用方:`RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)、
-   * `RunLauncher`(startWorker 失败时置 error),经 Port 回流。
+   * run 状态投影调用方统一为 `RunStatusService`。
    */
   async setConversationRunState(
     conversationId: string,

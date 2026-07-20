@@ -472,7 +472,10 @@ describe("RunService", () => {
 
       expect(
         mockRunStatusService.markCancelledWithoutHandle
-      ).toHaveBeenCalledWith("run-1");
+      ).toHaveBeenCalledWith({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      });
       expect(hadHandle).toBe(false);
     });
 

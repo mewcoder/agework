@@ -179,15 +179,24 @@ export class RunStatusService {
     );
   }
 
-  /** 平台侧取消:DB 有活跃行但无内存 handle(重启遗留等),直接落 cancelled 终态并记账。 */
-  async markCancelledWithoutHandle(runId: string): Promise<void> {
-    await this.runRepository.markCancelled(runId);
-    this.recordPlatformStatusChanged(
-      runId,
-      "cancelled",
-      "cancelled_without_handle",
-      `record cancel without handle for run ${runId}`
-    );
+  /** 平台侧取消:DB 有活跃行但无内存 handle(重启遗留等),仍复用完整终态序列。 */
+  async markCancelledWithoutHandle(input: {
+    runId: string;
+    conversationId: string;
+  }): Promise<void> {
+    const payload: RunStatusPayload = {
+      status: "cancelled",
+      error: "cancelled_without_handle",
+    };
+    const decision = this.decide(input.runId, payload);
+    if (decision.action === "ignore") return;
+    await this.apply({
+      runId: input.runId,
+      payload,
+      effect: decision.effect,
+      conversationId: input.conversationId,
+      origin: "platform",
+    });
   }
 
   private recordStatusEvent(runId: string, payload: RunStatusPayload): void {

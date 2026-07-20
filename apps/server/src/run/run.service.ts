@@ -265,8 +265,7 @@ export class RunService implements OnApplicationBootstrap {
 
   /**
    * 停止指定 conversation 的活跃 run。
-   * @returns 是否存在活跃的 in-memory run handle。
-   *   conversation agent 路由用此判断是否需要重置 conversation status。
+   * @returns 是否存在活跃的 in-memory run handle 并已下发取消命令。
    */
   async stop(
     conversationId: string,
@@ -280,9 +279,10 @@ export class RunService implements OnApplicationBootstrap {
     if (!handle) {
       // No in-memory handle — clean up stale state
       if (activeRunRecord) {
-        await this.runStatusService.markCancelledWithoutHandle(
-          activeRunRecord.id
-        );
+        await this.runStatusService.markCancelledWithoutHandle({
+          runId: activeRunRecord.id,
+          conversationId,
+        });
       }
       return false;
     }

@@ -289,36 +289,19 @@ describe("AgentService", () => {
   });
 
   describe("stop()", () => {
-    it("resets a stale running conversation to idle when no in-memory handle existed", async () => {
+    it("verifies ownership and delegates status convergence to RunService", async () => {
       mockConversationService.findById = vi
         .fn()
         .mockResolvedValue({ runStatus: "running" });
-      mockConversationService.setRunStatus = vi
-        .fn()
-        .mockResolvedValue({ count: 1 });
       mockRunService.stop = vi.fn().mockResolvedValue(false);
 
       await service.stop("conversation-1", user);
 
-      expect(mockRunService.stop).toHaveBeenCalledWith("conversation-1");
-      expect(mockConversationService.setRunStatus).toHaveBeenCalledWith(
-        "conversation-1",
-        "idle"
+      expect(mockConversationService.findById).toHaveBeenCalledWith(
+        "user-1",
+        "conversation-1"
       );
-    });
-
-    it("does not reset status when an active handle was stopped", async () => {
-      mockConversationService.findById = vi
-        .fn()
-        .mockResolvedValue({ runStatus: "running" });
-      mockConversationService.setRunStatus = vi
-        .fn()
-        .mockResolvedValue({ count: 1 });
-      mockRunService.stop = vi.fn().mockResolvedValue(true);
-
-      await service.stop("conversation-1", user);
-
-      expect(mockConversationService.setRunStatus).not.toHaveBeenCalled();
+      expect(mockRunService.stop).toHaveBeenCalledWith("conversation-1");
     });
   });
 
