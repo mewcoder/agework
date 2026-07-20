@@ -206,10 +206,7 @@ export class AgentService {
 
   /** 校验 conversation 归属后停止活跃 run；状态收敛统一归 RunStatusService。 */
   async stop(conversationId: string, user: JwtUser): Promise<void> {
-    await this.conversationService.findById(
-      user.userId,
-      conversationId
-    );
+    await this.conversationService.findById(user.userId, conversationId);
     await this.runService.stop(conversationId);
   }
 

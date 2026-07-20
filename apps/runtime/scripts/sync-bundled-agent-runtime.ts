@@ -15,10 +15,7 @@ const runtimeRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const sdkDepsDir = join(runtimeRoot, "sdk-deps");
 const packagePath = join(sdkDepsDir, "package.json");
 const lockPath = join(sdkDepsDir, "package-lock.json");
-const runtimeManifestPath = join(
-  sdkDepsDir,
-  "bundled-agent-runtime.json"
-);
+const runtimeManifestPath = join(sdkDepsDir, "bundled-agent-runtime.json");
 const write = process.argv.includes("--write");
 
 type BundledAgentEntry = AgentRuntimeRequirement & {
@@ -155,10 +152,14 @@ function addPluginRequirements(
 ): void {
   for (const [agentType, requirement] of Object.entries(requirements)) {
     if (agents[agentType]) {
-      throw new Error(`Duplicate bundled agent runtime declaration: ${agentType}`);
+      throw new Error(
+        `Duplicate bundled agent runtime declaration: ${agentType}`
+      );
     }
     if (Object.keys(requirement.npmPackages).length === 0) {
-      throw new Error(`Bundled agent ${agentType} requires at least one npm package`);
+      throw new Error(
+        `Bundled agent ${agentType} requires at least one npm package`
+      );
     }
     agents[agentType] = { pluginId, ...requirement };
   }

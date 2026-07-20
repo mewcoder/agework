@@ -7,8 +7,7 @@
  */
 export const BUNDLED_AGENT_PLUGIN_IDS = ["builtin-agents", "acp"] as const;
 
-export type BundledAgentPluginId =
-  (typeof BUNDLED_AGENT_PLUGIN_IDS)[number];
+export type BundledAgentPluginId = (typeof BUNDLED_AGENT_PLUGIN_IDS)[number];
 
 export function listBundledAgentPluginIds(): BundledAgentPluginId[] {
   return [...BUNDLED_AGENT_PLUGIN_IDS];

@@ -192,7 +192,7 @@ export class RunLauncher {
     }
     if (!isRuntimeType(runtimeType)) {
       throw new BadRequestException(
-        `工作空间的运行环境类型无效: ${runtimeType}`
+        `工作空间的运行环境类型无效: ${String(runtimeType)}`
       );
     }
 
@@ -412,13 +412,8 @@ export class RunLauncher {
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
   }): Promise<void> {
-    const {
-      runId,
-      conversationId,
-      placement,
-      agentProviderConfig,
-      runInput,
-    } = input;
+    const { runId, conversationId, placement, agentProviderConfig, runInput } =
+      input;
     const runtimeType = placement.runtimeType;
 
     try {

@@ -154,9 +154,7 @@ export class RunRepository {
   }
 
   /** user 停用/删除级联用：该 user 名下所有活跃 run 的会话 id（去重）。 */
-  async findActiveConversationIdsForUser(
-    userId: string
-  ): Promise<string[]> {
+  async findActiveConversationIdsForUser(userId: string): Promise<string[]> {
     const rows = await this.prisma.run.findMany({
       where: {
         conversation: { workspace: { userId } },
