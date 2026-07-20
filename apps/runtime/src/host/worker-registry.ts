@@ -17,21 +17,22 @@ import {
  * 入口，确保 RuntimeHost 不再跨三个状态容器手工清理。后续内部存储如何演进
  * 不影响 RuntimeHost 契约。
  */
-export class WorkerRegistry extends WorkerPool {
+export class WorkerRegistry {
+  private readonly workers = new WorkerPool();
   private readonly mailbox = new CommandMailbox();
   private readonly handshakes = new HandshakeStore();
 
-  override put(entry: WorkerEntry): void {
+  put(entry: WorkerEntry): void {
     const identity: ReuseIdentity = {
       scope: entry.isolation.scope,
       subjectId: entry.isolation.subjectId,
       runtimeType: entry.runtimeType,
     };
-    const previous = this.getByIdentity(
+    const previous = this.workers.getByIdentity(
       identity,
       entry.userLifecycleVersion
     );
-    super.put(entry);
+    this.workers.put(entry);
     if (previous && previous.workerId !== entry.workerId) {
       this.cleanupControlState(previous.workerId, "worker superseded");
     }
@@ -42,7 +43,7 @@ export class WorkerRegistry extends WorkerPool {
    * 让重复 stop/release 保持幂等。
    */
   evict(workerId: string, reason: string): WorkerEntry | undefined {
-    const entry = super.remove(workerId);
+    const entry = this.workers.remove(workerId);
     this.cleanupControlState(workerId, reason);
     return entry;
   }
@@ -84,6 +85,68 @@ export class WorkerRegistry extends WorkerPool {
 
   commandEpoch(workerId: string): number {
     return this.mailbox.epochFor(workerId);
+  }
+
+  getById(...args: Parameters<WorkerPool["getById"]>) {
+    return this.workers.getById(...args);
+  }
+
+  getByIdentity(...args: Parameters<WorkerPool["getByIdentity"]>) {
+    return this.workers.getByIdentity(...args);
+  }
+
+  getByRunId(...args: Parameters<WorkerPool["getByRunId"]>) {
+    return this.workers.getByRunId(...args);
+  }
+
+  ownsRun(...args: Parameters<WorkerPool["ownsRun"]>) {
+    return this.workers.ownsRun(...args);
+  }
+
+  acquireOnce(...args: Parameters<WorkerPool["acquireOnce"]>) {
+    return this.workers.acquireOnce(...args);
+  }
+
+  drainAcquisitions(...args: Parameters<WorkerPool["drainAcquisitions"]>) {
+    return this.workers.drainAcquisitions(...args);
+  }
+
+  detachWorkspaceAcquisitions(
+    ...args: Parameters<WorkerPool["detachWorkspaceAcquisitions"]>
+  ) {
+    return this.workers.detachWorkspaceAcquisitions(...args);
+  }
+
+  markReady(...args: Parameters<WorkerPool["markReady"]>): void {
+    this.workers.markReady(...args);
+  }
+
+  associateRun(...args: Parameters<WorkerPool["associateRun"]>): void {
+    this.workers.associateRun(...args);
+  }
+
+  dissociateRun(...args: Parameters<WorkerPool["dissociateRun"]>): void {
+    this.workers.dissociateRun(...args);
+  }
+
+  touch(...args: Parameters<WorkerPool["touch"]>): void {
+    this.workers.touch(...args);
+  }
+
+  markCancelled(...args: Parameters<WorkerPool["markCancelled"]>): void {
+    this.workers.markCancelled(...args);
+  }
+
+  list(): WorkerEntry[] {
+    return this.workers.list();
+  }
+
+  listByWorkspace(...args: Parameters<WorkerPool["listByWorkspace"]>) {
+    return this.workers.listByWorkspace(...args);
+  }
+
+  listByUser(...args: Parameters<WorkerPool["listByUser"]>) {
+    return this.workers.listByUser(...args);
   }
 
   drainControlPlane(): void {

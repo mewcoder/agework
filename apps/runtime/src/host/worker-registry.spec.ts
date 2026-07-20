@@ -20,6 +20,14 @@ function makeEntry(workerId = "worker-1"): WorkerEntry {
 }
 
 describe("WorkerRegistry", () => {
+  it("does not expose WorkerPool.remove outside lifecycle eviction", () => {
+    const registry = new WorkerRegistry();
+
+    expect(
+      (registry as unknown as { remove?: unknown }).remove
+    ).toBeUndefined();
+  });
+
   it("evicts the entry, pending handshake and command queue together", async () => {
     const registry = new WorkerRegistry();
     const entry = makeEntry();
@@ -39,9 +47,9 @@ describe("WorkerRegistry", () => {
     await rejected;
 
     expect(registry.getById(entry.workerId)).toBeUndefined();
-    await expect(
-      registry.pollCommands(entry.workerId, 0, 0)
-    ).resolves.toEqual([]);
+    await expect(registry.pollCommands(entry.workerId, 0, 0)).resolves.toEqual(
+      []
+    );
   });
 
   it("cleans control state when a worker generation is superseded", async () => {
