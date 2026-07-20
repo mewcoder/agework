@@ -51,11 +51,11 @@ describe("CreateWorkspaceDto", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("rejects invalid runtime type in create payloads", async () => {
+  it("rejects malformed runtime type identifiers in create payloads", async () => {
     await expect(
       transformBody(CreateWorkspaceDto, {
         name: "My Workspace",
-        runtimeType: "vm",
+        runtimeType: "VM!",
       })
     ).rejects.toThrow(BadRequestException);
   });
