@@ -339,7 +339,7 @@ describe("RunStatusService", () => {
   });
 
   it("does not release a launch claim after another run became active", async () => {
-    const { handler, runConversation } = makeSubject({
+    const { handler } = makeSubject({
       activeRun: { id: "run-2" },
     });
 
