@@ -33,10 +33,10 @@ describe("run status ownership", () => {
     ).toEqual([]);
   });
 
-  it("keeps the Conversation run-status projection inside RunStatusService", () => {
+  it("keeps Conversation settlement/recovery writes inside RunStatusService", () => {
     expect(
       violations(
-        /conversationService\.setConversationRunState\s*\(/,
+        /conversationService\.(?:setConversationRunStateForRun|reconcileConversationRunState)\s*\(/,
         new Set(["run/status/run-status.service.ts"])
       )
     ).toEqual([]);

@@ -75,7 +75,10 @@ describe("RunLauncher", () => {
   }
 
   beforeEach(() => {
-    stopActiveRun = vi.fn().mockResolvedValue(true);
+    stopActiveRun = vi.fn().mockResolvedValue({
+      runId: "run-old",
+      hadHandle: true,
+    });
     mockRunRepository = {
       create: vi.fn().mockResolvedValue({ id: "run-1" }),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
@@ -94,7 +97,8 @@ describe("RunLauncher", () => {
     };
     mockConversationEffects = {
       activateConversation: vi.fn().mockResolvedValue(true),
-      setConversationRunState: vi.fn().mockResolvedValue(undefined),
+      handoffConversationRun: vi.fn().mockResolvedValue(true),
+      setConversationRunStateForRun: vi.fn().mockResolvedValue(true),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       saveAssistantMessage: vi.fn().mockResolvedValue(undefined),
       attachMessageToRun: vi.fn().mockResolvedValue(undefined),
@@ -217,8 +221,46 @@ describe("RunLauncher", () => {
     await launch();
     expect(mockConversationEffects.activateConversation).toHaveBeenCalledWith(
       "conversation-1",
-      "user-1"
+      "user-1",
+      "run-1"
     );
+  });
+
+  it("hands the Conversation projection from the steered run to the new run", async () => {
+    mockConversationEffects.activateConversation = vi
+      .fn()
+      .mockResolvedValue(false);
+
+    await launch(makeStartInput({ interruptReason: "user_steered" }));
+
+    expect(stopActiveRun).toHaveBeenCalledWith("conversation-1", {
+      reason: "user_steered",
+      endResponse: true,
+    });
+    expect(mockConversationEffects.handoffConversationRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "user-1",
+      "run-old",
+      "run-1"
+    );
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalled();
+  });
+
+  it("reclaims the Conversation when the old run settles before handoff", async () => {
+    mockConversationEffects.activateConversation = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    mockConversationEffects.handoffConversationRun = vi
+      .fn()
+      .mockResolvedValue(false);
+
+    await launch(makeStartInput({ interruptReason: "user_steered" }));
+
+    expect(
+      mockConversationEffects.activateConversation
+    ).toHaveBeenNthCalledWith(2, "conversation-1", "user-1", "run-1");
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalled();
   });
 
   it("saves the user message and triggers title generation", async () => {
@@ -307,6 +349,7 @@ describe("RunLauncher", () => {
     await launch(makeStartInput({ res }));
 
     expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      runId: "run-1",
       conversationId: "conversation-1",
     });
     expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
@@ -331,6 +374,7 @@ describe("RunLauncher", () => {
 
     expect(mockRunRepository.create).not.toHaveBeenCalled();
     expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      runId: "run-1",
       conversationId: "conversation-1",
     });
     expect(res.end).toHaveBeenCalled();
@@ -355,7 +399,7 @@ describe("RunLauncher", () => {
     });
     expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(
-      mockConversationEffects.setConversationRunState
+      mockConversationEffects.setConversationRunStateForRun
     ).not.toHaveBeenCalled();
     expect(mockLiveRunRegistry.unregister).not.toHaveBeenCalled();
   });

@@ -64,12 +64,12 @@ function makeSubject(input?: {
     markError: vi.fn().mockResolvedValue(undefined),
     markCancelled: vi.fn().mockResolvedValue(undefined),
     markCancelling: vi.fn().mockResolvedValue(undefined),
-    findActiveByConversationId: vi
-      .fn()
-      .mockResolvedValue(input?.activeRun ?? null),
   };
   const runConversation = {
-    setConversationRunState: vi.fn().mockResolvedValue(undefined),
+    setConversationRunStateForRun: vi
+      .fn()
+      .mockResolvedValue(input?.activeRun?.id !== "run-2"),
+    reconcileConversationRunState: vi.fn().mockResolvedValue(true),
   } satisfies Partial<ConversationService>;
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   const finalization = new RunFinalizationStore();
@@ -130,8 +130,9 @@ describe("RunStatusService", () => {
 
     expect(runRepository.markRequiresAction).toHaveBeenCalledWith("run-1");
     expect(handle.saveRun).toHaveBeenCalledWith(false);
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { pendingUserAction: "question" }
     );
   });
@@ -175,8 +176,9 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markError).toHaveBeenCalledWith("run-1", "boom");
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { runStatus: "error" }
     );
     expect(handle.saveRun).toHaveBeenCalledWith(false, "error");
@@ -192,7 +194,7 @@ describe("RunStatusService", () => {
     });
   });
 
-  it("does not overwrite conversation status when a newer run is active", async () => {
+  it("settles through the activeRunId CAS when a newer run owns the projection", async () => {
     const { handler, runConversation, registry } = makeSubject({
       activeRun: { id: "run-2" },
     });
@@ -205,7 +207,11 @@ describe("RunStatusService", () => {
       effect: runStatusEffect("finished"),
     });
 
-    expect(runConversation.setConversationRunState).not.toHaveBeenCalled();
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "idle" }
+    );
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 
@@ -282,8 +288,9 @@ describe("RunStatusService", () => {
       "run-1",
       "host offline"
     );
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { runStatus: "error" }
     );
     expect(runEvents.runStatusChanged).toHaveBeenCalledWith({
@@ -317,10 +324,16 @@ describe("RunStatusService", () => {
   it("releases a failed launch claim when no run row became active", async () => {
     const { handler, runConversation } = makeSubject();
 
-    await handler.failLaunchClaim({ conversationId: "conversation-1" });
+    await expect(
+      handler.failLaunchClaim({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      })
+    ).resolves.toBe(true);
 
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { runStatus: "error" }
     );
   });
@@ -330,9 +343,12 @@ describe("RunStatusService", () => {
       activeRun: { id: "run-2" },
     });
 
-    await handler.failLaunchClaim({ conversationId: "conversation-1" });
-
-    expect(runConversation.setConversationRunState).not.toHaveBeenCalled();
+    await expect(
+      handler.failLaunchClaim({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      })
+    ).resolves.toBe(false);
   });
 
   it("marks cancelling and records a platform status event on cancel request", async () => {
@@ -360,8 +376,9 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markCancelled).toHaveBeenCalledWith("run-1");
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { runStatus: "idle" }
     );
     expect(runEvents.runStatusChanged).toHaveBeenCalledWith({

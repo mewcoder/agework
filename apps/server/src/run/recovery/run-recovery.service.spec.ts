@@ -123,7 +123,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     });
   });
 
-  it("repairs stale Conversation projections before recovering active runs", async () => {
+  it("repairs stale Conversation projections after recovering active runs", async () => {
     const deps = makeDeps([]);
     deps.runRepository.findRunningConversationsWithoutActiveRun = vi
       .fn()

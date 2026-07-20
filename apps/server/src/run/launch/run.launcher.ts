@@ -45,7 +45,7 @@ type SaveRun = (
 export type StopActiveRun = (
   conversationId: string,
   options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
-) => Promise<boolean>;
+) => Promise<{ runId?: string; hadHandle: boolean }>;
 
 /**
  * 一次 run 的启动准备能力：业务放置校验、并发守卫、落库 run 记录、提交执行面
@@ -92,7 +92,7 @@ export class RunLauncher {
     const scope = placement.scope;
     const stream = new RunStream(res);
 
-    const claimedConversation = await this.claimRun({
+    await this.claimRun({
       conversationId,
       userId,
       runId,
@@ -121,7 +121,6 @@ export class RunLauncher {
       await this.handlePreRunFailure({
         runId,
         conversationId,
-        claimedConversation,
         stream,
         error: err,
       });
@@ -235,24 +234,46 @@ export class RunLauncher {
     runId: string;
     interruptReason?: "user_steered";
     stopActiveRun: StopActiveRun;
-  }): Promise<boolean> {
+  }): Promise<void> {
     const { conversationId, userId, runId, interruptReason, stopActiveRun } =
       input;
     const activated = await this.conversationService.activateConversation(
       conversationId,
-      userId
+      userId,
+      runId
     );
-    if (activated) return true;
+    if (activated) return;
     if (interruptReason === "user_steered") {
-      await stopActiveRun(conversationId, {
+      const stopped = await stopActiveRun(conversationId, {
         reason: "user_steered",
         endResponse: true,
       });
+      const handedOff = stopped.runId
+        ? await this.conversationService.handoffConversationRun(
+            conversationId,
+            userId,
+            stopped.runId,
+            runId
+          )
+        : false;
+      // 无内存 handle 的旧 Run 会在 stop 内同步收敛并释放 owner；此时重新认领。
+      const reclaimed =
+        handedOff ||
+        (await this.conversationService.activateConversation(
+          conversationId,
+          userId,
+          runId
+        ));
+      if (!reclaimed) {
+        throw new ConflictException(
+          "Conversation run ownership changed while steering"
+        );
+      }
       this.logger.log("active run interrupted by user steering", {
         conversationId,
         runId,
       });
-      return false;
+      return;
     }
 
     throw new ConflictException(
@@ -380,11 +401,10 @@ export class RunLauncher {
   private async handlePreRunFailure(input: {
     runId: string;
     conversationId: string;
-    claimedConversation: boolean;
     stream: RunStream;
     error: unknown;
   }): Promise<void> {
-    const { runId, conversationId, claimedConversation, stream, error } = input;
+    const { runId, conversationId, stream, error } = input;
     this.logger.warn("prepare run failed", {
       runId,
       conversationId,
@@ -392,9 +412,7 @@ export class RunLauncher {
     });
     const message = error instanceof Error ? error.message : String(error);
     try {
-      if (claimedConversation) {
-        await this.runStatusService.failLaunchClaim({ conversationId });
-      }
+      await this.runStatusService.failLaunchClaim({ runId, conversationId });
     } finally {
       stream.writeError({ threadId: conversationId, runId, message });
       stream.end();

@@ -151,7 +151,7 @@ export class RunService implements OnApplicationBootstrap {
   async start(input: StartRunInput): Promise<void> {
     await this.runLauncher.launch(input, {
       stopActiveRun: (conversationId, options) =>
-        this.stop(conversationId, options),
+        this.stopWithResult(conversationId, options),
     });
   }
 
@@ -271,6 +271,14 @@ export class RunService implements OnApplicationBootstrap {
     conversationId: string,
     options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
   ): Promise<boolean> {
+    return (await this.stopWithResult(conversationId, options)).hadHandle;
+  }
+
+  /** steering 额外需要旧 runId，才能原子交接 Conversation 投影所有权。 */
+  private async stopWithResult(
+    conversationId: string,
+    options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
+  ): Promise<{ runId?: string; hadHandle: boolean }> {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
@@ -284,7 +292,7 @@ export class RunService implements OnApplicationBootstrap {
           conversationId,
         });
       }
-      return false;
+      return { runId: activeRunRecord?.id, hadHandle: false };
     }
     handle.stopRequested = true;
     handle.stopReason = options?.reason;
@@ -308,7 +316,7 @@ export class RunService implements OnApplicationBootstrap {
       handle.stream.end();
       handle.stream.detach();
     }
-    return true;
+    return { runId: handle.runId, hadHandle: true };
   }
 }
 

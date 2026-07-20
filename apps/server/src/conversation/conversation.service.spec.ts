@@ -16,8 +16,10 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
     updateTitle: vi.fn().mockResolvedValue(undefined),
     renameOwned: vi.fn().mockResolvedValue(undefined),
     updateOwned: vi.fn().mockResolvedValue(undefined),
-    setRunStatus: vi.fn().mockResolvedValue(true),
-    setPendingUserAction: vi.fn().mockResolvedValue(undefined),
+    claimRun: vi.fn().mockResolvedValue(true),
+    handoffRun: vi.fn().mockResolvedValue(true),
+    setRunStateForOwner: vi.fn().mockResolvedValue(true),
+    reconcileRunStateWithoutActiveRun: vi.fn().mockResolvedValue(true),
     attachMessageToRun: vi.fn().mockResolvedValue({ count: 1 }),
     archiveOwned: vi.fn().mockResolvedValue(undefined),
     unarchiveOwned: vi.fn().mockResolvedValue(undefined),
@@ -31,6 +33,51 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
 }
 
 describe("ConversationService", () => {
+  it("claims the Conversation projection for the starting run", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await expect(
+      service.activateConversation("conversation-1", "user-1", "run-1")
+    ).resolves.toBe(true);
+    expect(repo.claimRun).toHaveBeenCalledWith("conversation-1", "run-1");
+  });
+
+  it("hands the Conversation projection to the steering run", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await expect(
+      service.handoffConversationRun(
+        "conversation-1",
+        "user-1",
+        "run-old",
+        "run-new"
+      )
+    ).resolves.toBe(true);
+    expect(repo.handoffRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-old",
+      "run-new"
+    );
+  });
+
+  it("updates run state through the activeRunId owner guard", async () => {
+    const repo = makeRepo();
+    const service = new ConversationService(repo as never);
+
+    await expect(
+      service.setConversationRunStateForRun("conversation-1", "run-1", {
+        runStatus: "idle",
+      })
+    ).resolves.toBe(true);
+    expect(repo.setRunStateForOwner).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "idle" }
+    );
+  });
+
   it("lists conversations by newest update time and maps to dto", async () => {
     const createdAt = new Date("2026-05-30T10:00:00.000Z");
     const updatedAt = new Date("2026-05-31T10:00:00.000Z");

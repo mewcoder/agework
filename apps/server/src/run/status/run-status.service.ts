@@ -105,8 +105,9 @@ export class RunStatusService {
       }
 
       if (handle && payload.pendingAction !== undefined) {
-        await this.conversationService.setConversationRunState(
+        await this.conversationService.setConversationRunStateForRun(
           handle.conversationId,
+          runId,
           { pendingUserAction: payload.pendingAction }
         );
       }
@@ -172,13 +173,13 @@ export class RunStatusService {
    * Run 行创建前失败时释放 Conversation claim。若已有别的活跃 Run 接管会话，
    * 不覆盖它的 running 投影。
    */
-  async failLaunchClaim(input: { conversationId: string }): Promise<void> {
-    const activeRun = await this.runRepository.findActiveByConversationId(
-      input.conversationId
-    );
-    if (activeRun) return;
-    await this.conversationService.setConversationRunState(
+  async failLaunchClaim(input: {
+    runId: string;
+    conversationId: string;
+  }): Promise<boolean> {
+    return this.conversationService.setConversationRunStateForRun(
       input.conversationId,
+      input.runId,
       { runStatus: "error" }
     );
   }
@@ -188,9 +189,9 @@ export class RunStatusService {
     conversationId: string;
     runStatus: "idle" | "error";
   }): Promise<void> {
-    await this.conversationService.setConversationRunState(
+    await this.conversationService.reconcileConversationRunState(
       input.conversationId,
-      { runStatus: input.runStatus }
+      input.runStatus
     );
   }
 
@@ -323,15 +324,11 @@ export class RunStatusService {
   ): Promise<void> {
     if (!effect.terminalConversationStatus) return;
 
-    const newerActiveRun =
-      await this.runRepository.findActiveByConversationId(conversationId);
-    if (newerActiveRun && newerActiveRun.id !== runId) {
-      return;
-    }
-
-    await this.conversationService.setConversationRunState(conversationId, {
-      runStatus: effect.terminalConversationStatus,
-    });
+    await this.conversationService.setConversationRunStateForRun(
+      conversationId,
+      runId,
+      { runStatus: effect.terminalConversationStatus }
+    );
   }
 
   private writeTerminalSse(

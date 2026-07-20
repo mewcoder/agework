@@ -80,7 +80,6 @@ export class RunRecoveryService
   }
 
   async failInterruptedRuns(): Promise<void> {
-    await this.reconcileConversationRunStatuses();
     const activeRuns = await this.runRepository.listActive();
     if (activeRuns.length === 0) {
       this.logger.log("No interrupted active runs found.");
@@ -105,6 +104,8 @@ export class RunRecoveryService
         });
       }
     }
+    // active Run 全部判死后再统一修复投影，也覆盖旧数据尚无 activeRunId 的情况。
+    await this.reconcileConversationRunStatuses();
     this.startAbandonedSweep();
   }
 
