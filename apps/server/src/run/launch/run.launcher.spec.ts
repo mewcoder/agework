@@ -9,6 +9,7 @@ import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
+import type { RunStatusService } from "../status/run-status.service";
 
 function makeWorkspaceView(
   overrides: Partial<WorkspaceRunContext> = {}
@@ -35,6 +36,7 @@ describe("RunLauncher", () => {
   let mockConversationEffects: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
+  let mockRunStatusService: Partial<RunStatusService>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
 
   function makeRes() {
@@ -109,13 +111,17 @@ describe("RunLauncher", () => {
       isWorkerScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
     };
+    mockRunStatusService = {
+      failRun: vi.fn().mockResolvedValue(undefined),
+    };
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeHost as RuntimeHostContract,
       mockConversationEffects as ConversationService,
       mockRunEvents,
-      mockConfigService as ConfigService
+      mockConfigService as ConfigService,
+      mockRunStatusService as RunStatusService
     );
   });
 
@@ -291,7 +297,7 @@ describe("RunLauncher", () => {
     expect(res.write).not.toHaveBeenCalled();
   });
 
-  it("rolls back on submit failure", async () => {
+  it("routes submit failure through the run status owner", async () => {
     mockRuntimeHost.submitRun = vi
       .fn()
       .mockRejectedValue(new Error("spawn failed"));
@@ -303,13 +309,15 @@ describe("RunLauncher", () => {
       "run-1",
       expect.any(Object)
     );
-    expect(mockLiveRunRegistry.unregister).toHaveBeenCalledWith("run-1");
-    expect(mockRunRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "Failed to start worker"
-    );
+    expect(mockRunStatusService.failRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "启动 worker 失败: spawn failed",
+    });
+    expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(
       mockConversationEffects.setConversationRunState
-    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
+    ).not.toHaveBeenCalled();
+    expect(mockLiveRunRegistry.unregister).not.toHaveBeenCalled();
   });
 });

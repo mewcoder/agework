@@ -31,6 +31,7 @@ import { RunEventService } from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { RunStream } from "../streaming/run.stream";
+import { RunStatusService } from "../status/run-status.service";
 
 type SaveRun = (
   complete: boolean,
@@ -63,7 +64,8 @@ export class RunLauncher {
     private readonly runtimeHost: RuntimeHostExecution,
     private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly runStatusService: RunStatusService
   ) {}
 
   /** 启动一次 run：从 placement 解析到 live handle 注册的完整出站准备链路。 */
@@ -151,15 +153,13 @@ export class RunLauncher {
       res,
     });
 
-    const submitted = await this.submitToHost({
+    await this.submitToHost({
       runId,
       conversationId,
       placement,
       agentProviderConfig,
       runInput,
-      stream,
     });
-    if (!submitted) this.liveRuns.unregister(runId);
   }
 
   /**
@@ -392,15 +392,13 @@ export class RunLauncher {
     placement: RunPlacement;
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
-    stream: RunStream;
-  }): Promise<boolean> {
+  }): Promise<void> {
     const {
       runId,
       conversationId,
       placement,
       agentProviderConfig,
       runInput,
-      stream,
     } = input;
     const runtimeType = placement.runtimeType;
 
@@ -421,7 +419,7 @@ export class RunLauncher {
         agentProviderConfig,
         input: runInput,
       });
-      return true;
+      return;
     } catch (err) {
       this.logger.error("start worker failed", {
         runId,
@@ -429,40 +427,26 @@ export class RunLauncher {
         runtimeType,
         ...errorLogFields(err),
       });
-      await this.runRepository
-        .markError(runId, "Failed to start worker")
-        .catch(swallow(this.logger, `mark run ${runId} start failure`));
-      this.runEvents
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      await this.runEvents
         .append(
           this.runEvents.runtimeStatusChanged({
             runId,
             status: "start_failed",
             runtimeType,
             scope: placement.scope,
-            error: err instanceof Error ? err.message : String(err),
+            error: errorMsg,
             data: errorLogFields(err),
           })
         )
         .catch(
           swallow(this.logger, `record runtime start failure for run ${runId}`)
-        )
-        .finally(() => this.runEvents.forgetRun(runId));
-      await this.conversationService
-        .setConversationRunState(conversationId, { runStatus: "error" })
-        .catch(
-          swallow(
-            this.logger,
-            `set conversation active run status to error for run ${runId}`
-          )
         );
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      stream.writeError({
-        threadId: conversationId,
+      await this.runStatusService.failRun({
         runId,
-        message: "启动 worker 失败: " + errorMsg,
+        conversationId,
+        error: "启动 worker 失败: " + errorMsg,
       });
-      stream.end();
-      return false;
     }
   }
 
