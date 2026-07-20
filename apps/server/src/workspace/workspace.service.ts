@@ -156,7 +156,7 @@ export class WorkspaceService {
       }
     }
 
-    let firstError: unknown;
+    let firstError: Error | undefined;
     for (const workspaceId of targets) {
       try {
         await this.runtimeHostService.releaseResources({
@@ -164,7 +164,8 @@ export class WorkspaceService {
           target: { type: "workspace", workspaceId },
         });
       } catch (error) {
-        firstError ??= error;
+        firstError ??=
+          error instanceof Error ? error : new Error(String(error));
       }
     }
     if (firstError) throw firstError;
@@ -468,7 +469,7 @@ export class WorkspaceService {
         `该 Runtime Host 不支持运行方式: ${selectedRuntimeType}`
       );
     }
-    const runtimeType = selectedRuntimeType as RuntimeType;
+    const runtimeType = selectedRuntimeType;
     const capability = capabilities[runtimeType];
     if (runtimeType === "native") {
       if (requestedWorkerScope && requestedWorkerScope !== "workspace") {

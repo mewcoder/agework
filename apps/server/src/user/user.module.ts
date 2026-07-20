@@ -9,11 +9,7 @@ import { RuntimeHostModule } from "../runtime-host/runtime-host.module";
 @Module({
   imports: [PrismaModule, RuntimeHostModule],
   controllers: [AdminUserController],
-  providers: [
-    UserService,
-    UserRepository,
-    PasswordHasherService,
-  ],
+  providers: [UserService, UserRepository, PasswordHasherService],
   exports: [UserService],
 })
 export class UserModule {}

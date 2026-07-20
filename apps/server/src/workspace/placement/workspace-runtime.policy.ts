@@ -67,7 +67,7 @@ export class WorkspaceRuntimePolicy {
     const value = runtimeType?.trim() || this.config.getDefaultRuntimeType();
     if (!this.config.isRuntimeTypeAllowed(value)) {
       throw new BadRequestException(
-        `当前部署不支持该工作空间运行环境: ${value}`
+        `当前部署不支持该工作空间运行环境: ${String(value)}`
       );
     }
     return value;

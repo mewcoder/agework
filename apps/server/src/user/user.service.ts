@@ -82,7 +82,7 @@ export class UserService {
       }
     }
 
-    let firstError: unknown;
+    let firstError: Error | undefined;
     for (const { userId, version } of targets.values()) {
       try {
         await this.runtimeHosts.releaseResources({
@@ -94,7 +94,8 @@ export class UserService {
           },
         });
       } catch (error) {
-        firstError ??= error;
+        firstError ??=
+          error instanceof Error ? error : new Error(String(error));
       }
     }
     if (firstError) throw firstError;
