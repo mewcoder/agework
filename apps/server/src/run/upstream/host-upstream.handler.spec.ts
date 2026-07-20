@@ -61,7 +61,8 @@ describe("HostUpstreamHandler", () => {
     };
 
     mockConversations = {
-      setConversationRunState: vi.fn().mockResolvedValue(undefined),
+      setConversationRunStateForRun: vi.fn().mockResolvedValue(true),
+      reconcileConversationRunState: vi.fn().mockResolvedValue(true),
       setAgentSessionId: vi.fn().mockResolvedValue(undefined),
       activateConversation: vi.fn().mockResolvedValue(true),
     };
