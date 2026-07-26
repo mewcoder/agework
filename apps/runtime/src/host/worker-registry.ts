@@ -55,10 +55,6 @@ export class WorkerRegistry {
     return this.handshakes.waitForRegister(workerId, token);
   }
 
-  cancelHandshake(workerId: string, reason: string): void {
-    this.handshakes.cancel(workerId, reason);
-  }
-
   registerWorker(
     workerId: string,
     token: string,

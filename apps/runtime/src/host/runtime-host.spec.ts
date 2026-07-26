@@ -4,7 +4,8 @@ import type {
   SubmitRunInput,
 } from "@agework/shared/protocol";
 import { RuntimeHost, type RuntimeHostConfig } from "./runtime-host.js";
-import type { WorkerPool, ReuseIdentity } from "./worker-pool.js";
+import type { ReuseIdentity } from "./worker-pool.js";
+import type { WorkerRegistry } from "./worker-registry.js";
 import { deriveReuseIdentity } from "./worker-pool.js";
 import type { CleanupLedger } from "./cleanup-ledger.js";
 
@@ -85,8 +86,8 @@ function injectProvider(
   return { start, stop, destroy };
 }
 
-function poolOf(host: RuntimeHost): WorkerPool {
-  return (host as unknown as { pool: WorkerPool }).pool;
+function poolOf(host: RuntimeHost): WorkerRegistry {
+  return (host as unknown as { pool: WorkerRegistry }).pool;
 }
 
 function cleanupLedgerOf(host: RuntimeHost): CleanupLedger {
