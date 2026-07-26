@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import {
-  ProcessBlock,
-  groupToolItems,
-  visibleToolItems,
-} from "./process-block";
+import { ProcessBlock } from "./process-block";
+import { groupToolItems, visibleToolItems } from "./tool-grouping";
 
 describe("ProcessBlock", () => {
   it("keeps details open while a permission interrupt is waiting", () => {

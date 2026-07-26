@@ -20,7 +20,8 @@ import {
   isAwaitingAnswerStatus,
   isToolCallPart,
 } from "@/components/assistant-ui/thread-utils";
-import { ToolGroup, ProcessBlock, type ToolGroupItem } from "./process-block";
+import { ToolGroup, ProcessBlock } from "./process-block";
+import type { ToolGroupItem } from "./tool-grouping";
 import { MessageError } from "./message-error";
 import { AssistantActionBar, RunDuration } from "./action-bar";
 import { DotMatrix, type DotMatrixState } from "@/components/assistant-ui/dot-matrix";

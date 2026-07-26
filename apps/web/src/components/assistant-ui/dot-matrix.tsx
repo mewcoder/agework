@@ -182,7 +182,6 @@ const STATES = {
 } satisfies Record<string, StateConfig>;
 
 export type DotMatrixState = keyof typeof STATES;
-export const dotMatrixStates = Object.keys(STATES) as readonly DotMatrixState[];
 
 export type DotMatrixProps = Omit<ComponentProps<"span">, "children"> & {
   state?: DotMatrixState;
