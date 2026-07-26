@@ -41,6 +41,7 @@ describe("RunService", () => {
     mockRunStatusService = {
       markCancelRequested: vi.fn().mockResolvedValue(undefined),
       markCancelledWithoutHandle: vi.fn().mockResolvedValue(undefined),
+      reconcileConversationRunStatus: vi.fn().mockResolvedValue(undefined),
     };
     mockRunLauncher = {
       launch: vi.fn().mockResolvedValue(undefined),
@@ -462,6 +463,26 @@ describe("RunService", () => {
   });
 
   describe("stop()", () => {
+    it("repairs a stale conversation projection when no active run row exists", async () => {
+      mockRunRepository.findActiveByConversationId = vi
+        .fn()
+        .mockResolvedValue(null);
+      mockLiveRunRegistry.get = vi.fn().mockReturnValue(undefined);
+
+      const hadHandle = await service.stop("conversation-1");
+
+      expect(
+        mockRunStatusService.reconcileConversationRunStatus
+      ).toHaveBeenCalledWith({
+        conversationId: "conversation-1",
+        runStatus: "idle",
+      });
+      expect(
+        mockRunStatusService.markCancelledWithoutHandle
+      ).not.toHaveBeenCalled();
+      expect(hadHandle).toBe(false);
+    });
+
     it("should mark cancelled and return false when no live handle but run record exists", async () => {
       mockRunRepository.findActiveByConversationId = vi
         .fn()

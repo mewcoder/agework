@@ -232,13 +232,7 @@ describe("RunRepository", () => {
         runs: {
           none: {
             status: {
-              in: [
-                "queued",
-                "preparing",
-                "running",
-                "cancelling",
-                "requires_action",
-              ],
+              notIn: ["finished", "error", "cancelled"],
             },
           },
         },

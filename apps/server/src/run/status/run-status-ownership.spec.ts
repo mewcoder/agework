@@ -24,10 +24,11 @@ function violations(
 }
 
 describe("run status ownership", () => {
+  // 只锚定方法名不锚定接收者变量名,防止换个注入别名(如 this.conversations)绕过守卫。
   it("keeps Run persistence mutations inside RunStatusService", () => {
     expect(
       violations(
-        /runRepository\.(?:markRunning|markRequiresAction|markFinished|markError|markCancelled|markCancelling)\s*\(/,
+        /\.\s*(?:markRunning|markRequiresAction|markFinished|markError|markCancelled|markCancelling)\s*\(/,
         new Set(["run/status/run-status.service.ts"])
       )
     ).toEqual([]);
@@ -36,7 +37,7 @@ describe("run status ownership", () => {
   it("keeps Conversation settlement/recovery writes inside RunStatusService", () => {
     expect(
       violations(
-        /conversationService\.(?:setConversationRunStateForRun|reconcileConversationRunState)\s*\(/,
+        /\.\s*(?:setConversationRunStateForRun|reconcileConversationRunState)\s*\(/,
         new Set(["run/status/run-status.service.ts"])
       )
     ).toEqual([]);

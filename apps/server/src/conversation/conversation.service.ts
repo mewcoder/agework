@@ -341,7 +341,7 @@ export class ConversationService {
   }
 
   /**
-   * ConversationEffectsPort 实现:原子激活会话并记录投影 owner runId,
+   * 原子激活会话并记录投影 owner runId,
    * 激活失败时校验归属(findById 抛 NotFoundException),返回是否成功激活。
    * 调用方:`RunLauncher.claimRun`。
    */

@@ -291,6 +291,13 @@ export class RunService implements OnApplicationBootstrap {
           runId: activeRunRecord.id,
           conversationId,
         });
+      } else {
+        // 无活跃 Run 行时收敛遗留的 running 投影(CAS 守卫,存在非终态 Run 则不动),
+        // 让用户的停止操作可以在运行期修复卡死会话,不必等服务重启对账。
+        await this.runStatusService.reconcileConversationRunStatus({
+          conversationId,
+          runStatus: "idle",
+        });
       }
       return { runId: activeRunRecord?.id, hadHandle: false };
     }

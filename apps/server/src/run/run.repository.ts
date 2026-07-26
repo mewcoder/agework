@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { TERMINAL_RUN_STATUSES } from "@agework/shared";
 import type { AgentContextUsage, RunUsage } from "@agework/shared/protocol";
 import { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
@@ -116,7 +117,9 @@ export class RunRepository {
       where: {
         deletedAt: null,
         runStatus: "running",
-        runs: { none: { status: { in: ACTIVE_RUN_STATUSES } } },
+        // 与 ConversationRepository.reconcileRunStateWithoutActiveRun 的写侧守卫
+        // 使用同一个 shared 终态集合,避免两侧"无活跃 Run"判定漂移。
+        runs: { none: { status: { notIn: [...TERMINAL_RUN_STATUSES] } } },
       },
       select: {
         id: true,
