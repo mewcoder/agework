@@ -9,15 +9,13 @@ import type {
   ReadFileDiffInput,
   ReadFileInput,
   SearchFilesInput,
-  WorkspaceFileQuery,
-} from "@agework/shared/protocol";
-import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
   WorkspaceFileListResponse,
+  WorkspaceFileQuery,
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
-} from "@agework/shared/api";
+} from "@agework/shared/protocol";
 import {
   detectEnvConfig,
   installCli as installCliOnDisk,

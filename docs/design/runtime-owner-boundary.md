@@ -1,14 +1,12 @@
 # Server / Runtime 隔离与复用边界重构
 
-Status: ready-for-implementation
+Status: implemented
 
 Date: 2026-07-19
 
 Related:
 
-- [`docs/design/server-runtime-worker-target-architecture.md`](../../docs/design/server-runtime-worker-target-architecture.md)
-- [`research-plan.md`](research-plan.md)
-- [`working.md`](working.md)
+- [`server-runtime-worker-target-architecture.md`](server-runtime-worker-target-architecture.md)
 
 ## 1. 结论
 

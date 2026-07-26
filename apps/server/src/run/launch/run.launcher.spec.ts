@@ -9,6 +9,7 @@ import { RunEventService } from "../../run-event/run-event.service";
 import { ConfigService } from "../../config/config.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
+import type { RunStatusService } from "../status/run-status.service";
 
 function makeWorkspaceView(
   overrides: Partial<WorkspaceRunContext> = {}
@@ -35,6 +36,7 @@ describe("RunLauncher", () => {
   let mockConversationEffects: Partial<ConversationService>;
   let mockRunEvents: RunEventService;
   let mockConfigService: Partial<ConfigService>;
+  let mockRunStatusService: Partial<RunStatusService>;
   let stopActiveRun: ReturnType<typeof vi.fn>;
 
   function makeRes() {
@@ -73,7 +75,10 @@ describe("RunLauncher", () => {
   }
 
   beforeEach(() => {
-    stopActiveRun = vi.fn().mockResolvedValue(true);
+    stopActiveRun = vi.fn().mockResolvedValue({
+      runId: "run-old",
+      hadHandle: true,
+    });
     mockRunRepository = {
       create: vi.fn().mockResolvedValue({ id: "run-1" }),
       findActiveByConversationId: vi.fn().mockResolvedValue(null),
@@ -92,7 +97,8 @@ describe("RunLauncher", () => {
     };
     mockConversationEffects = {
       activateConversation: vi.fn().mockResolvedValue(true),
-      setConversationRunState: vi.fn().mockResolvedValue(undefined),
+      handoffConversationRun: vi.fn().mockResolvedValue(true),
+      setConversationRunStateForRun: vi.fn().mockResolvedValue(true),
       saveUserMessage: vi.fn().mockResolvedValue(undefined),
       saveAssistantMessage: vi.fn().mockResolvedValue(undefined),
       attachMessageToRun: vi.fn().mockResolvedValue(undefined),
@@ -109,13 +115,18 @@ describe("RunLauncher", () => {
       isWorkerScopeAllowed: (s: string): s is "user" | "workspace" =>
         s === "user" || s === "workspace",
     };
+    mockRunStatusService = {
+      failRun: vi.fn().mockResolvedValue(undefined),
+      failLaunchClaim: vi.fn().mockResolvedValue(undefined),
+    };
     launcher = new RunLauncher(
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeHost as RuntimeHostContract,
       mockConversationEffects as ConversationService,
       mockRunEvents,
-      mockConfigService as ConfigService
+      mockConfigService as ConfigService,
+      mockRunStatusService as RunStatusService
     );
   });
 
@@ -210,8 +221,46 @@ describe("RunLauncher", () => {
     await launch();
     expect(mockConversationEffects.activateConversation).toHaveBeenCalledWith(
       "conversation-1",
-      "user-1"
+      "user-1",
+      "run-1"
     );
+  });
+
+  it("hands the Conversation projection from the steered run to the new run", async () => {
+    mockConversationEffects.activateConversation = vi
+      .fn()
+      .mockResolvedValue(false);
+
+    await launch(makeStartInput({ interruptReason: "user_steered" }));
+
+    expect(stopActiveRun).toHaveBeenCalledWith("conversation-1", {
+      reason: "user_steered",
+      endResponse: true,
+    });
+    expect(mockConversationEffects.handoffConversationRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "user-1",
+      "run-old",
+      "run-1"
+    );
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalled();
+  });
+
+  it("reclaims the Conversation when the old run settles before handoff", async () => {
+    mockConversationEffects.activateConversation = vi
+      .fn()
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+    mockConversationEffects.handoffConversationRun = vi
+      .fn()
+      .mockResolvedValue(false);
+
+    await launch(makeStartInput({ interruptReason: "user_steered" }));
+
+    expect(
+      mockConversationEffects.activateConversation
+    ).toHaveBeenNthCalledWith(2, "conversation-1", "user-1", "run-1");
+    expect(mockRuntimeHost.submitRun).toHaveBeenCalled();
   });
 
   it("saves the user message and triggers title generation", async () => {
@@ -291,7 +340,47 @@ describe("RunLauncher", () => {
     expect(res.write).not.toHaveBeenCalled();
   });
 
-  it("rolls back on submit failure", async () => {
+  it("releases the conversation claim when run creation fails", async () => {
+    mockRunRepository.create = vi
+      .fn()
+      .mockRejectedValue(new Error("database unavailable"));
+    const res = makeRes();
+
+    await launch(makeStartInput({ res }));
+
+    expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+    });
+    expect(mockRuntimeHost.submitRun).not.toHaveBeenCalled();
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining("database unavailable")
+    );
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it("releases the conversation claim when saving the user turn fails", async () => {
+    mockConversationEffects.saveUserMessage = vi
+      .fn()
+      .mockRejectedValue(new Error("message write failed"));
+    const res = makeRes();
+
+    await launch(
+      makeStartInput({
+        res,
+        userMessage: { id: "msg-1", content: "hi" },
+      })
+    );
+
+    expect(mockRunRepository.create).not.toHaveBeenCalled();
+    expect(mockRunStatusService.failLaunchClaim).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+    });
+    expect(res.end).toHaveBeenCalled();
+  });
+
+  it("routes submit failure through the run status owner", async () => {
     mockRuntimeHost.submitRun = vi
       .fn()
       .mockRejectedValue(new Error("spawn failed"));
@@ -303,13 +392,15 @@ describe("RunLauncher", () => {
       "run-1",
       expect.any(Object)
     );
-    expect(mockLiveRunRegistry.unregister).toHaveBeenCalledWith("run-1");
-    expect(mockRunRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "Failed to start worker"
-    );
+    expect(mockRunStatusService.failRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "启动 worker 失败: spawn failed",
+    });
+    expect(mockRunRepository.markError).not.toHaveBeenCalled();
     expect(
-      mockConversationEffects.setConversationRunState
-    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
+      mockConversationEffects.setConversationRunStateForRun
+    ).not.toHaveBeenCalled();
+    expect(mockLiveRunRegistry.unregister).not.toHaveBeenCalled();
   });
 });

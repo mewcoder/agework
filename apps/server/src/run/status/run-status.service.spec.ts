@@ -64,12 +64,12 @@ function makeSubject(input?: {
     markError: vi.fn().mockResolvedValue(undefined),
     markCancelled: vi.fn().mockResolvedValue(undefined),
     markCancelling: vi.fn().mockResolvedValue(undefined),
-    findActiveByConversationId: vi
-      .fn()
-      .mockResolvedValue(input?.activeRun ?? null),
   };
   const runConversation = {
-    setConversationRunState: vi.fn().mockResolvedValue(undefined),
+    setConversationRunStateForRun: vi
+      .fn()
+      .mockResolvedValue(input?.activeRun?.id !== "run-2"),
+    reconcileConversationRunState: vi.fn().mockResolvedValue(true),
   } satisfies Partial<ConversationService>;
   const registry = input?.registry ?? new LiveRunRegistry(makeConfig());
   const finalization = new RunFinalizationStore();
@@ -130,8 +130,9 @@ describe("RunStatusService", () => {
 
     expect(runRepository.markRequiresAction).toHaveBeenCalledWith("run-1");
     expect(handle.saveRun).toHaveBeenCalledWith(false);
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { pendingUserAction: "question" }
     );
   });
@@ -175,8 +176,9 @@ describe("RunStatusService", () => {
     });
 
     expect(runRepository.markError).toHaveBeenCalledWith("run-1", "boom");
-    expect(runConversation.setConversationRunState).toHaveBeenCalledWith(
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
       "conversation-1",
+      "run-1",
       { runStatus: "error" }
     );
     expect(handle.saveRun).toHaveBeenCalledWith(false, "error");
@@ -192,7 +194,7 @@ describe("RunStatusService", () => {
     });
   });
 
-  it("does not overwrite conversation status when a newer run is active", async () => {
+  it("settles through the activeRunId CAS when a newer run owns the projection", async () => {
     const { handler, runConversation, registry } = makeSubject({
       activeRun: { id: "run-2" },
     });
@@ -205,7 +207,11 @@ describe("RunStatusService", () => {
       effect: runStatusEffect("finished"),
     });
 
-    expect(runConversation.setConversationRunState).not.toHaveBeenCalled();
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "idle" }
+    );
     expect(handle.saveRun).toHaveBeenCalledWith(true, undefined);
   });
 
@@ -268,6 +274,83 @@ describe("RunStatusService", () => {
     expect(handler.isTerminalOrFinalizing("run-1")).toBe(true);
   });
 
+  it("fails a run without a live handle through the single status owner", async () => {
+    const { handler, runRepository, runConversation, runEvents } =
+      makeSubject();
+
+    await handler.failRun({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "host offline",
+    });
+
+    expect(runRepository.markError).toHaveBeenCalledWith(
+      "run-1",
+      "host offline"
+    );
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "error" }
+    );
+    expect(runEvents.runStatusChanged).toHaveBeenCalledWith({
+      runId: "run-1",
+      origin: "platform",
+      status: "error",
+      reason: "host offline",
+    });
+  });
+
+  it("fails a live run with the normal terminal side effects", async () => {
+    const registry = new LiveRunRegistry(makeConfig());
+    const unregister = vi.spyOn(registry, "unregister");
+    const { handler } = makeSubject({
+      activeRun: { id: "run-1" },
+      registry,
+    });
+    const handle = makeHandle();
+    registry.register("run-1", handle);
+
+    await handler.failRun({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "host offline",
+    });
+
+    expect(handle.saveRun).toHaveBeenCalledWith(false, "error");
+    expect(unregister).toHaveBeenCalledWith("run-1");
+  });
+
+  it("releases a failed launch claim when no run row became active", async () => {
+    const { handler, runConversation } = makeSubject();
+
+    await expect(
+      handler.failLaunchClaim({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      })
+    ).resolves.toBe(true);
+
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "error" }
+    );
+  });
+
+  it("does not release a launch claim after another run became active", async () => {
+    const { handler } = makeSubject({
+      activeRun: { id: "run-2" },
+    });
+
+    await expect(
+      handler.failLaunchClaim({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      })
+    ).resolves.toBe(false);
+  });
+
   it("marks cancelling and records a platform status event on cancel request", async () => {
     const { handler, runRepository, runEvents } = makeSubject();
 
@@ -284,11 +367,20 @@ describe("RunStatusService", () => {
   });
 
   it("marks cancelled and records a platform status event when no handle exists", async () => {
-    const { handler, runRepository, runEvents } = makeSubject();
+    const { handler, runRepository, runConversation, runEvents } =
+      makeSubject();
 
-    await handler.markCancelledWithoutHandle("run-1");
+    await handler.markCancelledWithoutHandle({
+      runId: "run-1",
+      conversationId: "conversation-1",
+    });
 
     expect(runRepository.markCancelled).toHaveBeenCalledWith("run-1");
+    expect(runConversation.setConversationRunStateForRun).toHaveBeenCalledWith(
+      "conversation-1",
+      "run-1",
+      { runStatus: "idle" }
+    );
     expect(runEvents.runStatusChanged).toHaveBeenCalledWith({
       runId: "run-1",
       origin: "platform",

@@ -1,10 +1,4 @@
-import type {
-  HostUpstreamNotification,
-  ReleaseRuntimeResourcesInput,
-  RuntimeHostResourceLifecycle,
-  RuntimeHostResourceReconciliation,
-  RuntimeLifecycleClaim,
-} from "@agework/shared/protocol";
+import type { HostUpstreamNotification } from "@agework/shared/protocol";
 
 /**
  * host.upstream 回流 Port(架构规则 §4 决策链 5:infra 运行时回流):
@@ -60,30 +54,6 @@ export type RuntimeHostRow = {
   removedAt: Date | null;
 };
 
-/** Workspace/User 删除与 Host 重连对账使用的资源生命周期端口(替代旧 OwnerReconciliation)。 */
-export type RuntimeHostResourceLifecyclePort = RuntimeHostResourceLifecycle;
-
-/** Server 重连对账使用的资源 reconciliation 端口。 */
-export type RuntimeHostResourceReconciliationPort =
-  RuntimeHostResourceReconciliation & {
-    /** runtimeHostId 省略时聚合所有在线 Host；指定时只查询目标 Host。 */
-    listLifecycleClaims(
-      runtimeHostId?: string
-    ): Promise<RuntimeLifecycleClaim[]>;
-    /** 列出所有当前在线的 Host id(含 builtin)。 */
-    listConnectedHostIds(): string[];
-  };
-
-/** Run 恢复对账只需要 Host 上仍被占用的 runId，不向业务模块暴露 Worker 快照。 */
-export interface RuntimeHostRunReconciliation {
-  listRunIds(runtimeHostId: string): Promise<string[]>;
-}
-
-/** Server 侧查询 Host 控制面是否可达；builtin 永远可达，registered 取决于隧道。 */
-export interface RuntimeHostConnectivity {
-  isConnected(runtimeHostId: string): boolean;
-}
-
 /** builtin（本机 in-process）RuntimeHost 的固定 id。所有 runtimeType 都走这一个 Host。 */
 export const BUILTIN_HOST_ID = "builtin";
 
@@ -92,20 +62,10 @@ export function isBuiltinHostId(runtimeHostId: string): boolean {
   return runtimeHostId === BUILTIN_HOST_ID;
 }
 
-/** 同一个 Host 路由适配器按角色暴露，消费者不能越面调用。 */
+/** 执行与启动期反向接线保留窄 token；其余用例统一经 RuntimeHostService。 */
 export const RUNTIME_HOST_EXECUTION = Symbol("RuntimeHostExecution");
 export const RUNTIME_HOST_UPSTREAM_BINDING = Symbol(
   "RuntimeHostUpstreamBinding"
-);
-export const RUNTIME_HOST_CONNECTIVITY = Symbol("RuntimeHostConnectivity");
-export const RUNTIME_HOST_ENVIRONMENT = Symbol("RuntimeHostEnvironment");
-export const RUNTIME_HOST_WORKSPACE_DATA = Symbol("RuntimeHostWorkspaceData");
-export const RUNTIME_HOST_DIAGNOSTICS = Symbol("RuntimeHostDiagnostics");
-export const RUNTIME_HOST_RESOURCE_RECONCILIATION = Symbol(
-  "RuntimeHostResourceReconciliation"
-);
-export const RUNTIME_HOST_RUN_RECONCILIATION = Symbol(
-  "RuntimeHostRunReconciliation"
 );
 export const RUNTIME_HOST_RUN_REAP_BINDING = Symbol(
   "RuntimeHostRunReapBinding"

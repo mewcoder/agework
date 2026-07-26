@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import {
   USER_DELETED_EVENT,
@@ -6,10 +6,7 @@ import {
   UserDeletedEvent,
   UserDisabledEvent,
 } from "../../user/user.events";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "../../runtime-host/runtime-host.types";
+import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { RunService } from "../run.service";
 
 /**
@@ -36,8 +33,7 @@ export class RunUserListener {
 
   constructor(
     private readonly runService: RunService,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    private readonly hostResources: RuntimeHostResourceReconciliationPort
+    private readonly runtimeHosts: RuntimeHostService
   ) {}
 
   @OnEvent([USER_DISABLED_EVENT, USER_DELETED_EVENT])
@@ -59,13 +55,9 @@ export class RunUserListener {
     // Step 2: 对所有在线 Host 下发 releaseResources(user target)
     // 必须覆盖所有在线 Host,因为 in-flight submit 可能尚未在 Runtime 形成 claim
     try {
-      const hostIds = this.hostResources.listConnectedHostIds();
+      const hostIds = this.runtimeHosts.listConnectedHostIds();
       for (const runtimeHostId of hostIds) {
-        await this.releaseUserResources(
-          runtimeHostId,
-          userId,
-          sessionVersion
-        );
+        await this.releaseUserResources(runtimeHostId, userId, sessionVersion);
       }
     } catch (err) {
       this.logger.warn(
@@ -82,7 +74,7 @@ export class RunUserListener {
     userLifecycleVersion: number
   ): Promise<void> {
     try {
-      await this.hostResources.releaseResources({
+      await this.runtimeHosts.releaseResources({
         runtimeHostId,
         target: { type: "user", userId, userLifecycleVersion },
       });

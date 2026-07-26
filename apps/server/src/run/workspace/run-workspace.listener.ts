@@ -1,13 +1,10 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
 import {
   WORKSPACE_DELETED_EVENT,
   WorkspaceDeletedEvent,
 } from "../../workspace/workspace.events";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "../../runtime-host/runtime-host.types";
+import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { RunService } from "../run.service";
 
 /**
@@ -24,8 +21,7 @@ export class RunWorkspaceListener {
 
   constructor(
     private readonly runService: RunService,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    private readonly hostResources: RuntimeHostResourceReconciliationPort
+    private readonly runtimeHosts: RuntimeHostService
   ) {}
 
   @OnEvent(WORKSPACE_DELETED_EVENT)
@@ -43,7 +39,7 @@ export class RunWorkspaceListener {
       );
     }
     try {
-      await this.hostResources.releaseResources({
+      await this.runtimeHosts.releaseResources({
         runtimeHostId,
         target: { type: "workspace", workspaceId },
       });

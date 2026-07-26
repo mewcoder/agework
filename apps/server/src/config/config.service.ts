@@ -221,7 +221,7 @@ export class ConfigService implements OnModuleInit {
       );
     }
 
-    return Array.from(new Set(values)) as RuntimeType[];
+    return Array.from(new Set(values));
   }
 
   /** builtin Host 显式允许加载的 runtime 插件包；不做隐式发现。 */

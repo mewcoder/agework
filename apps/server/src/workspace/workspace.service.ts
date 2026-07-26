@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  Inject,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -29,10 +28,6 @@ import type {
   RuntimeLifecycleClaim,
   WorkerScope,
 } from "@agework/shared/protocol";
-import {
-  RUNTIME_HOST_RESOURCE_RECONCILIATION,
-  type RuntimeHostResourceReconciliationPort,
-} from "../runtime-host/runtime-host.types";
 import type {
   WorkspaceFileListResponse,
   WorkspaceFileReadResponse,
@@ -73,9 +68,7 @@ export class WorkspaceService {
     private readonly events: EventEmitter2,
     private readonly runtimePolicy: WorkspaceRuntimePolicy,
     private readonly directoryHandler: WorkspaceDirectoryHandler,
-    private readonly runtimeHostService: RuntimeHostService,
-    @Inject(RUNTIME_HOST_RESOURCE_RECONCILIATION)
-    private readonly hostResources: RuntimeHostResourceReconciliationPort
+    private readonly runtimeHostService: RuntimeHostService
   ) {}
 
   /**
@@ -128,7 +121,9 @@ export class WorkspaceService {
     }
     // DB 状态是权威:User 必须 active 且未删除才能启动新 run
     if (workspace.user.status !== "active" || workspace.user.deletedAt) {
-      throw new BadRequestException("工作空间属主用户已禁用或删除,无法启动 run");
+      throw new BadRequestException(
+        "工作空间属主用户已禁用或删除,无法启动 run"
+      );
     }
     return {
       workspaceId: workspace.id,
@@ -161,15 +156,16 @@ export class WorkspaceService {
       }
     }
 
-    let firstError: unknown;
+    let firstError: Error | undefined;
     for (const workspaceId of targets) {
       try {
-        await this.hostResources.releaseResources({
+        await this.runtimeHostService.releaseResources({
           runtimeHostId,
           target: { type: "workspace", workspaceId },
         });
       } catch (error) {
-        firstError ??= error;
+        firstError ??=
+          error instanceof Error ? error : new Error(String(error));
       }
     }
     if (firstError) throw firstError;
@@ -473,7 +469,7 @@ export class WorkspaceService {
         `该 Runtime Host 不支持运行方式: ${selectedRuntimeType}`
       );
     }
-    const runtimeType = selectedRuntimeType as RuntimeType;
+    const runtimeType = selectedRuntimeType;
     const capability = capabilities[runtimeType];
     if (runtimeType === "native") {
       if (requestedWorkerScope && requestedWorkerScope !== "workspace") {
@@ -653,10 +649,7 @@ function distinctPendingWorkspaceReleases(
 ): string[] {
   const ids = new Set<string>();
   for (const claim of claims) {
-    if (
-      claim.kind === "release_pending" &&
-      claim.target.type === "workspace"
-    ) {
+    if (claim.kind === "release_pending" && claim.target.type === "workspace") {
       ids.add(claim.target.workspaceId);
     }
   }

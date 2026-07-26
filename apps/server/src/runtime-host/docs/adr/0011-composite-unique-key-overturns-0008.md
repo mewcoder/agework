@@ -1,4 +1,4 @@
-> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host`。OwnerKey/WorkerKey 公共协议概念已被 [SPEC](../../../../../.scratch/runtime-owner-boundary/SPEC.md) 进一步推翻，复用身份由 Runtime 内部派生。
+> **⚠ SUPERSEDED**: 本 ADR 已被 server-runtime-worker 目标架构推翻。worker-manager 执行栈在 Phase 3 全部删除，worker 池/信箱/握手/fence 移入 `@agework/runtime/host`。OwnerKey/WorkerKey 公共协议概念已被 [Runtime owner boundary](../../../../../../docs/design/runtime-owner-boundary.md) 进一步推翻，复用身份由 Runtime 内部派生。
 
 # Worker 防重键升级为 (ownerId, runtimeId, isolationScope) 复合唯一约束
 

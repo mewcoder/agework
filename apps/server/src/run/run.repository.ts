@@ -107,6 +107,28 @@ export class RunRepository {
     });
   }
 
+  /**
+   * 查找仍投影为 running、但已经没有活跃 Run 的会话。用于重启后修复
+   * Run 终态已落库而 Conversation 投影未落库的崩溃窗口。
+   */
+  async findRunningConversationsWithoutActiveRun() {
+    return this.prisma.conversation.findMany({
+      where: {
+        deletedAt: null,
+        runStatus: "running",
+        runs: { none: { status: { in: ACTIVE_RUN_STATUSES } } },
+      },
+      select: {
+        id: true,
+        runs: {
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { status: true },
+        },
+      },
+    });
+  }
+
   /** Host 重连对账：批量读取其现场 run 的数据库状态与取消命令所需会话 id。 */
   async findRuntimeReconciliationRows(runIds: string[]) {
     if (runIds.length === 0) return [];
@@ -132,9 +154,7 @@ export class RunRepository {
   }
 
   /** user 停用/删除级联用：该 user 名下所有活跃 run 的会话 id（去重）。 */
-  async findActiveConversationIdsForUser(
-    userId: string
-  ): Promise<string[]> {
+  async findActiveConversationIdsForUser(userId: string): Promise<string[]> {
     const rows = await this.prisma.run.findMany({
       where: {
         conversation: { workspace: { userId } },

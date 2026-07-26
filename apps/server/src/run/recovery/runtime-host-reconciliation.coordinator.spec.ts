@@ -10,13 +10,15 @@ function deferred() {
   return { promise, resolve };
 }
 
-function makeCoordinator(overrides: {
-  runs?: Record<string, unknown>;
-  workspaces?: Record<string, unknown>;
-  users?: Record<string, unknown>;
-  runtimeHosts?: Record<string, unknown>;
-  hostResources?: Record<string, unknown>;
-} = {}) {
+function makeCoordinator(
+  overrides: {
+    runs?: Record<string, unknown>;
+    workspaces?: Record<string, unknown>;
+    users?: Record<string, unknown>;
+    runtimeHosts?: Record<string, unknown>;
+    hostResources?: Record<string, unknown>;
+  } = {}
+) {
   const runs = {
     reconcileRuntimeHostRuns: vi.fn().mockResolvedValue(undefined),
     ...overrides.runs,
@@ -33,19 +35,17 @@ function makeCoordinator(overrides: {
     isCurrentReconciliationEpoch: vi.fn().mockReturnValue(true),
     markReconciled: vi.fn().mockReturnValue(true),
     markReconcileFailed: vi.fn().mockReturnValue(true),
-    ...overrides.runtimeHosts,
-  };
-  const hostResources = {
     listLifecycleClaims: vi.fn().mockResolvedValue([]),
     ...overrides.hostResources,
+    ...overrides.runtimeHosts,
   };
   const coordinator = new RuntimeHostReconciliationCoordinator(
     runs as never,
     workspaces as never,
     users as never,
-    runtimeHosts as never,
-    hostResources as never
+    runtimeHosts as never
   );
+  const hostResources = runtimeHosts;
   return { coordinator, runs, workspaces, users, runtimeHosts, hostResources };
 }
 
@@ -103,22 +103,50 @@ describe("RuntimeHostReconciliationCoordinator", () => {
   });
 
   it.each([
-    ["run", { runs: { reconcileRuntimeHostRuns: vi.fn().mockRejectedValue(new Error("run")) } }],
-    ["workspace", { workspaces: { reconcileRuntimeHostResources: vi.fn().mockRejectedValue(new Error("workspace")) } }],
-    ["user", { users: { reconcileRuntimeHostResources: vi.fn().mockRejectedValue(new Error("user")) } }],
-  ])("keeps the host fail-closed when %s reconciliation fails", async (_name, overrides) => {
-    const deps = makeCoordinator(overrides);
-    await deps.coordinator.onRuntimeHostConnected(
-      new RuntimeHostConnectedEvent("host-1", 3)
-    );
+    [
+      "run",
+      {
+        runs: {
+          reconcileRuntimeHostRuns: vi.fn().mockRejectedValue(new Error("run")),
+        },
+      },
+    ],
+    [
+      "workspace",
+      {
+        workspaces: {
+          reconcileRuntimeHostResources: vi
+            .fn()
+            .mockRejectedValue(new Error("workspace")),
+        },
+      },
+    ],
+    [
+      "user",
+      {
+        users: {
+          reconcileRuntimeHostResources: vi
+            .fn()
+            .mockRejectedValue(new Error("user")),
+        },
+      },
+    ],
+  ])(
+    "keeps the host fail-closed when %s reconciliation fails",
+    async (_name, overrides) => {
+      const deps = makeCoordinator(overrides);
+      await deps.coordinator.onRuntimeHostConnected(
+        new RuntimeHostConnectedEvent("host-1", 3)
+      );
 
-    expect(deps.runtimeHosts.markReconcileFailed).toHaveBeenCalledWith(
-      "host-1",
-      3
-    );
-    expect(deps.runtimeHosts.markReconciled).not.toHaveBeenCalled();
-    deps.coordinator.onApplicationShutdown();
-  });
+      expect(deps.runtimeHosts.markReconcileFailed).toHaveBeenCalledWith(
+        "host-1",
+        3
+      );
+      expect(deps.runtimeHosts.markReconciled).not.toHaveBeenCalled();
+      deps.coordinator.onApplicationShutdown();
+    }
+  );
 
   it("reruns the complete attempt on the same connection after failure", async () => {
     vi.useFakeTimers();

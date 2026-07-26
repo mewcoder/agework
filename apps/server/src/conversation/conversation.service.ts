@@ -341,62 +341,62 @@ export class ConversationService {
   }
 
   /**
-   * 原子切换会话运行状态;切到 `running` 时要求当前状态为 `idle`/`error`,防止重复启动 run。
-   * 返回是否命中并发生变更。
-   * 调用方:`AgentService`(停止后置 idle)、`RunLauncher`(激活前置 running)、
-   * `RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)。
-   */
-  async setRunStatus(
-    conversationId: string,
-    runStatus: "idle" | "running" | "error"
-  ): Promise<boolean> {
-    return this.repo.setRunStatus(conversationId, runStatus);
-  }
-
-  /**
-   * ConversationEffectsPort 实现:原子激活会话(setRunStatus("running")),
+   * ConversationEffectsPort 实现:原子激活会话并记录投影 owner runId,
    * 激活失败时校验归属(findById 抛 NotFoundException),返回是否成功激活。
-   * 调用方:`RunLauncher.claimRun`,经 Port 回流,run 模块不直接依赖本 Service。
+   * 调用方:`RunLauncher.claimRun`。
    */
   async activateConversation(
     conversationId: string,
-    userId: string
+    userId: string,
+    runId: string
   ): Promise<boolean> {
-    const activated = await this.setRunStatus(conversationId, "running");
+    const activated = await this.repo.claimRun(conversationId, runId);
     if (activated) return true;
     await this.findById(userId, conversationId);
     return false;
   }
 
   /**
-   * ConversationEffectsPort 实现:设置会话运行终态 / 中间态(idle / error / pendingUserAction)。
-   * 调用方:`RunStatusService`(终态回写)、`RunRecoveryService`(重启恢复时置 error)、
-   * `RunLauncher`(startWorker 失败时置 error),经 Port 回流。
+   * steering 所有权交接:只有仍由 currentRunId 持有的 running 会话可转交。
+   * 失败时校验归属并返回 false，让调用方拒绝无 owner 的新 Run。
    */
-  async setConversationRunState(
+  async handoffConversationRun(
     conversationId: string,
-    state: {
-      runStatus?: "idle" | "running" | "error";
-      pendingUserAction?: ConversationPendingUserAction | null;
-    }
-  ): Promise<void> {
-    if (state.pendingUserAction !== undefined) {
-      await this.setPendingUserAction(conversationId, state.pendingUserAction);
-    }
-    if (state.runStatus !== undefined) {
-      await this.setRunStatus(conversationId, state.runStatus);
-    }
+    userId: string,
+    currentRunId: string,
+    nextRunId: string
+  ): Promise<boolean> {
+    const handedOff = await this.repo.handoffRun(
+      conversationId,
+      currentRunId,
+      nextRunId
+    );
+    if (handedOff) return true;
+    await this.findById(userId, conversationId);
+    return false;
   }
 
-  /**
-   * 记录待用户操作(如 `question`),用于 requires-action 场景标记会话需要用户输入。
-   * 调用方:`RunStatusService`。
-   */
-  async setPendingUserAction(
+  /** Run 状态投影只能由 activeRunId 对应的 owner Run 写入。 */
+  async setConversationRunStateForRun(
     conversationId: string,
-    pendingUserAction: ConversationPendingUserAction
-  ) {
-    await this.repo.setPendingUserAction(conversationId, pendingUserAction);
+    runId: string,
+    state: {
+      runStatus?: "idle" | "error";
+      pendingUserAction?: ConversationPendingUserAction | null;
+    }
+  ): Promise<boolean> {
+    return this.repo.setRunStateForOwner(conversationId, runId, state);
+  }
+
+  /** 启动恢复路径：仅在不存在非终态 Run 时修复遗留投影。 */
+  async reconcileConversationRunState(
+    conversationId: string,
+    runStatus: "idle" | "error"
+  ): Promise<boolean> {
+    return this.repo.reconcileRunStateWithoutActiveRun(
+      conversationId,
+      runStatus
+    );
   }
 
   /**

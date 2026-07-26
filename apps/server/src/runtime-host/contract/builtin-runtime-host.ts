@@ -65,91 +65,93 @@ export class BuiltinRuntimeHostLifecycle implements OnApplicationShutdown {
   }
 }
 
-export const builtinRuntimeHostLifecycleProvider: FactoryProvider<BuiltinRuntimeHostLifecycle> = {
-  provide: BUILTIN_RUNTIME_HOST_LIFECYCLE,
-  inject: [ConfigService, RuntimeHostRepository, RunEventService],
-  useFactory: async (
-    configService: ConfigService,
-    repository: RuntimeHostRepository,
-    runEvents: RunEventService
-  ): Promise<BuiltinRuntimeHostLifecycle> => {
-    const workerPort = configService.getBuiltinWorkerHttpPort();
-    const apiBasePath = configService.getApiBasePath();
-    const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
+export const builtinRuntimeHostLifecycleProvider: FactoryProvider<BuiltinRuntimeHostLifecycle> =
+  {
+    provide: BUILTIN_RUNTIME_HOST_LIFECYCLE,
+    inject: [ConfigService, RuntimeHostRepository, RunEventService],
+    useFactory: async (
+      configService: ConfigService,
+      repository: RuntimeHostRepository,
+      runEvents: RunEventService
+    ): Promise<BuiltinRuntimeHostLifecycle> => {
+      const workerPort = configService.getBuiltinWorkerHttpPort();
+      const apiBasePath = configService.getApiBasePath();
+      const workerApiBaseUrl = `http://127.0.0.1:${workerPort}${apiBasePath}`;
 
-    const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
-    const providerPlugins = [
-      createDockerRuntimePlugin(),
-      ...(await loadRuntimePlugins(configService.getRuntimePluginPackages())),
-    ];
-    const pluginsByType = new Map(
-      providerPlugins.map((plugin) => [plugin.type, plugin])
-    );
-    // native 进程内恒可用；其余 provider 由各自插件声明探测能力。
-    const detectCapabilities = async (): Promise<HostCapabilityStatus> => {
-      const entries = await Promise.all(
-        configService.getAllowedRuntimeTypes().map(async (runtimeType) => {
-          const plugin = pluginsByType.get(runtimeType);
-          const availability = plugin?.probe
-            ? await plugin.probe()
-            : { available: true };
-          return [
-            runtimeType,
-            {
-              ...availability,
-              displayName:
-                runtimeType === "native"
-                  ? "Native"
-                  : plugin?.displayName ?? runtimeType,
-              scopes:
-                runtimeType === "native"
-                  ? ["workspace"]
-                  : plugin?.scopes ?? ["user", "workspace"],
-            },
-          ] as const;
-        })
+      const providerConfig = toRuntimeConfig(configService, workerApiBaseUrl);
+      const providerPlugins = [
+        createDockerRuntimePlugin(),
+        ...(await loadRuntimePlugins(configService.getRuntimePluginPackages())),
+      ];
+      const pluginsByType = new Map(
+        providerPlugins.map((plugin) => [plugin.type, plugin])
       );
-      return Object.fromEntries(entries) as HostCapabilityStatus;
-    };
-    const capabilities = await detectCapabilities();
+      // native 进程内恒可用；其余 provider 由各自插件声明探测能力。
+      const detectCapabilities = async (): Promise<HostCapabilityStatus> => {
+        const entries = await Promise.all(
+          configService.getAllowedRuntimeTypes().map(async (runtimeType) => {
+            const plugin = pluginsByType.get(runtimeType);
+            const availability = plugin?.probe
+              ? await plugin.probe()
+              : { available: true };
+            return [
+              runtimeType,
+              {
+                ...availability,
+                displayName:
+                  runtimeType === "native"
+                    ? "Native"
+                    : (plugin?.displayName ?? runtimeType),
+                scopes:
+                  runtimeType === "native"
+                    ? ["workspace"]
+                    : (plugin?.scopes ?? ["user", "workspace"]),
+              },
+            ] as const;
+          })
+        );
+        return Object.fromEntries(entries) as HostCapabilityStatus;
+      };
+      const capabilities = await detectCapabilities();
 
-    const host = new RuntimeHost({
-      runtimeLogDir: configService.getRuntimeLogDir(),
-      getUserWorkspace: (username) => configService.getUserWorkspace(username),
-      launchTimeoutMs: configService.getLaunchTimeoutSeconds() * 1000,
-      heartbeatTimeoutMs: configService.getHeartbeatTimeoutSeconds() * 1000,
-      agentEventTrace: configService.getAgentEventTraceConfig(),
-      cliInstallDir: configService.getHostCliDir(),
-      capabilities,
-      // provider 依赖中途挂掉/恢复反映到放置准入,只拦新 run
-      refreshCapabilities: detectCapabilities,
-      providerConfig,
-      providerPlugins,
-      agentPluginPackages: configService.getAgentPluginPackages(),
-      resolveCliPaths: async () => {
-        const row = await repository.findById(BUILTIN_HOST_ID);
-        return row
-          ? resolveRuntimeHostCliPaths(row)
-          : { claude: null, codex: null, opencode: null, pi: null };
-      },
-      // 「命令已下发」是记账不是执行回流,直接落 run-event 账本(best-effort)
-      onCommandDispatched: ({ runId, commandId, commandType }) => {
-        void runEvents
-          .append(runEvents.commandSent({ runId, commandId, commandType }))
-          .catch(() => {});
-      },
-    });
+      const host = new RuntimeHost({
+        runtimeLogDir: configService.getRuntimeLogDir(),
+        getUserWorkspace: (username) =>
+          configService.getUserWorkspace(username),
+        launchTimeoutMs: configService.getLaunchTimeoutSeconds() * 1000,
+        heartbeatTimeoutMs: configService.getHeartbeatTimeoutSeconds() * 1000,
+        agentEventTrace: configService.getAgentEventTraceConfig(),
+        cliInstallDir: configService.getHostCliDir(),
+        capabilities,
+        // provider 依赖中途挂掉/恢复反映到放置准入,只拦新 run
+        refreshCapabilities: detectCapabilities,
+        providerConfig,
+        providerPlugins,
+        agentPluginPackages: configService.getAgentPluginPackages(),
+        resolveCliPaths: async () => {
+          const row = await repository.findById(BUILTIN_HOST_ID);
+          return row
+            ? resolveRuntimeHostCliPaths(row)
+            : { claude: null, codex: null, opencode: null, pi: null };
+        },
+        // 「命令已下发」是记账不是执行回流,直接落 run-event 账本(best-effort)
+        onCommandDispatched: ({ runId, commandId, commandType }) => {
+          void runEvents
+            .append(runEvents.commandSent({ runId, commandId, commandType }))
+            .catch(() => {});
+        },
+      });
 
-    // builtin Host 自管 worker HTTP 服务器——worker 数据面对端不再连 server
-    const httpServer = new WorkerHttpServer(host, workerPort, apiBasePath);
-    const lifecycle = new BuiltinRuntimeHostLifecycle(host, httpServer);
-    await lifecycle.initialize();
-    logger.log(
-      `builtin Host worker HTTP server listening on port ${workerPort}`
-    );
-    return lifecycle;
-  },
-};
+      // builtin Host 自管 worker HTTP 服务器——worker 数据面对端不再连 server
+      const httpServer = new WorkerHttpServer(host, workerPort, apiBasePath);
+      const lifecycle = new BuiltinRuntimeHostLifecycle(host, httpServer);
+      await lifecycle.initialize();
+      logger.log(
+        `builtin Host worker HTTP server listening on port ${workerPort}`
+      );
+      return lifecycle;
+    },
+  };
 
 export const builtinRuntimeHostProvider: FactoryProvider<RuntimeHost> = {
   provide: BUILTIN_RUNTIME_HOST,

@@ -73,10 +73,6 @@ export type {
   WorkerRegisterRequest,
   WorkerRegisterResponse,
   WorkerScope,
-  RuntimeSpec,
-  NativeRuntimeSpec,
-  SandboxRuntimeSpec,
-  SandboxPlacementInfo,
 } from "./channel";
 export type {
   RuntimeType,

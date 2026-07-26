@@ -10,16 +10,11 @@ import {
 import { generateId } from "@agework/shared";
 import type { Response } from "express";
 import { swallow } from "../common/swallow";
-import type {
-  RuntimeHostDiagnostics,
-  RuntimeHostExecution,
-} from "@agework/shared/protocol";
+import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "./run.repository";
 import { LiveRunRegistry } from "./live-run/live-run.registry";
-import {
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_EXECUTION,
-} from "../runtime-host/runtime-host.types";
+import { RUNTIME_HOST_EXECUTION } from "../runtime-host/runtime-host.types";
+import { RuntimeHostService } from "../runtime-host/runtime-host.service";
 import { type IncompleteMessageReason } from "./upstream/assistant-message.aggregator";
 import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
@@ -38,8 +33,7 @@ export class RunService implements OnApplicationBootstrap {
     private readonly liveRuns: LiveRunRegistry,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
-    @Inject(RUNTIME_HOST_DIAGNOSTICS)
-    private readonly runtimeHostDiagnostics: RuntimeHostDiagnostics,
+    private readonly runtimeHosts: RuntimeHostService,
     private readonly runEvents: RunEventService,
     private readonly runStatusService: RunStatusService,
     private readonly runLauncher: RunLauncher,
@@ -78,7 +72,7 @@ export class RunService implements OnApplicationBootstrap {
     if (!row) {
       throw new NotFoundException(`Run ${id} 不存在`);
     }
-    const workers = await this.runtimeHostDiagnostics.listWorkers();
+    const { list: workers } = await this.runtimeHosts.listWorkersForAdmin();
     const worker = workers.find((w) => w.runIds.includes(id)) ?? null;
     return { ...toAdminRunDetail(row), worker };
   }
@@ -157,7 +151,7 @@ export class RunService implements OnApplicationBootstrap {
   async start(input: StartRunInput): Promise<void> {
     await this.runLauncher.launch(input, {
       stopActiveRun: (conversationId, options) =>
-        this.stop(conversationId, options),
+        this.stopWithResult(conversationId, options),
     });
   }
 
@@ -271,13 +265,20 @@ export class RunService implements OnApplicationBootstrap {
 
   /**
    * 停止指定 conversation 的活跃 run。
-   * @returns 是否存在活跃的 in-memory run handle。
-   *   conversation agent 路由用此判断是否需要重置 conversation status。
+   * @returns 是否存在活跃的 in-memory run handle 并已下发取消命令。
    */
   async stop(
     conversationId: string,
     options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
   ): Promise<boolean> {
+    return (await this.stopWithResult(conversationId, options)).hadHandle;
+  }
+
+  /** steering 额外需要旧 runId，才能原子交接 Conversation 投影所有权。 */
+  private async stopWithResult(
+    conversationId: string,
+    options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
+  ): Promise<{ runId?: string; hadHandle: boolean }> {
     const activeRunRecord =
       await this.runRepository.findActiveByConversationId(conversationId);
     const handle = activeRunRecord
@@ -286,11 +287,12 @@ export class RunService implements OnApplicationBootstrap {
     if (!handle) {
       // No in-memory handle — clean up stale state
       if (activeRunRecord) {
-        await this.runStatusService.markCancelledWithoutHandle(
-          activeRunRecord.id
-        );
+        await this.runStatusService.markCancelledWithoutHandle({
+          runId: activeRunRecord.id,
+          conversationId,
+        });
       }
-      return false;
+      return { runId: activeRunRecord?.id, hadHandle: false };
     }
     handle.stopRequested = true;
     handle.stopReason = options?.reason;
@@ -314,7 +316,7 @@ export class RunService implements OnApplicationBootstrap {
       handle.stream.end();
       handle.stream.detach();
     }
-    return true;
+    return { runId: handle.runId, hadHandle: true };
   }
 }
 

@@ -26,15 +26,13 @@ import type {
   StopWorkerInput,
   SubmitRunInput,
   WorkerSnapshot,
-  WorkspaceFileQuery,
-} from "@agework/shared/protocol";
-import type {
   WorkspaceChangedFilesResponse,
   WorkspaceFileDiffResponse,
   WorkspaceFileListResponse,
+  WorkspaceFileQuery,
   WorkspaceFileReadResponse,
   WorkspaceFileSearchResponse,
-} from "@agework/shared/api";
+} from "@agework/shared/protocol";
 import { ConfigService } from "../../config/config.service";
 import { HostTunnelHandler } from "../gateway/host-tunnel.handler";
 

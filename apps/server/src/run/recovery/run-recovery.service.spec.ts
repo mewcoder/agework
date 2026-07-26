@@ -2,10 +2,9 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import type { RuntimeHostContract } from "@agework/shared/protocol";
 import { RunRecoveryService } from "./run-recovery.service";
 import type { RunRepository } from "../run.repository";
-import type { ConversationService } from "../../conversation/conversation.service";
+import type { RunStatusService } from "../status/run-status.service";
 import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { ConfigService } from "../../config/config.service";
-import type { RuntimeHostRunReconciliation } from "../../runtime-host/runtime-host.types";
 
 function makeRuntimeHost(
   overrides: Record<string, unknown> = {}
@@ -30,14 +29,16 @@ function makeActiveRun(input: { id?: string; runtimeHostId?: string }) {
 function makeDeps(activeRuns: unknown[]) {
   const runRepository: Partial<RunRepository> = {
     listActive: vi.fn().mockResolvedValue(activeRuns),
-    markError: vi.fn().mockResolvedValue(undefined),
     findRuntimeReconciliationRows: vi.fn().mockResolvedValue([]),
+    findRunningConversationsWithoutActiveRun: vi.fn().mockResolvedValue([]),
   };
-  const conversationService: Partial<ConversationService> = {
-    setConversationRunState: vi.fn().mockResolvedValue(undefined),
+  const runStatusService: Partial<RunStatusService> = {
+    failRun: vi.fn().mockResolvedValue(undefined),
+    reconcileConversationRunStatus: vi.fn().mockResolvedValue(undefined),
   };
   const runtimeHostService: Partial<RuntimeHostService> = {
     getRuntimeHostRow: vi.fn().mockResolvedValue(null),
+    listRunIds: vi.fn().mockResolvedValue([]),
   };
   // check 间隔 60s;判死窗口 300s → 兜底 grace 600s(2×),
   // 保证「sweep 触发时刚断线的 run」还在 grace 内不被误杀。
@@ -47,7 +48,7 @@ function makeDeps(activeRuns: unknown[]) {
   };
   return {
     runRepository,
-    conversationService,
+    runStatusService,
     runtimeHostService,
     configService,
   };
@@ -56,17 +57,15 @@ function makeDeps(activeRuns: unknown[]) {
 function makeService(
   deps: ReturnType<typeof makeDeps>,
   runtimeHost: Partial<RuntimeHostContract>,
-  runReconciliation: Partial<RuntimeHostRunReconciliation> = {
-    listRunIds: vi.fn().mockResolvedValue([]),
-  }
+  runtimeHostServiceOverrides: Partial<RuntimeHostService> = {}
 ) {
+  Object.assign(deps.runtimeHostService, runtimeHostServiceOverrides);
   return new RunRecoveryService(
     deps.runRepository as RunRepository,
-    deps.conversationService as unknown as ConversationService,
+    deps.runStatusService as RunStatusService,
     deps.runtimeHostService as RuntimeHostService,
     deps.configService as ConfigService,
     runtimeHost as RuntimeHostContract,
-    runReconciliation as RuntimeHostRunReconciliation,
     { setRunReapPort: vi.fn() }
   );
 }
@@ -87,13 +86,11 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     await service.failInterruptedRuns();
 
-    expect(deps.runRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "服务重启导致运行中断"
-    );
-    expect(
-      deps.conversationService.setConversationRunState
-    ).toHaveBeenCalledWith("conversation-1", { runStatus: "error" });
+    expect(deps.runStatusService.failRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "服务重启导致运行中断",
+    });
   });
 
   it("fails registered-host runs and cancels their stale remote sessions", async () => {
@@ -107,10 +104,11 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
     await service.failInterruptedRuns();
 
-    expect(deps.runRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "服务重启导致运行中断"
-    );
+    expect(deps.runStatusService.failRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "服务重启导致运行中断",
+    });
     expect(runtimeHost.command).toHaveBeenCalledWith({
       runtimeHostId: "rt-registered-1",
       payload: expect.objectContaining({
@@ -122,6 +120,46 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
     expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
       runtimeHostId: "rt-registered-1",
       runId: "run-1",
+    });
+  });
+
+  it("repairs stale Conversation projections after recovering active runs", async () => {
+    const deps = makeDeps([]);
+    deps.runRepository.findRunningConversationsWithoutActiveRun = vi
+      .fn()
+      .mockResolvedValue([
+        { id: "conversation-finished", runs: [{ status: "finished" }] },
+        { id: "conversation-cancelled", runs: [{ status: "cancelled" }] },
+        { id: "conversation-error", runs: [{ status: "error" }] },
+        { id: "conversation-no-run", runs: [] },
+      ]);
+    service = makeService(deps, makeRuntimeHost());
+
+    await service.failInterruptedRuns();
+
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-finished",
+      runStatus: "idle",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-cancelled",
+      runStatus: "idle",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-error",
+      runStatus: "error",
+    });
+    expect(
+      deps.runStatusService.reconcileConversationRunStatus
+    ).toHaveBeenCalledWith({
+      conversationId: "conversation-no-run",
+      runStatus: "error",
     });
   });
 
@@ -215,7 +253,7 @@ describe("RunRecoveryService.failInterruptedRuns", () => {
 
   it("rejects bootstrap recovery when the core run status write fails", async () => {
     const deps = makeDeps([makeActiveRun({ runtimeHostId: "builtin" })]);
-    deps.runRepository.markError = vi
+    deps.runStatusService.failRun = vi
       .fn()
       .mockRejectedValue(new Error("database unavailable"));
     service = makeService(deps, makeRuntimeHost());
@@ -242,7 +280,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     vi.useFakeTimers();
     service = makeService(deps, runtimeHost);
     await service.failInterruptedRuns(); // 启动 sweep 定时器
-    (deps.runRepository.markError as ReturnType<typeof vi.fn>).mockClear();
+    (deps.runStatusService.failRun as ReturnType<typeof vi.fn>).mockClear();
     await vi.advanceTimersByTimeAsync(60_000);
   }
 
@@ -258,10 +296,11 @@ describe("RunRecoveryService abandoned-host sweep", () => {
 
     await runOneSweep(deps, runtimeHost);
 
-    expect(deps.runRepository.markError).toHaveBeenCalledWith(
-      "run-1",
-      "Runtime Host 离线超时,运行中断"
-    );
+    expect(deps.runStatusService.failRun).toHaveBeenCalledWith({
+      runId: "run-1",
+      conversationId: "conversation-1",
+      error: "Runtime Host 离线超时,运行中断",
+    });
     expect(runtimeHost.releaseRun).toHaveBeenCalledWith({
       runtimeHostId: "rt-registered-1",
       runId: "run-1",
@@ -279,7 +318,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
 
     await runOneSweep(deps, makeRuntimeHost());
 
-    expect(deps.runRepository.markError).not.toHaveBeenCalled();
+    expect(deps.runStatusService.failRun).not.toHaveBeenCalled();
   });
 
   it("leaves runs alone during the grace window right after a disconnect", async () => {
@@ -293,7 +332,7 @@ describe("RunRecoveryService abandoned-host sweep", () => {
 
     await runOneSweep(deps, makeRuntimeHost());
 
-    expect(deps.runRepository.markError).not.toHaveBeenCalled();
+    expect(deps.runStatusService.failRun).not.toHaveBeenCalled();
   });
 
   it("never sweeps builtin Host runs (they are handled at boot)", async () => {
@@ -302,6 +341,6 @@ describe("RunRecoveryService abandoned-host sweep", () => {
     await runOneSweep(deps, makeRuntimeHost());
 
     expect(deps.runtimeHostService.getRuntimeHostRow).not.toHaveBeenCalled();
-    expect(deps.runRepository.markError).not.toHaveBeenCalled();
+    expect(deps.runStatusService.failRun).not.toHaveBeenCalled();
   });
 });

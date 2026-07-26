@@ -7,12 +7,14 @@ import { RunEventService } from "../run-event/run-event.service";
 import { RunStatusService } from "./status/run-status.service";
 import { RunLauncher } from "./launch/run.launcher";
 import { RunRecoveryService } from "./recovery/run-recovery.service";
+import type { RuntimeHostService } from "../runtime-host/runtime-host.service";
 
 describe("RunService", () => {
   let service: RunService;
   let mockRunRepository: Partial<RunRepository>;
   let mockLiveRunRegistry: Partial<LiveRunRegistry>;
   let mockRuntimeHost: Partial<RuntimeHostContract>;
+  let mockRuntimeHostService: Partial<RuntimeHostService>;
   let mockRunEvents: RunEventService;
   let mockRunStatusService: Partial<RunStatusService>;
   let mockRunLauncher: Partial<RunLauncher>;
@@ -30,7 +32,9 @@ describe("RunService", () => {
     };
     mockRuntimeHost = {
       command: vi.fn().mockResolvedValue(undefined),
-      listWorkers: vi.fn().mockResolvedValue([]),
+    };
+    mockRuntimeHostService = {
+      listWorkersForAdmin: vi.fn().mockResolvedValue({ list: [] }),
     };
     mockRunEvents = new RunEventService({} as never, {} as never, {} as never);
     vi.spyOn(mockRunEvents, "append").mockResolvedValue({} as never);
@@ -49,7 +53,7 @@ describe("RunService", () => {
       mockRunRepository as RunRepository,
       mockLiveRunRegistry as LiveRunRegistry,
       mockRuntimeHost as RuntimeHostContract,
-      mockRuntimeHost as RuntimeHostContract,
+      mockRuntimeHostService as RuntimeHostService,
       mockRunEvents,
       mockRunStatusService as RunStatusService,
       mockRunLauncher as RunLauncher,
@@ -373,9 +377,9 @@ describe("RunService", () => {
 
     it("reshapes the raw row and attaches the live worker snapshot", async () => {
       mockRunRepository.findAdminDetail = vi.fn().mockResolvedValue(rawRow);
-      mockRuntimeHost.listWorkers = vi
-        .fn()
-        .mockResolvedValue([{ workerId: "w-1", runIds: ["run-1"] }]);
+      mockRuntimeHostService.listWorkersForAdmin = vi.fn().mockResolvedValue({
+        list: [{ workerId: "w-1", runIds: ["run-1"] }],
+      });
 
       const detail = await service.getDetailForAdmin("run-1");
 
@@ -468,7 +472,10 @@ describe("RunService", () => {
 
       expect(
         mockRunStatusService.markCancelledWithoutHandle
-      ).toHaveBeenCalledWith("run-1");
+      ).toHaveBeenCalledWith({
+        runId: "run-1",
+        conversationId: "conversation-1",
+      });
       expect(hadHandle).toBe(false);
     });
 

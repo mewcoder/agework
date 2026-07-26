@@ -195,13 +195,18 @@ function makeServices() {
   const prisma = new MemoryPrisma();
   const passwordHasher = new PasswordHasherService();
   const repository = new UserRepository(prisma as unknown as PrismaService);
-  const users = new UserService(repository, passwordHasher, {
-    emit: vi.fn(),
-  } as never, {
-    listLifecycleClaims: vi.fn().mockResolvedValue([]),
-    listConnectedHostIds: vi.fn().mockReturnValue([]),
-    releaseResources: vi.fn().mockResolvedValue(undefined),
-  } as never);
+  const users = new UserService(
+    repository,
+    passwordHasher,
+    {
+      emit: vi.fn(),
+    } as never,
+    {
+      listLifecycleClaims: vi.fn().mockResolvedValue([]),
+      listConnectedHostIds: vi.fn().mockReturnValue([]),
+      releaseResources: vi.fn().mockResolvedValue(undefined),
+    } as never
+  );
 
   return { users, repository, passwordHasher, prisma };
 }

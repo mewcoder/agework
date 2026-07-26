@@ -13,7 +13,7 @@ import type {
 
 // ── Server ↔ Runtime Host 契约 ──────────────────────────────────────
 //
-// 设计定案见 .scratch/runtime-owner-boundary/SPEC.md。
+// 设计定案见 docs/design/runtime-owner-boundary.md。
 // Server 只下发 scope 与业务身份事实,Runtime 是复用身份与复用策略的唯一权威。
 
 /** Runtime SDK 插件声明的开放标识，如 native / docker / opensandbox。 */

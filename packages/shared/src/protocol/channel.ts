@@ -205,54 +205,8 @@ export interface RunChannel {
   close(): Promise<void>;
 }
 
-// ── RuntimeSpec ──────────────────────────────────────────────────────
-
 /** Worker 复用范围：user（用户范围）或 workspace（工作空间范围）。 */
 export type WorkerScope = "user" | "workspace";
-
-/**
- * 沙箱专属放置信息：复用范围、容器内挂载目标、沙箱引擎类型。
- * 仅 runtimeType 为 container（docker|opensandbox）时存在；native 模式无 sandbox scope，不带此对象。
- */
-export type SandboxPlacementInfo = {
-  scope: WorkerScope;
-  /** 容器/沙箱内 hostPath 的挂载目标路径（如 `/workspace` 或 `/workspaces`）。 */
-  mountTarget: string;
-};
-
-/**
- * 一次 run 已解析的 runtime 规格：workspace 怎么挂进运行环境（host/容器侧路径 + 挂载点）。
- * 启动前纯计算,provider 照此挂卷/起容器。
- *
- * `sandbox` 是否存在决定 placement 形态；runtimeType 是插件开放标识，不再承担封闭联合判别。
- * `runtimePath` 跨 native/container 都有意义（worker 在执行环境内看到的
- * workspace 路径），留顶层。container-only 逻辑可直接以 `SandboxRuntimeSpec` 为入参。
- *
- * 隔离/复用身份(isolation)由 Runtime Host 从 placement 派生后注入
- * RuntimeLaunchContext,不再进入 RuntimeSpec。
- */
-type RuntimeSpecBase = {
-  runtimeType: string;
-  userId: string;
-  workspaceId: string;
-  hostPath: string;
-  runtimePath: string;
-  /** 日志目录在执行环境内的路径(native 下即宿主机日志目录)。 */
-  runtimeLogDir: string;
-};
-
-export type NativeRuntimeSpec = RuntimeSpecBase & {
-  runtimeType: "native";
-  sandbox?: never;
-};
-
-export type SandboxRuntimeSpec = RuntimeSpecBase & {
-  sandbox: SandboxPlacementInfo;
-};
-
-export type RuntimeSpec = RuntimeSpecBase & {
-  sandbox?: SandboxPlacementInfo;
-};
 
 // ── RunExecutionHandle ────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeHostResourceReconciliationPort } from "../../runtime-host/runtime-host.types";
+import type { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import type { RunService } from "../run.service";
 import { UserDisabledEvent, UserDeletedEvent } from "../../user/user.events";
 import { RunUserListener } from "./run-user.listener";
@@ -10,7 +10,7 @@ function makeHostResources(overrides: Record<string, unknown> = {}) {
     listConnectedHostIds: vi.fn().mockReturnValue(["builtin"]),
     releaseResources: vi.fn().mockResolvedValue(undefined),
     ...overrides,
-  } as unknown as RuntimeHostResourceReconciliationPort;
+  } as unknown as RuntimeHostService;
 }
 
 function makeDeps(
@@ -23,8 +23,12 @@ function makeDeps(
   const stopForUser =
     overrides.stopForUser ?? vi.fn().mockResolvedValue(undefined);
   const hostResources = makeHostResources({
-    ...(overrides.releaseResources && { releaseResources: overrides.releaseResources }),
-    ...(overrides.listConnectedHostIds && { listConnectedHostIds: overrides.listConnectedHostIds }),
+    ...(overrides.releaseResources && {
+      releaseResources: overrides.releaseResources,
+    }),
+    ...(overrides.listConnectedHostIds && {
+      listConnectedHostIds: overrides.listConnectedHostIds,
+    }),
   });
   const listener = new RunUserListener(
     { stopForUser } as unknown as RunService,
@@ -43,9 +47,7 @@ describe("RunUserListener", () => {
       releaseResources: vi.fn(async () => {
         order.push("release");
       }),
-      listConnectedHostIds: vi
-        .fn()
-        .mockReturnValue(["rt-1", "rt-2"]),
+      listConnectedHostIds: vi.fn().mockReturnValue(["rt-1", "rt-2"]),
     });
 
     await listener.onUserDeactivated(new UserDisabledEvent("user-1", 5));
@@ -103,9 +105,7 @@ describe("RunUserListener", () => {
     // P0 fix: in-flight submit may not have formed a claim yet.
     // Must send release to all connected hosts to install fence.
     const { listener, hostResources } = makeDeps({
-      listConnectedHostIds: vi
-        .fn()
-        .mockReturnValue(["rt-1", "rt-2", "rt-3"]),
+      listConnectedHostIds: vi.fn().mockReturnValue(["rt-1", "rt-2", "rt-3"]),
     });
 
     await listener.onUserDeactivated(new UserDisabledEvent("user-1", 2));

@@ -10,14 +10,12 @@ import type { RuntimeHostExecution } from "@agework/shared/protocol";
 import { RunRepository } from "../run.repository";
 import {
   RUNTIME_HOST_EXECUTION,
-  RUNTIME_HOST_RUN_RECONCILIATION,
   RUNTIME_HOST_RUN_REAP_BINDING,
   type HostReapReason,
   type HostRunReapBinding,
   type HostRunReapPort,
-  type RuntimeHostRunReconciliation,
 } from "../../runtime-host/runtime-host.types";
-import { ConversationService } from "../../conversation/conversation.service";
+import { RunStatusService } from "../status/run-status.service";
 import { RuntimeHostService } from "../../runtime-host/runtime-host.service";
 import { isBuiltinHostId } from "../../runtime-host/runtime-host.types";
 import { ConfigService } from "../../config/config.service";
@@ -59,13 +57,11 @@ export class RunRecoveryService
 
   constructor(
     private readonly runRepository: RunRepository,
-    private readonly conversationService: ConversationService,
+    private readonly runStatusService: RunStatusService,
     private readonly runtimeHostService: RuntimeHostService,
     private readonly configService: ConfigService,
     @Inject(RUNTIME_HOST_EXECUTION)
     private readonly runtimeHost: RuntimeHostExecution,
-    @Inject(RUNTIME_HOST_RUN_RECONCILIATION)
-    private readonly runReconciliation: RuntimeHostRunReconciliation,
     @Inject(RUNTIME_HOST_RUN_REAP_BINDING)
     private readonly runReapBinding: HostRunReapBinding
   ) {}
@@ -90,7 +86,11 @@ export class RunRecoveryService
     } else {
       for (const run of activeRuns) {
         const runtimeHostId = run.conversation.workspace.runtimeHostId;
-        await this.failRun(run.id, run.conversationId, "服务重启导致运行中断");
+        await this.runStatusService.failRun({
+          runId: run.id,
+          conversationId: run.conversationId,
+          error: "服务重启导致运行中断",
+        });
         this.logger.log(`Marked interrupted run ${run.id} as error`);
 
         if (isBuiltinHostId(runtimeHostId)) continue;
@@ -104,7 +104,28 @@ export class RunRecoveryService
         });
       }
     }
+    // active Run 全部判死后再统一修复投影，也覆盖旧数据尚无 activeRunId 的情况。
+    await this.reconcileConversationRunStatuses();
     this.startAbandonedSweep();
+  }
+
+  private async reconcileConversationRunStatuses(): Promise<void> {
+    const staleConversations =
+      await this.runRepository.findRunningConversationsWithoutActiveRun();
+    for (const conversation of staleConversations) {
+      const latestStatus = conversation.runs[0]?.status;
+      const runStatus =
+        latestStatus === "finished" || latestStatus === "cancelled"
+          ? "idle"
+          : "error";
+      await this.runStatusService.reconcileConversationRunStatus({
+        conversationId: conversation.id,
+        runStatus,
+      });
+      this.logger.warn(
+        `Reconciled stale conversation ${conversation.id} run status to ${runStatus}`
+      );
+    }
   }
 
   private async retryHostReconciliation(runtimeHostId: string): Promise<void> {
@@ -124,7 +145,7 @@ export class RunRecoveryService
    * 由协调器保持 fail-closed 并重跑完整 attempt。
    */
   async reconcileRuntimeHost(runtimeHostId: string): Promise<void> {
-    const runIds = await this.runReconciliation.listRunIds(runtimeHostId);
+    const runIds = await this.runtimeHostService.listRunIds(runtimeHostId);
     const rows = await this.runRepository.findRuntimeReconciliationRows(runIds);
     const rowById = new Map(rows.map((row) => [row.id, row]));
     let firstFailure: Error | undefined;
@@ -214,11 +235,11 @@ export class RunRecoveryService
       this.logger.warn(
         `Run ${run.id} abandoned: registered host ${runtimeHostId} offline beyond grace window`
       );
-      await this.failRun(
-        run.id,
-        run.conversationId,
-        "Runtime Host 离线超时,运行中断"
-      );
+      await this.runStatusService.failRun({
+        runId: run.id,
+        conversationId: run.conversationId,
+        error: "Runtime Host 离线超时,运行中断",
+      });
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }
   }
@@ -240,7 +261,11 @@ export class RunRecoveryService
       this.logger.warn(
         `Run ${run.id} reaped: host ${runtimeHostId} ${logDetail}`
       );
-      await this.failRun(run.id, run.conversationId, runReason);
+      await this.runStatusService.failRun({
+        runId: run.id,
+        conversationId: run.conversationId,
+        error: runReason,
+      });
       this.runtimeHost.releaseRun({ runtimeHostId, runId: run.id });
     }
   }
@@ -254,21 +279,5 @@ export class RunRecoveryService
     if (row.status === "online") return false;
     const heartbeatAt = row.lastHeartbeatAt?.getTime() ?? 0;
     return heartbeatAt < cutoffMs;
-  }
-
-  private async failRun(
-    runId: string,
-    conversationId: string,
-    reason: string
-  ): Promise<void> {
-    await this.runRepository.markError(runId, reason);
-    await this.conversationService
-      .setConversationRunState(conversationId, { runStatus: "error" })
-      .catch(
-        swallow(
-          this.logger,
-          `set conversation active run status to error for run ${runId}`
-        )
-      );
   }
 }

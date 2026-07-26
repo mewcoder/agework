@@ -106,6 +106,9 @@ model Conversation {
   title             String?
   status            String    @default("regular")
   runStatus         String    @default("idle")
+  // 当前拥有 Conversation 运行状态投影的 Run。启动/steering/终态均以此做 CAS，
+  // 防止旧 Run 的迟到终态覆盖新 Run 的 running 投影。
+  activeRunId       String?
   pendingUserAction String?
   workspaceId       String
   workspace         Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)

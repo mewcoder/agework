@@ -54,8 +54,18 @@ export class RunStatusService {
     runId: string;
     payload: RunStatusPayload;
     effect: RunStatusEffect;
+    /** 无 LiveRunHandle 的平台恢复路径用它回写会话终态。 */
+    conversationId?: string;
+    /** worker 上行默认 runtime；恢复/平台主动终结显式标 platform。 */
+    origin?: "runtime" | "platform";
   }): Promise<void> {
-    const { runId, payload, effect } = input;
+    const {
+      runId,
+      payload,
+      effect,
+      conversationId,
+      origin = "runtime",
+    } = input;
     const terminal = effect.terminal;
     this.logger[terminal ? "log" : "debug"]("run status", {
       runId,
@@ -66,7 +76,16 @@ export class RunStatusService {
     if (terminal) {
       this.finalization.beginFinalizing(runId);
     }
-    this.recordStatusEvent(runId, payload);
+    if (origin === "platform") {
+      this.recordPlatformStatusChanged(
+        runId,
+        payload.status,
+        payload.error,
+        `record platform run status for run ${runId}`
+      );
+    } else {
+      this.recordStatusEvent(runId, payload);
+    }
     if (effect.persistenceAction === "markRequiresAction") {
       this.runEvents
         .append(this.runEvents.permissionRequested({ runId }))
@@ -86,14 +105,25 @@ export class RunStatusService {
       }
 
       if (handle && payload.pendingAction !== undefined) {
-        await this.conversationService.setConversationRunState(
+        await this.conversationService.setConversationRunStateForRun(
           handle.conversationId,
+          runId,
           { pendingUserAction: payload.pendingAction }
         );
       }
 
-      if (terminal && handle) {
-        await this.applyTerminalEffects(runId, payload, effect, handle);
+      if (terminal) {
+        const terminalConversationId = handle?.conversationId ?? conversationId;
+        if (terminalConversationId) {
+          await this.updateConversationTerminalStatus(
+            runId,
+            effect,
+            terminalConversationId
+          );
+        }
+        if (handle) {
+          await this.applyTerminalEffects(runId, payload, effect, handle);
+        }
       }
 
       // 只有全部终态副作用成功后才记 completed。失败时保留 live handle 与
@@ -114,6 +144,57 @@ export class RunStatusService {
     }
   }
 
+  /**
+   * 平台/恢复侧把 run 收敛为 error。无论 LiveRunHandle 是否存在都复用 apply:
+   * 有 handle 时完整保存消息、结束 SSE 并清理内存；无 handle 时仍统一完成
+   * Run/Conversation 持久化、状态事件和终态守卫。
+   */
+  async failRun(input: {
+    runId: string;
+    conversationId: string;
+    error: string;
+  }): Promise<void> {
+    const payload: RunStatusPayload = {
+      status: "error",
+      error: input.error,
+    };
+    const decision = this.decide(input.runId, payload);
+    if (decision.action === "ignore") return;
+    await this.apply({
+      runId: input.runId,
+      payload,
+      effect: decision.effect,
+      conversationId: input.conversationId,
+      origin: "platform",
+    });
+  }
+
+  /**
+   * Run 行创建前失败时释放 Conversation claim。若已有别的活跃 Run 接管会话，
+   * 不覆盖它的 running 投影。
+   */
+  async failLaunchClaim(input: {
+    runId: string;
+    conversationId: string;
+  }): Promise<boolean> {
+    return this.conversationService.setConversationRunStateForRun(
+      input.conversationId,
+      input.runId,
+      { runStatus: "error" }
+    );
+  }
+
+  /** 重启对账专用：修复没有活跃 Run 时遗留的 Conversation 状态投影。 */
+  async reconcileConversationRunStatus(input: {
+    conversationId: string;
+    runStatus: "idle" | "error";
+  }): Promise<void> {
+    await this.conversationService.reconcileConversationRunState(
+      input.conversationId,
+      input.runStatus
+    );
+  }
+
   /** 平台侧取消请求:活跃 run 标记 cancelling 并记账;终态等 worker 上报 cancelled 收敛。 */
   async markCancelRequested(runId: string, reason?: string): Promise<void> {
     await this.runRepository.markCancelling(runId);
@@ -125,15 +206,24 @@ export class RunStatusService {
     );
   }
 
-  /** 平台侧取消:DB 有活跃行但无内存 handle(重启遗留等),直接落 cancelled 终态并记账。 */
-  async markCancelledWithoutHandle(runId: string): Promise<void> {
-    await this.runRepository.markCancelled(runId);
-    this.recordPlatformStatusChanged(
-      runId,
-      "cancelled",
-      "cancelled_without_handle",
-      `record cancel without handle for run ${runId}`
-    );
+  /** 平台侧取消:DB 有活跃行但无内存 handle(重启遗留等),仍复用完整终态序列。 */
+  async markCancelledWithoutHandle(input: {
+    runId: string;
+    conversationId: string;
+  }): Promise<void> {
+    const payload: RunStatusPayload = {
+      status: "cancelled",
+      error: "cancelled_without_handle",
+    };
+    const decision = this.decide(input.runId, payload);
+    if (decision.action === "ignore") return;
+    await this.apply({
+      runId: input.runId,
+      payload,
+      effect: decision.effect,
+      conversationId: input.conversationId,
+      origin: "platform",
+    });
   }
 
   private recordStatusEvent(runId: string, payload: RunStatusPayload): void {
@@ -195,7 +285,6 @@ export class RunStatusService {
     effect: RunStatusEffect,
     handle: LiveRunHandle
   ): Promise<void> {
-    await this.updateConversationTerminalStatus(runId, effect, handle);
     if (effect.terminalMessageComplete !== true) {
       this.recordMessageFailed(runId, effect, handle);
     }
@@ -231,19 +320,13 @@ export class RunStatusService {
   private async updateConversationTerminalStatus(
     runId: string,
     effect: RunStatusEffect,
-    handle: LiveRunHandle
+    conversationId: string
   ): Promise<void> {
     if (!effect.terminalConversationStatus) return;
 
-    const newerActiveRun = await this.runRepository.findActiveByConversationId(
-      handle.conversationId
-    );
-    if (newerActiveRun && newerActiveRun.id !== runId) {
-      return;
-    }
-
-    await this.conversationService.setConversationRunState(
-      handle.conversationId,
+    await this.conversationService.setConversationRunStateForRun(
+      conversationId,
+      runId,
       { runStatus: effect.terminalConversationStatus }
     );
   }

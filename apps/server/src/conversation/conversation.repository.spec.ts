@@ -1,4 +1,5 @@
 import { ConversationRepository } from "./conversation.repository";
+import { TERMINAL_RUN_STATUSES } from "@agework/shared";
 
 const ownerFilter = { userId: "user-1", deletedAt: null };
 
@@ -86,18 +87,86 @@ describe("ConversationRepository", () => {
     }
   );
 
-  it("setRunStatus guards the running transition and reports whether a row changed", async () => {
+  it("claims an idle/error conversation for one run", async () => {
     const updateMany = vi.fn().mockResolvedValue({ count: 1 });
     const repo = new ConversationRepository(
       makePrisma({ conversation: { updateMany } }) as never
     );
 
-    const changed = await repo.setRunStatus("conv-1", "running");
+    const changed = await repo.claimRun("conv-1", "run-1");
 
     expect(changed).toBe(true);
     expect(updateMany).toHaveBeenCalledWith({
       where: { id: "conv-1", runStatus: { in: ["idle", "error"] } },
-      data: { runStatus: "running", pendingUserAction: null },
+      data: {
+        runStatus: "running",
+        activeRunId: "run-1",
+        pendingUserAction: null,
+      },
+    });
+  });
+
+  it("hands conversation ownership from the steered run to the next run", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repo = new ConversationRepository(
+      makePrisma({ conversation: { updateMany } }) as never
+    );
+
+    await expect(repo.handoffRun("conv-1", "run-old", "run-new")).resolves.toBe(
+      true
+    );
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "conv-1",
+        runStatus: "running",
+        activeRunId: "run-old",
+      },
+      data: { activeRunId: "run-new", pendingUserAction: null },
+    });
+  });
+
+  it("settles only the run that still owns the conversation projection", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repo = new ConversationRepository(
+      makePrisma({ conversation: { updateMany } }) as never
+    );
+
+    await expect(
+      repo.setRunStateForOwner("conv-1", "run-1", { runStatus: "idle" })
+    ).resolves.toBe(true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: "conv-1", activeRunId: "run-1" },
+      data: {
+        runStatus: "idle",
+        activeRunId: null,
+        pendingUserAction: null,
+      },
+    });
+  });
+
+  it("reconciles stale projections only when every Run is terminal", async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const repo = new ConversationRepository(
+      makePrisma({ conversation: { updateMany } }) as never
+    );
+
+    await expect(
+      repo.reconcileRunStateWithoutActiveRun("conv-1", "error")
+    ).resolves.toBe(true);
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "conv-1",
+        runs: {
+          none: {
+            status: { notIn: [...TERMINAL_RUN_STATUSES] },
+          },
+        },
+      },
+      data: {
+        runStatus: "error",
+        activeRunId: null,
+        pendingUserAction: null,
+      },
     });
   });
 

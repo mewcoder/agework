@@ -31,6 +31,7 @@ import { RunEventService } from "../../run-event/run-event.service";
 import type { StartRunInput } from "../run.types";
 import type { WorkspaceRunContext } from "../../workspace/workspace.types";
 import { RunStream } from "../streaming/run.stream";
+import { RunStatusService } from "../status/run-status.service";
 
 type SaveRun = (
   complete: boolean,
@@ -44,7 +45,7 @@ type SaveRun = (
 export type StopActiveRun = (
   conversationId: string,
   options?: { reason?: IncompleteMessageReason; endResponse?: boolean }
-) => Promise<boolean>;
+) => Promise<{ runId?: string; hadHandle: boolean }>;
 
 /**
  * 一次 run 的启动准备能力：业务放置校验、并发守卫、落库 run 记录、提交执行面
@@ -63,7 +64,8 @@ export class RunLauncher {
     private readonly runtimeHost: RuntimeHostExecution,
     private readonly conversationService: ConversationService,
     private readonly runEvents: RunEventService,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
+    private readonly runStatusService: RunStatusService
   ) {}
 
   /** 启动一次 run：从 placement 解析到 live handle 注册的完整出站准备链路。 */
@@ -97,12 +99,33 @@ export class RunLauncher {
       interruptReason,
       stopActiveRun: ports.stopActiveRun,
     });
-    await this.saveUserTurn({
-      conversationId,
-      userMessage,
-      agentType,
-      modelProviderId,
-    });
+
+    try {
+      await this.saveUserTurn({
+        conversationId,
+        userMessage,
+        agentType,
+        modelProviderId,
+      });
+      await this.createRun({
+        runId,
+        conversationId,
+        workspaceId: placement.workspaceId,
+        agentType,
+        runtimeType,
+        scope,
+        userMessageId,
+        userId,
+      });
+    } catch (err) {
+      await this.handlePreRunFailure({
+        runId,
+        conversationId,
+        stream,
+        error: err,
+      });
+      return;
+    }
 
     const aggregator = new AssistantMessageAggregator();
     const saveRun = this.makeSaveRun({ conversationId, runId, aggregator });
@@ -117,19 +140,6 @@ export class RunLauncher {
       runtimeType,
       scope,
     });
-
-    const runCreated = await this.createRun({
-      runId,
-      conversationId,
-      workspaceId: placement.workspaceId,
-      agentType,
-      runtimeType,
-      scope,
-      userMessageId,
-      userId,
-      stream,
-    });
-    if (!runCreated) return;
 
     const runtimeHandle: RunExecutionHandle = {
       runId,
@@ -151,15 +161,13 @@ export class RunLauncher {
       res,
     });
 
-    const submitted = await this.submitToHost({
+    await this.submitToHost({
       runId,
       conversationId,
       placement,
       agentProviderConfig,
       runInput,
-      stream,
     });
-    if (!submitted) this.liveRuns.unregister(runId);
   }
 
   /**
@@ -183,7 +191,7 @@ export class RunLauncher {
     }
     if (!isRuntimeType(runtimeType)) {
       throw new BadRequestException(
-        `工作空间的运行环境类型无效: ${runtimeType}`
+        `工作空间的运行环境类型无效: ${String(runtimeType)}`
       );
     }
 
@@ -231,14 +239,36 @@ export class RunLauncher {
       input;
     const activated = await this.conversationService.activateConversation(
       conversationId,
-      userId
+      userId,
+      runId
     );
     if (activated) return;
     if (interruptReason === "user_steered") {
-      await stopActiveRun(conversationId, {
+      const stopped = await stopActiveRun(conversationId, {
         reason: "user_steered",
         endResponse: true,
       });
+      const handedOff = stopped.runId
+        ? await this.conversationService.handoffConversationRun(
+            conversationId,
+            userId,
+            stopped.runId,
+            runId
+          )
+        : false;
+      // 无内存 handle 的旧 Run 会在 stop 内同步收敛并释放 owner；此时重新认领。
+      const reclaimed =
+        handedOff ||
+        (await this.conversationService.activateConversation(
+          conversationId,
+          userId,
+          runId
+        ));
+      if (!reclaimed) {
+        throw new ConflictException(
+          "Conversation run ownership changed while steering"
+        );
+      }
       this.logger.log("active run interrupted by user steering", {
         conversationId,
         runId,
@@ -317,8 +347,7 @@ export class RunLauncher {
     scope: string;
     userMessageId?: string;
     userId: string;
-    stream: RunStream;
-  }): Promise<boolean> {
+  }): Promise<void> {
     const {
       runId,
       conversationId,
@@ -328,57 +357,65 @@ export class RunLauncher {
       scope,
       userMessageId,
       userId,
-      stream,
     } = input;
 
-    try {
-      await this.runRepository.create({
-        id: runId,
-        conversationId,
-        agentType,
-        runtimeType,
-      });
-      this.recordRunEvent(
-        this.runEvents.runCreated({
-          runId,
-          conversationId,
-          workspaceId,
-          agentType,
-          runtimeType,
-          scope,
-        }),
-        `record run created for run ${runId}`
-      );
-      if (userMessageId) {
-        await this.conversationService
-          .attachMessageToRun(conversationId, userMessageId, runId)
-          .catch(
-            swallow(
-              this.logger,
-              `attach user message ${userMessageId} to run ${runId}`
-            )
-          );
-        this.recordRunEvent(
-          this.runEvents.messageAccepted({
-            runId,
-            conversationId,
-            messageId: userMessageId,
-            userId,
-          }),
-          `record message accepted for run ${runId}`
-        );
-      }
-      return true;
-    } catch (err) {
-      this.logger.warn("create run record failed", {
+    await this.runRepository.create({
+      id: runId,
+      conversationId,
+      agentType,
+      runtimeType,
+    });
+    this.recordRunEvent(
+      this.runEvents.runCreated({
         runId,
         conversationId,
-        ...errorLogFields(err),
-      });
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      stream.writeError({ threadId: conversationId, runId, message: errorMsg });
+        workspaceId,
+        agentType,
+        runtimeType,
+        scope,
+      }),
+      `record run created for run ${runId}`
+    );
+    if (userMessageId) {
+      await this.conversationService
+        .attachMessageToRun(conversationId, userMessageId, runId)
+        .catch(
+          swallow(
+            this.logger,
+            `attach user message ${userMessageId} to run ${runId}`
+          )
+        );
+      this.recordRunEvent(
+        this.runEvents.messageAccepted({
+          runId,
+          conversationId,
+          messageId: userMessageId,
+          userId,
+        }),
+        `record message accepted for run ${runId}`
+      );
+    }
+  }
+
+  /** Run 行尚未创建时失败：释放本次会话 claim，并结束当前响应。 */
+  private async handlePreRunFailure(input: {
+    runId: string;
+    conversationId: string;
+    stream: RunStream;
+    error: unknown;
+  }): Promise<void> {
+    const { runId, conversationId, stream, error } = input;
+    this.logger.warn("prepare run failed", {
+      runId,
+      conversationId,
+      ...errorLogFields(error),
+    });
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await this.runStatusService.failLaunchClaim({ runId, conversationId });
+    } finally {
+      stream.writeError({ threadId: conversationId, runId, message });
       stream.end();
-      return false;
     }
   }
 
@@ -392,16 +429,9 @@ export class RunLauncher {
     placement: RunPlacement;
     agentProviderConfig: AgentProviderConfig;
     runInput: unknown;
-    stream: RunStream;
-  }): Promise<boolean> {
-    const {
-      runId,
-      conversationId,
-      placement,
-      agentProviderConfig,
-      runInput,
-      stream,
-    } = input;
+  }): Promise<void> {
+    const { runId, conversationId, placement, agentProviderConfig, runInput } =
+      input;
     const runtimeType = placement.runtimeType;
 
     try {
@@ -421,7 +451,7 @@ export class RunLauncher {
         agentProviderConfig,
         input: runInput,
       });
-      return true;
+      return;
     } catch (err) {
       this.logger.error("start worker failed", {
         runId,
@@ -429,40 +459,26 @@ export class RunLauncher {
         runtimeType,
         ...errorLogFields(err),
       });
-      await this.runRepository
-        .markError(runId, "Failed to start worker")
-        .catch(swallow(this.logger, `mark run ${runId} start failure`));
-      this.runEvents
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      await this.runEvents
         .append(
           this.runEvents.runtimeStatusChanged({
             runId,
             status: "start_failed",
             runtimeType,
             scope: placement.scope,
-            error: err instanceof Error ? err.message : String(err),
+            error: errorMsg,
             data: errorLogFields(err),
           })
         )
         .catch(
           swallow(this.logger, `record runtime start failure for run ${runId}`)
-        )
-        .finally(() => this.runEvents.forgetRun(runId));
-      await this.conversationService
-        .setConversationRunState(conversationId, { runStatus: "error" })
-        .catch(
-          swallow(
-            this.logger,
-            `set conversation active run status to error for run ${runId}`
-          )
         );
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      stream.writeError({
-        threadId: conversationId,
+      await this.runStatusService.failRun({
         runId,
-        message: "启动 worker 失败: " + errorMsg,
+        conversationId,
+        error: "启动 worker 失败: " + errorMsg,
       });
-      stream.end();
-      return false;
     }
   }
 

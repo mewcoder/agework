@@ -13,6 +13,11 @@ import {
   type InstallCliResult,
   type RuntimeCapabilities,
   type WorkerScope,
+  type WorkspaceChangedFilesResponse,
+  type WorkspaceFileDiffResponse,
+  type WorkspaceFileListResponse,
+  type WorkspaceFileReadResponse,
+  type WorkspaceFileSearchResponse,
 } from "@agework/shared/protocol";
 import { rpcError, rpcSuccess } from "@agework/shared/protocol/rpc";
 import {
@@ -21,21 +26,13 @@ import {
   isHostTunnelServerNotification,
   isWireMessageType,
 } from "@agework/shared/protocol/wire";
-import { AGEWORK_VERSION } from "@agework/shared";
-import type { RuntimeEnvConfig } from "@agework/shared/api";
+import { AGEWORK_VERSION, type RuntimeEnvConfig } from "@agework/shared";
 import type { RegisteredRuntimeHostConfig, RuntimeType } from "./config.js";
 import { detectEnvConfig } from "@agework/shared/cli";
 import type {
   DirectoryListing,
   HostCapabilityStatus,
 } from "@agework/shared/protocol";
-import type {
-  WorkspaceFileListResponse,
-  WorkspaceFileReadResponse,
-  WorkspaceFileSearchResponse,
-  WorkspaceChangedFilesResponse,
-  WorkspaceFileDiffResponse,
-} from "@agework/shared/api";
 import { TunnelUpstream } from "./tunnel-upstream.js";
 
 /** 按 runtimeTypes 构建能力矩阵条目(scope 表 + 各类型的可用性)。 */

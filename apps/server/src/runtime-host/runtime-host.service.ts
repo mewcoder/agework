@@ -2,7 +2,6 @@ import {
   BadGatewayException,
   BadRequestException,
   ConflictException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
@@ -11,9 +10,8 @@ import {
 import { createHash, randomBytes } from "node:crypto";
 import { type AgentType } from "@agework/shared";
 import type {
-  RuntimeHostDiagnostics,
-  RuntimeHostEnvironment,
-  RuntimeHostWorkspaceData,
+  ReleaseRuntimeResourcesInput,
+  RuntimeLifecycleClaim,
   WorkerSnapshot,
 } from "@agework/shared/protocol";
 import { normalizeRuntimeCapabilities } from "@agework/shared/protocol";
@@ -36,19 +34,15 @@ import { RuntimeHostRepository } from "./runtime-host.repository";
 import {
   BUILTIN_HOST_ID,
   isBuiltinHostId,
-  RUNTIME_HOST_CONNECTIVITY,
-  RUNTIME_HOST_DIAGNOSTICS,
-  RUNTIME_HOST_ENVIRONMENT,
-  RUNTIME_HOST_WORKSPACE_DATA,
-  type RuntimeHostConnectivity,
   type RuntimeHostRow,
 } from "./runtime-host.types";
 import { resolveRuntimeHostCliPaths } from "./environment/runtime-host-environment";
 import { HostTunnelHandler } from "./gateway/host-tunnel.handler";
+import { RuntimeHostAdapter } from "./contract/runtime-host.adapter";
 
 /**
-  * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
- * 所有执行机动作统一经最小 RuntimeHost 角色端口；本类不自行访问执行机或拼隧道 RPC。
+ * RuntimeHost 根门面：管理注册、placement 与环境结果持久化，并编排 Host 用例。
+ * 所有执行机动作统一委托 RuntimeHostAdapter；本类不自行访问执行机或拼隧道 RPC。
  *
  * 注意:resolveRuntimeSpec 已删除(SPEC §10.2),由 Runtime SDK 直接处理。
  */
@@ -58,20 +52,13 @@ export class RuntimeHostService implements OnApplicationBootstrap {
 
   constructor(
     private readonly repository: RuntimeHostRepository,
-    @Inject(RUNTIME_HOST_CONNECTIVITY)
-    private readonly connectivity: RuntimeHostConnectivity,
-    @Inject(RUNTIME_HOST_ENVIRONMENT)
-    private readonly environment: RuntimeHostEnvironment,
-    @Inject(RUNTIME_HOST_WORKSPACE_DATA)
-    private readonly workspaceData: RuntimeHostWorkspaceData,
-    @Inject(RUNTIME_HOST_DIAGNOSTICS)
-    private readonly diagnostics: RuntimeHostDiagnostics,
+    private readonly host: RuntimeHostAdapter,
     private readonly tunnelHandler: HostTunnelHandler
   ) {}
 
   /** 启动时只初始化一行 builtin Host，并持久化 Host 报告的完整能力矩阵。 */
   async onApplicationBootstrap(): Promise<void> {
-    const capabilities = await this.environment.detectEnv(BUILTIN_HOST_ID);
+    const capabilities = await this.host.detectEnv(BUILTIN_HOST_ID);
     await this.repository.upsertBuiltin({
       name: BUILTIN_HOST_ID,
       capabilities,
@@ -92,9 +79,31 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     return isBuiltinHostId(runtimeHostId);
   }
 
-/** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
+  /** builtin Host 的固定 id（不查库，和 runtimeType 无关）。 */
   getBuiltinHostId(): string {
     return BUILTIN_HOST_ID;
+  }
+
+  /** 对目标 Host 释放 workspace/user 生命周期资源。 */
+  releaseResources(input: ReleaseRuntimeResourcesInput): Promise<void> {
+    return this.host.releaseResources(input);
+  }
+
+  /** 查询单个或全部在线 Host 的生命周期 claims。 */
+  listLifecycleClaims(
+    runtimeHostId?: string
+  ): Promise<RuntimeLifecycleClaim[]> {
+    return this.host.listLifecycleClaims(runtimeHostId);
+  }
+
+  /** 列出当前在线的 Host id，包含 builtin。 */
+  listConnectedHostIds(): string[] {
+    return this.host.listConnectedHostIds();
+  }
+
+  /** 查询目标 Host 上仍占用的 run id，供恢复对账使用。 */
+  listRunIds(runtimeHostId: string): Promise<string[]> {
+    return this.host.listRunIds(runtimeHostId);
   }
 
   /** 判断给定 epoch 是否仍是该 registered Host 的当前 tunnel session。 */
@@ -112,7 +121,7 @@ export class RuntimeHostService implements OnApplicationBootstrap {
     return this.tunnelHandler.markReconcileFailed(runtimeHostId, epoch);
   }
 
-/** 创建 registered Runtime Host 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
+  /** 创建 registered Runtime Host 并生成配对 token。token 明文只在本次响应出现,库里只存 sha256。 */
   async create(
     ownerId: string,
     name: string
@@ -146,30 +155,30 @@ export class RuntimeHostService implements OnApplicationBootstrap {
 
   /** admin: 现场查询所有 Host(builtin + registered)上的 worker 快照,不入库。 */
   async listWorkersForAdmin(): Promise<{ list: WorkerSnapshot[] }> {
-    return { list: await this.diagnostics.listWorkers() };
+    return { list: await this.host.listWorkers() };
   }
 
-/**
- * admin: 按 runtimeHostId 定向停止目标 Host 上的一个 worker。
- * 目标 Host 离线/超时是预期失败,按上游不可达(502)报告。
- */
-async stopWorkerForAdmin(
-  runtimeHostId: string,
-  workerId: string
-): Promise<void> {
-  try {
-    await this.diagnostics.stopWorker({
-      runtimeHostId,
-      workerId,
-    });
-  } catch (err) {
-    throw new BadGatewayException(
-      `stop worker failed on host ${runtimeHostId}: ${
-        err instanceof Error ? err.message : String(err)
-      }`
-    );
+  /**
+   * admin: 按 runtimeHostId 定向停止目标 Host 上的一个 worker。
+   * 目标 Host 离线/超时是预期失败,按上游不可达(502)报告。
+   */
+  async stopWorkerForAdmin(
+    runtimeHostId: string,
+    workerId: string
+  ): Promise<void> {
+    try {
+      await this.host.stopWorker({
+        runtimeHostId,
+        workerId,
+      });
+    } catch (err) {
+      throw new BadGatewayException(
+        `stop worker failed on host ${runtimeHostId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+    }
   }
-}
 
   /**
    * 查询 Host 是否存在且对该用户可见（自己的 registered 或全局 builtin，且未注销）；
@@ -237,12 +246,12 @@ async stopWorkerForAdmin(
     if (!row) {
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (!this.connectivity.isConnected(runtimeHostId)) {
+    if (!this.host.isConnected(runtimeHostId)) {
       throw new BadRequestException(
         `runtime host ${runtimeHostId} is not connected`
       );
     }
-    const { executablePath } = await this.environment.installCli({
+    const { executablePath } = await this.host.installCli({
       runtimeHostId,
       agentType,
     });
@@ -266,12 +275,12 @@ async stopWorkerForAdmin(
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
     // registered 未连接:不是错误,只是此刻无法检测(前端按离线展示)
-    if (!this.connectivity.isConnected(runtimeHostId)) {
+    if (!this.host.isConnected(runtimeHostId)) {
       return { envConfig: null };
     }
     let envConfig: RuntimeEnvConfig | undefined;
     try {
-      envConfig = (await this.environment.detectEnv(runtimeHostId)).native?.cli;
+      envConfig = (await this.host.detectEnv(runtimeHostId)).native?.cli;
     } catch (err) {
       // 检测/RPC 失败与「未检出 CLI」是两回事,失败要让调用方看见
       throw new BadRequestException(
@@ -295,7 +304,7 @@ async stopWorkerForAdmin(
   ): Promise<HostDirectoryResponse> {
     await this.assertRuntimeHostReachable(ownerId, runtimeHostId);
     try {
-      const result = await this.workspaceData.listDirectory({
+      const result = await this.host.listDirectory({
         runtimeHostId,
         path,
       });
@@ -315,7 +324,7 @@ async stopWorkerForAdmin(
   ): Promise<CreateHostDirectoryResponse> {
     await this.assertRuntimeHostReachable(ownerId, runtimeHostId);
     try {
-      await this.workspaceData.createDirectory({ runtimeHostId, path });
+      await this.host.createDirectory({ runtimeHostId, path });
       return { path };
     } catch (err) {
       throw new BadRequestException(
@@ -336,7 +345,7 @@ async stopWorkerForAdmin(
     relativePath: string
   ): Promise<WorkspaceFileListResponse> {
     try {
-      return await this.workspaceData.listFiles({
+      return await this.host.listFiles({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -355,7 +364,7 @@ async stopWorkerForAdmin(
     relativePath: string
   ): Promise<WorkspaceFileReadResponse> {
     try {
-      return await this.workspaceData.readFile({
+      return await this.host.readFile({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -378,7 +387,7 @@ async stopWorkerForAdmin(
     rootPath: string
   ): Promise<WorkspaceChangedFilesResponse> {
     try {
-      return await this.workspaceData.listChangedFiles({
+      return await this.host.listChangedFiles({
         runtimeHostId,
         rootPath,
       });
@@ -394,7 +403,7 @@ async stopWorkerForAdmin(
     relativePath: string
   ): Promise<WorkspaceFileDiffResponse> {
     try {
-      return await this.workspaceData.readFileDiff({
+      return await this.host.readFileDiff({
         runtimeHostId,
         rootPath,
         path: relativePath,
@@ -410,7 +419,7 @@ async stopWorkerForAdmin(
     rootPath: string
   ): Promise<WorkspaceFileSearchResponse> {
     try {
-      return await this.workspaceData.searchFiles({ runtimeHostId, rootPath });
+      return await this.host.searchFiles({ runtimeHostId, rootPath });
     } catch (err) {
       throw new BadRequestException(
         err instanceof Error ? err.message : String(err)
@@ -433,7 +442,7 @@ async stopWorkerForAdmin(
     if (!owned) {
       throw new NotFoundException(`runtime host not found: ${runtimeHostId}`);
     }
-    if (!this.connectivity.isConnected(runtimeHostId)) {
+    if (!this.host.isConnected(runtimeHostId)) {
       throw new BadRequestException(
         `runtime host ${runtimeHostId} is not connected`
       );

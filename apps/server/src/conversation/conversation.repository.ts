@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { AgentModeState } from "@agework/shared";
+import { TERMINAL_RUN_STATUSES, type AgentModeState } from "@agework/shared";
 import type { Prisma } from "../../generated/prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service";
 
@@ -159,29 +159,80 @@ export class ConversationRepository {
     });
   }
 
-  async setRunStatus(
-    conversationId: string,
-    runStatus: "idle" | "running" | "error"
-  ): Promise<boolean> {
-    const where =
-      runStatus === "running"
-        ? { id: conversationId, runStatus: { in: ["idle", "error"] } }
-        : { id: conversationId };
+  /** 空闲/错误会话由 runId 原子认领，后续投影写入必须携带同一 owner。 */
+  async claimRun(conversationId: string, runId: string): Promise<boolean> {
     const result = await this.prisma.conversation.updateMany({
-      where,
-      data: { runStatus, pendingUserAction: null },
+      where: { id: conversationId, runStatus: { in: ["idle", "error"] } },
+      data: {
+        runStatus: "running",
+        activeRunId: runId,
+        pendingUserAction: null,
+      },
     });
     return result.count > 0;
   }
 
-  async setPendingUserAction(
+  /** steering 时把投影所有权从旧 Run CAS 交给新 Run。 */
+  async handoffRun(
     conversationId: string,
-    pendingUserAction: string | null
-  ) {
-    await this.prisma.conversation.updateMany({
-      where: { id: conversationId, deletedAt: null },
-      data: { pendingUserAction },
+    currentRunId: string,
+    nextRunId: string
+  ): Promise<boolean> {
+    const result = await this.prisma.conversation.updateMany({
+      where: {
+        id: conversationId,
+        runStatus: "running",
+        activeRunId: currentRunId,
+      },
+      data: { activeRunId: nextRunId, pendingUserAction: null },
     });
+    return result.count > 0;
+  }
+
+  /** 仅当前 owner Run 可更新 Conversation 的运行投影。终态同时释放 owner。 */
+  async setRunStateForOwner(
+    conversationId: string,
+    runId: string,
+    state: {
+      runStatus?: "idle" | "error";
+      pendingUserAction?: string | null;
+    }
+  ): Promise<boolean> {
+    const result = await this.prisma.conversation.updateMany({
+      where: { id: conversationId, activeRunId: runId },
+      data: {
+        ...(state.pendingUserAction !== undefined
+          ? { pendingUserAction: state.pendingUserAction }
+          : {}),
+        ...(state.runStatus !== undefined
+          ? {
+              runStatus: state.runStatus,
+              activeRunId: null,
+              pendingUserAction: null,
+            }
+          : {}),
+      },
+    });
+    return result.count > 0;
+  }
+
+  /** 启动恢复：没有任何非终态 Run 时才清理遗留投影与 owner。 */
+  async reconcileRunStateWithoutActiveRun(
+    conversationId: string,
+    runStatus: "idle" | "error"
+  ): Promise<boolean> {
+    const result = await this.prisma.conversation.updateMany({
+      where: {
+        id: conversationId,
+        runs: {
+          none: {
+            status: { notIn: [...TERMINAL_RUN_STATUSES] },
+          },
+        },
+      },
+      data: { runStatus, activeRunId: null, pendingUserAction: null },
+    });
+    return result.count > 0;
   }
 
   attachMessageToRun(conversationId: string, messageId: string, runId: string) {
