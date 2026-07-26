@@ -42,21 +42,22 @@ AgeWork 的目标就是把这些能力组织成一个可以长期运行的工作
 
 | 能力 | 说明 |
 | --- | --- |
-| 多 Agent 接入 | 通过 adapter 接入 Claude、Codex 等 Agent，并统一转换为前后端可消费的事件流。 |
+| 多 Agent 接入 | 内置 Claude、Codex adapter，并可通过 ACP 协议接入 OpenCode、pi 等 Agent，统一转换为前后端可消费的 AG-UI 事件流。 |
+| 插件体系 | Agent 与 Runtime 均按插件扩展：`agent-sdk` / `runtime-sdk` 定义契约，ACP Agent、Docker Runtime 以官方插件交付。 |
 | 项目化工作区 | 以 workspace 组织代码目录、会话历史、任务输入和执行记录。 |
-| 会话与运行历史 | 保留 conversation、run history、工具调用、状态变化和诊断信息。 |
-| Local / Sandbox Runtime | 支持本机运行，也可以接入 sandbox runtime 执行高隔离任务。 |
+| 会话与运行历史 | 保留 conversation、run history、工具调用、状态变化和诊断信息，支持中断、恢复与审计事件查询。 |
+| Native / Docker Runtime | 同一套执行链路支持本机直跑，也可切换 Docker 沙箱隔离执行；OpenSandbox 作为实验性插件按需启用。 |
 | 本地优先数据控制 | 默认使用本地 SQLite，数据、配置和日志由当前 AgeWork 实例管理。 |
 | 可选登录验证 | 开发模式可免登录；生产部署默认启用登录验证，并在首次访问时设置固定 `admin` 管理员密码。 |
-| Web + API + Worker + Desktop | 同一仓库维护 React Web、NestJS API、Agent Worker 和 Electron 桌面壳。 |
+| Web + API + Runtime + Desktop | 同一仓库维护 React Web、NestJS API、Runtime（Host + Worker）和 Electron 桌面壳。 |
 
 ## Quick start
 
 ### Requirements
 
-- Node.js `>=22`
+- Node.js `>=22.18`
 - pnpm `10.33.4`
-- Docker：仅在使用 Docker sandbox、实验性 OpenSandbox 或构建 worker 镜像时需要
+- Docker：仅在使用 Docker Runtime 或构建 worker 镜像时需要
 
 ### Start with the interactive guide
 
@@ -85,46 +86,45 @@ pnpm dev
 | 命令 | 说明 |
 | --- | --- |
 | `pnpm boot` | 交互式初始化向导 |
-| `pnpm init:dev` | 初始化开发环境 |
-| `pnpm init:prod` | 初始化生产环境 |
+| `pnpm init:dev` / `pnpm init:prod` | 初始化开发 / 生产环境 |
 | `pnpm dev` | 同时启动 API 和 Web |
-| `pnpm dev:server` | 只启动后端服务 |
-| `pnpm dev:web` | 只启动前端服务 |
+| `pnpm dev:server` / `pnpm dev:web` | 只启动后端 / 前端 |
 | `pnpm typecheck` | 全仓类型检查 |
-| `pnpm test:server` | 后端单元测试（自动生成 Prisma Client 与所需 workspace 产物） |
-| `pnpm test:web` | 前端单元测试 |
+| `pnpm lint` | 全仓 ESLint |
+| `pnpm test:server` / `pnpm test:web` | 后端 / 前端单元测试 |
 | `pnpm db:push` | 同步数据库 schema |
 | `pnpm db:studio` | 打开 Prisma Studio |
+| `pnpm build` | 构建全部产物 |
 | `pnpm app:deploy` | 构建并启动生产服务 |
 | `pnpm kill-port <port>` | 清理指定端口 |
 
 ## Architecture
 
-AgeWork 采用 monorepo 组织，核心链路如下：
+AgeWork 采用 monorepo 组织，核心链路是 Server → Runtime Host → Worker 三层：
 
 ```text
 Web UI
   -> API Server
-    -> Runtime Manager
-      -> Local Worker / Sandbox Worker
+    -> Runtime Host (native / docker / sandbox provider)
+      -> Worker (per-run Runner)
         -> Agent Adapter
-          -> Claude / Codex / other Agent backends
+          -> Claude / Codex / ACP Agents
 ```
 
 其中：
 
-- **Web UI**：工作区、会话、任务输入、消息流和管理页面。
-- **API Server**：用户、配置、workspace、conversation、run、runtime 和事件聚合。
-- **Runtime Manager**：根据 workspace 配置选择 local 或 sandbox runtime。
-- **Worker**：负责启动 Agent adapter、转发任务、回传事件和运行状态。
-- **Agent Adapter**：把不同 Agent 的 SDK / CLI / 协议事件转换为 AgeWork 统一事件流。
+- **Web UI**：工作区、会话、任务输入、消息流和管理后台。
+- **API Server**（`apps/server`）：用户与鉴权、workspace、conversation、run、模型 Provider 配置和事件聚合；通过 `runtime-host` 模块统一管理本机内置与远程注册的 Runtime Host。
+- **Runtime Host**（`apps/runtime`）：一台执行机上的运行环境权威，按 Runtime 插件（native / docker / opensandbox）供给执行载体，管理 Worker 生命周期与复用。
+- **Worker / Runner**：常驻 Worker 进程按 run 派生 Runner，负责启动 Agent adapter、转发命令、回传事件和运行状态。
+- **Agent Adapter**（`packages/adapters`、`packages/agent-acp`）：把 Claude Agent SDK、Codex app-server、ACP 等不同协议统一转换为 AgeWork 的 AG-UI 事件流。
 
 ## Tech stack
 
 - Monorepo: pnpm workspace + Turborepo
 - Web: React 19, Vite, Tailwind CSS v4, TanStack Router, TanStack Query, assistant-ui
 - API: NestJS 11, Prisma, SQLite / PostgreSQL driver adapter
-- Worker / Adapters: Claude Agent SDK, Codex app-server (JSON-RPC), AG-UI
+- Runtime / Adapters: Claude Agent SDK, Codex app-server (JSON-RPC), ACP (Agent Client Protocol), AG-UI
 - Desktop: Electron
 - Test: Vitest, Playwright
 
@@ -133,27 +133,33 @@ Web UI
 ```text
 .
 ├── apps
-│   ├── server    # NestJS API、Prisma schema、服务端模块
-│   ├── runtime   # @agework/runtime，Host + Worker/Runner 发行产物
-│   ├── web       # React + Vite 前端
-│   └── desktop   # Electron 桌面壳
+│   ├── server              # NestJS API、Prisma schema、服务端模块
+│   ├── runtime             # @agework/runtime：Runtime Host + Worker / Runner
+│   ├── web                 # React + Vite 前端
+│   └── desktop             # Electron 桌面壳（不在 pnpm workspace 内）
 ├── packages
-│   ├── adapters  # Claude、Codex 等 Agent adapter
-│   ├── runtime-sdk # Runtime 插件公共 SDK
-│   ├── runtime-opensandbox # 实验性 OpenSandbox 插件
-│   ├── worker    # Agent worker
-│   ├── shared    # 前后端共享类型、协议类型、API 类型
-│   └── react-ag-ui
-├── e2e           # Playwright E2E 测试
-├── infra         # 可选运行时等基础设施配置
-└── scripts       # 初始化、端口清理、worker 构建等脚本
+│   ├── shared              # 前后端共享类型、协议类型、API 类型
+│   ├── adapters            # Claude、Codex 等内置 Agent adapter
+│   ├── agent-sdk           # Agent Adapter 插件的公共轻量契约
+│   ├── agent-acp           # 官方 ACP Agent 插件（OpenCode、pi 等接入）
+│   ├── runtime-sdk         # Runtime 插件公共 SDK
+│   ├── runtime-docker      # 官方 Docker Runtime 插件
+│   ├── runtime-opensandbox # 实验性 OpenSandbox Runtime 插件
+│   └── react-ag-ui         # @assistant-ui/react-ag-ui，AG-UI 适配层
+├── e2e                     # Playwright E2E 测试
+├── infra                   # 可选运行时等基础设施配置
+├── docs                    # 项目文档（入口 docs/README.md）
+└── scripts                 # 初始化、端口清理、worker 构建等脚本
 ```
 
 ## Documentation
 
-- [使用与部署指南](docs/usage.md)：启动、开发、部署、配置、Runtime / Sandbox、桌面端。
-- [配置管理](docs/config.md)：环境变量、DB 系统设置、模型 Provider 配置。
-- [AG-UI 接入说明](docs/ag-ui.md)：前后端 Agent 事件协议和项目内使用方式。
+完整索引见 [docs/README.md](docs/README.md)。常用入口：
+
+- [使用与部署指南](docs/usage.md)：安装、启动、开发、部署与日常使用。
+- [配置管理](docs/config.md)：环境变量与配置边界、模型 Provider 配置。
+- [插件开发指南](docs/guide/README.md)：Runtime 插件、Agent 插件与 ACP Agent Profile 的开发与接入。
+- [架构参考](docs/README.md#架构参考当前)：worker RPC 协议、Docker Runtime、权限矩阵、事件与日志排查。
 - [产品定位与方向](docs/product-positioning-and-direction.md)：AgeWork 的定位、边界和阶段性路线。
 
 OpenSandbox provider 以独立插件包作为按需启用、非主要维护方向的实验能力保留，见
@@ -167,7 +173,7 @@ AgeWork 仍处于快速开发阶段。当前优先级：
 - 打磨 Claude / Codex 等核心 Agent 的深度接入，而不是浅层堆叠大量 Agent。
 - 稳定面向个人与团队部署的 Native / Docker runtime 和 worker 镜像构建链路。
 - 强化团队部署所需的权限、审计、配置治理和 API-first 能力。
-- 持续演进 Web、API、Worker、Desktop 的统一部署体验。
+- 持续演进 Web、API、Runtime、Desktop 的统一部署体验。
 
 ## Contributing
 
